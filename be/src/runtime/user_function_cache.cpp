@@ -33,11 +33,10 @@
 #include "env/env.h"
 #include "fmt/compile.h"
 #include "gutil/strings/split.h"
-#include "http/http_client.h"
 #include "util/defer_op.h"
 #include "util/dynamic_util.h"
+#include "util/download_util.h"
 #include "util/file_utils.h"
-#include "util/md5.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -245,46 +244,10 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
 Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry) {
     DCHECK(!entry->is_downloaded);
 
-    // get local path to save library
     std::string tmp_file = entry->lib_file + ".tmp";
-    auto fp = fopen(tmp_file.c_str(), "w");
-    DeferOp defer([&]() { fclose(fp); });
-
-    if (fp == nullptr) {
-        LOG(WARNING) << "fail to open file, file=" << tmp_file << ", error=" << ferror(fp);
-        return Status::InternalError("fail to open file");
-    }
-
-    Md5Digest digest;
-    HttpClient client;
-    RETURN_IF_ERROR(client.init(url));
-    Status status;
-    auto download_cb = [&status, &tmp_file, fp, &digest](const void* data, size_t length) {
-        digest.update(data, length);
-        auto res = fwrite(data, length, 1, fp);
-        if (res != 1) {
-            LOG(WARNING) << "fail to write data to file, file=" << tmp_file << ", error=" << ferror(fp);
-            status = Status::InternalError("fail to write data when download");
-            return false;
-        }
-        return true;
-    };
-
-    RETURN_IF_ERROR(client.execute(download_cb));
-    RETURN_IF_ERROR(status);
-
-    digest.digest();
-    if (!boost::iequals(digest.hex(), entry->checksum)) {
-        LOG(WARNING) << "UDF's checksum is not equal, one=" << digest.hex() << ", other=" << entry->checksum;
-        return Status::InternalError("UDF's library checksum is not match");
-    }
-
-    // rename temporary file to library file
-    auto ret = rename(tmp_file.c_str(), entry->lib_file.c_str());
-    if (ret != 0) {
-        LOG(WARNING) << "fail to rename " << tmp_file << " to " << entry->lib_file;
-        return Status::InternalError("fail to rename file");
-    }
+    std::string target_file = entry->lib_file;
+    std::string expected_checksum = entry->checksum;
+    RETURN_IF_ERROR(DownloadUtil::download(url, tmp_file, target_file, expected_checksum));
 
     entry->function_type = get_function_type(url);
 

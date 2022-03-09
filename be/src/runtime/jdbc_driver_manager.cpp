@@ -9,11 +9,10 @@
 #include "env/env.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
-#include "http/http_client.h"
 #include "util/defer_op.h"
+#include "util/download_util.h"
 #include "util/dynamic_util.h"
 #include "util/file_utils.h"
-#include "util/md5.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -173,46 +172,9 @@ Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEnt
     LOG(INFO) << fmt::format("download jdbc driver {} from url {}, expected checksum is: {}", entry->name, url,
                              entry->checksum);
     std::string tmp_file = fmt::format("{}/{}_{}.tmp", _driver_dir, entry->name, entry->checksum);
-    auto fp = fopen(tmp_file.c_str(), "w");
-    DeferOp defer([&]() { fclose(fp); });
-
-    if (fp == nullptr) {
-        LOG(ERROR) << fmt::format("fail to open file {}, error={}", tmp_file, ferror(fp));
-        return Status::InternalError("fail to open tmp file when downloading jdbc driver");
-    }
-
-    Md5Digest digest;
-    HttpClient client;
-    client.set_ssl_verify_peer(false);
-    RETURN_IF_ERROR(client.init(url));
-    Status status;
-
-    auto download_cb = [&status, &tmp_file, fp, &digest](const void* data, size_t length) {
-        digest.update(data, length);
-        auto res = fwrite(data, length, 1, fp);
-        if (res != 1) {
-            LOG(ERROR) << fmt::format("fail to write data to file {}, error={}", tmp_file, ferror(fp));
-            status = Status::InternalError("fail to write data when downloading jdbc driver");
-            return false;
-        }
-        return true;
-    };
-    RETURN_IF_ERROR(client.execute(download_cb));
-    RETURN_IF_ERROR(status);
-
-    digest.digest();
-    if (!boost::iequals(digest.hex(), entry->checksum)) {
-        LOG(ERROR) << fmt::format("JDBC Driver's checksum is not equal, expected={}, actual={}", entry->checksum,
-                                  digest.hex());
-        return Status::InternalError("JDBC Driver's checksum is not match");
-    }
-
-    // rename tmporary file to driver file
-    auto ret = rename(tmp_file.c_str(), entry->location.c_str());
-    if (ret != 0) {
-        LOG(ERROR) << fmt::format("fail to rename file {} to {}", tmp_file, entry->location);
-        return Status::InternalError("fail to rename file");
-    }
+    std::string target_file = entry->location;
+    std::string expected_checksum = entry->checksum;
+    RETURN_IF_ERROR(DownloadUtil::download(url, tmp_file, target_file, expected_checksum));
     entry->is_downloaded = true;
     entry->is_available.store(true);
     return Status::OK();
