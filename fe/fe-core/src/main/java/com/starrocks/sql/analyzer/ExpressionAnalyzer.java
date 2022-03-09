@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -354,13 +354,38 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        List<String> addDateFunctions = Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "TIMESTAMPADD");
+        List<String> subDateFunctions = Lists.newArrayList("DATE_SUB", "SUBDATE", "DAYS_SUB");
+
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
-            try {
-                node.analyzeImpl(null);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            node.setChild(0, TypeManager.addCastExpr(node.getChild(0), Type.DATETIME));
+
+            String funcOpName;
+            if (node.getFuncName() != null) {
+                if (addDateFunctions.contains(node.getFuncName().toUpperCase())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "ADD");
+                } else if (subDateFunctions.contains(node.getFuncName().toUpperCase())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "SUB");
+                } else {
+                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "DIFF");
+                }
+            } else {
+                funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(),
+                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "ADD" : "SUB");
             }
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
+                    .toArray(Type[]::new);
+            Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s).", funcOpName, Joiner.on(", ")
+                        .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+            }
+            node.setType(fn.getReturnType());
+            node.setFn(fn);
             return null;
         }
 
