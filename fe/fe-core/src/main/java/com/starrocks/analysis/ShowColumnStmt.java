@@ -22,13 +22,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
@@ -61,7 +63,6 @@ public class ShowColumnStmt extends ShowStmt {
     private String db;
     private String pattern;
     private boolean isVerbose;
-    private SelectStmt selectStmt;
     private Expr where;
 
     public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose) {
@@ -124,17 +125,14 @@ public class ShowColumnStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) throws AnalysisException {
+    public QueryStatement toSelectStmt() throws AnalysisException {
         if (where == null) {
             return null;
         }
-        if (selectStmt != null) {
-            return selectStmt;
-        }
-        analyze(analyzer);
+
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
         // Field
         SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_NAME"), "Field");
         selectList.addItem(item);
@@ -178,12 +176,9 @@ public class ShowColumnStmt extends ShowStmt {
         }
 
         where = where.substitute(aliasMap);
-        selectStmt = new SelectStmt(selectList,
-                new FromClause(Lists.newArrayList(new TableRef(TABLE_NAME, null))),
-                where, null, null, null, LimitElement.NO_LIMIT);
-        analyzer.setSchemaInfo(tableName.getDb(), tableName.getTbl(), null);
 
-        return selectStmt;
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME, null),
+                where, null, null));
     }
 
     @Override

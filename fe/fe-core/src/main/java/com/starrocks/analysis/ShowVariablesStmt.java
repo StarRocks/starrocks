@@ -21,12 +21,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,7 +46,6 @@ public class ShowVariablesStmt extends ShowStmt {
     private SetType type;
     private String pattern;
     private Expr where;
-    private SelectStmt selectStmt;
 
     public ShowVariablesStmt(SetType type, String pattern) {
         this.type = type;
@@ -77,18 +78,17 @@ public class ShowVariablesStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) {
+    public QueryStatement toSelectStmt() {
         if (where == null) {
             return null;
         }
-        if (selectStmt != null) {
-            return selectStmt;
+        if (type == null) {
+            type = SetType.DEFAULT;
         }
-        analyze(analyzer);
         // Columns
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        TableName tableName = null;
+        TableName tableName;
         if (type == SetType.GLOBAL) {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "GLOBAL_VARIABLES");
         } else {
@@ -104,15 +104,9 @@ public class ShowVariablesStmt extends ShowStmt {
         aliasMap.put(new SlotRef(null, VALUE_COL), item.getExpr().clone(null));
         // change
         where = where.substitute(aliasMap);
-        selectStmt = new SelectStmt(selectList,
-                new FromClause(Lists.newArrayList(new TableRef(tableName, null))),
-                where, null, null, null, LimitElement.NO_LIMIT);
-        LOG.debug("select stmt is {}", selectStmt.toSql());
 
-        // DB: type
-        // table: thread id
-        analyzer.setSchemaInfo(type.toSql(), null, null);
-        return selectStmt;
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName, null),
+                where, null, null));
     }
 
     @Override
