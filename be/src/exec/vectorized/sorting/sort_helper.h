@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/nullable_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized//sorting//sort_permute.h"
 #include "util/orlp/pdqsort.h"
@@ -32,6 +33,45 @@ static std::string dubug_column(const Column* column, const SmallPermutation& pe
 }
 #endif
 
+// TODO(mofei) optimize it with SIMD
+inline static size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
+    for (; start < list.size(); start++) {
+        if (list[start] == 0) {
+            return start;
+        }
+    }
+    return list.size();
+}
+
+// TODO(mofei) optimize it with SIMD
+inline static size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
+    for (; start < list.size(); start++) {
+        if (list[start] != 0) {
+            return start;
+        }
+    }
+    return list.size();
+}
+
+template <class T, class Container>
+static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other,
+                                                             const Container& container) {
+    InlinePermutation<T> inlined(other.size());
+    for (int i = 0; i < other.size(); i++) {
+        int index = other[i].index_in_chunk;
+        inlined[i].index_in_chunk = index;
+        inlined[i].inline_value = container[index];
+    }
+    return inlined;
+}
+
+template <class T>
+static inline void restore_inline_permutation(const InlinePermutation<T>& inlined, SmallPermutation& output) {
+    for (int i = 0; i < inlined.size(); i++) {
+        output[i].index_in_chunk = inlined[i].index_in_chunk;
+    }
+}
+
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_asc_order, bool is_null_first,
@@ -50,39 +90,44 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
     fmt::print("nullable column before sort: {}\n", dubug_column(column, permutation));
 #endif
 
-    // sort ranges
-    if (SIMD::count_nonzero(tie) > 0) {
-        // TODO(mofei) is there any optimization opportunity
-        int range_first = 0;
-        while (range_first < tie.size()) {
-            int range_last = SIMD::find_zero(tie, range_first + 1);
+    // TODO(mofei) is there any optimization opportunity
+    int range_first = 0;
+    int range_last = 0;
+    while (range_first < tie.size()) {
+        range_first = find_nonzero(tie, range_first + 1);
+        if (range_first >= tie.size()) {
+            break;
+        }
+        range_first--;
+        range_last = find_zero(tie, range_first + 1);
+        if (range_last > tie.size()) {
+            break;
+        }
+        if (range_last - range_first > 1) {
+            auto pivot_iter =
+                    std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
+            int pivot_start = pivot_iter - permutation.begin();
+            tie[pivot_start] = 0;
+            // TODO(mofei) reuse the global permutation
+            int notnull_start = is_null_first ? pivot_start : range_first;
+            int notnull_end = is_null_first ? range_last : pivot_start;
+            SmallPermutation partial_perm(permutation.begin() + notnull_start, permutation.begin() + notnull_end);
+            Tie partial_tie(tie.begin() + notnull_start, tie.begin() + notnull_end);
 
-            if (range_last > tie.size()) {
-                break;
-            } else if (range_last - range_first > 1) {
-                auto pivot_iter =
-                        std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
-                int pivot_start = pivot_iter - permutation.begin();
-                tie[pivot_start] = 0;
-                // TODO(mofei) reuse the global permutation
-                int notnull_start = is_null_first ? pivot_start : range_first;
-                int notnull_end = is_null_first ? range_last : pivot_start;
-                SmallPermutation partial_perm(permutation.begin() + notnull_start, permutation.begin() + notnull_end);
-                Tie partial_tie(tie.begin() + notnull_start, tie.begin() + notnull_end);
-
-                column->data_column()->sort_and_tie(is_asc_order, is_null_first, partial_perm, partial_tie, build_tie);
-                std::copy(partial_perm.begin(), partial_perm.end(), permutation.begin() + notnull_start);
+            column->data_column()->sort_and_tie(is_asc_order, is_null_first, partial_perm, partial_tie, build_tie);
+            std::copy(partial_perm.begin(), partial_perm.end(), permutation.begin() + notnull_start);
+            if (build_tie) {
                 std::copy(partial_tie.begin(), partial_tie.end(), tie.begin() + notnull_start);
             }
+        }
 
 #ifndef NDEBUG
-            fmt::print("column after iteration: [{}, {}): {}\n", range_first, range_last,
-                       dubug_column(column, permutation));
-            fmt::print("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
+        fmt::print("column after iteration: [{}, {}): {}\n", range_first, range_last,
+                   dubug_column(column, permutation));
+        fmt::print("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
 #endif
 
-            range_first = range_last;
-        }
+        range_first = range_last;
     }
 
 #ifndef NDEBUG
@@ -91,8 +136,8 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
 #endif
 }
 
-template <class DataComparator>
-static inline void sort_and_tie_helper(Column* column, bool is_asc_order, SmallPermutation& permutation, Tie& tie,
+template <class DataComparator, class PermutationType>
+static inline void sort_and_tie_helper(Column* column, bool is_asc_order, PermutationType& permutation, Tie& tie,
                                        DataComparator cmp, bool build_tie = true) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
@@ -107,34 +152,40 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, SmallP
 #ifndef NDEBUG
     fmt::print("tie before sort: {}\n", fmt::join(tie, ","));
     fmt::print("column before sort: {}\n", dubug_column(column, permutation));
+    int tie_count = 0;
 #endif
 
-    if (SIMD::count_nonzero(tie) > 0) {
-        // TODO(mofei) is there any optimization opportunity
-        int range_first = 0;
-        while (range_first < tie.size()) {
-            int range_last = SIMD::find_zero(tie, range_first + 1);
-            if (range_last > tie.size()) {
-                break;
-            } else if (range_last - range_first > 1) {
-                do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
-                if (build_tie) {
-                    tie[range_first] = 0;
-                    for (int i = range_first + 1; i < range_last; i++) {
-                        tie[i] = cmp(permutation[i - 1], permutation[i]) == 0;
-                    }
+    // TODO(mofei) is there any optimization opportunity
+    int range_first = 0;
+    int range_last = 0;
+    while (range_first < tie.size()) {
+        range_first = find_nonzero(tie, range_first + 1);
+        if (range_first >= tie.size()) {
+            break;
+        }
+        range_first--;
+        range_last = find_zero(tie, range_first + 1);
+        if (range_last > tie.size()) {
+            break;
+        }
+        if (range_last - range_first > 1) {
+            do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
+            if (build_tie) {
+                tie[range_first] = 0;
+                for (int i = range_first + 1; i < range_last; i++) {
+                    tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
                 }
             }
-#ifndef NDEBUG
-            fmt::print("column after iteration: [{}, {}) {}\n", range_first, range_last,
-                       dubug_column(column, permutation));
-            fmt::print("tie after iteration: {}\n", fmt::join(tie, ",   "));
-#endif
-            range_first = range_last;
         }
+#ifndef NDEBUG
+        tie_count++;
+        fmt::print("column after iteration: [{}, {}) {}\n", range_first, range_last, dubug_column(column, permutation));
+        fmt::print("tie after iteration: {}\n", fmt::join(tie, ",   "));
+#endif
+        range_first = range_last;
     }
 #ifndef NDEBUG
-    fmt::print("tie after sort: {}\n", fmt::join(tie, ",   "));
+    fmt::print("tie({}) after sort: {}\n", tie_count, fmt::join(tie, ",   "));
     fmt::print("nullable column after sort: {}\n", dubug_column(column, permutation));
 #endif
 }
