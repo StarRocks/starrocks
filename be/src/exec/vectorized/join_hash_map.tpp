@@ -73,14 +73,14 @@ Status DirectMappingJoinBuildFunc<PT>::construct_hash_table(RuntimeState* state,
         auto& null_array = nullable_column->null_column()->get_data();
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
             if (null_array[i] == 0) {
-                auto buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
+                size_t buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
                 table_items->next[i] = table_items->first[buckets];
                 table_items->first[buckets] = i;
             }
         }
     } else {
         for (size_t i = 1; i < table_items->row_count + 1; i++) {
-            auto buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
+            size_t buckets = data[i] - RunTimeTypeLimits<PT>::min_value();
             table_items->next[i] = table_items->first[buckets];
             table_items->first[buckets] = i;
         }
