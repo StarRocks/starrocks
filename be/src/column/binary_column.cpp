@@ -372,7 +372,7 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
 }
 
 void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                                std::vector<uint8_t>& tie, bool build_tie) {
+                                std::vector<uint8_t>& tie, std::pair<int, int> range) {
     DCHECK_GE(size(), permutation.size());
     using ItemType = InlinePermuteItem<Slice>;
     auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
@@ -380,7 +380,7 @@ void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPerm
     };
     
     auto inlined = create_inline_permutation<Slice>(permutation, get_data());
-    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, build_tie);
+    sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, range);
     restore_inline_permutation(inlined, permutation);
 }
 

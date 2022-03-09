@@ -99,7 +99,7 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
 static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_asc_order, bool is_null_first,
-                                                SmallPermutation& permutation, Tie& tie, bool build_tie = true) {
+                                                SmallPermutation& permutation, Tie& tie, std::pair<int, int> range) {
     NullData& null_data = column->null_column_data();
     auto null_pred = [&](const SmallPermuteItem& item) -> bool {
         if (is_null_first) {
@@ -114,16 +114,16 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
     fmt::print("nullable column before sort: {}\n", dubug_column(column, permutation));
 #endif
 
-    int range_first = 0;
+    int range_first = range.first;
     int range_last = 0;
-    while (range_first < tie.size()) {
+    while (range_first < range.second) {
         range_first = find_nonzero(tie, range_first + 1);
-        if (range_first >= tie.size()) {
+        if (range_first >= range.second) {
             break;
         }
         range_first--;
         range_last = find_zero(tie, range_first + 1);
-        if (range_last > tie.size()) {
+        if (range_last > range.second) {
             break;
         }
         if (range_last - range_first > 1) {
@@ -131,17 +131,11 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
             int pivot_start = pivot_iter - permutation.begin();
             tie[pivot_start] = 0;
-            // TODO(mofei) reuse the global permutation
             int notnull_start = is_null_first ? pivot_start : range_first;
             int notnull_end = is_null_first ? range_last : pivot_start;
-            SmallPermutation partial_perm(permutation.begin() + notnull_start, permutation.begin() + notnull_end);
-            Tie partial_tie(tie.begin() + notnull_start, tie.begin() + notnull_end);
 
-            column->data_column()->sort_and_tie(is_asc_order, is_null_first, partial_perm, partial_tie, build_tie);
-            std::copy(partial_perm.begin(), partial_perm.end(), permutation.begin() + notnull_start);
-            if (build_tie) {
-                std::copy(partial_tie.begin(), partial_tie.end(), tie.begin() + notnull_start);
-            }
+            column->data_column()->sort_and_tie(is_asc_order, is_null_first, permutation, tie,
+                                                {notnull_start, notnull_end});
         }
 
 #ifndef NDEBUG
@@ -161,10 +155,9 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
 
 template <class DataComparator, class PermutationType>
 static inline void sort_and_tie_helper(Column* column, bool is_asc_order, PermutationType& permutation, Tie& tie,
-                                       DataComparator cmp, bool build_tie = true) {
+                                       DataComparator cmp, std::pair<int, int> range) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
-
     auto do_sort = [&](auto begin, auto end) {
         if (is_asc_order) {
             ::pdqsort(false, begin, end, lesser);
@@ -179,25 +172,23 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, Permut
 #endif
 
     // TODO(mofei) is there any optimization opportunity
-    int range_first = 0;
+    int range_first = range.first;
     int range_last = 0;
-    while (range_first < tie.size()) {
+    while (range_first < range.second) {
         range_first = find_nonzero(tie, range_first + 1);
-        if (range_first >= tie.size()) {
+        if (range_first >= range.second) {
             break;
         }
         range_first--;
         range_last = find_zero(tie, range_first + 1);
-        if (range_last > tie.size()) {
+        if (range_last > range.second) {
             break;
         }
         if (range_last - range_first > 1) {
             do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
-            if (build_tie) {
-                tie[range_first] = 0;
-                for (int i = range_first + 1; i < range_last; i++) {
-                    tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
-                }
+            tie[range_first] = 0;
+            for (int i = range_first + 1; i < range_last; i++) {
+                tie[i] &= cmp(permutation[i - 1], permutation[i]) == 0;
             }
         }
 #ifndef NDEBUG

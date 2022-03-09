@@ -197,7 +197,7 @@ size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, 
 
 template <typename T>
 void ObjectColumn<T>::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                                   std::vector<uint8_t>& tie, bool build_tie) {
+                                   std::vector<uint8_t>& tie, std::pair<int, int> range) {
     DCHECK(false) << "Don't support object column sort_and_tie";
 }
 
