@@ -396,16 +396,11 @@ Status HdfsChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
-    _update_realtime_counter((*chunk).get());
     // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _num_rows_read >= _limit) {
+    if (_limit != -1 && _scanner->num_rows_read() >= _limit) {
         return Status::EndOfFile("limit reach");
     }
     return Status::OK();
-}
-
-void HdfsChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
-    _num_rows_read += chunk->num_rows();
 }
 
 } // namespace starrocks::pipeline

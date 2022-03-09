@@ -65,7 +65,6 @@ private:
 
     // =====================================
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::ChunkPtr* chunk);
-    void _update_realtime_counter(vectorized::Chunk* chunk);
 
     // =====================================
     vectorized::HdfsScanNode* _scan_node;
@@ -128,7 +127,6 @@ private:
     // ======================================
     // The following are profile metrics
     RuntimeProfile* _runtime_profile;
-    int64_t _num_rows_read = 0;
     vectorized::HdfsScanProfile _profile;
 };
 } // namespace pipeline
