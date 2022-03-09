@@ -10,6 +10,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import org.apache.commons.lang.StringUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
@@ -30,19 +31,22 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
 public class HiveResource extends Resource {
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
 
+    @SerializedName(value = "metastoreURIs")
+    private String metastoreURIs;
+
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
     public HiveResource(String name) {
         super(name, ResourceType.HIVE);
-        properties = Maps.newHashMap();
+        this.properties = new HashMap<>();
     }
 
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
-        Preconditions.checkState(properties != null);
+        Preconditions.checkState(properties != null, "properties can not be null");
 
-        String metastoreURIs = properties.get(HIVE_METASTORE_URIS);
+        metastoreURIs = properties.get(HIVE_METASTORE_URIS);
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
         }
@@ -51,18 +55,26 @@ public class HiveResource extends Resource {
         this.properties = properties;
     }
 
-    protected Map<String, String> getProperties() {
-        return this.properties;
-    }
-
     @Override
     protected void getProcNodeData(BaseProcResult result) {
-        String lowerCaseType = super.type.name().toLowerCase();
-        result.addRow(Lists.newArrayList(super.name, lowerCaseType,
-                HIVE_METASTORE_URIS, this.properties.get(HIVE_METASTORE_URIS)));
+        String lowerCaseType = type.name().toLowerCase();
+        result.addRow(Lists.newArrayList(name, lowerCaseType, HIVE_METASTORE_URIS, metastoreURIs));
     }
 
     public String getHiveMetastoreURIs() {
-        return this.properties.get(HIVE_METASTORE_URIS);
+        return metastoreURIs;
     }
+
+    public HiveResource copyOne() throws DdlException {
+        HiveResource hiveResource = new HiveResource(this.name);
+        hiveResource.setProperties(this.properties);
+        return hiveResource ;
+    }
+
+    public HiveResource upsert(Map<String, String> properties){
+        Preconditions.checkState(properties != null, "properties can not be null");
+        properties.forEach((k, v) -> properties.put(k, v));
+        return this ;
+    }
+
 }

@@ -105,6 +105,15 @@ public class ResourceMgr implements Writable {
         }
     }
 
+    public boolean containsResource(String name) {
+        return nameToResource.containsKey(name);
+    }
+
+    public Resource getResource(String name) {
+        return nameToResource.get(name);
+    }
+
+
     /**
      * alter resource statement only support external hive now .
      * @param stmt
@@ -114,42 +123,23 @@ public class ResourceMgr implements Writable {
         String name = stmt.getResourceName();
 
         //check if the target resource exists .
-        Resource resource = nameToResource.get(name);
+        Resource resource = this.getResource(name);
         if (resource == null) {
             throw new DdlException("Resource(" + name + ") does not exist");
         }
 
         if (resource instanceof HiveResource) {
-            // update the properties
-            Map<String, String> properties = ((HiveResource) resource).getProperties();
-            for (Map.Entry<String, String> entry : stmt.getProperties().entrySet()) {
-                String key = entry.getKey();
-                if (!properties.containsKey(key)) {
-                    throw new DdlException("Property(" + key + ") does not support");
-                }
-                properties.put(key, entry.getValue());
-            }
-            resource.setProperties(properties);
-
-            // update the nameToResource
-            nameToResource.put(name, resource);
-
-            // drop the cache
+            // 1. upsert the resource properties
+            // 2. update the nameToResource
+            // 3. drop the cache
+            // 4. update the edit log
+            HiveResource copiedRes = ((HiveResource) resource).copyOne().upsert(stmt.getProperties());
+            nameToResource.put(name, copiedRes);
             Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
-
-            // update edit log
             Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
         } else {
             throw new DdlException("Alter resource statement only support external hive now");
         }
-    }
-
-    public boolean containsResource(String name) {
-        return nameToResource.containsKey(name);
-    }
-
-    public Resource getResource(String name) {
-        return nameToResource.get(name);
     }
 
     public int getResourceNum() {

@@ -2,7 +2,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
