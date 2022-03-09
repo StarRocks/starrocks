@@ -94,15 +94,10 @@ struct CompileAssert {};
 // Note, that most uses of DISALLOW_ASSIGN and DISALLOW_COPY are broken
 // semantically, one should either use disallow both or neither. Try to
 // avoid these in new code.
-#ifndef DISALLOW_COPY_AND_ASSIGN
+#undef DISALLOW_COPY_AND_ASSIGN
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
     TypeName(const TypeName&) = delete;    \
     void operator=(const TypeName&) = delete
-#endif
-
-// An older, politically incorrect name for the above.
-// Prefer DISALLOW_COPY_AND_ASSIGN for new code.
-#define DISALLOW_EVIL_CONSTRUCTORS(TypeName) DISALLOW_COPY_AND_ASSIGN(TypeName)
 
 // A macro to disallow all the implicit constructors, namely the
 // default constructor, copy constructor and operator= functions.

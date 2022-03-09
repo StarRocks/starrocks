@@ -10,6 +10,7 @@
 #include "env/env_hdfs.h"
 #include "env/env_posix.h"
 #include "env/env_s3.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
@@ -22,12 +23,7 @@ public:
         return instance;
     }
 
-    // Disallow copy ctor and copy assignment
-    EnvRegistry(const EnvRegistry&) = delete;
-    void operator=(const EnvRegistry&) = delete;
-    // Disallow move ctor and move assignment
-    EnvRegistry(EnvRegistry&&) = delete;
-    void operator=(EnvRegistry&&) = delete;
+    DISALLOW_COPY_AND_ASSIGNMENT(EnvRegistry);
 
     void register_env(std::string_view pattern, FactoryFunc func) {
         _entries.emplace_back(Entry{std::regex(pattern.begin(), pattern.end()), std::move(func)});
