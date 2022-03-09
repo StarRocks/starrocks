@@ -193,7 +193,7 @@ Status DirectMappingJoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& tab
             auto& null_array = nullable_column->null_column()->get_data();
             for (size_t i = 0; i < probe_row_count; i++) {
                 if (null_array[i] == 0) {
-                    probe_state->next[i] = table_items.first[data[i] - RunTimeTypeTraits<PT>::min_value()];
+                    probe_state->next[i] = table_items.first[data[i] - RunTimeTypeLimits<PT>::min_value()];
                 } else {
                     probe_state->next[i] = 0;
                 }
