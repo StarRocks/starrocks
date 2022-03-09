@@ -304,16 +304,14 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         }
         Table table = tableInfo.getTable();
 
-        if (table.getName().equals(tableName)) {
-            if (table.getType() == TableType.OLAP) {
-                Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
-            }
-
-            nameToTableInfoDBLevel.remove(tableName);
-            idToTableInfo.row(dbId).remove(table.getId());
-            idToRecycleTime.remove(table.getId());
-            LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
+        if (table.getType() == TableType.OLAP) {
+            Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
         }
+
+        nameToTableInfoDBLevel.remove(tableName);
+        idToTableInfo.row(dbId).remove(table.getId());
+        idToRecycleTime.remove(table.getId());
+        LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
     }
 
     public synchronized void replayEraseTable(long tableId) {
