@@ -13,12 +13,13 @@
 namespace starrocks {
 namespace pipeline {
 
-JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node)
-    : ScanOperator(factory, id, scan_node),
-      _jdbc_scan_node(jdbc_scan_node),
-      _conjunct_ctxs(scan_node->conjunct_ctxs()),
-      _limit(scan_node->limit()),
-      _result_chunks(config::doris_scanner_queue_size) {}
+JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                                   const TJDBCScanNode& jdbc_scan_node)
+        : ScanOperator(factory, id, scan_node),
+          _jdbc_scan_node(jdbc_scan_node),
+          _conjunct_ctxs(scan_node->conjunct_ctxs()),
+          _limit(scan_node->limit()),
+          _result_chunks(config::doris_scanner_queue_size) {}
 
 bool JDBCScanOperator::has_output() const {
     if (_is_finished.load()) {
@@ -78,7 +79,9 @@ void JDBCScanOperator::_start_scanner(RuntimeState* state) {
     std::string driver_class = jdbc_table->jdbc_driver_class();
     std::string driver_location;
 
-    if (status = JDBCDriverManager::getInstance()->get_driver_location(driver_name, driver_url, driver_checksum, &driver_location); !status.ok()) {
+    if (status = JDBCDriverManager::getInstance()->get_driver_location(driver_name, driver_url, driver_checksum,
+                                                                       &driver_location);
+        !status.ok()) {
         LOG(ERROR) << fmt::format("Get JDBC Driver[{}] error, error is {}", driver_name, status.to_string());
         _set_scanner_state(true, status);
         return;
@@ -210,15 +213,13 @@ std::string JDBCScanOperator::get_jdbc_sql(const std::string& table, const std::
 }
 
 JDBCScanOperatorFactory::JDBCScanOperatorFactory(int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node)
-    : ScanOperatorFactory(id, scan_node),
-      _jdbc_scan_node(jdbc_scan_node) {}
+        : ScanOperatorFactory(id, scan_node), _jdbc_scan_node(jdbc_scan_node) {}
 
 Status JDBCScanOperatorFactory::do_prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void JDBCScanOperatorFactory::do_close(RuntimeState* state) {
-}
+void JDBCScanOperatorFactory::do_close(RuntimeState* state) {}
 
 OperatorPtr JDBCScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
     return std::make_shared<JDBCScanOperator>(this, _id, _scan_node, _jdbc_scan_node);

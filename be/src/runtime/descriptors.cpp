@@ -246,8 +246,7 @@ std::string JDBCTableDescriptor::debug_string() const {
     std::stringstream out;
     out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver_name=" << _jdbc_driver_name
         << " jdbc_driver_url=" << _jdbc_driver_url << " jdbc_driver_checksum=" << _jdbc_driver_checksum
-        << " jdbc_driver_class=" << _jdbc_driver_class
-        << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
+        << " jdbc_driver_class=" << _jdbc_driver_class << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
         << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
     return out.str();
 }
