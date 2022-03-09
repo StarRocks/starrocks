@@ -378,7 +378,7 @@ void BinaryColumn::sort_and_tie(bool is_asc_order, bool is_null_first, SmallPerm
     auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
         return lhs.inline_value.compare(rhs.inline_value);
     };
-    
+
     auto inlined = create_inline_permutation<Slice>(permutation, get_data());
     sort_and_tie_helper(this, is_asc_order, inlined, tie, cmp, range, build_tie);
     restore_inline_permutation(inlined, permutation);
