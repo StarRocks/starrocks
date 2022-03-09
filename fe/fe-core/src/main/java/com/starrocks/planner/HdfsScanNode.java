@@ -430,4 +430,8 @@ public class HdfsScanNode extends ScanNode {
         }
     }
 
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }
