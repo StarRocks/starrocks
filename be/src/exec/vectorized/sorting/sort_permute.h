@@ -15,7 +15,12 @@ struct PermutationItem {
     uint32_t permutation_index;
 };
 
+struct SmallPermuteItem {
+    uint32_t index_in_chunk;
+};
+
 using Permutation = std::vector<PermutationItem>;
+using SmallPermutation = std::vector<SmallPermuteItem>;
 using Tie = std::vector<uint8_t>;
 
 enum CompareStrategy {
