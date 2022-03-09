@@ -2,6 +2,10 @@
 
 #pragma once
 
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -26,13 +30,12 @@ struct SorterComparator {
 
 template <>
 struct SorterComparator<Slice> {
-    static int compare(const Slice& lhs, const Slice& rhs) {
-        return lhs.compare(rhs);
-    }
+    static int compare(const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs); }
 };
 
 #ifndef NDEBUG
-static std::string dubug_column(const Column* column, const SmallPermutation& permutation) {
+template <class PermutationType>
+static std::string dubug_column(const Column* column, const PermutationType& permutation) {
     std::string res;
     for (auto p : permutation) {
         res += fmt::format("{:>5}, ", column->debug_item(p.index_in_chunk));
@@ -41,24 +44,37 @@ static std::string dubug_column(const Column* column, const SmallPermutation& pe
 }
 #endif
 
-// TODO(mofei) optimize it with SIMD
-inline static size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
-    for (; start < list.size(); start++) {
-        if (list[start] == 0) {
-            return start;
+inline static size_t find_byte(const std::vector<uint8_t>& list, size_t start, uint8_t byte) {
+    const uint8_t* ptr = list.data() + start;
+    const uint8_t* end = list.data() + list.size();
+
+#ifdef __SSE2__
+    // use simd to test 16bytes each time
+    const int SSE2_BYTES = sizeof(__m128i);
+    const __m128i sse_zero = _mm_set1_epi8(byte);
+    const uint8_t* sse_end = ptr + (end - ptr) / SSE2_BYTES * SSE2_BYTES;
+    for (; ptr < sse_end; ptr += SSE2_BYTES) {
+        uint32_t mask = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128((const __m128i*)(ptr)), sse_zero));
+        int pos = __builtin_ffs(mask);
+        if (pos != 0) {
+            return ptr + pos - 1 - list.data();
         }
     }
-    return list.size();
+#endif
+
+    for (; ptr < end && *ptr != byte; ++ptr) {
+    }
+
+    return ptr - list.data();
 }
 
-// TODO(mofei) optimize it with SIMD
+// Find position for zero byte, return size of list if not found
+inline static size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
+    return find_byte(list, start, 0);
+}
+
 inline static size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
-    for (; start < list.size(); start++) {
-        if (list[start] != 0) {
-            return start;
-        }
-    }
-    return list.size();
+    return find_byte(list, start, 1);
 }
 
 template <class T, class Container>
@@ -98,7 +114,6 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
     fmt::print("nullable column before sort: {}\n", dubug_column(column, permutation));
 #endif
 
-    // TODO(mofei) is there any optimization opportunity
     int range_first = 0;
     int range_last = 0;
     while (range_first < tie.size()) {
