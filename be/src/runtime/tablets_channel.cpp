@@ -215,7 +215,10 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
                 tablets.push_back(tablet);
             }
         }
-        (void)StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+        auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to persist transactions, tablets num: " << tablets.size() << " err: " << st;
+        }
     }
 }
 
