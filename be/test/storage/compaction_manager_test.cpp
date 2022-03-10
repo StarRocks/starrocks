@@ -13,6 +13,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks {
 
