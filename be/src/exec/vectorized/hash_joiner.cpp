@@ -94,7 +94,6 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
     _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
     _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
     _probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     _other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     _where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
@@ -103,8 +102,6 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
-    // Pipeline query engine always needn't create tuple columns
-    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -113,7 +110,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->search_ht_timer = _search_ht_timer;
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
-    param->output_tuple_column_timer = _output_tuple_column_timer;
 
     param->output_slots = _output_slots;
     std::set<SlotId> predicate_slots;
@@ -271,7 +267,7 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
 
 void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _ht = src_join_builder->_ht.clone_readable_table();
-    _ht.set_probe_profile(_search_ht_timer, _output_probe_column_timer, _output_tuple_column_timer);
+    _ht.set_probe_profile(_search_ht_timer, _output_probe_column_timer);
 
     _probe_column_count = src_join_builder->_probe_column_count;
     _build_column_count = src_join_builder->_build_column_count;

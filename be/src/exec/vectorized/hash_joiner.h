@@ -379,7 +379,6 @@ private:
     // Profile for hash join prober.
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* _build_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _other_join_conjunct_evaluate_timer = nullptr;
