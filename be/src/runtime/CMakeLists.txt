@@ -39,6 +39,7 @@ set(RUNTIME_FILES
     descriptors.cpp
     exec_env.cpp
     user_function_cache.cpp
+    jdbc_driver_manager.cpp
     mem_pool.cpp
     plan_fragment_executor.cpp
     primitive_type.cpp

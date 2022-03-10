@@ -5,6 +5,10 @@ package com.starrocks.catalog;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.thrift.TJDBCTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -35,13 +39,16 @@ public class JDBCTableTest {
     }
 
     private Resource getMockedJDBCResource(String name) throws Exception {
+        FeConstants.runningUnitTest = true;
         Resource jdbcResource = new JDBCResource(name);
         Map<String, String> resourceProperties = Maps.newHashMap();
         resourceProperties.put("jdbc_uri", "jdbc_uri");
         resourceProperties.put("user", "user0");
         resourceProperties.put("password", "password0");
-        resourceProperties.put("driver", "driver0");
+        resourceProperties.put("driver_url", "driver_url");
+        resourceProperties.put("driver_class", "driver_class");
         jdbcResource.setProperties(resourceProperties);
+        FeConstants.runningUnitTest = false;
         return jdbcResource;
     }
 
@@ -63,6 +70,41 @@ public class JDBCTableTest {
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.assertEquals(this.resourceName, table.getResourceName());
         Assert.assertEquals(this.table, table.getJdbcTable());
+    }
+
+    @Test
+    public void testToThrift(@Mocked Catalog catalog,
+                             @Mocked ResourceMgr resourceMgr) throws Exception {
+        new Expectations() {
+            {
+                Catalog.getCurrentCatalog();
+                result = catalog;
+
+                catalog.getResourceMgr();
+                result = resourceMgr;
+
+                resourceMgr.getResource("jdbc0");
+                result = getMockedJDBCResource(resourceName);
+            }
+        };
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        // build expected table descriptor
+        JDBCResource resource = (JDBCResource) getMockedJDBCResource("jdbc0");
+        TTableDescriptor expectedDesc = new TTableDescriptor(1000, TTableType.JDBC_TABLE, columns.size(), 0, "jdbc_table", "");
+        TJDBCTable expectedTable = new TJDBCTable();
+        // we will not compute checksum in ut, so we can skip to setJdbc_driver_checksum
+        expectedTable.setJdbc_driver_name(resource.getName());
+        expectedTable.setJdbc_driver_url(resource.getProperty(JDBCResource.DRIVER_URL));
+        expectedTable.setJdbc_driver_class(resource.getProperty(JDBCResource.DRIVER_CLASS));
+        expectedTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
+        expectedTable.setJdbc_table(this.table);
+        expectedTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
+        expectedTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
+        expectedDesc.setJdbcTable(expectedTable);
+
+        Assert.assertEquals(tableDescriptor, expectedDesc);
     }
 
 
