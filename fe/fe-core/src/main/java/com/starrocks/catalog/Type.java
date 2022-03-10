@@ -99,9 +99,10 @@ public abstract class Type implements Cloneable {
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
+    public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
+
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
-    public static final ScalarType JSON = ScalarType.createJsonType();
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
@@ -158,6 +159,7 @@ public abstract class Type implements Cloneable {
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
+
     protected static final ImmutableMap<PrimitiveType, ScalarType> PRIMITIVE_TYPE_SCALAR_TYPE_IMMUTABLE_MAP =
             ImmutableMap.<PrimitiveType, ScalarType>builder()
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
@@ -1247,7 +1249,7 @@ public abstract class Type implements Cloneable {
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
-            return ScalarType.createJsonType();
+            return JSON;
         }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
