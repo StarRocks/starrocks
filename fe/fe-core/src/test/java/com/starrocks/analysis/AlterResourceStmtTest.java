@@ -53,7 +53,7 @@ public class AlterResourceStmtTest {
         AlterResourceStmt stmt = new AlterResourceStmt("hive0",properties);
         stmt.analyze(analyzer);
         Assert.assertEquals("hive0", stmt.getResourceName());
-        Assert.assertEquals("ALTER RESOURCE 'hive0' PROPERTIES(\"hive.metastore.uris\" = \"thrift://10.10.44.98:9083\")", stmt.toSql());
+        Assert.assertEquals("ALTER RESOURCE 'hive0' SET PROPERTIES(\"hive.metastore.uris\" = \"thrift://10.10.44.98:9083\")", stmt.toSql());
     }
 
     @Test(expected = AnalysisException.class)

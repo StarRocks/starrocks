@@ -147,6 +147,13 @@ public class HiveTable extends Table {
     }
 
     public Map<String, String> getHiveProperties() {
+        // The user may alter the resource properties
+        // So we do this to get the fresh properties
+        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        if (resource != null) {
+            HiveResource hiveResource = (HiveResource) resource;
+            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+        }
         return hiveProperties;
     }
 

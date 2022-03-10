@@ -42,9 +42,10 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Hashtable;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Resource manager is responsible for managing external resources used by StarRocks.
@@ -59,21 +60,28 @@ public class ResourceMgr implements Writable {
             .build();
 
     @SerializedName(value = "nameToResource")
-    private final Hashtable<String, Resource> nameToResource = new Hashtable<>();
+    private final HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
+    private final ReentrantReadWriteLock rwlock = new ReentrantReadWriteLock();
 
     public ResourceMgr() {
+
     }
 
     public void createResource(CreateResourceStmt stmt) throws DdlException {
-        Resource resource = Resource.fromStmt(stmt);
-        String resourceName = stmt.getResourceName();
-        if (nameToResource.putIfAbsent(resourceName, resource) != null) {
-            throw new DdlException("Resource(" + resourceName + ") already exist");
+        rwlock.writeLock().lock();
+        try {
+            Resource resource = Resource.fromStmt(stmt);
+            String resourceName = stmt.getResourceName();
+            if (nameToResource.putIfAbsent(resourceName, resource) != null) {
+                throw new DdlException("Resource(" + resourceName + ") already exist");
+            }
+            // log add
+            Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
+            LOG.info("create resource success. resource: {}", resource);
+        } finally {
+            rwlock.writeLock().unlock();
         }
-        // log add
-        Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
-        LOG.info("create resource success. resource: {}", resource);
     }
 
     public void replayCreateResource(Resource resource) {
@@ -81,17 +89,22 @@ public class ResourceMgr implements Writable {
     }
 
     public void dropResource(DropResourceStmt stmt) throws DdlException {
-        String name = stmt.getResourceName();
-        Resource resource = nameToResource.remove(name);
-        if (resource == null) {
-            throw new DdlException("Resource(" + name + ") does not exist");
+        rwlock.writeLock().lock();
+        try {
+            String name = stmt.getResourceName();
+            Resource resource = nameToResource.remove(name);
+            if (resource == null) {
+                throw new DdlException("Resource(" + name + ") does not exist");
+            }
+
+            onDropResource(resource);
+
+            // log drop
+            Catalog.getCurrentCatalog().getEditLog().logDropResource(new DropResourceOperationLog(name));
+            LOG.info("drop resource success. resource name: {}", name);
+        } finally {
+            rwlock.writeLock().lock();
         }
-
-        onDropResource(resource);
-
-        // log drop
-        Catalog.getCurrentCatalog().getEditLog().logDropResource(new DropResourceOperationLog(name));
-        LOG.info("drop resource success. resource name: {}", name);
     }
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
@@ -106,13 +119,22 @@ public class ResourceMgr implements Writable {
     }
 
     public boolean containsResource(String name) {
-        return nameToResource.containsKey(name);
+        rwlock.readLock().lock();
+        try {
+            return nameToResource.containsKey(name);
+        } finally {
+            rwlock.readLock().unlock();
+        }
     }
 
     public Resource getResource(String name) {
-        return nameToResource.get(name);
+        rwlock.readLock().lock();
+        try {
+            return nameToResource.get(name);
+        } finally {
+            rwlock.readLock().unlock();
+        }
     }
-
 
     /**
      * alter resource statement only support external hive now .
@@ -120,34 +142,48 @@ public class ResourceMgr implements Writable {
      * @throws DdlException
      */
     public void alterResource(AlterResourceStmt stmt) throws DdlException {
-        String name = stmt.getResourceName();
+        rwlock.writeLock().lock();
+        try {
+            // check if the target resource exists .
+            String name = stmt.getResourceName();
+            Resource resource = this.getResource(name);
+            if (resource == null) {
+                throw new DdlException("Resource(" + name + ") does not exist");
+            }
 
-        //check if the target resource exists .
-        Resource resource = this.getResource(name);
-        if (resource == null) {
-            throw new DdlException("Resource(" + name + ") does not exist");
-        }
-
-        if (resource instanceof HiveResource) {
-            // 1. upsert the resource properties
-            // 2. update the nameToResource
-            // 3. drop the cache
-            // 4. update the edit log
-            HiveResource copiedRes = ((HiveResource) resource).copyOne().upsert(stmt.getProperties());
-            nameToResource.put(name, copiedRes);
-            Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
-            Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
-        } else {
-            throw new DdlException("Alter resource statement only support external hive now");
+            if (resource instanceof HiveResource) {
+                // 1. alter the resource properties
+                // 2. update the nameToResource
+                // 3. drop the cache
+                // 4. update the edit log
+                ((HiveResource) resource).alterProperties(stmt.getProperties());
+                nameToResource.put(name, resource);
+                Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
+                Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
+            } else {
+                throw new DdlException("Alter resource statement only support external hive now");
+            }
+        } finally {
+            rwlock.writeLock().unlock();
         }
     }
 
     public int getResourceNum() {
-        return nameToResource.size();
+        rwlock.readLock().lock();
+        try {
+            return nameToResource.size();
+        } finally {
+            rwlock.readLock().unlock();
+        }
     }
 
     public List<List<String>> getResourcesInfo() {
-        return procNode.fetchResult().getRows();
+        rwlock.readLock().lock();
+        try {
+            return procNode.fetchResult().getRows();
+        } finally {
+            rwlock.readLock().unlock();
+        }
     }
 
     public ResourceProcNode getProcNode() {

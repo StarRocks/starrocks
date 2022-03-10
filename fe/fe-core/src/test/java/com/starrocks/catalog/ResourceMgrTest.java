@@ -116,7 +116,7 @@ public class ResourceMgrTest {
         addHiveResource(mgr,editLog,catalog,auth) ;
 
         // alter hive resource
-        String newThriftPath = "thrift://10.10.44.xxx:9083" ;
+        String newThriftPath = "thrift://10.10.44.xxx:9083";
         Map<String,String> properties = new HashMap<>();
         properties.put("hive.metastore.uris", newThriftPath);
         AlterResourceStmt stmt = new AlterResourceStmt(name,properties);
@@ -127,10 +127,8 @@ public class ResourceMgrTest {
         Resource resource = mgr.getResource(name);
         Assert.assertTrue(resource instanceof HiveResource);
 
-        Map<String,String> proMapper = ((HiveResource)resource).getProperties();
-        Assert.assertEquals(2,proMapper.size());
-        Assert.assertEquals(newThriftPath,proMapper.get("hive.metastore.uris"));
-        Assert.assertEquals(type,proMapper.get("type"));
+        String metastoreURIs = ((HiveResource) resource).getHiveMetastoreURIs();
+        Assert.assertEquals(newThriftPath, metastoreURIs);
     }
 
     @Test(expected = DdlException.class)
@@ -176,7 +174,7 @@ public class ResourceMgrTest {
         // add hive resource
         name = "hive0";
         type = "hive" ;
-        addHiveResource(mgr,editLog,catalog,auth) ;
+        addHiveResource(mgr,editLog,catalog,auth);
 
         // alter hive resource
         Map<String,String> properties = new HashMap<>();
@@ -210,12 +208,6 @@ public class ResourceMgrTest {
 
         Resource resource = mgr.getResource(name);
         Assert.assertTrue(resource instanceof HiveResource);
-
-        Map<String,String> proMapper = ((HiveResource)resource).getProperties();
-        Assert.assertEquals(2,proMapper.size());
-        Assert.assertEquals("thrift://10.10.44.98:9083",proMapper.get("hive.metastore.uris"));
-        Assert.assertEquals(type,proMapper.get("type"));
-
         return stmt ;
     }
 

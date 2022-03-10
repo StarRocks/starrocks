@@ -60,7 +60,7 @@ public class AlterResourceStmt extends DdlStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("ALTER ");
         sb.append("RESOURCE '").append(resourceName).append("' ");
-        sb.append("PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false)).append(")");
+        sb.append("SET PROPERTIES(").append(new PrintableMap<>(properties, "=", true, false)).append(")");
         return sb.toString();
     }
 }
