@@ -317,6 +317,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseTable(long tableId) {
         Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
+        // For different TableIds, there must be only a unique DbId
         Optional<Long> dbIdOpt = column.keySet().stream().findFirst();
         if (dbIdOpt.isPresent()) {
             Long dbId = dbIdOpt.get();
