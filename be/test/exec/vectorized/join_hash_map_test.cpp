@@ -787,8 +787,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
 
     auto chunk = std::make_shared<Chunk>();
-    auto status = join_hash_map->_probe_null_output(&chunk, 2);
-    ASSERT_TRUE(status.ok());
+    join_hash_map->_probe_null_output(&chunk, 2);
 
     ASSERT_EQ(chunk->num_columns(), 3);
 
@@ -823,8 +822,7 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
 
     auto chunk = std::make_shared<Chunk>();
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    auto status = join_hash_map->_build_default_output(&chunk, 2);
-    ASSERT_TRUE(status.ok());
+    join_hash_map->_build_default_output(&chunk, 2);
 
     ASSERT_EQ(chunk->num_columns(), 3);
 
