@@ -49,6 +49,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -316,8 +317,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseTable(long tableId) {
         Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
-        for (Long dbId : column.keySet()) {
-            RecycleTableInfo tableInfo = column.remove(dbId);
+        Optional<Long> dbIdOpt = column.keySet().stream().findFirst();
+        if (dbIdOpt.isPresent()) {
+            Long dbId = dbIdOpt.get();
+            RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
