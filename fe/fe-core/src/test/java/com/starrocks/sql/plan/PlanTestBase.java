@@ -637,13 +637,16 @@ public class PlanTestBase {
                         "\"password\" = \"123\",\n" +
                         "\"database\" = \"db1\",\n" +
                         "\"table\" = \"tbl1\"\n" +
-                        ");")
-                .withResource("create external resource \"jdbc_test\"\n" +
+                        ");");
+
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
                         "PROPERTIES (\n" +
                         "\"type\"=\"jdbc\",\n" +
                         "\"user\"=\"test_user\",\n" +
                         "\"password\"=\"test_passwd\",\n" +
-                        "\"driver\"=\"test_driver\",\n" +
+                        "\"driver_url\"=\"test_driver_url\",\n" +
+                        "\"driver_class\"=\"test.driver.class\",\n" +
                         "\"jdbc_uri\"=\"test_uri\"\n" +
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
@@ -653,6 +656,7 @@ public class PlanTestBase {
                         "\"resource\"=\"jdbc_test\",\n" +
                         "\"table\"=\"test_table\"\n" +
                         ");");
+        FeConstants.runningUnitTest = false;
 
         starRocksAssert.withTable("CREATE TABLE `t0_not_null` (\n" +
                 "  `v1` bigint NOT NULL COMMENT \"\",\n" +
