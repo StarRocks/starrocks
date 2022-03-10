@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -49,6 +50,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -260,7 +262,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
-    private synchronized void eraseTable(long currentTimeMs) {
+    @VisibleForTesting
+    public synchronized void eraseTable(long currentTimeMs) {
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = tableEntry.entrySet().iterator();
             List<Long> tableIdList = Lists.newArrayList();
@@ -316,7 +319,9 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseTable(long tableId) {
         Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
-        for (Long dbId : column.keySet()) {
+        Optional<Long> dbIdOpt = column.keySet().stream().findFirst();
+        if (dbIdOpt.isPresent()) {
+            Long dbId = dbIdOpt.get();
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
@@ -325,9 +330,9 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, true);
                 }
             }
+            idToRecycleTime.remove(tableId);
+            LOG.info("replay erase table[{}] finished", tableId);
         }
-        idToRecycleTime.remove(tableId);
-        LOG.info("replay erase table[{}] finished", tableId);
     }
 
     private synchronized void erasePartition(long currentTimeMs) {
