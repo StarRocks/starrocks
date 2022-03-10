@@ -316,8 +316,7 @@ public class PropertyAnalyzer {
                 Type type = column.getType();
 
                 // tinyint/float/double columns don't support
-                if (!type.isScalarType() || type.isFloatingPointType() || type.isTinyint() ||
-                        type.isBoolean() || type.isDecimalV3()) {
+                if (!type.supportBloomFilter()) {
                     throw new AnalysisException(String.format("Invalid bloom filter column '%s': unsupported type %s",
                             bfColumn, type));
                 }
