@@ -126,7 +126,7 @@ public abstract class Type implements Cloneable {
                     .addAll(floatPointTypes)
                     .build();
 
-    private static final ImmutableList<Type> supportedTypes =
+    protected static final ImmutableList<Type> supportedTypes =
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .add(BOOLEAN)
@@ -149,12 +149,19 @@ public abstract class Type implements Cloneable {
                     .add(JSON)
                     .build();
 
+    protected static final ImmutableList<Type> SUPPORT_SCALAR_TYPE_LIST =
+            ImmutableList.copyOf(supportedTypes.stream().filter(Type::isScalarType).collect(Collectors.toList()));
+
     protected static final ImmutableMap<String, ScalarType> STATIC_TYPE_MAP =
             ImmutableMap.<String, ScalarType>builder()
                     .put("DECIMAL", ScalarType.createDecimalV2Type())
-                    .putAll(supportedTypes.stream()
-                            .filter(Type::isScalarType)
+                    .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
+                    .build();
+    protected static final ImmutableMap<PrimitiveType, ScalarType> PRIMITIVE_TYPE_SCALAR_TYPE_IMMUTABLE_MAP =
+            ImmutableMap.<PrimitiveType, ScalarType>builder()
+                    .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
+                            .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
                     .build();
 
     /**

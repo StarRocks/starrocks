@@ -76,6 +76,7 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "scale")
     private int scale;
 
+
     protected ScalarType(PrimitiveType type) {
         this.type = type;
     }
@@ -98,64 +99,48 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createType(PrimitiveType type) {
-        switch (type) {
-            case INVALID_TYPE:
-                return INVALID;
-            case NULL_TYPE:
-                return NULL;
-            case BOOLEAN:
-                return BOOLEAN;
-            case SMALLINT:
-                return SMALLINT;
-            case TINYINT:
-                return TINYINT;
-            case INT:
-                return INT;
-            case BIGINT:
-                return BIGINT;
-            case FLOAT:
-                return FLOAT;
-            case DOUBLE:
-                return DOUBLE;
-            case CHAR:
-                return CHAR;
-            case VARCHAR:
-                return createVarcharType();
-            case HLL:
-                return createHllType();
-            case JSON:
-                return JSON;
-            case BITMAP:
-                return BITMAP;
-            case PERCENTILE:
-                return PERCENTILE;
-            case DATE:
-                return DATE;
-            case DATETIME:
-                return DATETIME;
-            case TIME:
-                return TIME;
-            case DECIMALV2:
-                return DEFAULT_DECIMALV2;
-            case LARGEINT:
-                return LARGEINT;
-            case DECIMAL32:
-                return DECIMAL32;
-            case DECIMAL64:
-                return DECIMAL64;
-            case DECIMAL128:
-                return DECIMAL128;
-            default:
-                LOG.warn("type={}", type);
-                Preconditions.checkState(false);
-                return NULL;
-        }
+        ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_IMMUTABLE_MAP.get(type);
+        Preconditions.checkNotNull(res, "unknown type " + type);
+        return res;
     }
 
     public static ScalarType createType(String type) {
         ScalarType res = STATIC_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
+    }
+
+    /**
+     * Create type from parser, needs to infer type from simple name
+     */
+    public static ScalarType createTypeFromParser(String typeName, Integer length, Integer precision, Integer scale) {
+        if (PrimitiveType.isStaticType(typeName) || (length == null && precision == null && scale == null)) {
+            return createType(typeName);
+        } else if (length != null) {
+            if ("VARCHAR".equals(typeName)) {
+                return createVarchar(length);
+            } else if ("CHAR".equals(typeName)) {
+                return createCharType(length);
+            } else if ("STRING".equals(typeName)) {
+                ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+                stringType.setAssignedStrLenInColDefinition();
+                return stringType;
+            }
+        } else if (precision != null && scale != null) {
+            if ("DECIMAL".equals(typeName)) {
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            } else if ("DECIMALV2".equals(typeName)) {
+                return ScalarType.createDecimalV2Type(precision, scale);
+            } else if ("DECIMAL32".equals(typeName)) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
+            } else if ("DECIMAL64".equals(typeName)) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
+            } else if ("DECIMAL128".equals(typeName)) {
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+            }
+        }
+
+        throw new IllegalArgumentException("Unsupported type specification: " + typeName);
     }
 
     public static ScalarType createCharType(int len) {
