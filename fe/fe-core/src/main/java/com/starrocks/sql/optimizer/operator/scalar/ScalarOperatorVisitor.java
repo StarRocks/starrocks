@@ -69,4 +69,8 @@ public abstract class ScalarOperatorVisitor<R, C> {
     public R visitCaseWhenOperator(CaseWhenOperator operator, C context) {
         return visit(operator, context);
     }
+
+    public R visitDictMappingOperator(DictMappingOperator operator, C context) {
+        return visit(operator, context);
+    }
 }

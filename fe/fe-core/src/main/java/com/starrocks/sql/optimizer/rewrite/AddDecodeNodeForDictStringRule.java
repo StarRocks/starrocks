@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -145,7 +146,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     public static class DecodeVisitor extends OptExpressionVisitor<OptExpression, DecodeContext> {
 
         public static boolean couldApplyDictOptimize(ScalarOperator operator) {
-            return operator.accept(new CouldApplyDictOptimizeVisitor(), null);
+            return operator.getUsedColumns().cardinality() == 1 &&
+                    operator.accept(new CouldApplyDictOptimizeVisitor(), null);
         }
 
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
@@ -438,27 +440,34 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             int stringColumnId = valueOperator.getUsedColumns().getFirstId();
             if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
-                ColumnRefOperator oldStringArgColumn = context.columnRefFactory.getColumnRef(stringColumnId);
-                Integer columnId =
-                        context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
-                ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+                // if output was TYPE_VARCHAR rewrite as DictColumn
+                // if output was other type, only rewrite input column
+                if (valueOperator.getType().isVarchar()) {
+                    Integer columnId =
+                            context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
+                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
 
-                ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                        keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
+                    ColumnRefOperator newDictColumn = context.columnRefFactory.create(
+                            keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
 
-                Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMapWithExpectedSize(1);
-                rewriteMap.put(oldStringArgColumn, dictColumn);
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-                // Will modify the operator, must use clone
-                ScalarOperator newCallOperator = valueOperator.clone().accept(rewriter, null);
-                newCallOperator.setType(ID_TYPE);
+                    final DictMappingOperator newCallOperator =
+                            new DictMappingOperator(dictColumn, valueOperator.clone(), ID_TYPE);
 
-                newProjectMap.put(newDictColumn, newCallOperator);
-                newProjectMap.remove(keyColumn);
+                    newProjectMap.put(newDictColumn, newCallOperator);
+                    newProjectMap.remove(keyColumn);
 
-                context.stringFunctions.put(newDictColumn, newCallOperator);
+                    context.stringFunctions.put(newDictColumn, newCallOperator);
 
-                newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
+                    newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
+                } else {
+                    Integer columnId =
+                            context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
+                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
+                    final DictMappingOperator newCallOperator =
+                            new DictMappingOperator(dictColumn, valueOperator.clone(), valueOperator.getType());
+                    newProjectMap.put(keyColumn, newCallOperator);
+                }
+
             }
         }
 
@@ -805,29 +814,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitCall(CallOperator call, Void context) {
-            // Can not apply it on calling function on constant value such as `hex(10)`
-            if (call.getUsedColumns().cardinality() != 1) {
-                return false;
-            }
             if (!call.getFunction().isCouldApplyDictOptimize()) {
                 return false;
             }
-            for (ScalarOperator child : call.getChildren()) {
-                if (child instanceof CallOperator) {
-                    if (!child.accept(this, null)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
+            return call.getChildren().stream().allMatch(scalarOperator -> scalarOperator.accept(this, null));
         }
 
         @Override
         public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return false;
-            }
-            if (predicate.getUsedColumns().cardinality() > 1) {
                 return false;
             }
             if (!predicate.getChild(1).isConstant()) {
@@ -849,12 +844,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitCastOperator(CastOperator operator, Void context) {
-            return false;
+            return operator.getChild(0).accept(this, null);
         }
 
         @Override
         public Boolean visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-            return false;
+            return operator.getChildren().stream().allMatch(scalarOperator -> scalarOperator.accept(this, null));
         }
 
         @Override
@@ -864,7 +859,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitConstant(ConstantOperator literal, Void context) {
-            return false;
+            return true;
         }
 
         @Override
