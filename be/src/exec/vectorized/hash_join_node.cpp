@@ -220,13 +220,13 @@ Status HashJoinNode::open(RuntimeState* state) {
         {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.append_chunk(state, chunk)));
+            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk));
         }
     }
 
     {
         // build hash table: compute key columns, and then build the hash table.
-        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_build(state)));
+        RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }
@@ -549,7 +549,7 @@ Status HashJoinNode::_build(RuntimeState* state) {
 
     {
         SCOPED_TIMER(_build_ht_timer);
-        RETURN_IF_ERROR(_ht.build(state));
+        TRY_CATCH_BAD_ALLOC(_ht.build(state));
     }
 
     return Status::OK();
@@ -651,7 +651,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -689,7 +689,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (!_build_eos) {
-        RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
+        TRY_CATCH_BAD_ALLOC(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
 
         eval_join_runtime_filters(chunk);
 
