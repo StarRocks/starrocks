@@ -301,8 +301,7 @@ public class ReduceCastRuleTest {
             CastOperator castOperator =
                     new CastOperator(Type.DATETIME, new ColumnRefOperator(0, Type.DATE, "id_date", false));
             ConstantOperator constantOperator = ConstantOperator.createNull(Type.DATETIME);
-            BinaryPredicateOperator beforeOptimize =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castOperator, constantOperator);
+            BinaryPredicateOperator beforeOptimize = BinaryPredicateOperator.ge(castOperator, constantOperator);
             ScalarOperator afterOptimize = reduceCastRule.apply(
                     beforeOptimize,
                     null);
@@ -425,8 +424,7 @@ public class ReduceCastRuleTest {
             CastOperator castOperator =
                     new CastOperator(Type.DATE, new ColumnRefOperator(0, Type.DATETIME, "id_datetime", false));
             ConstantOperator constantOperator = ConstantOperator.createNull(Type.DATE);
-            BinaryPredicateOperator beforeOptimize =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castOperator, constantOperator);
+            BinaryPredicateOperator beforeOptimize = BinaryPredicateOperator.lt(castOperator, constantOperator);
             ScalarOperator afterOptimize = reduceCastRule.apply(beforeOptimize, null);
             Assert.assertSame(beforeOptimize, afterOptimize);
         }
