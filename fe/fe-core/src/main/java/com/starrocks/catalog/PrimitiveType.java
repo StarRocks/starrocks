@@ -23,8 +23,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -113,8 +113,8 @@ public enum PrimitiveType {
                     .addAll(STRING_TYPE_LIST)
                     .build();
 
-    private static final ImmutableSet<String> VARIABLE_TYPE_SET =
-            ImmutableSet.<String>builder()
+    private static final ImmutableSortedSet<String> VARIABLE_TYPE_SET =
+            ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .add(PrimitiveType.CHAR.toString())
                     .add(PrimitiveType.VARCHAR.toString())
                     .add(PrimitiveType.DECIMALV2.toString())

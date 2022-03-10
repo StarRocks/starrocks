@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -95,6 +96,7 @@ public abstract class Type implements Cloneable {
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
     public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+    public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
@@ -153,9 +155,10 @@ public abstract class Type implements Cloneable {
     protected static final ImmutableList<Type> SUPPORT_SCALAR_TYPE_LIST =
             ImmutableList.copyOf(supportedTypes.stream().filter(Type::isScalarType).collect(Collectors.toList()));
 
-    protected static final ImmutableMap<String, ScalarType> STATIC_TYPE_MAP =
-            ImmutableMap.<String, ScalarType>builder()
-                    .put("DECIMAL", ScalarType.createDecimalV2Type())
+    protected static final ImmutableSortedMap<String, ScalarType> STATIC_TYPE_MAP =
+            ImmutableSortedMap.<String, ScalarType>orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
+                    .put("STRING", Type.DEFAULT_STRING)
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
@@ -164,6 +167,7 @@ public abstract class Type implements Cloneable {
             ImmutableMap.<PrimitiveType, ScalarType>builder()
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
+                    .put(INVALID.getPrimitiveType(), INVALID)
                     .build();
 
     /**

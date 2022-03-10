@@ -31,6 +31,7 @@ import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,33 +115,31 @@ public class ScalarType extends Type implements Cloneable {
      * Create type from parser, needs to infer type from simple name
      */
     public static ScalarType createTypeFromParser(String typeName, Integer length, Integer precision, Integer scale) {
-        if (PrimitiveType.isStaticType(typeName) || (length == null && precision == null && scale == null)) {
-            return createType(typeName);
-        } else if (length != null) {
-            if ("VARCHAR".equals(typeName)) {
+        if (length != null) {
+            if (StringUtils.startsWithIgnoreCase(typeName, "VARCHAR")) {
                 return createVarchar(length);
-            } else if ("CHAR".equals(typeName)) {
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "CHAR")) {
                 return createCharType(length);
-            } else if ("STRING".equals(typeName)) {
-                ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-                stringType.setAssignedStrLenInColDefinition();
-                return stringType;
+            } else if ("STRING".equalsIgnoreCase(typeName)) {
+                return DEFAULT_STRING;
             }
         } else if (precision != null && scale != null) {
-            if ("DECIMAL".equals(typeName)) {
+            if ("DECIMAL".equalsIgnoreCase(typeName)) {
                 return ScalarType.createUnifiedDecimalType(precision, scale);
-            } else if ("DECIMALV2".equals(typeName)) {
+            } else if ("DECIMALV2".equalsIgnoreCase(typeName)) {
                 return ScalarType.createDecimalV2Type(precision, scale);
-            } else if ("DECIMAL32".equals(typeName)) {
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL32")) {
                 return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
-            } else if ("DECIMAL64".equals(typeName)) {
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL64")) {
                 return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
-            } else if ("DECIMAL128".equals(typeName)) {
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL128")) {
                 return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
             }
+        } else {
+            return createType(typeName);
         }
 
-        throw new IllegalArgumentException("Unsupported type specification: " + typeName);
+        throw new IllegalArgumentException("Unsupported type: " + typeName);
     }
 
     public static ScalarType createCharType(int len) {
@@ -261,6 +260,12 @@ public class ScalarType extends Type implements Cloneable {
                     "Illegal decimal precision(1 to 38): pecision=" + precision);
             return ScalarType.INVALID;
         }
+    }
+
+    public static ScalarType createDefaultString() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+        stringType.setAssignedStrLenInColDefinition();
+        return stringType;
     }
 
     public static ScalarType createVarcharType(int len) {
@@ -460,7 +465,7 @@ public class ScalarType extends Type implements Cloneable {
             if (isWildcardDecimal()) {
                 return type.toString();
             }
-            return type.toString() + "(" + precision + "," + scale + ")";
+            return type + "(" + precision + "," + scale + ")";
         } else if (type == PrimitiveType.VARCHAR) {
             if (isWildcardVarchar()) {
                 return "VARCHAR";
@@ -512,7 +517,7 @@ public class ScalarType extends Type implements Cloneable {
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:
-                stringBuilder.append("unknown type: ").append(type.toString());
+                stringBuilder.append("unknown type: ").append(type);
                 break;
         }
         return stringBuilder.toString();
@@ -655,10 +660,7 @@ public class ScalarType extends Type implements Cloneable {
         if (this.isStringType() && t.isStringType()) {
             return true;
         }
-        if (isDecimalV2() && t.isDecimalV2()) {
-            return true;
-        }
-        return false;
+        return isDecimalV2() && t.isDecimalV2();
     }
 
     @Override
