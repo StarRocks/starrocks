@@ -100,7 +100,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createType(PrimitiveType type) {
-        ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_IMMUTABLE_MAP.get(type);
+        ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
     }
