@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -39,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Abstract class describing an Impala data type (scalar/complex type).
@@ -145,6 +147,14 @@ public abstract class Type implements Cloneable {
                     .add(DECIMAL64)
                     .add(DECIMAL128)
                     .add(JSON)
+                    .build();
+
+    protected static final ImmutableMap<String, ScalarType> STATIC_TYPE_MAP =
+            ImmutableMap.<String, ScalarType>builder()
+                    .put("DECIMAL", ScalarType.createDecimalV2Type())
+                    .putAll(supportedTypes.stream()
+                            .filter(Type::isScalarType)
+                            .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
 
     /**

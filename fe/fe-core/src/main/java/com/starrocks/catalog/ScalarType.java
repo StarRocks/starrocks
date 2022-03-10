@@ -153,60 +153,9 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createType(String type) {
-        switch (type) {
-            case "INVALID_TYPE":
-                return INVALID;
-            case "NULL_TYPE":
-                return NULL;
-            case "BOOLEAN":
-                return BOOLEAN;
-            case "SMALLINT":
-                return SMALLINT;
-            case "TINYINT":
-                return TINYINT;
-            case "INT":
-                return INT;
-            case "BIGINT":
-                return BIGINT;
-            case "FLOAT":
-                return FLOAT;
-            case "DOUBLE":
-                return DOUBLE;
-            case "CHAR":
-                return CHAR;
-            case "VARCHAR":
-                return createVarcharType();
-            case "HLL":
-                return createHllType();
-            case "BITMAP":
-                return BITMAP;
-            case "PERCENTILE":
-                return PERCENTILE;
-            case "DATE":
-                return DATE;
-            case "DATETIME":
-                return DATETIME;
-            case "TIME":
-                return TIME;
-            case "DECIMAL":
-                return createDecimalV2Type();
-            case "DECIMALV2":
-                return createDecimalV2Type();
-            case "LARGEINT":
-                return LARGEINT;
-            case "DECIMAL32":
-                return DECIMAL32;
-            case "DECIMAL64":
-                return DECIMAL64;
-            case "DECIMAL128":
-                return DECIMAL128;
-            case "JSON":
-                return JSON;
-            default:
-                LOG.warn("type={}", type);
-                Preconditions.checkState(false);
-                return NULL;
-        }
+        ScalarType res = STATIC_TYPE_MAP.get(type);
+        Preconditions.checkNotNull(res, "unknown type " + type);
+        return res;
     }
 
     public static ScalarType createCharType(int len) {
