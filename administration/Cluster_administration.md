@@ -111,6 +111,25 @@ ps aux | grep StarRocksFe
 
 BE、FE启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼容，从新 FE 发出的命令可能会导致旧的 BE 挂掉。但是因为已经部署了新的 BE 文件，BE 通过守护进程自动重启后，即已经是新的 BE 了。
 
+##### StarRocks 2.0 升级到StarRocks 2.1 的注意事项
+
+StarRocks如果从2.0升级到2.1版本如果是灰度升级的方式需要确保下面的一些配置项:
+
+1. 确保所有be的配置项vector_chunk_size是4096(默认配置)
+2. 确保 FE session 变量 batch_size 小于 4096 (默认配置为1024)
+
+```sql
+mysql> show variables like '%batch_size%';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| batch_size    | 1024  |
++---------------+-------+
+1 row in set (0.00 sec)
+-- 设置 batch_size
+mysql> set global batch_size = 4096;
+```
+
 #### 测试BE升级的正确性
 
 * 任意选择一个BE节点，部署最新的starrocks_be二进制文件。
