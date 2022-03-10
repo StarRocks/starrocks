@@ -36,12 +36,13 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MysqlServerTest {
     private static final Logger LOG = LoggerFactory.getLogger(MysqlServerTest.class);
 
-    private int submitNum;
-    private int submitFailNum;
+    private final AtomicInteger submitNum = new AtomicInteger(0);
+    private final AtomicInteger submitFailNum = new AtomicInteger(0);
     @Mocked
     private ConnectScheduler scheduler;
     @Mocked
@@ -49,8 +50,8 @@ public class MysqlServerTest {
 
     @Before
     public void setUp() {
-        submitNum = 0;
-        submitFailNum = 0;
+        submitNum.set(0);
+        submitFailNum.set(0);
         new Expectations() {
             {
                 scheduler.submit((ConnectContext) any);
@@ -58,9 +59,7 @@ public class MysqlServerTest {
                 result = new Delegate() {
                     public Boolean answer() throws Throwable {
                         LOG.info("answer.");
-                        synchronized (MysqlServerTest.this) {
-                            submitNum++;
-                        }
+                        submitNum.getAndIncrement();
                         return Boolean.TRUE;
                     }
                 };
@@ -70,9 +69,7 @@ public class MysqlServerTest {
                 result = new Delegate() {
                     public Boolean answer() throws Throwable {
                         LOG.info("answer.");
-                        synchronized (MysqlServerTest.this) {
-                            submitFailNum++;
-                        }
+                        submitFailNum.getAndIncrement();
                         return Boolean.FALSE;
                     }
                 };
@@ -98,7 +95,7 @@ public class MysqlServerTest {
         channel2.connect(new InetSocketAddress("127.0.0.1", port));
         // sleep to wait mock process
         Thread.sleep(3000);
-        
+
         channel1.close();
         channel2.close();
 
@@ -106,7 +103,7 @@ public class MysqlServerTest {
         server.stop();
         server.join();
 
-        Assert.assertEquals(2, submitNum);
+        Assert.assertEquals(2, submitNum.get());
     }
 
     @Test
@@ -158,7 +155,7 @@ public class MysqlServerTest {
         server.stop();
         server.join();
 
-        Assert.assertEquals(2, submitFailNum);
+        Assert.assertEquals(2, submitFailNum.get());
     }
 
 }
