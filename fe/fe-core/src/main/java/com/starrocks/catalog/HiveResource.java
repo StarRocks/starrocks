@@ -73,6 +73,10 @@ public class HiveResource extends Resource {
             String key = entry.getKey();
             String value = entry.getValue();
             if (HIVE_METASTORE_URIS.equals(key)) {
+                if (StringUtils.isBlank(value)) {
+                    throw new DdlException(HIVE_METASTORE_URIS + " can not be null");
+                }
+                validateMetastoreUris(value);
                 this.metastoreURIs = value;
             } else {
                 throw new DdlException(String.format("property %s has not support yet", key));
