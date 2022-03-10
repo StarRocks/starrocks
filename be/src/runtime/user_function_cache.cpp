@@ -33,8 +33,8 @@
 #include "env/env.h"
 #include "fmt/compile.h"
 #include "gutil/strings/split.h"
-#include "util/dynamic_util.h"
 #include "util/download_util.h"
+#include "util/dynamic_util.h"
 #include "util/file_utils.h"
 #include "util/spinlock.h"
 

@@ -11,7 +11,8 @@
 
 namespace starrocks {
 
-Status DownloadUtil::download(const std::string& url, const std::string& tmp_file, const std::string& target_file, const std::string& expected_checksum) {
+Status DownloadUtil::download(const std::string& url, const std::string& tmp_file, const std::string& target_file,
+                              const std::string& expected_checksum) {
     auto fp = fopen(tmp_file.c_str(), "w");
     DeferOp defer([&]() { fclose(fp); });
 
@@ -40,7 +41,8 @@ Status DownloadUtil::download(const std::string& url, const std::string& tmp_fil
 
     digest.digest();
     if (!boost::iequals(digest.hex(), expected_checksum)) {
-        LOG(ERROR) << fmt::format("Download file's checksum is not equal, expected={}, actual={}", expected_checksum, digest.hex());
+        LOG(ERROR) << fmt::format("Download file's checksum is not equal, expected={}, actual={}", expected_checksum,
+                                  digest.hex());
         return Status::InternalError("Download file's checksum is not match");
     }
 
@@ -52,4 +54,4 @@ Status DownloadUtil::download(const std::string& url, const std::string& tmp_fil
     }
     return Status::OK();
 }
-}
+} // namespace starrocks
