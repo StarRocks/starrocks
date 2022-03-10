@@ -648,18 +648,11 @@ void DataDir::_process_garbage_path(const std::string& path) {
 }
 
 Status DataDir::update_capacity() {
-    try {
-        std::filesystem::space_info path_info = std::filesystem::space(_path);
-        _available_bytes = path_info.available;
-        _disk_capacity_bytes = path_info.capacity;
-    } catch (std::filesystem::filesystem_error& e) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("get path $0 available capacity failed, error=$1",
-                                                                      _path, e.what())),
-                                  "std::filesystem::space failed");
-    }
+    ASSIGN_OR_RETURN(auto space_info, Env::Default()->space(_path));
+    _available_bytes = space_info.available;
+    _disk_capacity_bytes = space_info.capacity;
     LOG(INFO) << "path: " << _path << " total capacity: " << _disk_capacity_bytes
               << ", available capacity: " << _available_bytes;
-
     return Status::OK();
 }
 
