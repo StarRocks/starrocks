@@ -12,6 +12,7 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "testutil/assert.h"
 
@@ -60,23 +61,17 @@ void S3InputStreamTest::TearDownTestCase() {
 
 void init_s3client() {
     Aws::Client::ClientConfiguration config;
-    config.region = Aws::Region::AP_SOUTHEAST_1;
-    const char* ak = getenv("AWS_ACCESS_KEY_ID");
-    const char* sk = getenv("AWS_SECRET_ACCESS_KEY");
-    CHECK(ak != nullptr) << "Env AWS_ACCESS_KEY_ID not set";
-    CHECK(sk != nullptr) << "Env AWS_SECRET_ACCESS_KEY not set";
+    config.scheme = Aws::Http::Scheme::HTTP;
+    config.endpointOverride = config::object_storage_endpoint;
+    auto ak = config::object_storage_access_key_id;
+    auto sk = config::object_storage_secret_access_key;
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
     g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config));
 }
 
 void init_bucket() {
     Aws::Client::ClientConfiguration config;
-    config.region = Aws::Region::AP_SOUTHEAST_1;
-    auto constraint = Aws::S3::Model::BucketLocationConstraintMapper::GetBucketLocationConstraintForName(
-            Aws::Region::AP_SOUTHEAST_1);
     Aws::S3::Model::CreateBucketConfiguration bucket_config;
-    bucket_config.SetLocationConstraint(constraint);
-
     Aws::S3::Model::CreateBucketRequest request;
     request.SetCreateBucketConfiguration(bucket_config);
     request.SetBucket(kBucketName);

@@ -22,6 +22,12 @@
         ASSERT_FALSE(st.ok()); \
     } while (0)
 
+#define EXPECT_ERROR(stmt)     \
+    do {                       \
+        auto&& st = (stmt);    \
+        EXPECT_FALSE(st.ok()); \
+    } while (0)
+
 #define EXPECT_OK(stmt)             \
     do {                            \
         Status st = (stmt);         \

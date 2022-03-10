@@ -3,6 +3,7 @@
 #include "env/env_memory.h"
 
 #include <butil/files/file_path.h>
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "gutil/strings/join.h"
@@ -47,8 +48,8 @@ public:
         bool is_dir = false;
         CHECK_OK(_env->is_directory(normalized_path, &is_dir));
         if (is_dir) {
-            CHECK_OK(_env->iterate_dir(normalized_path, [&, this](const char* filename) -> bool {
-                auto subdir = walk(normalized_path + "/" + filename);
+            CHECK_OK(_env->iterate_dir(normalized_path, [&, this](std::string_view filename) -> bool {
+                auto subdir = walk(fmt::format("{}/{}", normalized_path, filename));
                 result.insert(result.end(), subdir.begin(), subdir.end());
                 return true;
             }));

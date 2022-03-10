@@ -169,11 +169,11 @@ Status UserFunctionCache::_load_cached_lib() {
         std::string sub_dir = _lib_dir + "/" + std::to_string(i);
         RETURN_IF_ERROR(FileUtils::create_dir(sub_dir));
 
-        auto scan_cb = [this, &sub_dir](const char* file) {
+        auto scan_cb = [this, &sub_dir](std::string_view file) {
             if (is_dot_or_dotdot(file)) {
                 return true;
             }
-            auto st = _load_entry_from_lib(sub_dir, file);
+            auto st = _load_entry_from_lib(sub_dir, std::string(file.data()));
             if (!st.ok()) {
                 LOG(WARNING) << "load a library failed, dir=" << sub_dir << ", file=" << file;
             }

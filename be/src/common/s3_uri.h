@@ -18,11 +18,19 @@ public:
 
     const std::string& scheme() const { return _scheme; }
 
+    std::string& bucket() { return _bucket; }
+
     const std::string& bucket() const { return _bucket; }
+
+    std::string& key() { return _key; }
 
     const std::string& key() const { return _key; }
 
+    std::string& region() { return _region; }
+
     const std::string& region() const { return _region; }
+
+    std::string& endpoint() { return _endpoint; }
 
     const std::string& endpoint() const { return _endpoint; }
 
