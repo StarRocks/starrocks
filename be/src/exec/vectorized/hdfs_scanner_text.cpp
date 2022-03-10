@@ -12,13 +12,15 @@ namespace starrocks::vectorized {
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, char record_delimiter, string field_delimiter, size_t offset,
-                         size_t remain_length, size_t file_length)
-            : CSVReader(record_delimiter, field_delimiter) {
+    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
+                         size_t offset, size_t remain_length, size_t file_length)
+            : CSVReader(row_delimiter, column_separator) {
         _file = file;
         _offset = offset;
         _remain_length = remain_length;
         _file_length = file_length;
+        _row_delimiter_length = row_delimiter.size();
+        _column_separator_length = column_separator.size();
     }
 
     void reset(size_t offset, size_t remain_length);
@@ -68,21 +70,25 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     _remain_length -= s.size;
     _buff.add_limit(s.size);
     auto n = _buff.available();
-    if (s.size == 0 && n == 0) {
-        // Has reached the end of file and the buffer is empty.
-        _should_stop_scan = true;
-        LOG(INFO) << "Reach end of file!";
-        return Status::EndOfFile(_file->filename());
-    } else if (s.size == 0 && _buff.position()[n - 1] != _record_delimiter) {
-        // Has reached the end of file but still no record delimiter found, which
-        // is valid, according the RFC, add the record delimiter ourself.
-        _buff.append(_record_delimiter);
+    if (s.size == 0) {
+        if (n == 0) {
+            // Has reached the end of file and the buffer is empty.
+            _should_stop_scan = true;
+            LOG(INFO) << "Reach end of file!";
+            return Status::EndOfFile(_file->filename());
+        } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+            // Has reached the end of file but still no record delimiter found, which
+            // is valid, according the RFC, add the record delimiter ourself.
+            for (char ch : _row_delimiter) {
+                _buff.append(ch);
+            }
+        }
     }
 
     // For each scan range we always read the first record of next scan range,so _remain_length
     // may be negative here. Once we have read the first record of next scan range we
     // should stop scan in the next round.
-    if ((_remain_length < 0 && _buff.find(_record_delimiter, 0) != nullptr)) {
+    if ((_remain_length < 0 && _buff.find(_row_delimiter, 0) != nullptr)) {
         _should_stop_scan = true;
     }
 

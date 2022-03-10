@@ -23,7 +23,9 @@ protected:
     void TearDown() override {}
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
-                                                   const std::vector<TBrokerRangeDesc>& ranges) {
+                                                   const std::vector<TBrokerRangeDesc>& ranges,
+                                                   const string& multi_row_delimiter = "\n",
+                                                   const string& multi_column_separator = "|") {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -46,8 +48,8 @@ protected:
 
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
-        params->row_delimiter = '\n';
-        params->column_separator = '|';
+        params->__set_multi_row_delimiter(multi_row_delimiter);
+        params->__set_multi_column_separator(multi_column_separator);
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
@@ -156,6 +158,54 @@ TEST_F(CSVScannerTest, test_scalar_types) {
     EXPECT_EQ(true, chunk->get(2)[4].is_null());
     // len(oranges) == 7 > 6
     EXPECT_EQ(true, chunk->get(3)[4].is_null());
+}
+
+TEST_F(CSVScannerTest, test_multi_seprator) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_DATE);
+    types.emplace_back(TYPE_VARCHAR);
+
+    types[2].len = 10;
+    types[4].len = 6;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_one;
+    range_one.__set_path("./be/test/exec/test_data/csv_scanner/csv_file14");
+    range_one.__set_start_offset(0);
+    range_one.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range_one);
+
+    auto scanner = create_csv_scanner(types, ranges, "<br>", "^^");
+    EXPECT_NE(scanner, nullptr);
+
+    auto st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto chunk = res.value();
+
+    EXPECT_EQ(5, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    // int column
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(-1, chunk->get(1)[0].get_int32());
+
+    // double column
+    EXPECT_FLOAT_EQ(1.1, chunk->get(0)[1].get_double());
+    EXPECT_FLOAT_EQ(-0.1, chunk->get(1)[1].get_double());
+
+    // string column
+    EXPECT_EQ("ap", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("br", chunk->get(1)[2].get_slice());
+
+    // date column
+    EXPECT_EQ("2020-01-01", chunk->get(0)[3].get_date().to_string());
+    EXPECT_EQ("1998-09-01", chunk->get(1)[3].get_date().to_string());
 }
 
 TEST_F(CSVScannerTest, test_array_of_int) {
@@ -484,10 +534,9 @@ TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
 }
 
 TEST_F(CSVScannerTest, test_large_record_size) {
-    constexpr size_t record_length = CSVScanner::kMinBufferSize * 2;
-    constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    constexpr size_t record_length = 65533 * 5;
+    constexpr size_t field_length = 65533;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
-    static_assert(field_count * field_length < CSVScanner::kMaxBufferSize);
 
     TypeDescriptor large_varchar_type;
     large_varchar_type.type = TYPE_VARCHAR;
@@ -540,10 +589,9 @@ TEST_F(CSVScannerTest, test_large_record_size) {
 }
 
 TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
-    constexpr size_t record_length = CSVScanner::kMaxBufferSize;
+    constexpr size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
-    static_assert(field_count * field_length > CSVScanner::kMaxBufferSize);
 
     TypeDescriptor large_varchar_type;
     large_varchar_type.type = TYPE_VARCHAR;
