@@ -123,17 +123,17 @@ public class ScalarType extends Type implements Cloneable {
             } else if ("STRING".equalsIgnoreCase(typeName)) {
                 return DEFAULT_STRING;
             }
-        } else if (precision != null && scale != null) {
+        } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL")) {
             if ("DECIMAL".equalsIgnoreCase(typeName)) {
                 return ScalarType.createUnifiedDecimalType(precision, scale);
             } else if ("DECIMALV2".equalsIgnoreCase(typeName)) {
                 return ScalarType.createDecimalV2Type(precision, scale);
-            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL32")) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
-            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL64")) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
-            } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL128")) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+            }
+            PrimitiveType primitive = createType(typeName).getPrimitiveType();
+            if (precision == null || scale == null) {
+                return ScalarType.createDecimalV3Type(primitive);
+            } else {
+                return ScalarType.createDecimalV3Type(primitive, precision, scale);
             }
         } else {
             return createType(typeName);
@@ -168,6 +168,9 @@ public class ScalarType extends Type implements Cloneable {
         return new AnalysisException(hint + "error='" + errorMsg + "'");
     }
 
+    /**
+     * Unified decimal is used for parser, which creating default decimal from name
+     */
     public static ScalarType createUnifiedDecimalType() throws AnalysisException {
         throw decimalParseError("both precision and scale are absent");
     }
@@ -223,6 +226,9 @@ public class ScalarType extends Type implements Cloneable {
         return scalarType;
     }
 
+    /**
+     * Wildcard decimal is used for function matching
+     */
     public static ScalarType createWildcardDecimalV3Type(PrimitiveType type) {
         Preconditions.checkArgument(type.isDecimalV3Type());
         ScalarType scalarType = new ScalarType(type);

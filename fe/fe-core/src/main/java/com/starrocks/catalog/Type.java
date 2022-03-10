@@ -159,6 +159,7 @@ public abstract class Type implements Cloneable {
             ImmutableSortedMap.<String, ScalarType>orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
                     .put("STRING", Type.DEFAULT_STRING)
+                    .put("INTEGER", Type.INT)
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();

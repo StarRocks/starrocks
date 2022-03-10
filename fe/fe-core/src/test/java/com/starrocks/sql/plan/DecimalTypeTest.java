@@ -16,7 +16,7 @@ public class DecimalTypeTest extends PlanTestBase {
         sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) " +
                 "GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
+        Assert.assertTrue(plan, plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
     }
 
     @Test
