@@ -41,6 +41,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -375,7 +376,11 @@ public class RestoreJob extends AbstractJob {
                     status = new Status(ErrCode.NOT_FOUND, "table " + idChain.getTblId() + " has been dropped");
                     return;
                 }
-
+                if (tbl.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    status = new Status(ErrCode.COMMON_ERROR,
+                            "restore do not support primary key table: " + tbl.getName());
+                    return;
+                }
                 Partition part = tbl.getPartition(idChain.getPartId());
                 if (part == null) {
                     status = new Status(ErrCode.NOT_FOUND, "partition " + idChain.getPartId() + " has been dropped");
