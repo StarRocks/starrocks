@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
-import com.starrocks.common.Config;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
 import org.junit.Test;
@@ -86,6 +85,7 @@ public class CatalogRecycleBinTest {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
         bin.recycleTable(11, table);
+        bin.recycleTable(12, table);
 
         List<Table> tables = bin.getTables(11L);
         Assert.assertEquals(1, tables.size());
