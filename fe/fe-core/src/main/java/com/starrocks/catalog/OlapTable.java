@@ -1128,7 +1128,7 @@ public class OlapTable extends Table {
 
         int partitionCount = in.readInt();
         for (int i = 0; i < partitionCount; ++i) {
-            Partition partition = Partition.read(in);
+            Partition partition = Partition.read(in, partitionInfo);
             idToPartition.put(partition.getId(), partition);
             nameToPartition.put(partition.getName(), partition);
         }
