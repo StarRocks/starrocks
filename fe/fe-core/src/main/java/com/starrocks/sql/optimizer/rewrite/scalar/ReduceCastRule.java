@@ -71,15 +71,11 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         ScalarOperator castChild = child1.getChild(0);
         // abandon cast function when cast datetime to date
-        boolean isOriginalDateType = castChild.getType().isDate();
-        boolean isDatetimeType = child2.getType().isDatetime();
-        if (isOriginalDateType && isDatetimeType) {
+        if (castChild.getType().isDate() && child2.getType().isDatetime()) {
             return reduceDateToDatetimeCast(operator);
         }
 
-        boolean isOriginalDateTimeType = castChild.getType().isDatetime();
-        boolean isDateType = child2.getType().isDate();
-        if (isOriginalDateTimeType && isDateType) {
+        if (castChild.getType().isDatetime() && child2.getType().isDate()) {
             return reduceDatetimeToDateCast(operator);
         }
 
@@ -130,12 +126,17 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
     }
 
-    public ScalarOperator reduceDateToDatetimeCast(BinaryPredicateOperator operator) {
-        ScalarOperator child1 = operator.getChild(0);
-        ScalarOperator child2 = operator.getChild(1);
-        ScalarOperator castChild = child1.getChild(0);
-        LocalDateTime originalDateTime = ((ConstantOperator) child2).getDatetime();
-        LocalDateTime bottomDateTime = ((ConstantOperator) child2).getDatetime().toLocalDate().atTime(0, 0, 0, 0);
+    private ScalarOperator reduceDateToDatetimeCast(BinaryPredicateOperator operator) {
+        ScalarOperator castChild = operator.getChild(0).getChild(0);
+        ConstantOperator child2 = (ConstantOperator) operator.getChild(1);
+
+        if (child2.isNull()) {
+            return operator;
+        }
+
+        LocalDateTime originalDateTime = child2.getDatetime();
+        LocalDateTime bottomDateTime = child2.getDatetime().truncatedTo(ChronoUnit.DAYS);
+
         LocalDateTime targetDateTime;
         BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
         int offset;
@@ -146,15 +147,10 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // when the BinaryType is >= ,cast dateTime to minimum date type；
                 // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-28)
                 // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
-                if (originalDateTime.isEqual(bottomDateTime)) {
-                    offset = 0;
-                } else {
-                    offset = 1;
-                }
+                offset = originalDateTime.isEqual(bottomDateTime) ? 0 : 1;
                 targetDateTime = bottomDateTime.plusDays(offset);
-                newDate = ConstantOperator.createDate(targetDateTime.truncatedTo(ChronoUnit.DAYS));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+                newDate = ConstantOperator.createDate(targetDateTime);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.ge(castChild, newDate);
                 break;
             case GT:
                 // when the BinaryType is > ,cast dateTime to minimum date type；
@@ -162,9 +158,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-29)
                 offset = 1;
                 targetDateTime = bottomDateTime.plusDays(offset);
-                newDate = ConstantOperator.createDate(targetDateTime.truncatedTo(ChronoUnit.DAYS));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDate);
+                newDate = ConstantOperator.createDate(targetDateTime);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.ge(castChild, newDate);
                 break;
             case LE:
                 // when the BinaryType is <= ,cast dateTime to maximum date type；
@@ -172,23 +167,17 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-27)
                 offset = 0;
                 targetDateTime = bottomDateTime.plusDays(offset);
-                newDate = ConstantOperator.createDate(targetDateTime.truncatedTo(ChronoUnit.DAYS));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+                newDate = ConstantOperator.createDate(targetDateTime);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.le(castChild, newDate);
                 break;
             case LT:
                 // when the BinaryType is < ,cast dateTime to maximum date type；
                 // Eg:cast dateTime(2021-12-28 00:00:00.0) to date(2021-12-27)
                 // Eg:cast dateTime(2021-12-28 00:00:00.1) to date(2021-12-28)
-                if (originalDateTime.isEqual(bottomDateTime)) {
-                    offset = -1;
-                } else {
-                    offset = 0;
-                }
+                offset = originalDateTime.isEqual(bottomDateTime) ? -1 : 0;
                 targetDateTime = bottomDateTime.plusDays(offset);
-                newDate = ConstantOperator.createDate(targetDateTime.truncatedTo(ChronoUnit.DAYS));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, castChild, newDate);
+                newDate = ConstantOperator.createDate(targetDateTime);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.le(castChild, newDate);
                 break;
             case EQ:
                 // when the BinaryType is = ,cast dateTime to equivalent date type；
@@ -196,9 +185,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 if (!originalDateTime.isEqual(bottomDateTime)) {
                     resultBinaryPredicateOperator = operator;
                 } else {
-                    newDate = ConstantOperator.createDate(bottomDateTime.truncatedTo(ChronoUnit.DAYS));
-                    resultBinaryPredicateOperator =
-                            new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, castChild, newDate);
+                    newDate = ConstantOperator.createDate(bottomDateTime);
+                    resultBinaryPredicateOperator = BinaryPredicateOperator.eq(castChild, newDate);
                 }
                 break;
             default:
@@ -209,11 +197,14 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         return resultBinaryPredicateOperator;
     }
 
-    public ScalarOperator reduceDatetimeToDateCast(BinaryPredicateOperator operator) {
-        ScalarOperator child1 = operator.getChild(0);
-        ScalarOperator child2 = operator.getChild(1);
-        ScalarOperator castChild = child1.getChild(0);
-        LocalDateTime originalDate = ((ConstantOperator) child2).getDate();
+    private ScalarOperator reduceDatetimeToDateCast(BinaryPredicateOperator operator) {
+        ScalarOperator castChild = operator.getChild(0).getChild(0);
+        ConstantOperator child2 = (ConstantOperator) operator.getChild(1);
+        if (child2.isNull()) {
+            return operator;
+        }
+
+        LocalDateTime originalDate = child2.getDate().truncatedTo(ChronoUnit.DAYS);
         LocalDateTime targetDate;
         BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
         int offset;
@@ -226,9 +217,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // optimized to id_datetime >= 2021-12-28 00:00:00.0
                 offset = 0;
                 targetDate = originalDate.plusDays(offset);
-                newDatetime = ConstantOperator.createDatetime(targetDate.toLocalDate().atTime(0, 0, 0, 0));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDatetime);
+                newDatetime = ConstantOperator.createDatetime(targetDate);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.ge(castChild, newDatetime);
                 break;
             case GT:
                 // when the BinaryType is > , cast date to equivalent datetime type of next day
@@ -236,9 +226,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // optimized to id_datetime >= 2021-12-29 00:00:00.0
                 offset = 1;
                 targetDate = originalDate.plusDays(offset);
-                newDatetime = ConstantOperator.createDatetime(targetDate.toLocalDate().atTime(0, 0, 0, 0));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild, newDatetime);
+                newDatetime = ConstantOperator.createDatetime(targetDate);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.ge(castChild, newDatetime);
                 break;
             case LE:
                 // when the BinaryType is <= , cast date to equivalent datetime type of next day
@@ -246,9 +235,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // optimized to id_datetime < 2021-12-29 00:00:00.0
                 offset = 1;
                 targetDate = originalDate.plusDays(offset);
-                newDatetime = ConstantOperator.createDatetime(targetDate.toLocalDate().atTime(0, 0, 0, 0));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castChild, newDatetime);
+                newDatetime = ConstantOperator.createDatetime(targetDate);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.lt(castChild, newDatetime);
                 break;
             case LT:
                 // when the BinaryType is < , cast date to equivalent datetime type
@@ -256,24 +244,18 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 // optimized to id_datetime < 2021-12-28 00:00:00.0
                 offset = 0;
                 targetDate = originalDate.plusDays(offset);
-                newDatetime = ConstantOperator.createDatetime(targetDate.toLocalDate().atTime(0, 0, 0, 0));
-                resultBinaryPredicateOperator =
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castChild, newDatetime);
+                newDatetime = ConstantOperator.createDatetime(targetDate);
+                resultBinaryPredicateOperator = BinaryPredicateOperator.lt(castChild, newDatetime);
                 break;
             case EQ:
                 // when the BinaryType is = , replace it with compound operator
                 // E.g. cast(id_datetime as date) = 2021-12-28
                 // optimized to id_datetime >= 2021-12-28 and id_datetime < 2021-12-29
-                ConstantOperator beginDatetime =
-                        ConstantOperator.createDatetime(originalDate.plusDays(0).toLocalDate().atTime(0, 0, 0, 0));
-                ConstantOperator endDatetime =
-                        ConstantOperator.createDatetime(originalDate.plusDays(1).toLocalDate().atTime(0, 0, 0, 0));
-                resultBinaryPredicateOperator =
-                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, castChild,
-                                        beginDatetime),
-                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, castChild,
-                                        endDatetime));
+                ConstantOperator beginDatetime = ConstantOperator.createDatetime(originalDate.plusDays(0));
+                ConstantOperator endDatetime = ConstantOperator.createDatetime(originalDate.plusDays(1));
+                resultBinaryPredicateOperator = CompoundPredicateOperator
+                        .and(BinaryPredicateOperator.ge(castChild, beginDatetime),
+                                BinaryPredicateOperator.lt(castChild, endDatetime));
                 break;
             default:
                 resultBinaryPredicateOperator = operator;

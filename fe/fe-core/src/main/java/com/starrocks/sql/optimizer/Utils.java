@@ -276,8 +276,8 @@ public class Utils {
     //  or   or
     //  /\   /\
     // a  b c  d
-    private static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
-                                                 List<ScalarOperator> nodes) {
+    public static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
+                                                List<ScalarOperator> nodes) {
         LinkedList<ScalarOperator> link =
                 nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
 
