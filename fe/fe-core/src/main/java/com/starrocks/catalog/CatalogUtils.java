@@ -6,15 +6,16 @@ import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Set;
 
-public class CatalogChecker {
+public class CatalogUtils {
 
-    private static final Logger LOG = LogManager.getLogger(CatalogChecker.class);
+    private static final Logger LOG = LogManager.getLogger(CatalogUtils.class);
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
@@ -56,4 +57,7 @@ public class CatalogChecker {
         return existPartitionNameSet;
     }
 
+    public static boolean isUseStarOS(TStorageMedium storageMedium) {
+        return storageMedium == TStorageMedium.S3;
+    }
 }
