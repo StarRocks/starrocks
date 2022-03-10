@@ -25,7 +25,7 @@ private:
     Status _get_hive_column_index(const std::string& column_name);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
-    char _record_delimiter;
+    string _record_delimiter;
     string _field_delimiter;
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;

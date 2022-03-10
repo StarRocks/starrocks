@@ -238,8 +238,10 @@ public class FileScanNode extends LoadScanNode {
             params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
-            throw new UserException(
-                    "invalid row delimiter '" + fileGroup.getRowDelimiter() + "': must be a single character");
+            if (row_delimiter.length > 50) {
+                throw new UserException("the row delimiter is limited to a maximum of 50 bytes");
+            }
+            params.setMulti_row_delimiter(fileGroup.getRowDelimiter());
         }
 
         params.setColumn_separator(column_separator[0]);
