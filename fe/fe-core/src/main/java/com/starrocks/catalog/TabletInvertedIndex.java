@@ -128,6 +128,9 @@ public class TabletInvertedIndex {
             }
         }
 
+        long backendStorageTypeCnt = Catalog.getCurrentSystemInfo().getBackend(backendId).getDisks().values()
+                .stream().map(u -> u.getStorageMedium().getValue()).distinct().count();
+
         readLock();
         long start = System.currentTimeMillis();
         try {
@@ -182,8 +185,16 @@ public class TabletInvertedIndex {
                                 long partitionId = tabletMeta.getPartitionId();
                                 TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                                 if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
+                                    // If storage medium is less than 1, there is no need to send migration tasks to BE.
+                                    // Because BE will ignore this request.
                                     if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                        tabletMigrationMap.put(storageMedium, tabletId);
+                                        if (backendStorageTypeCnt <= 1) {
+                                            LOG.info("available storage medium type count is less than 1, " +
+                                                            "no need to send migrate task. tabletId={}, backendId={}.",
+                                                            tabletId, backendId);
+                                        } else {
+                                            tabletMigrationMap.put(storageMedium, tabletId);
+                                        }
                                     }
                                     if (storageMedium != tabletMeta.getStorageMedium()) {
                                         tabletMeta.setStorageMedium(storageMedium);
