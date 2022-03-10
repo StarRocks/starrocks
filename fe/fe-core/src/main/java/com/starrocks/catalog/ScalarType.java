@@ -125,9 +125,17 @@ public class ScalarType extends Type implements Cloneable {
             }
         } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL")) {
             if ("DECIMAL".equalsIgnoreCase(typeName)) {
-                return ScalarType.createUnifiedDecimalType(precision, scale);
+                if (precision != null) {
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                } else {
+                    return ScalarType.createUnifiedDecimalType(10, 0);
+                }
             } else if ("DECIMALV2".equalsIgnoreCase(typeName)) {
-                return ScalarType.createDecimalV2Type(precision, scale);
+                if (precision != null) {
+                    return ScalarType.createDecimalV2Type(precision, scale);
+                } else {
+                    return ScalarType.createDecimalV2Type();
+                }
             }
             PrimitiveType primitive = createType(typeName).getPrimitiveType();
             if (precision == null || scale == null) {
