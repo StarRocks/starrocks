@@ -32,9 +32,10 @@ public:
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, char record_delimiter, string field_delimiter)
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const string& record_delimiter,
+                         const string& field_delimiter)
                 : CSVReader(record_delimiter, field_delimiter) {
-            _file = file;
+            _file = std::move(file);
         }
 
         void set_counter(ScannerCounter* counter) { _counter = counter; }
@@ -57,7 +58,7 @@ private:
 
     const TBrokerScanRange& _scan_range;
     std::vector<Column*> _column_raw_ptrs;
-    char _record_delimiter;
+    string _record_delimiter;
     string _field_delimiter;
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
