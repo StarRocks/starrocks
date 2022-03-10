@@ -20,8 +20,8 @@ void SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* t
     table_items->build_pool = std::make_unique<MemPool>();
 }
 
-Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
-                                                     HashTableProbeState* probe_state) {
+void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHashTableItems* table_items,
+                                                   HashTableProbeState* probe_state) {
     uint32_t row_count = table_items->row_count;
 
     // prepare columns
@@ -48,7 +48,6 @@ Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHa
         serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
-    RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join build failed"));
 
     // serialize and build hash table
     uint32_t quo = row_count / state->chunk_size();
@@ -68,8 +67,6 @@ Status SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHa
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem, &ptr);
     }
-
-    return Status::OK();
 }
 
 void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
@@ -117,7 +114,7 @@ void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_
     }
 }
 
-Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
+void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state) {
     probe_state->probe_pool->clear();
 
     // prepare columns
@@ -144,7 +141,6 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
         serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = probe_state->probe_pool->allocate(serialize_size);
-    RETURN_IF_UNLIKELY_NULL(ptr, Status::MemoryAllocFailed("alloc mem for hash join probe failed"));
 
     // serialize and init search
     if (!null_columns.empty()) {
@@ -152,7 +148,6 @@ Status SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_item
     } else {
         _probe_column(table_items, probe_state, data_columns, ptr);
     }
-    return Status::OK();
 }
 
 void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
@@ -327,7 +322,27 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
 }
 
-Status JoinHashTable::build(RuntimeState* state) {
+int64_t JoinHashTable::mem_usage() {
+    int64_t usage = 0;
+    if (_table_items->build_chunk != nullptr) {
+        usage += _table_items->build_chunk->memory_usage();
+    }
+    usage += _table_items->first.capacity() * sizeof(uint32_t);
+    usage += _table_items->next.capacity() * sizeof(uint32_t);
+    if (_table_items->build_pool != nullptr) {
+        usage += _table_items->build_pool->total_reserved_bytes();
+    }
+    if (_probe_state->probe_pool != nullptr) {
+        usage += _probe_state->probe_pool->total_reserved_bytes();
+    }
+    if (_table_items->build_key_column != nullptr) {
+        usage += _table_items->build_key_column->memory_usage();
+    }
+    usage += _table_items->build_slice.size() * sizeof(Slice);
+    return usage;
+}
+
+void JoinHashTable::build(RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
 
     switch (_hash_map_type) {
@@ -338,51 +353,47 @@ Status JoinHashTable::build(RuntimeState* state) {
         _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
         _##NAME->build_prepare(state);                                                                                \
         _##NAME->probe_prepare(state);                                                                                \
-        RETURN_IF_ERROR(_##NAME->build(state));                                                                       \
+        _##NAME->build(state);                                                                                        \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
     default:
-        return Status::InternalError("not supported");
+        assert(false);
     }
-
-    return Status::OK();
 }
 
-Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-                            bool* eos) {
+void JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                          bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                                                       \
-    case JoinHashMapType::NAME:                                                       \
-        RETURN_IF_ERROR(_##NAME->probe(state, key_columns, probe_chunk, chunk, eos)); \
+#define M(NAME)                                                      \
+    case JoinHashMapType::NAME:                                      \
+        _##NAME->probe(state, key_columns, probe_chunk, chunk, eos); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
     default:
-        return Status::InternalError("not supported");
+        assert(false);
     }
-    return Status::OK();
 }
 
-Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+void JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
-#define M(NAME)                                                    \
-    case JoinHashMapType::NAME:                                    \
-        RETURN_IF_ERROR(_##NAME->probe_remain(state, chunk, eos)); \
+#define M(NAME)                                   \
+    case JoinHashMapType::NAME:                   \
+        _##NAME->probe_remain(state, chunk, eos); \
         break;
         APPLY_FOR_JOIN_VARIANTS(M)
 #undef M
     default:
-        return Status::InternalError("not supported");
+        assert(false);
     }
-    return Status::OK();
 }
 
-Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     Columns& columns = _table_items->build_chunk->columns();
     size_t chunk_memory_size = 0;
 
@@ -423,7 +434,6 @@ Status JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     }
 
     _table_items->row_count += chunk->num_rows();
-    return Status::OK();
 }
 
 void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
