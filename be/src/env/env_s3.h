@@ -89,6 +89,8 @@ public:
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("EnvS3::link_file");
     }
+
+    StatusOr<SpaceInfo> space(const std::string& path) override;
 };
 
 } // namespace starrocks
