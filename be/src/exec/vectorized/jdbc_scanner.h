@@ -77,7 +77,7 @@ private:
     // java class name for each result column
     std::vector<std::string> _column_class_name;
 
-    JNIEnv* _jni_env;
+    JNIEnv* _jni_env = nullptr;
 
     jclass _jdbc_bridge_cls;
     jclass _jdbc_scanner_cls;

@@ -58,7 +58,7 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     int64_t _limit;
 
-    TupleDescriptor* _result_tuple_desc;
+    TupleDescriptor* _result_tuple_desc = nullptr;
     BlockingQueue<ChunkPtr> _result_chunks;
 
     // scanner related
@@ -84,8 +84,6 @@ public:
 
 private:
     const TJDBCScanNode& _jdbc_scan_node;
-    std::vector<ExprContext*> _conjunct_ctxs;
-    int64_t _limit;
 };
 } // namespace pipeline
 } // namespace starrocks
