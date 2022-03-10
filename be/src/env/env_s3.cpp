@@ -245,4 +245,10 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
     return std::make_unique<OutputStreamAdapter>(std::move(ostream), fname);
 }
 
+StatusOr<SpaceInfo> EnvS3::space(const std::string& path) {
+    return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
+                     .free = std::numeric_limits<int64_t>::max(),
+                     .available = std::numeric_limits<int64_t>::max()};
+}
+
 } // namespace starrocks
