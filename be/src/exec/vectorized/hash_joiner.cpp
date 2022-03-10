@@ -14,6 +14,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
@@ -146,7 +147,7 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
     {
         // copy chunk of right table
         SCOPED_TIMER(_copy_right_table_chunk_timer);
-        RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
+        TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk));
     }
     return Status::OK();
 }
@@ -206,7 +207,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     if (_phase == HashJoinPhase::PROBE || _probe_input_chunk != nullptr) {
         DCHECK(_ht_has_remain && _probe_input_chunk);
 
-        RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }
@@ -222,7 +223,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
             return chunk;
         }
 
-        RETURN_IF_ERROR(_ht.probe_remain(state, &chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(_ht.probe_remain(state, &chunk, &_ht_has_remain));
         if (!_ht_has_remain) {
             enter_eos_phase();
         }
@@ -317,7 +318,7 @@ Status HashJoiner::_build(RuntimeState* state) {
 
     {
         SCOPED_TIMER(_build_ht_timer);
-        RETURN_IF_ERROR(_ht.build(state));
+        TRY_CATCH_BAD_ALLOC(_ht.build(state));
     }
 
     return Status::OK();
