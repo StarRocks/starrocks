@@ -28,7 +28,7 @@ struct JDBCDriverEntry {
 
     std::string name;
     std::string checksum;
-    int64_t first_access_ts;
+    int64_t first_access_ts = INT64_MAX;
     // ${driver_dir}/${name}_${checksum}_${first_access_ts}.jar
     std::string location;
 

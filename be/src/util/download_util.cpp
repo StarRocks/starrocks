@@ -14,10 +14,14 @@ namespace starrocks {
 Status DownloadUtil::download(const std::string& url, const std::string& tmp_file, const std::string& target_file,
                               const std::string& expected_checksum) {
     auto fp = fopen(tmp_file.c_str(), "w");
-    DeferOp defer([&]() { fclose(fp); });
+    DeferOp defer([&]() {
+        if (fp != nullptr) {
+            fclose(fp);
+        }
+    });
 
     if (fp == nullptr) {
-        LOG(ERROR) << fmt::format("fail to open file {}, error={}", tmp_file, ferror(fp));
+        LOG(ERROR) << fmt::format("fail to open file {}", tmp_file);
         return Status::InternalError(fmt::format("fail to open tmp file when downloading file from {}", url));
     }
 
