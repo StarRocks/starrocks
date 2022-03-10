@@ -154,4 +154,28 @@ public class BinaryPredicateOperator extends PredicateOperator {
     public boolean isNullable() {
         return !this.type.equals(BinaryType.EQ_FOR_NULL) && super.isNullable();
     }
+
+    public static BinaryPredicateOperator eq(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.EQ, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator ge(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.GE, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator gt(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.GT, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator ne(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.NE, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator le(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.LE, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator lt(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.LT, lhs, rhs);
+    }
 }
