@@ -77,7 +77,11 @@ public class JDBCTable extends Table {
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         JDBCResource resource = (JDBCResource) (Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName));
         TJDBCTable tJDBCTable = new TJDBCTable();
-        tJDBCTable.setJdbc_driver(resource.getProperty(JDBCResource.DRIVER));
+        tJDBCTable.setJdbc_driver_name(resource.getName());
+        tJDBCTable.setJdbc_driver_url(resource.getProperty(JDBCResource.DRIVER_URL));
+        tJDBCTable.setJdbc_driver_checksum(resource.getProperty(JDBCResource.CHECK_SUM));
+        tJDBCTable.setJdbc_driver_class(resource.getProperty(JDBCResource.DRIVER_CLASS));
+
         tJDBCTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
         tJDBCTable.setJdbc_table(jdbcTable);
         tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
