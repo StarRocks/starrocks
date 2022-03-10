@@ -63,6 +63,7 @@ bool JDBCScanOperator::is_finished() const {
 }
 
 Status JDBCScanOperator::_start_scanner_thread(RuntimeState* state) {
+    // @TODO(silverbullet233): need more test for thread_local variable memory leaks
     _scanner_thread.reset(new std::thread(&JDBCScanOperator::_start_scanner, this, state));
     return Status::OK();
 }

@@ -46,7 +46,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
 Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *chunk = std::make_shared<Chunk>();
-    std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
+    const std::vector<SlotDescriptor*>& slot_descs = _tuple_desc->slots();
 
     // init column information
     for (auto& slot_desc : slot_descs) {
