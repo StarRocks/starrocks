@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -50,7 +49,6 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -318,7 +316,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseTable(long tableId) {
         Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
-        for (Long dbId: column.keySet()) {
+        for (Long dbId : column.keySet()) {
             RecycleTableInfo tableInfo = column.remove(dbId);
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
