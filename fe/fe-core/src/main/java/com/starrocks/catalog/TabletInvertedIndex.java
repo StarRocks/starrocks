@@ -24,12 +24,15 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Pair;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
@@ -128,8 +131,17 @@ public class TabletInvertedIndex {
             }
         }
 
-        long backendStorageTypeCnt = Catalog.getCurrentSystemInfo().getBackend(backendId).getDisks().values()
-                .stream().map(u -> u.getStorageMedium().getValue()).distinct().count();
+        int backendStorageTypeCnt = -1;
+        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        if (be != null) {
+            ImmutableMap<String, DiskInfo> disks = be.getDisks();
+            Set<Integer> set = Sets.newHashSet();
+            for (DiskInfo diskInfo : disks.values()) {
+                TStorageMedium medium = diskInfo.getStorageMedium();
+                set.add(medium.getValue());
+            }
+            backendStorageTypeCnt = set.size();
+        }
 
         readLock();
         long start = System.currentTimeMillis();
@@ -189,7 +201,7 @@ public class TabletInvertedIndex {
                                     // Because BE will ignore this request.
                                     if (storageMedium != backendTabletInfo.getStorage_medium()) {
                                         if (backendStorageTypeCnt <= 1) {
-                                            LOG.info("available storage medium type count is less than 1, " +
+                                            LOG.debug("available storage medium type count is less than 1, " +
                                                             "no need to send migrate task. tabletId={}, backendId={}.",
                                                             tabletId, backendId);
                                         } else {
