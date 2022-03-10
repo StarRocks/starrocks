@@ -5,8 +5,7 @@
 #include <atomic>
 #include <memory>
 
-#include "env/env_hdfs.h"
-#include "env/env_s3.h"
+#include "env/env.h"
 #include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
@@ -666,20 +665,13 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         native_file_path = file_path.native();
     }
 
-    Env* env = nullptr;
-    if (is_hdfs_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvHdfs());
-    } else if (is_object_storage_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvS3());
-    } else {
-        env = Env::Default();
-    }
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
 
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
 
     auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
-    hdfs_file_desc->env = env;
+    hdfs_file_desc->env = _pool->add(env.release());
     hdfs_file_desc->path = native_file_path;
     hdfs_file_desc->partition_id = scan_range.partition_id;
     hdfs_file_desc->scan_range_path = scan_range_path;
