@@ -85,6 +85,8 @@ public:
 
     void append(const T value) { _data.emplace_back(value); }
 
+    void append(const Buffer<T>& values) { _data.insert(_data.end(), values.begin(), values.end()); }
+
     void append_datum(const Datum& datum) override { _data.emplace_back(datum.get<ValueType>()); }
 
     void append(const Column& src, size_t offset, size_t count) override;
@@ -95,7 +97,7 @@ public:
 
     bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 
-    bool append_strings(const std::vector<Slice>& slices __attribute__((unused))) override { return false; }
+    bool append_strings(const Buffer<Slice>& slices __attribute__((unused))) override { return false; }
 
     bool contain_value(size_t start, size_t end, T value) const {
         DCHECK_LE(start, end);
@@ -145,7 +147,7 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
-    void deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override { return sizeof(ValueType); }
 

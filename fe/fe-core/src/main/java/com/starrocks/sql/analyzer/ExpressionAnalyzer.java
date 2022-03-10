@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -37,7 +37,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -57,7 +56,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -79,17 +77,14 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class ExpressionAnalyzer {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
-
-    private final Catalog catalog;
     private final ConnectContext session;
 
-    public ExpressionAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
+    public ExpressionAnalyzer(ConnectContext session) {
         this.session = session;
     }
 
     public void analyze(Expr expression, AnalyzeState analyzeState, Scope scope) {
-        Visitor visitor = new Visitor(analyzeState, catalog, session);
+        Visitor visitor = new Visitor(analyzeState, session);
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -104,12 +99,10 @@ public class ExpressionAnalyzer {
     private class Visitor extends AstVisitor<Void, Scope> {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
-        private final Catalog catalog;
 
-        public Visitor(AnalyzeState analyzeState, Catalog catalog, ConnectContext session) {
+        public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
-            this.catalog = catalog;
         }
 
         @Override
@@ -335,7 +328,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -348,7 +341,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -361,13 +354,38 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+        List<String> addDateFunctions = Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "TIMESTAMPADD");
+        List<String> subDateFunctions = Lists.newArrayList("DATE_SUB", "SUBDATE", "DAYS_SUB");
+
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
-            try {
-                node.analyzeImpl(null);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            node.setChild(0, TypeManager.addCastExpr(node.getChild(0), Type.DATETIME));
+
+            String funcOpName;
+            if (node.getFuncName() != null) {
+                if (addDateFunctions.contains(node.getFuncName().toUpperCase())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "ADD");
+                } else if (subDateFunctions.contains(node.getFuncName().toUpperCase())) {
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "SUB");
+                } else {
+                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
+                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "DIFF");
+                }
+            } else {
+                funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(),
+                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "ADD" : "SUB");
             }
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
+                    .toArray(Type[]::new);
+            Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s).", funcOpName, Joiner.on(", ")
+                        .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+            }
+            node.setType(fn.getReturnType());
+            node.setFn(fn);
             return null;
         }
 
@@ -386,6 +404,10 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
             for (Type type : list) {
+                // TODO(mofei) support it
+                if (type.isJsonType()) {
+                    throw new SemanticException("InPredicate of JSON is not supported");
+                }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()
@@ -483,7 +505,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -729,22 +751,14 @@ public class ExpressionAnalyzer {
         public Void visitSubquery(Subquery node, Scope context) {
             QueryStmt stmt = node.getStatement();
 
-            if (!(stmt instanceof SelectStmt) && node.getQueryBlock() == null) {
+            if (!(stmt instanceof SelectStmt) && node.getQueryRelation() == null) {
                 throw new StarRocksPlannerException("A subquery must contain a single select block",
                         ErrorType.INTERNAL_ERROR);
             }
 
-            if (stmt != null) {
-                QueryAnalyzer queryAnalyzer = new QueryAnalyzer(catalog, session);
-                QueryRelation queryBlock = queryAnalyzer.transformQueryStmt(stmt, context);
-
-                node.setQueryBlock(queryBlock);
-                node.setType(queryBlock.getRelationFields().getFieldByIndex(0).getType());
-            } else if (node.getQueryBlock() != null) {
-                QueryAnalyzerV2 queryAnalyzer = new QueryAnalyzerV2(catalog, session);
-                queryAnalyzer.analyze(new QueryStatement(node.getQueryBlock()), context);
-                node.setType(node.getQueryBlock().getRelationFields().getFieldByIndex(0).getType());
-            }
+            QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
+            queryAnalyzer.analyze(new QueryStatement(node.getQueryRelation()), context);
+            node.setType(node.getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
             return null;
         }
 
@@ -811,9 +825,8 @@ public class ExpressionAnalyzer {
 
     }
 
-    public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, Catalog catalog,
-                                         ConnectContext session) {
-        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(catalog, session);
+    public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
     }
 
@@ -825,12 +838,12 @@ public class ExpressionAnalyzer {
             dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
         }
 
-        if (!catalog.getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+        if (!session.getCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
             throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
                     ErrorType.USER_ERROR);
         }
 
-        Database db = catalog.getDb(dbName);
+        Database db = session.getCatalog().getDb(dbName);
         if (db == null) {
             return null;
         }

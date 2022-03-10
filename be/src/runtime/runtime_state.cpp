@@ -32,6 +32,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -185,6 +186,13 @@ Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
     return Status::OK();
+}
+
+ObjectPool* RuntimeState::global_obj_pool() const {
+    if (_query_ctx == nullptr) {
+        return obj_pool();
+    }
+    return _query_ctx->object_pool();
 }
 
 std::string RuntimeState::error_log() {

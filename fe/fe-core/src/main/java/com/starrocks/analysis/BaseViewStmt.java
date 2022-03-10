@@ -30,6 +30,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,4 +176,9 @@ public class BaseViewStmt extends DdlStmt {
             throw new AnalysisException("Not support OUTFILE clause in CREATE VIEW statement");
         }
     }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBaseViewStatement(this, context);
+    }
+
 }

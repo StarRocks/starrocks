@@ -41,9 +41,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableAnalyzer {
-
-    private final Catalog catalog;
-    private final ConnectContext session;
     private static final Set<String> engineNames;
 
     static {
@@ -54,20 +51,15 @@ public class CreateTableAnalyzer {
         engineNames.add("hive");
     }
 
-    public CreateTableAnalyzer(Catalog catalog, ConnectContext session) {
-        this.catalog = catalog;
-        this.session = session;
-    }
-
-    public Relation transformCreateTableStmt(CreateTableStmt createTableStmt) {
+    public static void transformCreateTableStmt(CreateTableStmt createTableStmt, ConnectContext session) {
         createTableStmt.setClusterName(session.getClusterName());
         TableName tableName = createTableStmt.getDbTbl();
-        analyzeTableName(tableName);
+        analyzeTableName(tableName, session);
 
         FeNameFormat.verifyTableName(tableName.getTbl());
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
-                tableName.getTbl(), PrivPredicate.CREATE)) {
+        if (!Catalog.getCurrentCatalog().getAuth()
+                .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(), PrivPredicate.CREATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }
 
@@ -100,15 +92,14 @@ public class CreateTableAnalyzer {
                 } else {
                     for (ColumnDef columnDef : columnDefs) {
                         keyLength += columnDef.getType().getIndexSize();
-                        if (keysColumnNames.size() >= FeConstants.shortkey_max_column_count
-                                || keyLength > FeConstants.shortkey_maxsize_bytes) {
-                            if (keysColumnNames.size() == 0
-                                    && columnDef.getType().getPrimitiveType().isCharFamily()) {
+                        if (keysColumnNames.size() >= FeConstants.shortkey_max_column_count ||
+                                keyLength > FeConstants.shortkey_maxsize_bytes) {
+                            if (keysColumnNames.size() == 0 && columnDef.getType().getPrimitiveType().isCharFamily()) {
                                 keysColumnNames.add(columnDef.getName());
                             }
                             break;
                         }
-                        if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                        if (!columnDef.getType().isKeyType()) {
                             break;
                         }
                         if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
@@ -123,8 +114,7 @@ public class CreateTableAnalyzer {
                     // The OLAP table must has at least one short key and the float and double should not be short key.
                     // So the float and double could not be the first column in OLAP table.
                     if (keysColumnNames.isEmpty()) {
-                        throw new SemanticException(
-                                "Data type of first column cannot be %s", columnDefs.get(0).getType());
+                        throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
                     }
                     keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
                 }
@@ -250,15 +240,15 @@ public class CreateTableAnalyzer {
             }
         } else {
             if (partitionDesc != null || distributionDesc != null) {
-                throw new SemanticException("Create %s table should not contain partition or distribution desc",
-                        engineName);
+                throw new SemanticException("Create %s table should not contain partition or distribution desc", engineName);
             }
         }
 
         for (ColumnDef columnDef : columnDefs) {
             Column col = columnDef.toColumn();
-            if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
-                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS || keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
+            if (keysDesc != null &&
+                    (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
+                            keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
                 if (!col.isKey()) {
                     col.setAggregationTypeImplicit(true);
                 }
@@ -288,8 +278,7 @@ public class CreateTableAnalyzer {
                         }
                     }
                     if (!found) {
-                        throw new SemanticException("BITMAP column does not exist in table. invalid column: %s",
-                                indexColName);
+                        throw new SemanticException("BITMAP column does not exist in table. invalid column: %s", indexColName);
                     }
                 }
                 indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
@@ -304,10 +293,9 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("same index columns have multiple index name is not allowed.");
             }
         }
-        return null;
     }
 
-    private void analyzeIndexDef(IndexDef indexDef) {
+    private static void analyzeIndexDef(IndexDef indexDef) {
         IndexDef.IndexType indexType = indexDef.getIndexType();
         List<String> columns = indexDef.getColumns();
         String indexName = indexDef.getIndexName();
@@ -330,7 +318,7 @@ public class CreateTableAnalyzer {
     }
 
 
-    private Relation analyzeTableName(TableName tableName) {
+    private static Relation analyzeTableName(TableName tableName, ConnectContext session) {
         String db = tableName.getDb();
         if (Strings.isNullOrEmpty(db)) {
             db = session.getDatabase();
@@ -350,7 +338,7 @@ public class CreateTableAnalyzer {
         return null;
     }
 
-    private void analyzeEngineName(String engineName) {
+    private static void analyzeEngineName(String engineName) {
         if (Strings.isNullOrEmpty(engineName)) {
             engineName = "olap";
         }

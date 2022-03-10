@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -193,11 +194,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
 
-        List<Identifier> columns = null;
-        if (context.columnAliases() != null) {
-            columns = visit(context.columnAliases().identifier(), Identifier.class);
-        }
-
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
             List<ValueList> rowValues = visit(context.expressionsWithDefault(), ValueList.class);
@@ -212,10 +208,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement = (QueryStatement) visit(context.queryStatement());
         }
 
+        List<String> targetColumnNames = null;
+        if (context.columnAliases() != null) {
+            // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+            // to lowercase characters to facilitate subsequent matching.
+            List<Identifier> targetColumnNamesIdentifiers =
+                    visitIfPresent(context.columnAliases().identifier(), Identifier.class);
+            if (targetColumnNamesIdentifiers != null) {
+                targetColumnNames = targetColumnNamesIdentifiers.stream()
+                        .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            }
+        }
+
         return new InsertStmt(
                 new InsertTarget(targetTableName, null),
                 context.lable == null ? null : context.lable.getText(),
-                columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
+                targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
     }
@@ -291,7 +299,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
                     Long.parseLong(intervalLiteral.getValue().toString()),
-                    intervalLiteral.getTimeUnitIdent());
+                    intervalLiteral.getUnitIdentifier().getDescription());
         } else {
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
@@ -1076,12 +1084,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr right = (Expr) visit(context.right);
         if (left instanceof IntervalLiteral) {
             return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
-                    ((IntervalLiteral) left).getValue(), ((IntervalLiteral) left).getTimeUnitIdent(), true);
+                    ((IntervalLiteral) left).getValue(),
+                    ((IntervalLiteral) left).getUnitIdentifier().getDescription(), true);
         }
 
         if (right instanceof IntervalLiteral) {
             return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), left,
-                    ((IntervalLiteral) right).getValue(), ((IntervalLiteral) right).getTimeUnitIdent(), false);
+                    ((IntervalLiteral) right).getValue(),
+                    ((IntervalLiteral) right).getUnitIdentifier().getDescription(), false);
         }
 
         return new ArithmeticExpr(getArithmeticBinaryOperator(context.operator), left, right);
@@ -1112,6 +1122,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
     }
 
+    private static final List<String> DATE_FUNCTIONS =
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+
     @Override
     public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
         if (context.IF() != null) {
@@ -1122,14 +1135,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
         }
 
+        if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
+            String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
+            UnitIdentifier e1 = (UnitIdentifier) visit(context.unitIdentifier());
+            Expr e2 = (Expr) visit(context.expression(0));
+            Expr e3 = (Expr) visit(context.expression(1));
+
+            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getDescription());
+        }
+
         boolean isStar = context.ASTERISK_SYMBOL() != null;
         boolean distinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
 
         String functionName = getQualifiedName(context.qualifiedName()).toString();
-        if (functionName.equalsIgnoreCase("DATE_ADD")
-                || functionName.equalsIgnoreCase("ADDDATE")
-                || functionName.equalsIgnoreCase("DATE_SUB")
-                || functionName.equalsIgnoreCase("SUBDATE")) {
+
+        if (DATE_FUNCTIONS.contains(functionName.toUpperCase())) {
             if (context.expression().size() != 2) {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit)");
@@ -1138,24 +1158,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = (Expr) visit(context.expression(1));
             if (!(e2 instanceof IntervalLiteral)) {
-                e2 = new IntervalLiteral(e2, "DAY");
+                e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
             }
             IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
             return new TimestampArithmeticExpr(functionName, e1, intervalLiteral.getValue(),
-                    intervalLiteral.getTimeUnitIdent());
-        }
-
-        if (functionName.equalsIgnoreCase("TIMESTAMPADD") || functionName.equalsIgnoreCase("TIMESTAMPDIFF")) {
-            if (context.expression().size() != 3) {
-                throw new ParsingException(
-                        functionName + " must as format " + functionName + "(unit,interval,datetime_expr)");
-            }
-            Identifier e1 = (Identifier) visit(context.expression(0));
-            Expr e2 = (Expr) visit(context.expression(1));
-            Expr e3 = (Expr) visit(context.expression(2));
-
-            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getValue());
+                    intervalLiteral.getUnitIdentifier().getDescription());
         }
 
         if (functionName.equalsIgnoreCase("isnull")) {
@@ -1330,7 +1338,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
         }
 
-        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
+        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
+                .replace("\"\"", "\""));
     }
 
     private static String escapeBackSlash(String str) {
@@ -1395,7 +1404,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitInterval(StarRocksParser.IntervalContext context) {
-        return new IntervalLiteral((Expr) visit(context.value), context.from.getText());
+        return new IntervalLiteral((Expr) visit(context.value), (UnitIdentifier) visit(context.from));
+    }
+
+    @Override
+    public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
+        return new UnitIdentifier(context.getText());
     }
 
     @Override
@@ -1525,75 +1539,53 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private Type getType(StarRocksParser.TypeContext type) {
         if (type.baseType() != null) {
-            String signature = type.baseType().getText();
-            if (!type.typeParameter().isEmpty()) {
-                if (signature.equalsIgnoreCase("VARCHAR")) {
-                    if (type.typeParameter().size() > 1) {
-                        throw new SemanticException("VARCHAR can not contains multi type parameter");
-                    }
-
-                    if (type.typeParameter(0).INTEGER_VALUE() != null) {
-                        return ScalarType.createVarcharType(
-                                Integer.parseInt(type.typeParameter(0).INTEGER_VALUE().toString()));
-                    } else {
-                        throw new SemanticException("VARCHAR type parameter mush be integer");
-                    }
-                } else if (signature.equalsIgnoreCase("CHAR")) {
-                    if (type.typeParameter().size() > 1) {
-                        throw new SemanticException("CHAR can not contains multi type parameter");
-                    }
-                    if (type.typeParameter(0).INTEGER_VALUE() != null) {
-                        return ScalarType.createCharType(
-                                Integer.parseInt(type.typeParameter(0).INTEGER_VALUE().toString()));
-                    } else {
-                        throw new SemanticException("CHAR type parameter mush be integer");
-                    }
-                } else if (signature.equalsIgnoreCase("DECIMAL")) {
-                    throw new IllegalArgumentException("Unsupported type specification: " + type.getText());
-                }
-
-                throw new IllegalArgumentException("Unsupported type specification: " + type.getText());
-            }
-
-            if (signature.equalsIgnoreCase("BOOLEAN")) {
+            if (type.baseType().BOOLEAN() != null) {
                 return Type.BOOLEAN;
-            } else if (signature.equalsIgnoreCase("TINYINT")) {
+            } else if (type.baseType().TINYINT() != null) {
                 return Type.TINYINT;
-            } else if (signature.equalsIgnoreCase("SMALLINT")) {
+            } else if (type.baseType().SMALLINT() != null) {
                 return Type.SMALLINT;
-            } else if (signature.equalsIgnoreCase("INT") || signature.equalsIgnoreCase("INTEGER")) {
+            } else if (type.baseType().INT() != null || type.baseType().INTEGER() != null) {
                 return Type.INT;
-            } else if (signature.equalsIgnoreCase("BIGINT")) {
+            } else if (type.baseType().BIGINT() != null) {
                 return Type.BIGINT;
-            } else if (signature.equalsIgnoreCase("LARGEINT")) {
+            } else if (type.baseType().LARGEINT() != null) {
                 return Type.LARGEINT;
-            } else if (signature.equalsIgnoreCase("FLOAT")) {
+            } else if (type.baseType().FLOAT() != null) {
                 return Type.FLOAT;
-            } else if (signature.equalsIgnoreCase("DOUBLE")) {
+            } else if (type.baseType().DOUBLE() != null) {
                 return Type.DOUBLE;
-            } else if (signature.equalsIgnoreCase("DECIMAL")) {
-                return ScalarType.createUnifiedDecimalType(10, 0);
-            } else if (signature.equalsIgnoreCase("DATE")) {
+            } else if (type.baseType().DATE() != null) {
                 return Type.DATE;
-            } else if (signature.equalsIgnoreCase("DATETIME")) {
+            } else if (type.baseType().DATETIME() != null) {
                 return Type.DATETIME;
-            } else if (signature.equalsIgnoreCase("TIME")) {
+            } else if (type.baseType().TIME() != null) {
                 return Type.TIME;
-            } else if (signature.equalsIgnoreCase("VARCHAR")) {
-                return Type.VARCHAR;
-            } else if (signature.equalsIgnoreCase("CHAR")) {
-                return Type.CHAR;
-            } else if (signature.equalsIgnoreCase("STRING")) {
+            } else if (type.baseType().VARCHAR() != null) {
+                if (type.baseType().typeParameter() != null) {
+                    return ScalarType.createVarcharType(
+                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
+                } else {
+                    return Type.VARCHAR;
+                }
+            } else if (type.baseType().CHAR() != null) {
+                if (type.baseType().typeParameter() != null) {
+                    return ScalarType.createCharType(
+                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
+                } else {
+                    return Type.CHAR;
+                }
+            } else if (type.baseType().STRING() != null) {
                 ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
                 stringType.setAssignedStrLenInColDefinition();
                 return stringType;
-            } else if (signature.equalsIgnoreCase("BITMAP")) {
+            } else if (type.baseType().BITMAP() != null) {
                 return Type.BITMAP;
-            } else if (signature.equalsIgnoreCase("HLL")) {
+            } else if (type.baseType().HLL() != null) {
                 return Type.HLL;
-            } else if (signature.equalsIgnoreCase("PERCENTILE")) {
+            } else if (type.baseType().PERCENTILE() != null) {
                 return Type.PERCENTILE;
-            } else if (signature.equalsIgnoreCase("JSON")) {
+            } else if (type.baseType().JSON() != null) {
                 return Type.JSON;
             }
 
@@ -1613,11 +1605,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
 
-            int precision = Integer.parseInt(type.precision.INTEGER_VALUE().toString());
+            int precision = Integer.parseInt(type.precision.getText());
             int scale = ScalarType.DEFAULT_SCALE;
 
             if (type.scale != null) {
-                scale = Integer.parseInt(type.scale.INTEGER_VALUE().toString());
+                scale = Integer.parseInt(type.scale.getText());
             }
 
             if (type.decimalType().DECIMAL() != null) {

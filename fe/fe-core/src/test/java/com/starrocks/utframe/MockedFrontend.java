@@ -267,7 +267,7 @@ public class MockedFrontend {
         int retry = 0;
         while (!Catalog.getCurrentCatalog().isReady() && retry++ < 120) {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(100);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

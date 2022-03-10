@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -79,7 +80,7 @@ public class AnalyzeSetOperationTest {
 
         // column_0 should be non-nullable VARCHAR, and column_1 should be nullable TINYINT.
         String sql = "SELECT * FROM (VALUES (1,  2), (3, 4), ('10', NULL)) t;";
-        QueryRelation queryRelation = analyzeSuccess(sql);
+        QueryRelation queryRelation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
 
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, getConnectContext()).transform(queryRelation);

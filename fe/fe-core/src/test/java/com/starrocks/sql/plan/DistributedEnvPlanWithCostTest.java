@@ -195,7 +195,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "insert into test_all_type(t1a,t1b) select t1a,t1b from test_all_type limit 5";
         planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:1: t1a | 2: t1b | 11: expr | 12: expr | 13: expr | 14: expr | 15: expr | 16: expr | 17: expr | 18: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -465,20 +464,19 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().enableJoinReorder();
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testSetVar() throws Exception {
         String sql = "explain select c2 from db1.tbl3;";
-        String plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=false) */c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
 
-        // will throw NullPointException
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=true, enable_cbo=true) */ c2 from db1.tbl3";
-        plan = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, sql);
+        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
     }
 
     @Test
@@ -919,7 +917,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         String plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("     column statistics: \n" +
                 "     * L_PARTKEY-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 20000.0] ESTIMATE"));
 
@@ -934,7 +931,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("     column statistics: \n" +
                 "     * L_PARTKEY-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
 
@@ -949,7 +945,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("     column statistics: \n" +
                 "     * L_SHIPDATE-->[1.9921212E7, 1.9980202E7, 0.0, 8.0, 1.0] ESTIMATE"));
 
@@ -963,7 +958,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         };
 
         plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("     column statistics: \n" +
                 "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE"));
 
@@ -1095,13 +1089,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCastPartitionPrune() throws Exception {
         String sql = "select * from test_all_type_partition_by_datetime where cast(id_datetime as date) = '1991-01-01'";
         String plan = getFragmentPlan(sql);
-        // check not prune partition
-        Assert.assertTrue(plan.contains("partitions=3/3"));
+        // check prune partition
+        Assert.assertTrue(plan.contains("partitions=2/3"));
 
         sql = "select * from test_all_type_partition_by_date where cast(id_date as datetime) >= '1991-01-01 00:00:00' " +
                 "and cast(id_date as datetime) < '1992-01-01 12:00:00'";
         plan = getFragmentPlan(sql);
-        // check not prune partition
+        // check prune partition
         Assert.assertTrue(plan.contains("partitions=2/3"));
     }
 

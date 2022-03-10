@@ -148,6 +148,8 @@ set(EXEC_FILES
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
     pipeline/olap_scan_operator.cpp
+    pipeline/hdfs_scan_operator.cpp
+    pipeline/hdfs_chunk_source.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp

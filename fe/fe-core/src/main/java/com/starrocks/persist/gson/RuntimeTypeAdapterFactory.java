@@ -180,6 +180,46 @@ import java.util.Map;
  *     Shape shape = gson.fromJson(json, Shape.class);
  * }
  * </pre>
+ *
+ * <h3>Abstract And Deserialization New Class</h3>
+ * Abstract a new base class and new subclasses based on an old class.
+ * If deserialize the new subclass from old class json data,
+ * you should use the specific subclass to deserialize.
+ *
+ * <pre>
+ * {
+ *     &#64;code
+ *     // old class
+ *     class OldCircle {
+ *         int x;
+ *         int y;
+ *         int radius;
+ *     }
+ *
+ *     // new base class and subclasses
+ *     abstract class Shape {
+ *         int x;
+ *         int y;
+ *     }
+ *     class Circle extends Shape {
+ *         int radius;
+ *     }
+ *     class Rectangle extends Shape {
+ *         int width;
+ *         int height;
+ *     }
+ *
+ *     RuntimeTypeAdapterFactory<Shape> shapeAdapterFactory = RuntimeTypeAdapterFactory.of(Shape.class)
+ *             .registerSubtype(Rectangle.class)
+ *             .registerSubtype(Circle.class, true);
+ *
+ *     OldCircle circle = new OldCircle();
+ *     String json = gson.toJson(circle, OldCircle.class);
+ *
+ *     // shape is instance of Circle
+ *     Shape shape = gson.fromJson(json, Shape.class);
+ * }
+ * </pre>
  */
 public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
     private final Class<?> baseType;
@@ -187,6 +227,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
     private final Map<String, Class<?>> labelToSubtype = new LinkedHashMap<String, Class<?>>();
     private final Map<Class<?>, String> subtypeToLabel = new LinkedHashMap<Class<?>, String>();
     private final boolean maintainType;
+    private String defaultLabel;
 
     private RuntimeTypeAdapterFactory(Class<?> baseType, String typeFieldName, boolean maintainType) {
         if (typeFieldName == null || baseType == null) {
@@ -195,6 +236,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         this.baseType = baseType;
         this.typeFieldName = typeFieldName;
         this.maintainType = maintainType;
+        this.defaultLabel = null;
     }
 
     /**
@@ -226,11 +268,12 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
     /**
      * Registers {@code type} identified by {@code label}. Labels are case
      * sensitive.
+     * Default is {@code isDefault}.
      *
      * @throws IllegalArgumentException if either {@code type} or {@code label}
      *                                  have already been registered on this type adapter.
      */
-    public RuntimeTypeAdapterFactory<T> registerSubtype(Class<? extends T> type, String label) {
+    public RuntimeTypeAdapterFactory<T> registerSubtype(Class<? extends T> type, String label, boolean isDefault) {
         if (type == null || label == null) {
             throw new NullPointerException();
         }
@@ -239,12 +282,40 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         }
         labelToSubtype.put(label, type);
         subtypeToLabel.put(type, label);
+        if (isDefault) {
+            defaultLabel = label;
+        }
         return this;
+    }
+
+    /**
+     * Registers {@code type} identified by {@code label}. Labels are case
+     * sensitive.
+     * Default is false.
+     *
+     * @throws IllegalArgumentException if either {@code type} or {@code label}
+     *                                  have already been registered on this type adapter.
+     */
+    public RuntimeTypeAdapterFactory<T> registerSubtype(Class<? extends T> type, String label) {
+        return registerSubtype(type, label, false);
     }
 
     /**
      * Registers {@code type} identified by its {@link Class#getSimpleName simple
      * name}. Labels are case sensitive.
+     * Default is {@code isDefault}.
+     *
+     * @throws IllegalArgumentException if either {@code type} or its simple name
+     *                                  have already been registered on this type adapter.
+     */
+    public RuntimeTypeAdapterFactory<T> registerSubtype(Class<? extends T> type, boolean isDefault) {
+        return registerSubtype(type, type.getSimpleName(), isDefault);
+    }
+
+    /**
+     * Registers {@code type} identified by its {@link Class#getSimpleName simple
+     * name}. Labels are case sensitive.
+     * Default is false.
      *
      * @throws IllegalArgumentException if either {@code type} or its simple name
      *                                  have already been registered on this type adapter.
@@ -277,11 +348,16 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                     labelJsonElement = jsonElement.getAsJsonObject().remove(typeFieldName);
                 }
 
-                if (labelJsonElement == null) {
+                String label;
+                if (labelJsonElement != null) {
+                    label = labelJsonElement.getAsString();
+                } else if (defaultLabel != null) {
+                    label = defaultLabel;
+                } else {
                     throw new JsonParseException("cannot deserialize " + baseType
                             + " because it does not define a field named " + typeFieldName);
                 }
-                String label = labelJsonElement.getAsString();
+
                 @SuppressWarnings("unchecked") // registration requires that subtype extends T
                         TypeAdapter<R> delegate = (TypeAdapter<R>) labelToDelegate.get(label);
                 if (delegate == null) {

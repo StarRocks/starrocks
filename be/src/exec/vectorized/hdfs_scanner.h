@@ -23,6 +23,7 @@ class RuntimeFilterProbeCollector;
 struct HdfsScanStats {
     int64_t scan_ns = 0;
     int64_t raw_rows_read = 0;
+    int64_t num_rows_read = 0;
     int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
@@ -73,7 +74,7 @@ struct HdfsScannerParams {
     std::vector<const THdfsScanRange*> scan_ranges;
 
     // runtime bloom filter.
-    RuntimeFilterProbeCollector* runtime_filter_collector;
+    const RuntimeFilterProbeCollector* runtime_filter_collector;
 
     // should clone in scanner
     std::vector<ExprContext*> conjunct_ctxs;
@@ -187,6 +188,7 @@ public:
     void cleanup();
 
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
+    int64_t num_rows_read() const { return _stats.num_rows_read; }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();

@@ -52,7 +52,6 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.OperatorStrings;
@@ -168,11 +167,9 @@ public class UtFrameUtils {
     public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
             throws Exception {
         StatementBase statementBase;
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
         try {
             statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
-            Relation relation = analyzer.analyze(statementBase);
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
             if (e.getMessage() == null) {
@@ -182,28 +179,6 @@ public class UtFrameUtils {
             }
         }
 
-        return statementBase;
-    }
-
-    // Parse an origin stmt . Return a StatementBase instance.
-    public static StatementBase parseStmtWithNewAnalyzer(String originStmt, ConnectContext ctx)
-            throws Exception {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(ctx.getCatalog(), ctx);
-        StatementBase statementBase = null;
-        try {
-            statementBase = SqlParserUtils.getFirstStmt(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            System.err.println("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        }
         return statementBase;
     }
 
@@ -484,12 +459,11 @@ public class UtFrameUtils {
 
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql, connectContext.getSessionVariable().getSqlMode()).get(0);
-            com.starrocks.sql.analyzer.Analyzer analyzer =
-                    new com.starrocks.sql.analyzer.Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            Relation relation = analyzer.analyze(statementBase);
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(relation);
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform(((QueryStatement) statementBase).getQueryRelation());
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(

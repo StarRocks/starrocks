@@ -41,9 +41,9 @@ public class CatalogRecycleBinTest {
         Table table2 = new Table(2L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
         bin.recycleTable(11L, table2);
 
-        Table recycledTable = bin.getTable(1L);
+        Table recycledTable = bin.getTable(11L, 1L);
         Assert.assertNull(recycledTable);
-        recycledTable = bin.getTable(2L);
+        recycledTable = bin.getTable(11L, 2L);
         Assert.assertEquals(2L, recycledTable.getId());
 
         List<Table> tables = bin.getTables(11L);
@@ -79,4 +79,24 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(1, partitions.size());
         Assert.assertEquals(2L, partitions.get(0).getId());
     }
+
+    @Test
+    public void testReplayEraseTable() {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
+        bin.recycleTable(11, table);
+        bin.recycleTable(12, table);
+
+        List<Table> tables = bin.getTables(11L);
+        Assert.assertEquals(1, tables.size());
+
+        bin.replayEraseTable(2);
+        tables = bin.getTables(11);
+        Assert.assertEquals(1, tables.size());
+
+        bin.replayEraseTable(1);
+        tables = bin.getTables(11);
+        Assert.assertEquals(0, tables.size());
+    }
+
 }

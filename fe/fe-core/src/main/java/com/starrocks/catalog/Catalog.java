@@ -1615,7 +1615,7 @@ public class Catalog {
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                                 if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
                                     // set replica's schema hash
@@ -3523,7 +3523,7 @@ public class Catalog {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : tablet.getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -3798,7 +3798,7 @@ public class Catalog {
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
-            for (Replica replica : tablet.getReplicas()) {
+            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                 CreateReplicaTask task = new CreateReplicaTask(
                         replica.getBackendId(),
                         dbId,
@@ -4771,7 +4771,7 @@ public class Catalog {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -4815,7 +4815,7 @@ public class Catalog {
             }
             for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
                 // create a new tablet with random chosen backends
-                Tablet tablet = new Tablet(getNextId());
+                LocalTablet tablet = new LocalTablet(getNextId());
 
                 // add tablet to inverted index first
                 index.addTablet(tablet, tabletMeta);
@@ -4998,7 +4998,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
 
         // for compatibility
         int schemaHash = info.getSchemaHash();
@@ -5020,7 +5020,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
         Preconditions.checkNotNull(replica, info);
         replica.updateRowCount(info.getVersion(), info.getDataSize(), info.getRowCount());
@@ -5052,7 +5052,7 @@ public class Catalog {
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        Tablet tablet = materializedIndex.getTablet(info.getTabletId());
+        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
         tablet.deleteReplicaByBackendId(info.getBackendId());
     }
 
@@ -5158,7 +5158,7 @@ public class Catalog {
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
         Table table = db.getTable(tableId);
         if (table == null) {
-            table = recycleBin.getTable(tableId);
+            table = recycleBin.getTable(db.getId(), tableId);
         }
         return table;
     }
@@ -6596,7 +6596,7 @@ public class Catalog {
                                 for (Tablet tablet : materializedIndex.getTablets()) {
                                     int replicaNum = 0;
                                     int quorum = replicationNum / 2 + 1;
-                                    for (Replica replica : tablet.getReplicas()) {
+                                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                         if (replica.getState() != ReplicaState.CLONE
                                                 && beIds.contains(replica.getBackendId())) {
                                             replicaNum++;
@@ -7109,7 +7109,7 @@ public class Catalog {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : tablet.getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -7249,7 +7249,7 @@ public class Catalog {
                 if (mindex == null) {
                     continue;
                 }
-                Tablet tablet = mindex.getTablet(info.getTabletId());
+                LocalTablet tablet = (LocalTablet) mindex.getTablet(info.getTabletId());
                 if (tablet == null) {
                     continue;
                 }
@@ -7509,7 +7509,7 @@ public class Catalog {
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
-                        List<Replica> replicas = tablet.getReplicas();
+                        List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                         for (Replica replica : replicas) {
                             long backendId = replica.getBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);

@@ -47,7 +47,6 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "            ref_0.d_dow as c1 from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_day_name = \"dd\" limit 137;\n";
         String plan = getThriftPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("unused_output_column_name:[d_day_name]"));
     }
 

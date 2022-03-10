@@ -301,6 +301,8 @@ primaryExpression
     | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
     | LEFT '(' expression ',' expression ')'                                              #functionCall
     | RIGHT '(' expression ',' expression ')'                                             #functionCall
+    | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'                   #functionCall
+    | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'                  #functionCall
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -348,17 +350,17 @@ booleanValue
     ;
 
 interval
-    : INTERVAL value=expression from=intervalField
+    : INTERVAL value=expression from=unitIdentifier
     ;
 
-intervalField
+unitIdentifier
     : YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
     ;
 
 type
-    : arrayType
-    | baseType ('(' typeParameter (',' typeParameter)* ')')?
-    | decimalType ('(' precision=typeParameter (',' scale=typeParameter)? ')')?
+    : baseType
+    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | arrayType
     ;
 
 arrayType
@@ -366,11 +368,29 @@ arrayType
     ;
 
 typeParameter
-    : INTEGER_VALUE | type
+    : '(' INTEGER_VALUE ')'
     ;
 
 baseType
-    : identifier
+    : BOOLEAN
+    | TINYINT
+    | SMALLINT
+    | INT
+    | INTEGER
+    | BIGINT
+    | LARGEINT
+    | FLOAT
+    | DOUBLE
+    | DATE
+    | DATETIME
+    | TIME
+    | CHAR typeParameter?
+    | VARCHAR typeParameter?
+    | STRING
+    | BITMAP
+    | HLL
+    | PERCENTILE
+    | JSON
     ;
 
 decimalType
@@ -441,7 +461,7 @@ nonReserved
     | PRECEDING | PROPERTIES
     | ROLLUP
     | SECOND | SESSION | SETS | START
-    | TABLES | TEMPORARY | THAN | TIME | TYPE
+    | TABLES | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR

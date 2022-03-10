@@ -698,4 +698,8 @@ Env* Env::Default() {
     return &default_env;
 }
 
+std::unique_ptr<Env> new_env_posix() {
+    return std::make_unique<PosixEnv>();
+}
+
 } // end namespace starrocks

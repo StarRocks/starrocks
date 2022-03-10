@@ -21,12 +21,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
 // Show database statement.
 public class ShowDbStmt extends ShowStmt {
@@ -57,7 +59,7 @@ public class ShowDbStmt extends ShowStmt {
     }
 
     @Override
-    public SelectStmt toSelectStmt(Analyzer analyzer) {
+    public QueryStatement toSelectStmt() {
         if (where == null) {
             return null;
         }
@@ -68,11 +70,8 @@ public class ShowDbStmt extends ShowStmt {
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, DB_COL), item.getExpr().clone(null));
         where = where.substitute(aliasMap);
-        SelectStmt selectStmt = new SelectStmt(selectList,
-                new FromClause(Lists.newArrayList(new TableRef(TABLE_NAME, null))),
-                where, null, null, null, LimitElement.NO_LIMIT);
-
-        return selectStmt;
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME, null),
+                where, null, null));
     }
 
     @Override

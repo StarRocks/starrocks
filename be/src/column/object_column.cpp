@@ -92,7 +92,7 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::C
 };
 
 template <typename T>
-bool ObjectColumn<T>::append_strings(const vector<starrocks::Slice>& strs) {
+bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
     _pool.reserve(_pool.size() + strs.size());
     for (const Slice& s : strs) {
         _pool.emplace_back(s);
@@ -164,7 +164,7 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 }
 
 template <typename T>
-void ObjectColumn<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t chunk_size) {
+void ObjectColumn<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     DCHECK(false) << "Don't support object column deserialize and append";
 }
 

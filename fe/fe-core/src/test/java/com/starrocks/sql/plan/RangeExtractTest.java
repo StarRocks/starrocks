@@ -77,7 +77,6 @@ public class RangeExtractTest extends PlanTestBase {
     public void testRangePredicate8() throws Exception {
         String sql = "select * from t0 where v1 = 1 and v1 = 2";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:EMPTYSET\n"));
     }
 
@@ -85,7 +84,6 @@ public class RangeExtractTest extends PlanTestBase {
     public void testRangePredicate9() throws Exception {
         String sql = "select * from t0 where v1 > 1 and v1 <= 1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("PREDICATES: 1: v1 > 1, 1: v1 <= 1\n"));
     }
 
@@ -93,7 +91,6 @@ public class RangeExtractTest extends PlanTestBase {
     public void testRangePredicate10() throws Exception {
         String sql = "select * from t0 where v1 > 1 and v1 <= 0";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:EMPTYSET\n"));
     }
 
@@ -102,7 +99,6 @@ public class RangeExtractTest extends PlanTestBase {
         String sql =
                 "select t0.* from t0 inner join t1 on v1 = v4 and ((v1 = 1 and abs(v4) > 2) or (v1 = 3 and abs(v4) = 8))";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("PREDICATES: 1: v1 IN (1, 3), abs(1: v1) > 2\n"));
         Assert.assertTrue(plan.contains("PREDICATES: abs(4: v4) > 2, 4: v4 IN (1, 3)\n"));
     }
