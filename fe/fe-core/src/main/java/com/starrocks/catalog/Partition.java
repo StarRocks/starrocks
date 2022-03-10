@@ -97,6 +97,11 @@ public class Partition extends MetaObject implements Writable {
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
 
+    // Not persist.
+    // Currently it is used to check whether the storage medium of the partition is S3.
+    // If storage medium is S3, use StarOSTablet in MaterializedIndex, otherwise use LocalTablet.
+    private PartitionInfo partitionInfo = null;
+
     private Partition() {
     }
 
@@ -192,6 +197,14 @@ public class Partition extends MetaObject implements Writable {
 
     public DistributionInfo getDistributionInfo() {
         return distributionInfo;
+    }
+
+    public void setPartitionInfo(PartitionInfo partitionInfo) {
+        this.partitionInfo = partitionInfo;
+    }
+
+    public boolean isUseStarOS() {
+        return partitionInfo != null && partitionInfo.isUseStarOS(id);
     }
 
     public void createRollupIndex(MaterializedIndex mIndex) {
@@ -326,10 +339,15 @@ public class Partition extends MetaObject implements Writable {
         return true;
     }
 
-    public static Partition read(DataInput in) throws IOException {
+    public static Partition read(DataInput in, PartitionInfo partitionInfo) throws IOException {
         Partition partition = new Partition();
+        partition.setPartitionInfo(partitionInfo);
         partition.readFields(in);
         return partition;
+    }
+
+    public static Partition read(DataInput in) throws IOException {
+        return Partition.read(in, null);
     }
 
     @Override
@@ -375,18 +393,18 @@ public class Partition extends MetaObject implements Writable {
         name = Text.readString(in);
         state = PartitionState.valueOf(Text.readString(in));
 
-        baseIndex = MaterializedIndex.read(in);
+        baseIndex = MaterializedIndex.read(in, isUseStarOS());
 
         int rollupCount = in.readInt();
         for (int i = 0; i < rollupCount; ++i) {
-            MaterializedIndex rollupTable = MaterializedIndex.read(in);
+            MaterializedIndex rollupTable = MaterializedIndex.read(in, isUseStarOS());
             idToVisibleRollupIndex.put(rollupTable.getId(), rollupTable);
         }
 
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
             int shadowIndexCount = in.readInt();
             for (int i = 0; i < shadowIndexCount; i++) {
-                MaterializedIndex shadowIndex = MaterializedIndex.read(in);
+                MaterializedIndex shadowIndex = MaterializedIndex.read(in, isUseStarOS());
                 idToShadowIndex.put(shadowIndex.getId(), shadowIndex);
             }
         }
