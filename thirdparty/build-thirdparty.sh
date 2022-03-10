@@ -720,7 +720,8 @@ build_mariadb() {
     # we only need build libmariadbclient and headers
     make -j$PARALLEL mariadbclient
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
-    make install
+    mkdir -p $TP_INSTALL_DIR/lib/mariadb/
+    cp libmariadbclient.a $TP_INSTALL_DIR/lib/mariadb/
     # install mariadb headers
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
     make install
