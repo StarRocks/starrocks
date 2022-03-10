@@ -295,7 +295,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
                 OlapTable olapTbl = (OlapTable) tbl;
                 if (olapTbl.getKeysType() == KeysType.PRIMARY_KEYS) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                            "restore do not support primary key table: " + tblName);
+                            "backup do not support primary key table: " + tblName);
                 }
                 if (olapTbl.existTempPartitions()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
