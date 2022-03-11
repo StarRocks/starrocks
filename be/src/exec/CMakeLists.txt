@@ -118,6 +118,8 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
+    vectorized/jdbc_scan_node.cpp
+    vectorized/jdbc_scanner.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
@@ -150,6 +152,7 @@ set(EXEC_FILES
     pipeline/olap_scan_operator.cpp
     pipeline/hdfs_scan_operator.cpp
     pipeline/hdfs_chunk_source.cpp
+    pipeline/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
