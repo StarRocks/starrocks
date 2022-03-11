@@ -471,4 +471,33 @@ public class SetTest extends PlanTestBase {
                 "  |      [8, TINYINT, true]\n" +
                 "  |  pass-through-operands: all"));
     }
+
+    @Test
+    public void testUnionWithOrderBy() throws Exception {
+        String sql = "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:TOP-N\n" +
+                "  |  order by: <slot 12> 12: v3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE"));
+
+        sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
 }
