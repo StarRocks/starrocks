@@ -15,6 +15,9 @@ public:
     static AggregateFunctionPtr MakeAvgAggregateFunction();
 
     template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeDecimalAvgAggregateFunction();
+
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeBitmapUnionIntAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
@@ -53,8 +56,11 @@ public:
     template <typename NestedState>
     static AggregateFunctionPtr MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function);
 
-    template <PrimitiveType T>
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeSumAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeDecimalSumAggregateFunction();
 
     template <PrimitiveType PT, bool is_sample>
     static AggregateFunctionPtr MakeVarianceAggregateFunction();
@@ -66,6 +72,8 @@ public:
     static AggregateFunctionPtr MakeSumDistinctAggregateFunction();
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeDecimalSumDistinctAggregateFunction();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
 

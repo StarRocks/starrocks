@@ -35,6 +35,10 @@ template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeAvgAggregateFunction() {
     return std::make_shared<AvgAggregateFunction<PT>>();
 }
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeDecimalAvgAggregateFunction() {
+    return std::make_shared<DecimalAvgAggregateFunction<PT>>();
+}
 
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapUnionIntAggregateFunction() {
@@ -114,6 +118,11 @@ AggregateFunctionPtr AggregateFactory::MakeSumAggregateFunction() {
     return std::make_shared<SumAggregateFunction<PT>>();
 }
 
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeDecimalSumAggregateFunction() {
+    return std::make_shared<DecimalSumAggregateFunction<PT>>();
+}
+
 template <PrimitiveType PT, bool is_sample>
 AggregateFunctionPtr AggregateFactory::MakeVarianceAggregateFunction() {
     return std::make_shared<VarianceAggregateFunction<PT, is_sample>>();
@@ -132,6 +141,11 @@ AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::SUM>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
+    return std::make_shared<DecimalDistinctAggregateFunction<PT, AggDistinctType::SUM>>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
@@ -238,6 +252,14 @@ public:
                                create_array_function<arg_type, return_type, true>(name));
     }
 
+    template <PrimitiveType arg_type, PrimitiveType return_type>
+    void add_decimal_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+                               create_decimal_function<arg_type, return_type, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+                               create_decimal_function<arg_type, return_type, true>(name));
+    }
+
     template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
     AggregateFunctionPtr create_object_function(std::string& name) {
         if constexpr (is_null) {
@@ -312,6 +334,34 @@ public:
         return nullptr;
     }
 
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool is_null>
+    std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
+        static_assert(pt_is_decimal128<ResultPT>);
+        if constexpr (is_null) {
+            using ResultType = RunTimeCppType<ResultPT>;
+            if (name == "decimal_avg") {
+                auto avg = AggregateFactory::MakeDecimalAvgAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>>(avg);
+            } else if (name == "decimal_sum") {
+                auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>>(sum);
+            } else if (name == "decimal_multi_distinct_sum") {
+                auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT, ResultPT>>(
+                        distinct_sum);
+            }
+        } else {
+            if (name == "decimal_avg") {
+                return AggregateFactory::MakeDecimalAvgAggregateFunction<ArgPT>();
+            } else if (name == "decimal_sum") {
+                return AggregateFactory::MakeDecimalSumAggregateFunction<ArgPT>();
+            } else if (name == "decimal_multi_distinct_sum") {
+                return AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
+            }
+        }
+        return nullptr;
+    }
+
     // TODO(kks): simplify create_function method
     template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool is_null>
     std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
@@ -358,16 +408,20 @@ public:
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>>(avg);
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "multi_distinct_count2") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "multi_distinct_sum") {
                 auto distinct = AggregateFactory::MakeSumDistinctAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "multi_distinct_sum2") {
                 auto distinct = AggregateFactory::MakeSumDistinctAggregateFunctionV2<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
@@ -443,10 +497,12 @@ public:
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<MinAggregateData<ArgPT>>(min);
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "multi_distinct_count2") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
@@ -783,6 +839,17 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
+
+    // sum, avg, distinct_sum use decimal128 as intermediate or result type to avoid overflow
+    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_sum");
+    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_sum");
+    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_sum");
+    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
 }
 
 #undef ADD_ALL_TYPE
@@ -799,6 +866,20 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
             func_name = "multi_distinct_count2";
         }
     }
+
+    auto is_decimal_type = [](PrimitiveType pt) {
+        return pt == TYPE_DECIMAL32 || pt == TYPE_DECIMAL64 || pt == TYPE_DECIMAL128;
+    };
+    if (agg_func_set_version > 2 && is_decimal_type(arg_type)) {
+        if (name == "sum") {
+            func_name = "decimal_sum";
+        } else if (name == "avg") {
+            func_name = "decimal_avg";
+        } else if (name == "multi_distinct_sum") {
+            func_name = "decimal_multi_distinct_sum";
+        }
+    }
+
     return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
 }
 

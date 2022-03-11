@@ -141,8 +141,8 @@ public class FunctionSet {
                     .put(Type.DOUBLE, Type.DOUBLE)
                     .put(Type.LARGEINT, Type.LARGEINT)
                     .put(Type.DECIMALV2, Type.DECIMALV2)
-                    .put(Type.DECIMAL32, Type.DECIMAL64)
-                    .put(Type.DECIMAL64, Type.DECIMAL64)
+                    .put(Type.DECIMAL32, Type.DECIMAL128)
+                    .put(Type.DECIMAL64, Type.DECIMAL128)
                     .put(Type.DECIMAL128, Type.DECIMAL128)
                     .build();
 
@@ -539,11 +539,11 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,  false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
+                    Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT,false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL64, Type.DECIMAL64, false, true, false));
+                    Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.DOUBLE, false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(name,
@@ -555,6 +555,8 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
+
+
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",
@@ -613,13 +615,13 @@ public class FunctionSet {
                 Lists.newArrayList(Type.INT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin("avg",
-                Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL64, Type.VARCHAR,
+                Lists.newArrayList(Type.DECIMAL32), Type.DECIMAL128, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin("avg",
                 Lists.newArrayList(Type.BIGINT), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin("avg",
-                Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL64, Type.VARCHAR,
+                Lists.newArrayList(Type.DECIMAL64), Type.DECIMAL128, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin("avg",
                 Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.VARCHAR,
