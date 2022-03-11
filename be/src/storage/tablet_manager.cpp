@@ -35,6 +35,7 @@ DIAGNOSTIC_POP
 
 #include "env/env.h"
 #include "runtime/current_thread.h"
+#include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -735,6 +736,11 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     }
     auto st = _add_tablet_unlocked(tablet, update_meta, force);
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
+    // no concurrent access here
+    if (config::enable_new_compaction_framework) {
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+    }
+
     return st;
 }
 
@@ -1168,6 +1174,8 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
+    LOG(INFO) << "drop tablet:" << dropped_tablet->tablet_id() << ", stop compaction task";
+    dropped_tablet->stop_compaction();
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 

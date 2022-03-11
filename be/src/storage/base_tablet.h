@@ -38,9 +38,14 @@ class DataDir;
 class BaseTablet : public std::enable_shared_from_this<BaseTablet> {
 public:
     BaseTablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
+    // for ut
+    BaseTablet() = default;
+
     virtual ~BaseTablet() = default;
 
     inline DataDir* data_dir() const;
+
+    void set_data_dir(DataDir* data_dir) { _data_dir = data_dir; }
 
     // A tablet's data are stored in disk files under a directory with structure like:
     //   ${storage_root_path}/${shard_number}/${tablet_id}/${schema_hash}
@@ -64,6 +69,8 @@ public:
 
     // Property encapsulated in TabletMeta
     inline const TabletMetaSharedPtr tablet_meta();
+
+    void set_tablet_meta(const TabletMetaSharedPtr& tablet_meta) { _tablet_meta = tablet_meta; }
 
     inline TabletUid tablet_uid() const;
     inline int64_t table_id() const;

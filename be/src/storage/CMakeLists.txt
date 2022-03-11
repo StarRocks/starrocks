@@ -147,4 +147,10 @@ add_library(Storage STATIC
     vectorized/rowset_merger.cpp
     vectorized/column_predicate_rewriter.cpp
     vectorized/column_predicate_dict_conjuct.cpp
+    compaction_context.cpp
+    compaction_task.cpp
+    compaction_utils.cpp
+    compaction_manager.cpp
+    compaction_scheduler.cpp
+    compaction_task_factory.cpp
 )
