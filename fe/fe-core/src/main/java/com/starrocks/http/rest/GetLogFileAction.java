@@ -50,7 +50,10 @@ import java.util.Set;
  *      curl -X GET http://fe_host:http_port/api/get_log_file?type=fe.audit.log&file=fe.audit.log.20190528.1
  */
 public class GetLogFileAction extends RestBaseAction {
-    private final Set<String> logFileTypes = Sets.newHashSet("fe.audit.log");
+    private static final String TYPE_AUDIT = "fe.audit.log";
+    private static final String TYPE_SYSTEM = "system";
+
+    private final Set<String> logFileTypes = Sets.newHashSet(TYPE_AUDIT, TYPE_SYSTEM);
 
     public GetLogFileAction(ActionController controller) {
         super(controller);
@@ -88,7 +91,7 @@ public class GetLogFileAction extends RestBaseAction {
             return;
         } else if (method.equals(HttpMethod.GET)) {
             File log = getLogFile(logType, logFile);
-            if (!log.exists() || !log.isFile()) {
+            if (log == null || !log.exists() || !log.isFile()) {
                 response.appendContent("Log file not exist: " + log.getName());
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
@@ -102,13 +105,10 @@ public class GetLogFileAction extends RestBaseAction {
 
     private String getFileInfos(String logType) {
         Map<String, Long> fileInfos = Maps.newTreeMap();
-        if (logType.equals("fe.audit.log")) {
-            File logDir = new File(Config.audit_log_dir);
-            File[] files = logDir.listFiles();
-            for (int i = 0; i < files.length; i++) {
-                if (files[i].isFile() && files[i].getName().startsWith("fe.audit.log")) {
-                    fileInfos.put(files[i].getName(), files[i].length());
-                }
+        File logDir = new File(Config.audit_log_dir);
+        for (File file : logDir.listFiles()) {
+            if (file.isFile() && file.getName().startsWith(logType)) {
+                fileInfos.put(file.getName(), file.length());
             }
         }
 
@@ -123,10 +123,13 @@ public class GetLogFileAction extends RestBaseAction {
     }
 
     private File getLogFile(String logType, String logFile) {
-        String logPath = "";
-        if ("fe.audit.log".equals(logType)) {
-            logPath = Config.audit_log_dir + "/" + logFile;
+        String basePath = logType.equals(TYPE_AUDIT) ? Config.audit_log_dir : Config.sys_log_dir;
+        File logDir = new File(basePath);
+        for (File file : logDir.listFiles()) {
+            if (file.isFile() && file.getName().endsWith(logFile)) {
+                return file;
+            }
         }
-        return new File(logPath);
+        return null;
     }
 }
