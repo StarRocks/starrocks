@@ -90,6 +90,11 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
 Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
     while (_analytor->has_output()) {
+        if (_analytor->reached_limit()) {
+            return Status::OK();
+        }
+
+        int64_t found_partition_end = _analytor->find_partition_end();
         // Only process after all the data in a partition is reached
         if (!_analytor->is_partition_finished()) {
             return Status::OK();
@@ -112,9 +117,6 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary() {
             vectorized::ChunkPtr chunk;
             RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
             _analytor->offer_chunk_to_buffer(chunk);
-            if (_analytor->reached_limit()) {
-                return Status::OK();
-            }
         }
     }
     return Status::OK();
