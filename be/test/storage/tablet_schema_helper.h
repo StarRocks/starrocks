@@ -28,6 +28,49 @@
 
 namespace starrocks {
 
+// (k1 int, k2 varchar(20), k3 int) duplicated key (k1, k2)
+void inline create_tablet_schema(TabletSchema* tablet_schema) {
+    TabletSchemaPB tablet_schema_pb;
+    tablet_schema_pb.set_keys_type(DUP_KEYS);
+    tablet_schema_pb.set_num_short_key_columns(2);
+    tablet_schema_pb.set_num_rows_per_row_block(1024);
+    tablet_schema_pb.set_compress_kind(COMPRESS_NONE);
+    tablet_schema_pb.set_next_column_unique_id(4);
+
+    ColumnPB* column_1 = tablet_schema_pb.add_column();
+    column_1->set_unique_id(1);
+    column_1->set_name("k1");
+    column_1->set_type("INT");
+    column_1->set_is_key(true);
+    column_1->set_length(4);
+    column_1->set_index_length(4);
+    column_1->set_is_nullable(true);
+    column_1->set_is_bf_column(false);
+
+    ColumnPB* column_2 = tablet_schema_pb.add_column();
+    column_2->set_unique_id(2);
+    column_2->set_name("k2");
+    column_2->set_type("INT"); // TODO change to varchar(20) when dict encoding for string is supported
+    column_2->set_length(4);
+    column_2->set_index_length(4);
+    column_2->set_is_nullable(true);
+    column_2->set_is_key(true);
+    column_2->set_is_nullable(true);
+    column_2->set_is_bf_column(false);
+
+    ColumnPB* column_3 = tablet_schema_pb.add_column();
+    column_3->set_unique_id(3);
+    column_3->set_name("v1");
+    column_3->set_type("INT");
+    column_3->set_length(4);
+    column_3->set_is_key(false);
+    column_3->set_is_nullable(false);
+    column_3->set_is_bf_column(false);
+    column_3->set_aggregation("SUM");
+
+    tablet_schema->init_from_pb(tablet_schema_pb);
+}
+
 inline TabletColumn create_int_key(int32_t id, bool is_nullable = true, bool is_bf_column = false,
                                    bool has_bitmap_index = false) {
     TabletColumn column;

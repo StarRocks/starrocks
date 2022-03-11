@@ -41,6 +41,7 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/heartbeat_flags.h"
+#include "storage/compaction_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
@@ -88,6 +89,8 @@ public:
 
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
+
+    size_t get_store_num() { return _store_map.size(); }
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
@@ -155,6 +158,8 @@ public:
     TabletManager* tablet_manager() { return _tablet_manager.get(); }
 
     TxnManager* txn_manager() { return _txn_manager.get(); }
+
+    CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
     AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
@@ -333,6 +338,8 @@ private:
     std::unique_ptr<fs::BlockManager> _block_manager;
 
     std::unique_ptr<UpdateManager> _update_manager;
+
+    std::unique_ptr<CompactionManager> _compaction_manager;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

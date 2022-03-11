@@ -145,6 +145,7 @@ public:
     inline int64_t table_id() const;
     inline int64_t partition_id() const;
     inline int64_t tablet_id() const;
+    void set_tablet_id(int64_t tablet_id) { _tablet_id = tablet_id; }
     inline int32_t schema_hash() const;
     inline int16_t shard_id() const;
     inline void set_shard_id(int32_t shard_id);
