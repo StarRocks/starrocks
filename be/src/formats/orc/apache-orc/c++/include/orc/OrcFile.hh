@@ -39,7 +39,7 @@ namespace orc {
    */
 class InputStream {
 public:
-    enum class PrepareCacheEvent {
+    enum class PrepareCacheScope {
         READ_FULL_FILE,
         READ_FULL_STRIPE,
         READ_ROW_GROUP_INDEX,
@@ -78,7 +78,7 @@ public:
      */
     virtual const std::string& getName() const = 0;
 
-    virtual void prepareCache(PrepareCacheEvent event, uint64_t offset, uint64_t length);
+    virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
 };
 
 /**

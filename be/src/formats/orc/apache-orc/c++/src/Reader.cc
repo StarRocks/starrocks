@@ -385,7 +385,7 @@ void RowReaderImpl::loadStripeIndex() {
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
     uint64_t rowIndexSize = currentStripeInfo.indexlength();
-    contents->stream->prepareCache(InputStream::PrepareCacheEvent::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
+    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
 
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
@@ -964,7 +964,7 @@ void RowReaderImpl::startNextStripe() {
             }
         }
 
-        contents->stream->prepareCache(InputStream::PrepareCacheEvent::READ_FULL_STRIPE, currentStripeInfo.offset(),
+        contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
                                        stripeSize);
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
@@ -1308,7 +1308,7 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
             throw ParseError("File size too small");
         }
         std::unique_ptr<DataBuffer<char>> buffer(new DataBuffer<char>(*contents->pool, readSize));
-        stream->prepareCache(InputStream::PrepareCacheEvent::READ_FULL_FILE, 0, fileLength);
+        stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_FILE, 0, fileLength);
         stream->read(buffer->data(), readSize, fileLength - readSize);
 
         postscriptLength = buffer->data()[readSize - 1] & 0xff;
@@ -1407,6 +1407,6 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
     return 128 * 1024;
 }
 
-void InputStream::prepareCache(PrepareCacheEvent event, uint64_t offset, uint64_t length) {}
+void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
 
 } // namespace orc
