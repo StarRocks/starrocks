@@ -48,6 +48,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UpdateStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -113,6 +114,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitInsertStatement(InsertStmt node, C context) {
+        return visitStatement(node, context);
+    }
+
+    public R visitUpdateStatement(UpdateStmt node, C context) {
         return visitStatement(node, context);
     }
 

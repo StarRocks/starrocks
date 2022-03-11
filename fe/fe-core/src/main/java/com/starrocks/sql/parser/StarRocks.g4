@@ -22,6 +22,8 @@ statement
         distributionDesc?
         properties?
         AS queryStatement                                                               #createTableAsSelect
+    | (EXPLAIN (LOGICAL | VERBOSE | COSTS)?)?
+      UPDATE qualifiedName SET assignmentList (WHERE where=expression)?                 #update
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
@@ -452,6 +454,14 @@ identifier
 
 identifierList
     : '(' identifier (',' identifier)* ')'
+    ;
+
+assignment
+    : identifier EQ expressionOrDefault
+    ;
+
+assignmentList
+    : assignment (',' assignment)*
     ;
 
 number

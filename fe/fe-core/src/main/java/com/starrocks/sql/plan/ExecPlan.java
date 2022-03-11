@@ -4,6 +4,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -129,5 +130,21 @@ public class ExecPlan {
             }
         }
         return str.toString();
+    }
+
+    public String getExplainString(StatementBase.ExplainLevel level) {
+        TExplainLevel tlevel = null;
+        switch (level) {
+            case NORMAL:
+                tlevel = TExplainLevel.NORMAL;
+                break;
+            case VERBOSE:
+                tlevel = TExplainLevel.VERBOSE;
+                break;
+            case COST:
+                tlevel = TExplainLevel.COSTS;
+                break;
+        }
+        return getExplainString(tlevel);
     }
 }

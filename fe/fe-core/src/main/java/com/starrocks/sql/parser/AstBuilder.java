@@ -69,6 +69,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
@@ -82,6 +83,7 @@ import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -225,24 +227,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new InsertStmt(
                 new InsertTarget(targetTableName, null),
-                context.lable == null ? null : context.lable.getText(),
+                context.label == null ? null : context.label.getText(),
                 targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
     }
 
     @Override
+    public ParseNode visitExpressionOrDefault(StarRocksParser.ExpressionOrDefaultContext ctx) {
+        if (ctx.DEFAULT() != null) {
+            return new DefaultValueExpr();
+        } else {
+            return visit(ctx.expression());
+        }
+    }
+
+    @Override
     public ParseNode visitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext context) {
         ArrayList<Expr> row = Lists.newArrayList();
         for (int i = 0; i < context.expressionOrDefault().size(); ++i) {
-            StarRocksParser.ExpressionOrDefaultContext expressionOrDefaultContext = context.expressionOrDefault(i);
-            if (expressionOrDefaultContext.DEFAULT() != null) {
-                row.add(new DefaultValueExpr());
-            } else {
-                row.add((Expr) visit(expressionOrDefaultContext.expression()));
-            }
+            row.add((Expr) visit(context.expressionOrDefault(i)));
         }
-
         return new ValueList(row);
     }
 
@@ -275,6 +280,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createTableStmt,
                 columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
                 (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitUpdate(StarRocksParser.UpdateContext ctx) {
+        QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<ColumnAssignment> assignments = visit(ctx.assignmentList().assignment(), ColumnAssignment.class);
+        Expr where = ctx.where != null ? (Expr) visit(ctx.where) : null;
+        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
+        if (ctx.EXPLAIN() != null) {
+            StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
+            if (ctx.LOGICAL() != null) {
+                explainLevel = StatementBase.ExplainLevel.LOGICAL;
+            } else if (ctx.VERBOSE() != null) {
+                explainLevel = StatementBase.ExplainLevel.VERBOSE;
+            } else if (ctx.COSTS() != null) {
+                explainLevel = StatementBase.ExplainLevel.COST;
+            }
+            ret.setIsExplain(true, explainLevel);
+        }
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitAssignment(StarRocksParser.AssignmentContext ctx) {
+        String column = ((Identifier) visit(ctx.identifier())).getValue();
+        Expr expr = (Expr) visit(ctx.expressionOrDefault());
+        return new ColumnAssignment(column, expr);
     }
 
     @Override
