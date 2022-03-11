@@ -65,6 +65,7 @@ TEST_F(EnvS3Test, test_directory) {
     //  /dirname0/
     //
     EXPECT_OK(env->create_dir(S3Path("/dirname0")));
+    EXPECT_ERROR(env->is_directory(S3Path("/dirname"), &is_dir));
     EXPECT_OK(env->is_directory(S3Path("/dirname0"), &is_dir));
     EXPECT_TRUE(is_dir);
     EXPECT_TRUE(env->create_dir(S3Path("/dirname0")).is_already_exist());
@@ -112,6 +113,8 @@ TEST_F(EnvS3Test, test_directory) {
         EXPECT_OK(of->close());
         EXPECT_OK(env->is_directory(S3Path("/dirname2/0.dat"), &is_dir));
         EXPECT_FALSE(is_dir);
+        EXPECT_ERROR(env->is_directory(S3Path("/dirname2/0"), &is_dir));
+        EXPECT_ERROR(env->is_directory(S3Path("/dirname2/0.da"), &is_dir));
     }
     EXPECT_OK(env->is_directory(S3Path("/dirname2"), &is_dir));
     EXPECT_TRUE(is_dir);
