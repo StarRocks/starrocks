@@ -7,7 +7,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class ScanTest extends PlanTestBase {
-
     @Test
     public void testScan() throws Exception {
         String sql = "select * from t0";

@@ -86,7 +86,7 @@ public class StarRocksAssert {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database if exists " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().dropDb(dropDbStmt);
-        
+
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().createDb(createDbStmt);
@@ -117,7 +117,9 @@ public class StarRocksAssert {
 
     public StarRocksAssert withResource(String sql) throws Exception {
         CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-        Catalog.getCurrentCatalog().getResourceMgr().createResource(createResourceStmt);
+        if (!Catalog.getCurrentCatalog().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
+            Catalog.getCurrentCatalog().getResourceMgr().createResource(createResourceStmt);
+        }
         return this;
     }
 
