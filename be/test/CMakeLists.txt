@@ -48,6 +48,7 @@ set(EXEC_FILES
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
         ./exprs/agg/json_each_test.cpp
+        ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp
