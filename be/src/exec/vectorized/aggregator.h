@@ -311,7 +311,7 @@ public:
         auto end = hash_map_with_key.hash_map.end();
 
         vectorized::Columns group_by_columns = _create_group_by_columns();
-        vectorized::Columns agg_result_column = _create_agg_result_columns();
+        vectorized::Columns agg_result_columns = _create_agg_result_columns();
 
         int32_t read_index = 0;
         {
@@ -335,12 +335,12 @@ public:
             if (_needs_finalize) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                      _agg_states_offsets[i], agg_result_column[i].get());
+                                                      _agg_states_offsets[i], agg_result_columns[i].get());
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                       _agg_states_offsets[i], agg_result_column[i].get());
+                                                       _agg_states_offsets[i], agg_result_columns[i].get());
                 }
             }
         }
@@ -358,9 +358,9 @@ public:
                     group_by_columns[0]->append_default();
 
                     if (_needs_finalize) {
-                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_column);
+                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
                     } else {
-                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_column);
+                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
                     }
 
                     ++read_index;
@@ -379,17 +379,17 @@ public:
             for (size_t i = 0; i < group_by_columns.size(); i++) {
                 _result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
             }
-            for (size_t i = 0; i < agg_result_column.size(); i++) {
+            for (size_t i = 0; i < agg_result_columns.size(); i++) {
                 size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_column[i], _output_tuple_desc->slots()[id]->id());
+                _result_chunk->append_column(agg_result_columns[i], _output_tuple_desc->slots()[id]->id());
             }
         } else {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
                 _result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
             }
-            for (size_t i = 0; i < agg_result_column.size(); i++) {
+            for (size_t i = 0; i < agg_result_columns.size(); i++) {
                 size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_column[i], _intermediate_tuple_desc->slots()[id]->id());
+                _result_chunk->append_column(agg_result_columns[i], _intermediate_tuple_desc->slots()[id]->id());
             }
         }
         _num_rows_returned += read_index;
