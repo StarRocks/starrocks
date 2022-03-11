@@ -45,7 +45,7 @@ public:
     // now time point pass by deadline point.
     bool is_expired() {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _deadline;
+        return is_finished() && now > _deadline;
     }
 
     bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
