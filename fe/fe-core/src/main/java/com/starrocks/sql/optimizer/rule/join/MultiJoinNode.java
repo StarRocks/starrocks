@@ -95,7 +95,7 @@ public class MultiJoinNode {
                     return;
                 }
 
-                if (!entry.getValue().isColumnRef()) {
+                if (!entry.getKey().equals(entry.getValue())) {
                     expressionMap.put(entry.getKey(), entry.getValue());
                 }
             }

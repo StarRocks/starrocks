@@ -368,4 +368,13 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(4: lo_partkey)"));
     }
+
+    @Test
+    public void testSelectSubqueryWithMultiJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("  26:Project\n" +
+                "  |  <slot 24> : 21: bitmap_union\n" +
+                "  |  <slot 32> : 32: bitmap_union"));
+    }
 }
