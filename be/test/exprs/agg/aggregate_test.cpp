@@ -44,6 +44,25 @@ private:
     FunctionContext* ctx{};
 };
 
+class ManagedAggrState {
+public:
+    ~ManagedAggrState() { _func->destroy(_ctx, _state); }
+    std::unique_ptr<ManagedAggrState> create(const Function* ctx, const* AggregateFunction* func) {
+        return std::make_unique<ManagedAggrState>(ctx, func);
+    }
+    AggrDataPtr state() { return _state; }
+
+private:
+    ManagedAggrState(const FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
+        _state = _mem_pool.allocate_aligned(func->size(), func->alignof_size());
+        _func->create(_ctx, _state);
+    }
+    const FunctionContext* _ctx;
+    const AggregateFunction* _func;
+    MemPool _mem_pool;
+    AggDataPtr _state;
+};
+
 template <typename T>
 ColumnPtr gen_input_column1() {
     using DataColumn = typename ColumnTraits<T>::ColumnType;
@@ -168,13 +187,10 @@ template <typename T, typename TResult>
 void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                        TResult update_result2, TResult merge_result) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    auto mem_pool = std::make_unique<MemPool>();
     auto result_column = ResultColumn::create();
 
     // update input column 1
-    auto* aggr_state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(aggr_state != nullptr);
-    func->create(ctx, aggr_state);
+    auto aggr_state = ManagedAggrState::create(ctx, func);
     ColumnPtr column;
     column = gen_input_column1<T>();
     const Column* row_column = column.get();
@@ -183,9 +199,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
-    auto* aggr_state2 = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(aggr_state2 != nullptr);
-    func->create(ctx, aggr_state2);
+    auto aggr_state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2;
     column2 = gen_input_column2<T>();
     row_column = column2.get();
@@ -209,15 +223,12 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
 template <PrimitiveType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
-    auto mem_pool = std::make_unique<MemPool>();
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
     const auto& result_type = ctx->get_return_type();
     auto result_column = ResultColumn::create(result_type.precision, result_type.scale);
 
     // update input column 1
-    auto* aggr_state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(aggr_state != nullptr);
-    func->create(ctx, aggr_state);
+    auto aggr_state = ManagedAggrState::create(ctx, func);
     ColumnPtr column = gen_input_decimal_column1<PT>(ctx->get_arg_type(0));
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state);
@@ -225,9 +236,7 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
-    auto* aggr_state2 = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(aggr_state2 != nullptr);
-    func->create(ctx, aggr_state2);
+    auto aggr_state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_decimal_column2<PT>(ctx->get_arg_type(0));
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2);
@@ -252,11 +261,8 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
                                 TResult update_result2, TResult merge_result) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
     auto result_column = ResultColumn::create();
-    auto mem_pool = std::make_unique<MemPool>();
 
-    auto* state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(state != nullptr);
-    func->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
     ColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
@@ -265,9 +271,7 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
-    auto* state2 = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    ASSERT_TRUE(state2 != nullptr);
-    func->create(ctx, state2);
+    auto state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state2);
@@ -823,9 +827,7 @@ TEST_F(AggregateTest, test_dict_merge) {
     // [sr-1, sr-2, sr-3]
     auto col = ArrayColumn::create(data_col, offsets);
     const Column* column = col.get();
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    func->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, func);
     func->update_batch_single_state(ctx, col->size(), &column, state);
 
     auto res = BinaryColumn::create();
@@ -860,9 +862,7 @@ TEST_F(AggregateTest, test_dict_merge) {
 TEST_F(AggregateTest, test_sum_nullable) {
     using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>>;
     const AggregateFunction* sum_null = get_aggregate_function("sum", TYPE_INT, TYPE_BIGINT, true);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(sum_null->size(), sum_null->alignof_size());
-    sum_null->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, sum_null);
 
     auto data_column = Int32Column::create();
     auto null_column = NullColumn::create();
@@ -885,8 +885,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
     sum_null->serialize_to_column(ctx, state, serde_column2.get());
 
     // test merge
-    auto* state2 = mem_pool->allocate_aligned(sum_null->size(), sum_null->alignof_size());
-    sum_null->create(ctx, state2);
+    auto state2 = ManagedAggrState::create(ctx, sum_null);
 
     auto data_column2 = Int32Column::create();
     auto null_column2 = NullColumn::create();
@@ -911,9 +910,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
 
 TEST_F(AggregateTest, test_count_nullable) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, true);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    func->create(ctx, state);
+    auto aggr_state = ManagedAggrState::create(ctx, func);
 
     auto data_column = Int32Column::create();
     auto null_column = NullColumn::create();
@@ -934,9 +931,7 @@ TEST_F(AggregateTest, test_count_nullable) {
 
 TEST_F(AggregateTest, test_bitmap_nullable) {
     const AggregateFunction* bitmap_null = get_aggregate_function("bitmap_union_int", TYPE_INT, TYPE_BIGINT, true);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(bitmap_null->size(), bitmap_null->alignof_size());
-    bitmap_null->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, bitmap_null);
 
     auto data_column = Int32Column::create();
     auto null_column = NullColumn::create();
@@ -964,9 +959,7 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
 TEST_F(AggregateTest, test_group_concat) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(group_concat_function->size(), group_concat_function->alignof_size());
-    group_concat_function->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
 
     auto data_column = BinaryColumn::create();
 
@@ -997,9 +990,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 
     const AggregateFunction* group_concat_function =
             get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(group_concat_function->size(), group_concat_function->alignof_size());
-    group_concat_function->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
 
     auto data_column = BinaryColumn::create();
 
@@ -1037,9 +1028,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 TEST_F(AggregateTest, test_intersect_count) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("intersect_count", TYPE_INT, TYPE_BIGINT, false);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(group_concat_function->size(), group_concat_function->alignof_size());
-    group_concat_function->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
 
     auto data_column = BitmapColumn::create();
     auto int_column = Int32Column::create();
@@ -1094,9 +1083,7 @@ TEST_F(AggregateTest, test_intersect_count) {
 TEST_F(AggregateTest, test_bitmap_intersect) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("bitmap_intersect", TYPE_OBJECT, TYPE_OBJECT, false);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(group_concat_function->size(), group_concat_function->alignof_size());
-    group_concat_function->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
 
     auto data_column = BitmapColumn::create();
 
@@ -1128,9 +1115,7 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
 TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("bitmap_intersect", TYPE_OBJECT, TYPE_OBJECT, true);
-    auto mem_pool = std::make_unique<MemPool>();
-    auto* state = mem_pool->allocate_aligned(group_concat_function->size(), group_concat_function->alignof_size());
-    group_concat_function->create(ctx, state);
+    auto state = ManagedAggrState::create(ctx, group_concat_function);
 
     auto data_column = BitmapColumn::create();
     auto null_column = NullColumn::create();
@@ -1171,11 +1156,9 @@ template <typename T, typename TResult>
 void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFunction* func) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
     using ExpeactedResultColumnType = typename ColumnTraits<T>::ColumnType;
-    auto mem_pool = std::make_unique<MemPool>();
+    auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
     auto result_column1 = ResultColumn::create();
-    auto* state = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    func->create(ctx, state);
     ColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state);
@@ -1186,8 +1169,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
 
     // update input column 2
     auto result_column2 = ResultColumn::create();
-    auto* state2 = mem_pool->allocate_aligned(func->size(), func->alignof_size());
-    func->create(ctx, state2);
+    auto state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state2);
