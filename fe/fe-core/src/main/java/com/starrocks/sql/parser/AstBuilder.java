@@ -72,7 +72,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -1538,91 +1537,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Type getType(StarRocksParser.TypeContext type) {
+        Integer length = null;
+        Integer precision = null;
+        Integer scale = null;
+
         if (type.baseType() != null) {
-            if (type.baseType().BOOLEAN() != null) {
-                return Type.BOOLEAN;
-            } else if (type.baseType().TINYINT() != null) {
-                return Type.TINYINT;
-            } else if (type.baseType().SMALLINT() != null) {
-                return Type.SMALLINT;
-            } else if (type.baseType().INT() != null || type.baseType().INTEGER() != null) {
-                return Type.INT;
-            } else if (type.baseType().BIGINT() != null) {
-                return Type.BIGINT;
-            } else if (type.baseType().LARGEINT() != null) {
-                return Type.LARGEINT;
-            } else if (type.baseType().FLOAT() != null) {
-                return Type.FLOAT;
-            } else if (type.baseType().DOUBLE() != null) {
-                return Type.DOUBLE;
-            } else if (type.baseType().DATE() != null) {
-                return Type.DATE;
-            } else if (type.baseType().DATETIME() != null) {
-                return Type.DATETIME;
-            } else if (type.baseType().TIME() != null) {
-                return Type.TIME;
-            } else if (type.baseType().VARCHAR() != null) {
-                if (type.baseType().typeParameter() != null) {
-                    return ScalarType.createVarcharType(
-                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
-                } else {
-                    return Type.VARCHAR;
-                }
-            } else if (type.baseType().CHAR() != null) {
-                if (type.baseType().typeParameter() != null) {
-                    return ScalarType.createCharType(
-                            Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString()));
-                } else {
-                    return Type.CHAR;
-                }
-            } else if (type.baseType().STRING() != null) {
-                ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-                stringType.setAssignedStrLenInColDefinition();
-                return stringType;
-            } else if (type.baseType().BITMAP() != null) {
-                return Type.BITMAP;
-            } else if (type.baseType().HLL() != null) {
-                return Type.HLL;
-            } else if (type.baseType().PERCENTILE() != null) {
-                return Type.PERCENTILE;
-            } else if (type.baseType().JSON() != null) {
-                return Type.JSON;
+            if (type.baseType().typeParameter() != null) {
+                length = Integer.parseInt(type.baseType().typeParameter().INTEGER_VALUE().toString());
             }
-
-            return Type.INVALID;
+            return ScalarType.createTypeFromParser(type.baseType().getText(), length, precision, scale);
         } else if (type.decimalType() != null) {
-            if (type.precision == null) {
-                if (type.decimalType().DECIMAL() != null) {
-                    return ScalarType.createUnifiedDecimalType(10, 0);
-                } else if (type.decimalType().DECIMALV2() != null) {
-                    return ScalarType.createDecimalV2Type();
-                } else if (type.decimalType().DECIMAL32() != null) {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32);
-                } else if (type.decimalType().DECIMAL64() != null) {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64);
-                } else if (type.decimalType().DECIMAL128() != null) {
-                    return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128);
-                }
+            if (type.precision != null) {
+                precision = Integer.parseInt(type.precision.getText());
+                scale = type.scale == null ? ScalarType.DEFAULT_SCALE : Integer.parseInt(type.scale.getText());
             }
-
-            int precision = Integer.parseInt(type.precision.getText());
-            int scale = ScalarType.DEFAULT_SCALE;
-
-            if (type.scale != null) {
-                scale = Integer.parseInt(type.scale.getText());
-            }
-
-            if (type.decimalType().DECIMAL() != null) {
-                return ScalarType.createUnifiedDecimalType(precision, scale);
-            } else if (type.decimalType().DECIMALV2() != null) {
-                return ScalarType.createDecimalV2Type(precision, scale);
-            } else if (type.decimalType().DECIMAL32() != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, precision, scale);
-            } else if (type.decimalType().DECIMAL64() != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, precision, scale);
-            } else if (type.decimalType().DECIMAL128() != null) {
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
-            }
+            return ScalarType.createTypeFromParser(type.decimalType().getText(), length, precision, scale);
         } else if (type.arrayType() != null) {
             StarRocksParser.ArrayTypeContext arrayTypeContext = type.arrayType();
             return new ArrayType(getType(arrayTypeContext.type()));
