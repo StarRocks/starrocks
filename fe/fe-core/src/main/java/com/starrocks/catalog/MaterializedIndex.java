@@ -219,6 +219,10 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getReplicaCount() {
+        if (useStarOS) {
+            return tablets.size();
+        }
+
         long replicaCount = 0;
         for (Tablet tablet : getTablets()) {
             LocalTablet localTablet = (LocalTablet) tablet;

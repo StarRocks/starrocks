@@ -309,10 +309,10 @@ public class MasterImpl {
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
             } else {
                 long tabletId = createReplicaTask.getTabletId();
-
-                if (request.isSetFinish_tablet_infos()) {
-                    Replica replica = Catalog.getCurrentInvertedIndex().getReplica(createReplicaTask.getTabletId(),
-                            createReplicaTask.getBackendId());
+                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (!tabletMeta.isUseStarOS() && request.isSetFinish_tablet_infos()) {
+                    Replica replica = Catalog.getCurrentInvertedIndex().getReplica(tabletId, createReplicaTask.getBackendId());
                     replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
 
                     if (createReplicaTask.isRecoverTask()) {

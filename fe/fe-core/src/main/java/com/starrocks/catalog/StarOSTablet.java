@@ -55,6 +55,10 @@ public class StarOSTablet extends Tablet {
         this.rowCount = rowCount;
     }
 
+    public long getPrimaryBackendId() {
+        return Catalog.getCurrentCatalog().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
