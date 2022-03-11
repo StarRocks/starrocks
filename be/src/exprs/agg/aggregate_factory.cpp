@@ -917,7 +917,11 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
     auto is_decimal_type = [](PrimitiveType pt) {
         return pt == TYPE_DECIMAL32 || pt == TYPE_DECIMAL64 || pt == TYPE_DECIMAL128;
     };
+<<<<<<< HEAD
     if (func_version > 2 && is_decimal_type(arg_type)) {
+=======
+    if (agg_func_set_version > 2 && is_decimal_type(arg_type)) {
+>>>>>>> 25823442 (use decimal128 instead decimal64 for aggr sum (#3944))
         if (name == "sum") {
             func_name = "decimal_sum";
         } else if (name == "avg") {

@@ -586,6 +586,8 @@ public class FunctionSet {
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
 
+
+
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",
                 Lists.newArrayList(Type.HLL), Type.BIGINT, Type.HLL,
