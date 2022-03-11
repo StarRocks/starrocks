@@ -50,6 +50,8 @@ JVMFunctionHelper& JVMFunctionHelper::getInstance() {
         CHECK(env != nullptr) << "couldn't got a JNIEnv";
         helper.reset(new JVMFunctionHelper(env));
         helper->_add_class_path(getenv("STARROCKS_HOME") + std::string("/lib/udf-class-loader.jar"));
+        helper->_add_class_path(getenv("STARROCKS_HOME") +
+                                std::string("/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar"));
         helper->_init();
     }
     return *helper;
@@ -61,11 +63,13 @@ void JVMFunctionHelper::_init() {
     _string_class = _env->FindClass("java/lang/String");
     _throwable_class = _env->FindClass("java/lang/Throwable");
     _jarrays_class = _env->FindClass("java/util/Arrays");
+    _list_class = _env->FindClass("java/util/List");
 
     CHECK(_object_class);
     CHECK(_string_class);
     CHECK(_throwable_class);
     CHECK(_jarrays_class);
+    CHECK(_list_class);
 
     ADD_NUMBERIC_CLASS(boolean, Boolean, Z);
     ADD_NUMBERIC_CLASS(byte, Byte, B);
@@ -106,6 +110,11 @@ void JVMFunctionHelper::_init() {
     DCHECK(_batch_call);
     DCHECK(_batch_call_no_args);
     DCHECK(_direct_buffer_clear);
+
+    _list_get = _env->GetMethodID(_list_class, "get", "(I)Ljava/lang/Object;");
+    DCHECK(_list_get != nullptr);
+    _list_size = _env->GetMethodID(_list_class, "size", "()I");
+    DCHECK(_list_size != nullptr);
 }
 
 // https://stackoverflow.com/questions/45232522/how-to-set-classpath-of-a-running-jvm-in-cjni
@@ -259,6 +268,14 @@ jobject JVMFunctionHelper::int_batch_call(FunctionContext* ctx, jobject callers,
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _int_batch_call, callers, method, rows);
     _check_call_exception(ctx);
     return res;
+}
+
+jobject JVMFunctionHelper::list_get(jobject obj, int idx) {
+    return _env->CallObjectMethod(obj, _list_get, idx);
+}
+
+int JVMFunctionHelper::list_size(jobject obj) {
+    return static_cast<int>(_env->CallIntMethod(obj, _list_size));
 }
 
 DEFINE_NEW_BOX(boolean, uint8_t, Boolean, Boolean);
