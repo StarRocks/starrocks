@@ -10,6 +10,7 @@ import com.google.common.collect.Streams;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -49,6 +50,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -73,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -298,6 +301,19 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     childPlan, expressionMapping);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
+        }
+
+
+        if (setOperationRelation.hasOrderByClause()) {
+            List<Ordering> orderings = new ArrayList<>();
+            for (OrderByElement item : setOperationRelation.getOrderBy()) {
+                ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
+                        root.getExpressionMapping());
+                Ordering ordering = new Ordering(column, item.getIsAsc(),
+                        OrderByElement.nullsFirst(item.getNullsFirstParam(), item.getIsAsc()));
+                orderings.add(ordering);
+            }
+            root = root.withNewRoot(new LogicalTopNOperator(orderings));
         }
 
         LimitElement limit = setOperationRelation.getLimit();

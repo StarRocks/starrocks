@@ -8,7 +8,9 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -492,6 +494,31 @@ public class QueryAnalyzer {
             }
 
             Scope setOpOutputScope = new Scope(RelationId.of(node), new RelationFields(fields));
+
+            if (node.hasOrderByClause()) {
+                List<Expr> outputExpressions = node.getOutputExpression();
+                for (OrderByElement orderByElement : node.getOrderBy()) {
+                    Expr expression = orderByElement.getExpr();
+                    AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
+
+                    if (expression instanceof IntLiteral) {
+                        long ordinal = ((IntLiteral) expression).getLongValue();
+                        if (ordinal < 1 || ordinal > outputExpressions.size()) {
+                            throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
+                        }
+                        expression = outputExpressions.get((int) ordinal - 1);
+                    }
+
+                    analyzeExpression(expression, new AnalyzeState(), setOpOutputScope);
+
+                    if (!expression.getType().canOrderBy()) {
+                        throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                    }
+
+                    orderByElement.setExpr(expression);
+                }
+            }
+
             node.setScope(setOpOutputScope);
             node.setColumnOutputNames(setOpRelations.get(0).getColumnOutputNames());
             return setOpOutputScope;
