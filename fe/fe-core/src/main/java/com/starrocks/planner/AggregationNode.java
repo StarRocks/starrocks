@@ -282,7 +282,7 @@ public class AggregationNode extends PlanNode {
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
-        msg.agg_node.setAgg_func_set_version(2);
+        msg.agg_node.setAgg_func_set_version(3);
     }
 
     protected String getDisplayLabelDetail() {
