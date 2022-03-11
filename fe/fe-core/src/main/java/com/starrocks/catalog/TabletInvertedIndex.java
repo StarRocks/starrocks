@@ -132,7 +132,7 @@ public class TabletInvertedIndex {
         int backendStorageTypeCnt = -1;
         Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
         if (be != null) {
-            backendStorageTypeCnt = be.getBackendStorageTypeCnt();
+            backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }
 
         readLock();

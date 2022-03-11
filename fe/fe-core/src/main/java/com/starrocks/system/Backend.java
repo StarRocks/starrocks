@@ -695,14 +695,16 @@ public class Backend implements Writable {
         return disksRef.values().stream().filter(v -> v.getStorageMedium() == storageMedium).count();
     }
 
-    public int getBackendStorageTypeCnt() {
+    public int getAvailableBackendStorageTypeCnt() {
         if (!this.isAlive.get()) {
             return 0;
         }
         ImmutableMap<String, DiskInfo> disks = this.getDisks();
         Set<TStorageMedium> set = Sets.newHashSet();
         for (DiskInfo diskInfo : disks.values()) {
-            set.add(diskInfo.getStorageMedium());
+            if (diskInfo.getState() == DiskState.ONLINE) {
+                set.add(diskInfo.getStorageMedium());
+            }
         }
         return set.size();
     }
