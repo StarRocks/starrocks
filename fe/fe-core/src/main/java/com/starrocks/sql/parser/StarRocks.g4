@@ -221,7 +221,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? hint?                                                 #tableName
+    : qualifiedName partitionNames? tabletList? hint?                                     #tableName
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     | '(' relation ')'                                                                    #parenthesizedRelation
@@ -229,6 +229,10 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    ;
+
+tabletList
+    : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
 expressionsWithDefault
