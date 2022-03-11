@@ -922,7 +922,7 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
             func_name = "decimal_sum";
         } else if (name == "avg") {
             func_name = "decimal_avg";
-        } else if (name == "multi_distinct_sum2") {
+        } else if (name == "multi_distinct_sum") {
             func_name = "decimal_multi_distinct_sum";
         }
     }

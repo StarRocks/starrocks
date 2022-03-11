@@ -47,17 +47,17 @@ private:
 class ManagedAggrState {
 public:
     ~ManagedAggrState() { _func->destroy(_ctx, _state); }
-    std::unique_ptr<ManagedAggrState> create(const Function* ctx, const* AggregateFunction* func) {
+    static std::unique_ptr<ManagedAggrState> create(FunctionContext* ctx, const AggregateFunction* func) {
         return std::make_unique<ManagedAggrState>(ctx, func);
     }
-    AggrDataPtr state() { return _state; }
+    AggDataPtr state() { return _state; }
 
 private:
-    ManagedAggrState(const FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
+    ManagedAggrState(FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
         _state = _mem_pool.allocate_aligned(func->size(), func->alignof_size());
         _func->create(_ctx, _state);
     }
-    const FunctionContext* _ctx;
+    FunctionContext* _ctx;
     const AggregateFunction* _func;
     MemPool _mem_pool;
     AggDataPtr _state;
@@ -194,8 +194,8 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ColumnPtr column;
     column = gen_input_column1<T>();
     const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state);
-    func->finalize_to_column(ctx, aggr_state, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
@@ -203,8 +203,8 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ColumnPtr column2;
     column2 = gen_input_column2<T>();
     row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2);
-    func->finalize_to_column(ctx, aggr_state2, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
+    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
@@ -214,9 +214,9 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
         serde_column = ResultColumn::create();
     }
 
-    func->serialize_to_column(ctx, aggr_state, serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2, 0);
-    func->finalize_to_column(ctx, aggr_state2, result_column.get());
+    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
+    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
+    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
@@ -231,16 +231,16 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
     auto aggr_state = ManagedAggrState::create(ctx, func);
     ColumnPtr column = gen_input_decimal_column1<PT>(ctx->get_arg_type(0));
     const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state);
-    func->finalize_to_column(ctx, aggr_state, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
     auto aggr_state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_decimal_column2<PT>(ctx->get_arg_type(0));
     row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2);
-    func->finalize_to_column(ctx, aggr_state2, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
+    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
@@ -250,9 +250,9 @@ void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* fu
         serde_column = ResultColumn::create(result_type.precision, result_type.scale);
     }
 
-    func->serialize_to_column(ctx, aggr_state, serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2, 0);
-    func->finalize_to_column(ctx, aggr_state2, result_column.get());
+    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
+    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
+    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
@@ -266,23 +266,23 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
     // update input column 1
     ColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state);
-    func->finalize_to_column(ctx, state, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
+    func->finalize_to_column(ctx, state->state(), result_column.get());
     ASSERT_EQ(update_result1, result_column->get_data()[0]);
 
     // update input column 2
     auto state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2);
-    func->finalize_to_column(ctx, state2, result_column.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
+    func->finalize_to_column(ctx, state2->state(), result_column.get());
     ASSERT_EQ(update_result2, result_column->get_data()[1]);
 
     // merge column 1 and column 2
     ColumnPtr serde_column = BinaryColumn::create();
-    func->serialize_to_column(ctx, state, serde_column.get());
-    func->merge(ctx, serde_column.get(), state2, 0);
-    func->finalize_to_column(ctx, state2, result_column.get());
+    func->serialize_to_column(ctx, state->state(), serde_column.get());
+    func->merge(ctx, serde_column.get(), state2->state(), 0);
+    func->finalize_to_column(ctx, state2->state(), result_column.get());
     ASSERT_TRUE(abs(merge_result - result_column->get_data()[2]) < 1e-8);
 }
 
@@ -828,10 +828,10 @@ TEST_F(AggregateTest, test_dict_merge) {
     auto col = ArrayColumn::create(data_col, offsets);
     const Column* column = col.get();
     auto state = ManagedAggrState::create(ctx, func);
-    func->update_batch_single_state(ctx, col->size(), &column, state);
+    func->update_batch_single_state(ctx, col->size(), &column, state->state());
 
     auto res = BinaryColumn::create();
-    func->finalize_to_column(ctx, state, res.get());
+    func->finalize_to_column(ctx, state->state(), res.get());
 
     ASSERT_EQ(res->size(), 1);
     auto slice = res->get_slice(0);
@@ -875,14 +875,14 @@ TEST_F(AggregateTest, test_sum_nullable) {
     const Column* row_column = column.get();
 
     // test update
-    sum_null->update_batch_single_state(ctx, column->size(), &row_column, state);
-    auto* null_state = (NullableSumInt64*)state;
+    sum_null->update_batch_single_state(ctx, column->size(), &row_column, state->state());
+    auto* null_state = (NullableSumInt64*)state->state();
     int64_t result = *reinterpret_cast<const int64_t*>(null_state->nested_state());
     ASSERT_EQ(2450, result);
 
     // test serialize
     auto serde_column2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
-    sum_null->serialize_to_column(ctx, state, serde_column2.get());
+    sum_null->serialize_to_column(ctx, state->state(), serde_column2.get());
 
     // test merge
     auto state2 = ManagedAggrState::create(ctx, sum_null);
@@ -896,12 +896,12 @@ TEST_F(AggregateTest, test_sum_nullable) {
     auto column2 = NullableColumn::create(std::move(data_column2), std::move(null_column2));
     const Column* row_column2 = column2.get();
 
-    sum_null->update_batch_single_state(ctx, column2->size(), &row_column2, state2);
+    sum_null->update_batch_single_state(ctx, column2->size(), &row_column2, state2->state());
 
-    sum_null->merge(ctx, serde_column2.get(), state2, 0);
+    sum_null->merge(ctx, serde_column2.get(), state2->state(), 0);
 
     auto result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
-    sum_null->finalize_to_column(ctx, state2, result_column.get());
+    sum_null->finalize_to_column(ctx, state2->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
@@ -910,7 +910,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
 
 TEST_F(AggregateTest, test_count_nullable) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, true);
-    auto aggr_state = ManagedAggrState::create(ctx, func);
+    auto state = ManagedAggrState::create(ctx, func);
 
     auto data_column = Int32Column::create();
     auto null_column = NullColumn::create();
@@ -923,9 +923,9 @@ TEST_F(AggregateTest, test_count_nullable) {
     auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
 
     const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, column->size(), &row_column, state);
+    func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
-    int64_t result = *reinterpret_cast<int64_t*>(state);
+    int64_t result = *reinterpret_cast<int64_t*>(state->state());
     ASSERT_EQ(512, result);
 }
 
@@ -945,10 +945,10 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     const Column* row_column = column.get();
 
     // test update
-    bitmap_null->update_batch_single_state(ctx, column->size(), &row_column, state);
+    bitmap_null->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
     auto result_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
-    bitmap_null->finalize_to_column(ctx, state, result_column.get());
+    bitmap_null->finalize_to_column(ctx, state->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
@@ -972,10 +972,10 @@ TEST_F(AggregateTest, test_group_concat) {
     const Column* row_column = data_column.get();
 
     // test update
-    group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state);
+    group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
     auto result_column = BinaryColumn::create();
-    group_concat_function->finalize_to_column(ctx, state, result_column.get());
+    group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
 }
@@ -1017,10 +1017,11 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     local_ctx->impl()->set_constant_columns(const_columns);
 
     // test update
-    group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(), state);
+    group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                     state->state());
 
     auto result_column = BinaryColumn::create();
-    group_concat_function->finalize_to_column(local_ctx.get(), state, result_column.get());
+    group_concat_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
 
     ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
 }
@@ -1072,10 +1073,10 @@ TEST_F(AggregateTest, test_intersect_count) {
     ctx->impl()->set_constant_columns(const_columns);
 
     // test update
-    group_concat_function->update_batch_single_state(ctx, data_column->size(), raw_columns.data(), state);
+    group_concat_function->update_batch_single_state(ctx, data_column->size(), raw_columns.data(), state->state());
 
     auto result_column = Int64Column::create();
-    group_concat_function->finalize_to_column(ctx, state, result_column.get());
+    group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(1, result_column->get_data()[0]);
 }
@@ -1104,10 +1105,10 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
     const Column* row_column = data_column.get();
 
     // test update
-    group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state);
+    group_concat_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
 
     auto result_column = BitmapColumn::create();
-    group_concat_function->finalize_to_column(ctx, state, result_column.get());
+    group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("1", result_column->get_pool()[0].to_string());
 }
@@ -1141,10 +1142,10 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
     const Column* row_column = column.get();
 
     // test update
-    group_concat_function->update_batch_single_state(ctx, column->size(), &row_column, state);
+    group_concat_function->update_batch_single_state(ctx, column->size(), &row_column, state->state());
 
     auto result_column = NullableColumn::create(BitmapColumn::create(), NullColumn::create());
-    group_concat_function->finalize_to_column(ctx, state, result_column.get());
+    group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const BitmapColumn&>(result_data_column);
@@ -1161,8 +1162,8 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     auto result_column1 = ResultColumn::create();
     ColumnPtr column = gen_input_column1<T>();
     const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state);
-    func->finalize_to_column(ctx, state, result_column1.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
+    func->finalize_to_column(ctx, state->state(), result_column1.get());
 
     auto expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
@@ -1172,17 +1173,17 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     auto state2 = ManagedAggrState::create(ctx, func);
     ColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2);
-    func->finalize_to_column(ctx, state2, result_column2.get());
+    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
+    func->finalize_to_column(ctx, state2->state(), result_column2.get());
 
     auto expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
 
     // merge column 1 and column 2
     auto final_result_column = ResultColumn::create();
-    func->serialize_to_column(ctx, state, final_result_column.get());
-    func->merge(ctx, final_result_column.get(), state2, 0);
-    func->finalize_to_column(ctx, state2, final_result_column.get());
+    func->serialize_to_column(ctx, state->state(), final_result_column.get());
+    func->merge(ctx, final_result_column.get(), state2->state(), 0);
+    func->finalize_to_column(ctx, state2->state(), final_result_column.get());
 
     ASSERT_EQ(final_result_column->get_data()[0], result_column1->get_data()[0]);
 }
