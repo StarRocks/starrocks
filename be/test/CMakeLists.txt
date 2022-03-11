@@ -48,6 +48,11 @@ set(EXEC_FILES
         ./exec/parquet/metadata_test.cpp
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
+<<<<<<< HEAD
+=======
+        ./exprs/agg/json_each_test.cpp
+        ./exprs/agg/aggregate_test.cpp
+>>>>>>> 25823442 (use decimal128 instead decimal64 for aggr sum (#3944))
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp

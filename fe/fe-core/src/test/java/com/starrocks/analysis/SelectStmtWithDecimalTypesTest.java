@@ -219,8 +219,8 @@ public class SelectStmtWithDecimalTypesTest {
         ).toArray(new Type[0]);
 
         Type[] expectReturnTypes = Arrays.asList(
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 10),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 4),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30)
         ).toArray(new Type[0]);
         Assert.assertTrue(items.size() == 9);
