@@ -30,6 +30,8 @@ ADD_BE_TEST(es_scan_reader_test)
 ADD_BE_TEST(vectorized/repeat_node_test)
 ADD_BE_TEST(vectorized/arrow_converter_test)
 ADD_BE_TEST(vectorized/parquet_scanner_test)
+ADD_BE_TEST(vectorized/chunks_sorter_test)
+ADD_BE_TEST(vectorized/chunks_sorter_heapsorter_test)
 ADD_BE_TEST(schema_scanner/schema_columns_scanner_test)
 
 # Benchmarks

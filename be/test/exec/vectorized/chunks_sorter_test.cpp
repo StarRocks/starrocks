@@ -2,11 +2,13 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_merge.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/slot_ref.h"
 #include "fmt/core.h"
@@ -657,21 +659,102 @@ TEST_F(ChunksSorterTest, test_tie) {
             {9, 11},
     };
     ASSERT_EQ(expected, ranges);
+}
 
-    // empty tie
-    {
-        Tie tie{0, 0};
-        TieIterator iterator(tie);
-        ASSERT_FALSE(iterator.next());
+static ColumnPtr make_int_column(const std::vector<int>& data) {
+    auto res = Int32Column::create();
+    for (int x : data) {
+        res->append(x);
     }
-    {
-        Tie tie{0, 1};
-        TieIterator iterator(tie);
-        ASSERT_TRUE(iterator.next());
-        ASSERT_EQ(iterator.range_first, 0);
-        ASSERT_EQ(iterator.range_last, 2);
-        ASSERT_FALSE(iterator.next());
+    return res;
+}
+
+static ColumnPtr make_string_column(const std::vector<std::string>& data) {
+    auto res = BinaryColumn::create();
+    for (auto& x : data) {
+        res->append_string(x);
+    }
+    return res;
+}
+
+template <PrimitiveType ptype>
+static const std::vector<RunTimeCppType<ptype>> unnest_column_to_vector(ColumnPtr column) {
+    return ColumnHelper::cast_to<ptype>(column)->get_data();
+}
+
+// Combine multiple columns according to permutation
+static ColumnPtr combine_column(const Columns& columns, const Permutation& perm) {
+    if (columns.empty()) {
+        return {};
+    }
+    auto res = columns[0]->clone_empty();
+    for (auto& p : perm) {
+        DCHECK_LT(p.chunk_index, columns.size());
+        res->append_datum(columns[p.chunk_index]->get(p.index_in_chunk));
+    }
+    return res;
+}
+
+TEST_F(ChunksSorterTest, test_merge_sorted) {
+    // clang-format off
+    std::vector<std::tuple<std::vector<int>, std::vector<int>>> inputs = {
+            {{1, 3, 5}, {2, 4, 6}},
+            {{1, 3, 5}, {}},
+            {{}, {2, 4, 6}},
+            {{1, 2, 3}, {4, 5, 6}},
+            {{1, 1, 1}, {2, 2, 2}},
+            {{1, 1, 2}, {2, 2, 3}},
+    };
+    // clang-format on
+    for (auto [lhs_input, rhs_input] : inputs) {
+        fmt::print("merge ({}) and ({})\n", fmt::join(lhs_input, ","), fmt::join(rhs_input, ","));
+        auto lhs_column = make_int_column(lhs_input);
+        auto rhs_column = make_int_column(rhs_input);
+
+        Permutation perm;
+        Tie tie;
+        merge_sorted(lhs_column.get(), rhs_column.get(), 0, perm, tie);
+        auto result = combine_column(Columns({lhs_column, rhs_column}), perm);
+        std::vector<int> expected;
+        std::copy(lhs_input.begin(), lhs_input.end(), std::back_inserter(expected));
+        std::copy(rhs_input.begin(), rhs_input.end(), std::back_inserter(expected));
+        std::sort(expected.begin(), expected.end());
+        ASSERT_EQ(expected, unnest_column_to_vector<TYPE_INT>(result));
+        Tie expected_tie(expected.size(), 0);
+        for (int i = 1; i < expected.size(); i++) {
+            expected_tie[i] = expected[i - 1] == expected[i];
+        }
+        ASSERT_EQ(expected_tie, tie);
     }
 }
 
+TEST_F(ChunksSorterTest, test_merge_chunk) {
+    Columns chunk1, chunk2;
+    // setup chunk
+    chunk1.emplace_back(make_int_column({1, 2, 2, 3, 4, 4}));
+    chunk1.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
+    chunk1.emplace_back(make_int_column({5, 6, 7, 8, 9, 10}));
+
+    chunk2.emplace_back(make_int_column({2, 3, 3, 3, 4, 5}));
+    chunk2.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
+    chunk2.emplace_back(make_int_column({1, 2, 3, 4, 5, 6}));
+
+    Permutation perm;
+    merge_sorted_chunks(chunk1, chunk2, perm);
+    auto result_col1 = combine_column(Columns({chunk1[0], chunk2[0]}), perm);
+    auto result_col2 = combine_column(Columns({chunk1[1], chunk2[1]}), perm);
+    auto result_col3 = combine_column(Columns({chunk1[2], chunk2[2]}), perm);
+    auto unnest_col1 = unnest_column_to_vector<TYPE_INT>(result_col1);
+    auto unnest_col2 = unnest_column_to_vector<TYPE_VARCHAR>(result_col2);
+    auto unnest_col3 = unnest_column_to_vector<TYPE_INT>(result_col3);
+    ASSERT_TRUE(std::is_sorted(unnest_col1.begin(), unnest_col1.end()));
+    ASSERT_TRUE(std::is_sorted(unnest_col2.begin(), unnest_col2.end()));
+    ASSERT_TRUE(std::is_sorted(unnest_col3.begin(), unnest_col3.end()));
+}
+
 } // namespace starrocks::vectorized
+
+int main(int argc, char* argv[]) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

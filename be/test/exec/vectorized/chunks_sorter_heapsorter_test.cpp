@@ -302,3 +302,8 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_nullable_test) {
 }
 
 } // namespace starrocks::vectorized
+
+int main(int argc, char* argv[]) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
