@@ -231,6 +231,26 @@ std::string MySQLTableDescriptor::debug_string() const {
     return out.str();
 }
 
+JDBCTableDescriptor::JDBCTableDescriptor(const TTableDescriptor& tdesc)
+        : TableDescriptor(tdesc),
+          _jdbc_driver_name(tdesc.jdbcTable.jdbc_driver_name),
+          _jdbc_driver_url(tdesc.jdbcTable.jdbc_driver_url),
+          _jdbc_driver_checksum(tdesc.jdbcTable.jdbc_driver_checksum),
+          _jdbc_driver_class(tdesc.jdbcTable.jdbc_driver_class),
+          _jdbc_url(tdesc.jdbcTable.jdbc_url),
+          _jdbc_table(tdesc.jdbcTable.jdbc_table),
+          _jdbc_user(tdesc.jdbcTable.jdbc_user),
+          _jdbc_passwd(tdesc.jdbcTable.jdbc_passwd) {}
+
+std::string JDBCTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "JDBCTable(" << TableDescriptor::debug_string() << " jdbc_driver_name=" << _jdbc_driver_name
+        << " jdbc_driver_url=" << _jdbc_driver_url << " jdbc_driver_checksum=" << _jdbc_driver_checksum
+        << " jdbc_driver_class=" << _jdbc_driver_class << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
+        << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
+    return out.str();
+}
+
 TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
         : _id(tdesc.id),
           _table_desc(nullptr),
@@ -523,6 +543,10 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(hudi_desc->create_key_exprs(pool, chunk_size));
             desc = hudi_desc;
+            break;
+        }
+        case TTableType::JDBC_TABLE: {
+            desc = pool->add(new JDBCTableDescriptor(tdesc));
             break;
         }
         default:

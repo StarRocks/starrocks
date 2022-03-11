@@ -69,6 +69,10 @@ public:
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
+    // List methods
+    jobject list_get(jobject obj, int idx);
+    int list_size(jobject obj);
+
     DECLARE_NEW_BOX(uint8_t, Boolean)
     DECLARE_NEW_BOX(int8_t, Byte)
     DECLARE_NEW_BOX(int16_t, Short)
@@ -116,8 +120,13 @@ private:
     jclass _string_class;
     jclass _throwable_class;
     jclass _jarrays_class;
+    jclass _list_class;
 
     jmethodID _string_construct_with_bytes;
+
+    // List method
+    jmethodID _list_get;
+    jmethodID _list_size;
 
     jobject _utf8_charsets;
 
