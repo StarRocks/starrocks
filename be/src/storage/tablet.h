@@ -51,6 +51,9 @@ class Tablet;
 class TabletMeta;
 class TabletUpdateState;
 class TabletUpdates;
+class CompactionTask;
+class CompactionContext;
+class CompactionCandidate;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -67,6 +70,9 @@ public:
                                                    DataDir* data_dir = nullptr);
 
     Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
+
+    // for ut
+    Tablet() = default;
 
     ~Tablet() override;
 
@@ -244,6 +250,26 @@ public:
 
     int64_t mem_usage() { return sizeof(Tablet); }
 
+    // if there is _compaction_task running
+    // do not do compaction
+    bool need_compaction(CompactionType type) const {
+        std::unique_lock wrlock(_meta_lock);
+        return _need_compaction_unlock(type);
+    }
+
+    // for ut
+    void set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context);
+
+    std::vector<CompactionCandidate> get_compaction_candidates(bool need_update_context);
+
+    double compaction_score(CompactionType type) const;
+
+    std::shared_ptr<CompactionTask> get_compaction(CompactionType type, bool create_if_not_exist);
+
+    void stop_compaction();
+
+    void reset_compaction(CompactionType type);
+
 protected:
     void on_shutdown() override;
 
@@ -260,6 +286,18 @@ private:
     void _delete_stale_rowset_by_version(const Version& version);
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
+
+    bool _check_versions_completeness();
+
+    std::unique_ptr<CompactionContext> _get_compaction_context();
+
+    bool _is_compacted_singleton(Rowset* rowset);
+
+    // protected by _meta_lock
+    void _update_tablet_compaction_context();
+    std::vector<CompactionCandidate> _get_compaction_candidates();
+    bool _need_compaction_unlock() const;
+    bool _need_compaction_unlock(CompactionType type) const;
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -299,6 +337,11 @@ private:
 
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
+
+    // compaction related
+    std::unique_ptr<CompactionContext> _compaction_context;
+    std::shared_ptr<CompactionTask> _base_compaction_task;
+    std::shared_ptr<CompactionTask> _cumulative_compaction_task;
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure
