@@ -677,6 +677,11 @@ public abstract class Type implements Cloneable {
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType();
     }
 
+    public boolean supportBloomFilter() {
+        return isScalarType() && !isFloatingPointType() && !isTinyint() && !isBoolean() && !isDecimalV3() &&
+                !isJsonType() && !isOnlyMetricType();
+    }
+
     public static final String OnlyMetricTypeErrorMsg =
             "StarRocks hll and bitmap column must use with specific function, and don't support filter, group by and order by, " +
                     "please run 'help hll' or 'help bitmap' in your mysql client.";
