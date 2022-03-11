@@ -28,7 +28,7 @@ public class AlterResourceStmtTest {
 
     @Test
     public void testAlterResourceProperties(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
-        this.expectations(catalog,auth);
+        this.expectations(catalog, auth);
         Map<String, String> properties = Maps.newHashMap();
         properties.put("hive.metastore.uris", "thrift://10.10.44.98:9083");
         AlterResourceStmt stmt = new AlterResourceStmt("hive0",properties);

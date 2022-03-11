@@ -153,11 +153,9 @@ public class ResourceMgr implements Writable {
 
             if (resource instanceof HiveResource) {
                 // 1. alter the resource properties
-                // 2. update the nameToResource
-                // 3. drop the cache
-                // 4. update the edit log
+                // 2. clear the cache
+                // 3. update the edit log
                 ((HiveResource) resource).alterProperties(stmt.getProperties());
-                nameToResource.put(name, resource);
                 Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
                 Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
             } else {

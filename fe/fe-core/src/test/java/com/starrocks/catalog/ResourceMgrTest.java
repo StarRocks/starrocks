@@ -49,7 +49,7 @@ public class ResourceMgrTest {
     private String master;
     private String workingDir;
     private String broker;
-    private String hiveThriftPath ;
+    private String hiveMetastoreUris;
     private Map<String, String> properties;
     private Analyzer analyzer;
 
@@ -67,7 +67,7 @@ public class ResourceMgrTest {
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        hiveThriftPath = "thrift://10.10.44.98:9083" ;
+        hiveMetastoreUris = "thrift://10.10.44.98:9083";
     }
 
     @Test
@@ -199,7 +199,7 @@ public class ResourceMgrTest {
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("hive.metastore.uris", hiveThriftPath);
+        properties.put("hive.metastore.uris", hiveMetastoreUris);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
         Assert.assertEquals(0, mgr.getResourceNum());
