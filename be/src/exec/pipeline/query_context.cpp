@@ -30,6 +30,7 @@ void QueryContext::cancel(const Status& status) {
 
 static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM = 64;
 static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM_MASK = (1 << 6) - 1;
+
 QueryContextManager::QueryContextManager()
         : _mutexes(QUERY_CONTEXT_MAP_SLOT_NUM),
           _context_maps(QUERY_CONTEXT_MAP_SLOT_NUM),
@@ -132,7 +133,7 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
-    } else {
+    } else if (it->second->is_finished()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished
