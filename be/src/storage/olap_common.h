@@ -53,7 +53,7 @@ typedef unsigned __int128 uint128_t;
 
 typedef UniqueId TabletUid;
 
-enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3 };
+enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3, INVALID_COMPACTION };
 
 inline std::string to_string(CompactionType type) {
     switch (type) {
@@ -63,6 +63,8 @@ inline std::string to_string(CompactionType type) {
         return "cumulative";
     case UPDATE_COMPACTION:
         return "update";
+    case INVALID_COMPACTION:
+        return "invalid";
     default:
         return "unknown";
     }
@@ -358,6 +360,12 @@ struct Version {
 
     Version(int64_t first_, int64_t second_) : first(first_), second(second_) {}
     Version() {}
+
+    Version& operator=(const Version& version) {
+        first = version.first;
+        second = version.second;
+        return *this;
+    }
 
     friend std::ostream& operator<<(std::ostream& os, const Version& version);
 
