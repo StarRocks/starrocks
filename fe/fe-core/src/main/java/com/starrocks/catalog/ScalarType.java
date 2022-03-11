@@ -31,6 +31,7 @@ import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,6 +77,7 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "scale")
     private int scale;
 
+
     protected ScalarType(PrimitiveType type) {
         this.type = type;
     }
@@ -98,115 +100,54 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createType(PrimitiveType type) {
-        switch (type) {
-            case INVALID_TYPE:
-                return INVALID;
-            case NULL_TYPE:
-                return NULL;
-            case BOOLEAN:
-                return BOOLEAN;
-            case SMALLINT:
-                return SMALLINT;
-            case TINYINT:
-                return TINYINT;
-            case INT:
-                return INT;
-            case BIGINT:
-                return BIGINT;
-            case FLOAT:
-                return FLOAT;
-            case DOUBLE:
-                return DOUBLE;
-            case CHAR:
-                return CHAR;
-            case VARCHAR:
-                return createVarcharType();
-            case HLL:
-                return createHllType();
-            case JSON:
-                return JSON;
-            case BITMAP:
-                return BITMAP;
-            case PERCENTILE:
-                return PERCENTILE;
-            case DATE:
-                return DATE;
-            case DATETIME:
-                return DATETIME;
-            case TIME:
-                return TIME;
-            case DECIMALV2:
-                return DEFAULT_DECIMALV2;
-            case LARGEINT:
-                return LARGEINT;
-            case DECIMAL32:
-                return DECIMAL32;
-            case DECIMAL64:
-                return DECIMAL64;
-            case DECIMAL128:
-                return DECIMAL128;
-            default:
-                LOG.warn("type={}", type);
-                Preconditions.checkState(false);
-                return NULL;
-        }
+        ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
+        Preconditions.checkNotNull(res, "unknown type " + type);
+        return res;
     }
 
     public static ScalarType createType(String type) {
-        switch (type) {
-            case "INVALID_TYPE":
-                return INVALID;
-            case "NULL_TYPE":
-                return NULL;
-            case "BOOLEAN":
-                return BOOLEAN;
-            case "SMALLINT":
-                return SMALLINT;
-            case "TINYINT":
-                return TINYINT;
-            case "INT":
-                return INT;
-            case "BIGINT":
-                return BIGINT;
-            case "FLOAT":
-                return FLOAT;
-            case "DOUBLE":
-                return DOUBLE;
-            case "CHAR":
-                return CHAR;
-            case "VARCHAR":
-                return createVarcharType();
-            case "HLL":
-                return createHllType();
-            case "BITMAP":
-                return BITMAP;
-            case "PERCENTILE":
-                return PERCENTILE;
-            case "DATE":
-                return DATE;
-            case "DATETIME":
-                return DATETIME;
-            case "TIME":
-                return TIME;
-            case "DECIMAL":
-                return createDecimalV2Type();
-            case "DECIMALV2":
-                return createDecimalV2Type();
-            case "LARGEINT":
-                return LARGEINT;
-            case "DECIMAL32":
-                return DECIMAL32;
-            case "DECIMAL64":
-                return DECIMAL64;
-            case "DECIMAL128":
-                return DECIMAL128;
-            case "JSON":
-                return JSON;
-            default:
-                LOG.warn("type={}", type);
-                Preconditions.checkState(false);
-                return NULL;
+        ScalarType res = STATIC_TYPE_MAP.get(type);
+        Preconditions.checkNotNull(res, "unknown type " + type);
+        return res;
+    }
+
+    /**
+     * Create type from parser, needs to infer type from simple name
+     */
+    public static ScalarType createTypeFromParser(String typeName, Integer length, Integer precision, Integer scale) {
+        if (length != null) {
+            if (StringUtils.startsWithIgnoreCase(typeName, "VARCHAR")) {
+                return createVarchar(length);
+            } else if (StringUtils.startsWithIgnoreCase(typeName, "CHAR")) {
+                return createCharType(length);
+            } else if ("STRING".equalsIgnoreCase(typeName)) {
+                return DEFAULT_STRING;
+            }
+        } else if (StringUtils.startsWithIgnoreCase(typeName, "DECIMAL")) {
+            if ("DECIMAL".equalsIgnoreCase(typeName)) {
+                if (precision != null) {
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                } else {
+                    return ScalarType.createUnifiedDecimalType(10, 0);
+                }
+            } else if ("DECIMALV2".equalsIgnoreCase(typeName)) {
+                if (precision != null) {
+                    return ScalarType.createDecimalV2Type(precision, scale);
+                } else {
+                    return ScalarType.createDecimalV2Type();
+                }
+            }
+            PrimitiveType primitive = createType(typeName).getPrimitiveType();
+            if (precision == null || scale == null) {
+                return ScalarType.createDecimalV3Type(primitive);
+            } else {
+                return ScalarType.createDecimalV3Type(primitive, precision, scale);
+            }
+        } else {
+            return createType(typeName);
         }
+
+        throw new IllegalArgumentException("Unsupported type: " + typeName);
     }
 
     public static ScalarType createCharType(int len) {
@@ -235,6 +176,9 @@ public class ScalarType extends Type implements Cloneable {
         return new AnalysisException(hint + "error='" + errorMsg + "'");
     }
 
+    /**
+     * Unified decimal is used for parser, which creating default decimal from name
+     */
     public static ScalarType createUnifiedDecimalType() throws AnalysisException {
         throw decimalParseError("both precision and scale are absent");
     }
@@ -290,6 +234,9 @@ public class ScalarType extends Type implements Cloneable {
         return scalarType;
     }
 
+    /**
+     * Wildcard decimal is used for function matching
+     */
     public static ScalarType createWildcardDecimalV3Type(PrimitiveType type) {
         Preconditions.checkArgument(type.isDecimalV3Type());
         ScalarType scalarType = new ScalarType(type);
@@ -329,6 +276,12 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+    public static ScalarType createDefaultString() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+        stringType.setAssignedStrLenInColDefinition();
+        return stringType;
+    }
+
     public static ScalarType createVarcharType(int len) {
         // length checked in analysis
         ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
@@ -351,10 +304,6 @@ public class ScalarType extends Type implements Cloneable {
         ScalarType type = new ScalarType(PrimitiveType.HLL);
         type.len = MAX_HLL_LENGTH;
         return type;
-    }
-
-    public static ScalarType createJsonType() {
-        return new ScalarType(PrimitiveType.JSON);
     }
 
     // A common type for two decimal v3 types means that if t2 = getCommonTypeForDecimalV3(t0, t1),
@@ -530,7 +479,7 @@ public class ScalarType extends Type implements Cloneable {
             if (isWildcardDecimal()) {
                 return type.toString();
             }
-            return type.toString() + "(" + precision + "," + scale + ")";
+            return type + "(" + precision + "," + scale + ")";
         } else if (type == PrimitiveType.VARCHAR) {
             if (isWildcardVarchar()) {
                 return "VARCHAR";
@@ -582,7 +531,7 @@ public class ScalarType extends Type implements Cloneable {
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:
-                stringBuilder.append("unknown type: ").append(type.toString());
+                stringBuilder.append("unknown type: ").append(type);
                 break;
         }
         return stringBuilder.toString();
@@ -725,10 +674,7 @@ public class ScalarType extends Type implements Cloneable {
         if (this.isStringType() && t.isStringType()) {
             return true;
         }
-        if (isDecimalV2() && t.isDecimalV2()) {
-            return true;
-        }
-        return false;
+        return isDecimalV2() && t.isDecimalV2();
     }
 
     @Override

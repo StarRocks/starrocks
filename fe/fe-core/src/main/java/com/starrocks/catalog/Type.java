@@ -23,6 +23,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -39,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Abstract class describing an Impala data type (scalar/complex type).
@@ -93,13 +96,15 @@ public abstract class Type implements Cloneable {
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
     public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+    public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
+    public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
+
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
-    public static final ScalarType JSON = ScalarType.createJsonType();
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
@@ -124,7 +129,7 @@ public abstract class Type implements Cloneable {
                     .addAll(floatPointTypes)
                     .build();
 
-    private static final ImmutableList<Type> supportedTypes =
+    protected static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .add(BOOLEAN)
@@ -145,6 +150,25 @@ public abstract class Type implements Cloneable {
                     .add(DECIMAL64)
                     .add(DECIMAL128)
                     .add(JSON)
+                    .build();
+
+    protected static final ImmutableList<Type> SUPPORT_SCALAR_TYPE_LIST =
+            ImmutableList.copyOf(SUPPORTED_TYPES.stream().filter(Type::isScalarType).collect(Collectors.toList()));
+
+    protected static final ImmutableSortedMap<String, ScalarType> STATIC_TYPE_MAP =
+            ImmutableSortedMap.<String, ScalarType>orderedBy(String.CASE_INSENSITIVE_ORDER)
+                    .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
+                    .put("STRING", Type.DEFAULT_STRING)
+                    .put("INTEGER", Type.INT)
+                    .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
+                            .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
+                    .build();
+
+    protected static final ImmutableMap<PrimitiveType, ScalarType> PRIMITIVE_TYPE_SCALAR_TYPE_MAP =
+            ImmutableMap.<PrimitiveType, ScalarType>builder()
+                    .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
+                            .collect(Collectors.toMap(Type::getPrimitiveType, x -> (ScalarType) x)))
+                    .put(INVALID.getPrimitiveType(), INVALID)
                     .build();
 
     /**
@@ -565,7 +589,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static List<Type> getSupportedTypes() {
-        return supportedTypes;
+        return SUPPORTED_TYPES;
     }
 
     // TODO(dhc): fix this
@@ -1230,7 +1254,7 @@ public abstract class Type implements Cloneable {
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
-            return ScalarType.createJsonType();
+            return JSON;
         }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
