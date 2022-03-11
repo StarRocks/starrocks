@@ -441,7 +441,7 @@ public:
         _idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
         _idx_file_path_tmp = _idx_file_path + ".tmp";
         fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp});
+        fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, Env::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
         return block_mgr->create_block(wblock_opts, &_wb);
     }
 
