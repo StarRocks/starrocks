@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
@@ -131,17 +132,7 @@ public class TabletInvertedIndex {
             }
         }
 
-        int backendStorageTypeCnt = -1;
-        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
-        if (be != null) {
-            ImmutableMap<String, DiskInfo> disks = be.getDisks();
-            Set<Integer> set = Sets.newHashSet();
-            for (DiskInfo diskInfo : disks.values()) {
-                TStorageMedium medium = diskInfo.getStorageMedium();
-                set.add(medium.getValue());
-            }
-            backendStorageTypeCnt = set.size();
-        }
+        int backendStorageTypeCnt = getBackendStorageTypeCnt(backendId);
 
         readLock();
         long start = System.currentTimeMillis();
@@ -290,6 +281,21 @@ public class TabletInvertedIndex {
                         + " cost: {} ms", backendId, tabletSyncMap.size(),
                 tabletDeleteFromMeta.size(), foundTabletsWithValidSchema.size(), foundTabletsWithInvalidSchema.size(),
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
+    }
+
+    @VisibleForTesting
+    public int getBackendStorageTypeCnt(long backendId) {
+        int backendStorageTypeCnt = -1;
+        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        if (be != null) {
+            ImmutableMap<String, DiskInfo> disks = be.getDisks();
+            Set<TStorageMedium> set = Sets.newHashSet();
+            for (DiskInfo diskInfo : disks.values()) {
+                set.add(diskInfo.getStorageMedium());
+            }
+            backendStorageTypeCnt = set.size();
+        }
+        return backendStorageTypeCnt;
     }
 
     public Long getTabletIdByReplica(long replicaId) {
