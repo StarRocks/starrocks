@@ -5,7 +5,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -37,11 +36,6 @@ public class JsonTypeTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH (v_id) " +
                 "properties(\"replication_num\"=\"1\") ;"
         );
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        PlanTestBase.tearDown();
     }
 
     /**
