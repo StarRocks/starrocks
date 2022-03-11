@@ -120,6 +120,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -167,7 +169,7 @@ public class Coordinator {
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
     private final List<PlanFragment> fragments;
     // backend execute state
-    private final List<BackendExecState> backendExecStates = Lists.newArrayList();
+    private final ConcurrentNavigableMap<Integer, BackendExecState> backendExecStates = new ConcurrentSkipListMap<>();
     // backend which state need to be checked when joining this coordinator.
     // It is supposed to be the subset of backendExecStates.
     private final List<BackendExecState> needCheckBackendExecStates = Lists.newArrayList();
@@ -546,7 +548,7 @@ public class Coordinator {
                         TNetworkAddress host = instanceId2Host.get(tParam.params.fragment_instance_id);
                         BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
                                 profileFragmentId, tParam, this.addressToBackendID);
-                        backendExecStates.add(execState);
+                        backendExecStates.put(tParam.backend_num, execState);
                         if (needCheckBackendState) {
                             needCheckBackendExecStates.add(execState);
                             if (LOG.isDebugEnabled()) {
@@ -867,7 +869,7 @@ public class Coordinator {
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
-        for (BackendExecState backendExecState : backendExecStates) {
+        for (BackendExecState backendExecState : backendExecStates.values()) {
             backendExecState.cancelFragmentInstance(cancelReason);
         }
     }
@@ -1712,7 +1714,7 @@ public class Coordinator {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result =
                 Lists.newArrayList();
         for (int index = 0; index < fragments.size(); index++) {
-            for (BackendExecState backendExecState : backendExecStates) {
+            for (BackendExecState backendExecState : backendExecStates.values()) {
                 if (fragments.get(index).getFragmentId() != backendExecState.fragmentId) {
                     continue;
                 }
@@ -1724,7 +1726,7 @@ public class Coordinator {
     }
 
     private void attachInstanceProfileToFragmentProfile() {
-        for (BackendExecState backendExecState : backendExecStates) {
+        for (BackendExecState backendExecState : backendExecStates.values()) {
             if (!backendExecState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
