@@ -10,14 +10,14 @@
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
 #include <time.h>
 
 #include <limits>
 
-#include "aws/s3/model/ListObjectsV2Request.h"
-#include "aws/s3/model/ListObjectsV2Result.h"
 #include "common/config.h"
 #include "common/s3_uri.h"
 #include "gutil/strings/util.h"
@@ -31,7 +31,7 @@ namespace starrocks {
 static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     switch (error) {
     case Aws::S3::S3Errors::BUCKET_ALREADY_EXISTS:
-        return Status::AlreadyExist(fmt::format("bucket already exist: {}", msg));
+        return Status::AlreadyExist(fmt::format("bucket already exists: {}", msg));
     case Aws::S3::S3Errors::BUCKET_ALREADY_OWNED_BY_YOU:
         return Status::AlreadyExist(fmt::format("bucket already owned by you: {}", msg));
     case Aws::S3::S3Errors::NO_SUCH_BUCKET:
@@ -385,7 +385,7 @@ Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::
             const auto& full_name = cp.GetPrefix();
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
             if (!cb(name)) {
-                break;
+                return Status::OK();
             }
         }
         for (auto&& obj : result.GetContents()) {
@@ -399,7 +399,7 @@ Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::
             }
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
             if (!cb(name)) {
-                break;
+                return Status::OK();
             }
         }
     } while (result.GetIsTruncated());
