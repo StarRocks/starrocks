@@ -116,6 +116,9 @@ private:
     // the row sets being deleted. Should be called after set_scan_ranges.
     Status _capture_tablet_rowsets();
 
+    // scanner concurrency
+    size_t _scanner_concurrency();
+
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
@@ -158,6 +161,9 @@ private:
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
+    RuntimeProfile::Counter* _io_task_counter = nullptr;
+    RuntimeProfile::Counter* _task_concurrency = nullptr;
+    RuntimeProfile::Counter* _segment_counter = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;

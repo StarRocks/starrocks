@@ -16,16 +16,19 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "glog/logging.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/runtime_profile.h"
 namespace starrocks::vectorized {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -49,6 +52,9 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
 
     _tablet_counter = ADD_COUNTER(runtime_profile(), "TabletCount ", TUnit::UNIT);
+    _segment_counter = ADD_COUNTER(runtime_profile(), "SegmentCount ", TUnit::UNIT);
+    _io_task_counter = ADD_COUNTER(runtime_profile(), "IOTaskCount ", TUnit::UNIT);
+    _task_concurrency = ADD_COUNTER(runtime_profile(), "ScanConcurrency ", TUnit::UNIT);
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
     _init_counter(state);
     if (_tuple_desc == nullptr) {
@@ -479,8 +485,19 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
 
     _dict_optimize_parser.rewrite_conjuncts<true>(&conjunct_ctxs, state);
 
-    int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
-    for (auto& scan_range : _scan_ranges) {
+    int tablet_count = _scan_ranges.size();
+    for (int k = 0; k < tablet_count; ++k) {
+        auto& scan_range = _scan_ranges[k];
+        auto& tablet_rowset = _tablet_rowsets[k];
+
+        size_t segment_nums = 0;
+        for (const auto& rowset : tablet_rowset) {
+            segment_nums += rowset->num_segments();
+        }
+        COUNTER_UPDATE(_segment_counter, segment_nums);
+
+        int scanners_per_tablet = segment_nums;
+
         int num_ranges = key_ranges.size();
         int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
         for (int i = 0; i < num_ranges;) {
@@ -505,13 +522,16 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             // Assume all scanners have the same schema.
             _chunk_schema = &scanner->chunk_schema();
             _pending_scanners.push(scanner);
+            COUNTER_UPDATE(_io_task_counter, 1);
         }
     }
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
     _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
     _chunks_per_scanner += (config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
-    int concurrency = std::min<int>(kMaxConcurrency, _num_scanners);
+    // TODO: dynamic submit stragety
+    int concurrency = _scanner_concurrency();
+    COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
     TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
@@ -551,6 +571,48 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     }
 
     return Status::OK();
+}
+
+struct TypeMemoryUsed {
+    template <FieldType type>
+    size_t operator()() {
+        switch (type) {
+        case OLAP_FIELD_TYPE_VARCHAR:
+        case OLAP_FIELD_TYPE_CHAR:
+        case OLAP_FIELD_TYPE_JSON:
+            return 100;
+#define M(TYPE) return 100;
+            APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M)
+#undef M
+        default:
+            return 0;
+        }
+    }
+};
+
+size_t OlapScanNode::_scanner_concurrency() {
+    int64_t query_limit = _runtime_state->query_mem_tracker_ptr()->limit();
+
+    size_t chunk_mem_usage = 0;
+    size_t row_mem_usage = 0;
+    const auto& fields = _chunk_schema->fields();
+    // we could use statistics
+    for (const auto& field : fields) {
+        row_mem_usage += field->type()->size();
+        row_mem_usage += field_type_dispatch_column(field->type()->type(), TypeMemoryUsed());
+    }
+    // We temporarily assume that the memory tried in the storage layer
+    // is the same size as the chunk
+    row_mem_usage *= 2;
+    chunk_mem_usage = row_mem_usage * _runtime_state->chunk_size();
+    DCHECK_GT(chunk_mem_usage, 0);
+    // limit scan memory usage not greater than 1/4 query limit
+    int concurrency = std::max<int>(query_limit / 4 / chunk_mem_usage, 1);
+    // limit concurrency not greater than scanner numbers
+    concurrency = std::min<int>(concurrency, _num_scanners);
+    concurrency = std::min<int>(concurrency, kMaxConcurrency);
+
+    return concurrency;
 }
 
 Status OlapScanNode::set_scan_ranges(const std::vector<TInternalScanRange>& ranges) {
