@@ -138,6 +138,7 @@ public class ResourceMgr implements Writable {
 
     /**
      * alter resource statement only support external hive now .
+     *
      * @param stmt
      * @throws DdlException
      */

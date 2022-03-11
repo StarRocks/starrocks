@@ -62,8 +62,9 @@ public class HiveResource extends Resource {
     /**
      * <p>alter the resource properties.</p>
      * <p>the user can not alter the property that the system does not support.
-     * currently , hive resource only support 'hive.metastore.uris' property to alter.
-     * @param properties the properties that user uses to alter </p>
+     * currently , hive resource only support 'hive.metastore.uris' property to alter. </p>
+     *
+     * @param properties the properties that user uses to alter
      * @throws DdlException
      */
     public void alterProperties(Map<String, String> properties) throws DdlException {

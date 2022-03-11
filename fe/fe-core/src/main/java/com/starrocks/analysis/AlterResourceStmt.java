@@ -11,6 +11,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+
 import java.util.Map;
 
 public class AlterResourceStmt extends DdlStmt {

@@ -268,7 +268,6 @@ public class HiveTable extends Table {
             LOG.warn("table {} gets partitions stats failed.", name, e);
         }
 
-
         for (int i = 0; i < partitionsStats.size(); i++) {
             long partNumRows = partitionsStats.get(i).getNumRows();
             long partTotalFileBytes = partitionsStats.get(i).getTotalFileBytes();
