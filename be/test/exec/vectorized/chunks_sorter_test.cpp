@@ -623,21 +623,21 @@ TEST_F(ChunksSorterTest, find_zero) {
             bytes = std::vector<uint8_t>(len, 1);
             bytes[zero_pos] = 0;
             
-            size_t result = find_zero(bytes, 0);
+            size_t result = SIMD::find_zero(bytes, 0);
             EXPECT_EQ(zero_pos, result);
             
             // test non-zero
             std::fill(bytes.begin(), bytes.end(), 0);
             bytes[zero_pos] = 1;
-            result = find_nonzero(bytes, 0);
+            result = SIMD::find_nonzero(bytes, 0);
             EXPECT_EQ(zero_pos, result);
         }
         
         bytes = std::vector<uint8_t>(len, 1);
-        EXPECT_EQ(len, find_zero(bytes, 0));
+        EXPECT_EQ(len, SIMD::find_zero(bytes, 0));
         // test nonzero
         std::fill(bytes.begin(), bytes.end(), 0);
-        EXPECT_EQ(len, find_nonzero(bytes, 0));
+        EXPECT_EQ(len, SIMD::find_nonzero(bytes, 0));
     }
 }
 

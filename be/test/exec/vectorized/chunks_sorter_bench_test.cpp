@@ -298,7 +298,7 @@ static void BM_find_zero_simd(benchmark::State& state) {
     std::vector<uint8_t> bytes(1024, 1);
     
     for (auto _ : state) {
-        benchmark::DoNotOptimize(find_zero(bytes, 0));
+        benchmark::DoNotOptimize(SIMD::find_zero(bytes, 0));
     }
 }
 BENCHMARK(BM_find_zero_simd);
