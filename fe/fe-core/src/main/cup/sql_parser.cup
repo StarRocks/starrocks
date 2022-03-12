@@ -827,9 +827,9 @@ alter_stmt ::=
         RESULT = new AlterRoutineLoadStmt(jobLabel, loadPropertyList, jobProperties, datasourceProperties);
     :}
     /* resource */
-    | KW_ALTER KW_RESOURCE ident_or_text:resourceName opt_properties:properties
+    | KW_ALTER KW_RESOURCE ident_or_text:resourceName KW_SET opt_properties:properties
     {:
-        RESULT = new AlterResourceStmt(resourceName,properties);
+        RESULT = new AlterResourceStmt(resourceName, properties);
     :}
     | alter_resource_group_stmt:stmt
     {:

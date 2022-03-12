@@ -49,7 +49,7 @@ public class ResourceMgrTest {
     private String master;
     private String workingDir;
     private String broker;
-    private String hiveThriftPath ;
+    private String hiveMetastoreUris;
     private Map<String, String> properties;
     private Analyzer analyzer;
 
@@ -67,16 +67,16 @@ public class ResourceMgrTest {
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        hiveThriftPath = "thrift://10.10.44.98:9083" ;
+        hiveMetastoreUris = "thrift://10.10.44.98:9083";
     }
 
     @Test
     public void testAddDropResource(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
                                     @Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
-        ResourceMgr mgr = new ResourceMgr() ;
+        ResourceMgr mgr = new ResourceMgr();
 
         // add
-        addSparkResource(mgr,brokerMgr,editLog,catalog,auth);
+        addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
 
         // drop
         DropResourceStmt dropStmt = new DropResourceStmt(name);
@@ -90,7 +90,7 @@ public class ResourceMgrTest {
         ResourceMgr mgr = new ResourceMgr();
 
         // add
-        CreateResourceStmt stmt = addSparkResource(mgr,brokerMgr,editLog,catalog,auth);
+        CreateResourceStmt stmt = addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
 
         // add again
         mgr.createResource(stmt);
@@ -112,14 +112,14 @@ public class ResourceMgrTest {
 
         // add hive resource
         name = "hive0";
-        type = "hive" ;
-        addHiveResource(mgr,editLog,catalog,auth) ;
+        type = "hive";
+        addHiveResource(mgr, editLog, catalog, auth);
 
         // alter hive resource
-        String newThriftPath = "thrift://10.10.44.xxx:9083" ;
-        Map<String,String> properties = new HashMap<>();
+        String newThriftPath = "thrift://10.10.44.xxx:9083";
+        Map<String, String> properties = new HashMap<>();
         properties.put("hive.metastore.uris", newThriftPath);
-        AlterResourceStmt stmt = new AlterResourceStmt(name,properties);
+        AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         stmt.analyze(analyzer);
         mgr.alterResource(stmt);
 
@@ -127,10 +127,8 @@ public class ResourceMgrTest {
         Resource resource = mgr.getResource(name);
         Assert.assertTrue(resource instanceof HiveResource);
 
-        Map<String,String> proMapper = ((HiveResource)resource).getProperties();
-        Assert.assertEquals(2,proMapper.size());
-        Assert.assertEquals(newThriftPath,proMapper.get("hive.metastore.uris"));
-        Assert.assertEquals(type,proMapper.get("type"));
+        String metastoreURIs = ((HiveResource) resource).getHiveMetastoreURIs();
+        Assert.assertEquals(newThriftPath, metastoreURIs);
     }
 
     @Test(expected = DdlException.class)
@@ -139,12 +137,12 @@ public class ResourceMgrTest {
         ResourceMgr mgr = new ResourceMgr();
 
         // add spark resource
-        addSparkResource(mgr,brokerMgr,editLog,catalog,auth);
+        addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
 
         // alter spark resource
-        Map<String,String> properties = new HashMap<>();
-        properties.put("broker","broker2") ;
-        AlterResourceStmt stmt = new AlterResourceStmt(name,properties);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("broker", "broker2");
+        AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         stmt.analyze(analyzer);
         mgr.alterResource(stmt);
     }
@@ -156,38 +154,38 @@ public class ResourceMgrTest {
 
         // add hive resource
         name = "hive0";
-        type = "hive" ;
-        addHiveResource(mgr,editLog,catalog,auth) ;
+        type = "hive";
+        addHiveResource(mgr, editLog, catalog, auth);
 
         // alter hive resource
-        Map<String,String> properties = new HashMap<>();
+        Map<String, String> properties = new HashMap<>();
         properties.put("hive.metastore.uris", "thrift://10.10.44.xxx:9083");
-        String noExistName = "hive1" ;
-        AlterResourceStmt stmt = new AlterResourceStmt(noExistName ,properties);
+        String noExistName = "hive1";
+        AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
         stmt.analyze(analyzer);
         mgr.alterResource(stmt);
     }
 
     @Test(expected = DdlException.class)
     public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked Catalog catalog,
-                                          @Injectable Auth auth) throws UserException {
+                                                  @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
         name = "hive0";
-        type = "hive" ;
-        addHiveResource(mgr,editLog,catalog,auth) ;
+        type = "hive";
+        addHiveResource(mgr, editLog, catalog, auth);
 
         // alter hive resource
-        Map<String,String> properties = new HashMap<>();
+        Map<String, String> properties = new HashMap<>();
         properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
-        AlterResourceStmt stmt = new AlterResourceStmt(name ,properties);
+        AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         stmt.analyze(analyzer);
         mgr.alterResource(stmt);
     }
 
-    private CreateResourceStmt addHiveResource(ResourceMgr mgr,EditLog editLog,
-                                 Catalog catalog, Auth auth) throws UserException {
+    private CreateResourceStmt addHiveResource(ResourceMgr mgr, EditLog editLog,
+                                               Catalog catalog, Auth auth) throws UserException {
         new Expectations() {
             {
                 catalog.getEditLog();
@@ -201,7 +199,7 @@ public class ResourceMgrTest {
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("hive.metastore.uris", hiveThriftPath);
+        properties.put("hive.metastore.uris", hiveMetastoreUris);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
         Assert.assertEquals(0, mgr.getResourceNum());
@@ -210,17 +208,11 @@ public class ResourceMgrTest {
 
         Resource resource = mgr.getResource(name);
         Assert.assertTrue(resource instanceof HiveResource);
-
-        Map<String,String> proMapper = ((HiveResource)resource).getProperties();
-        Assert.assertEquals(2,proMapper.size());
-        Assert.assertEquals("thrift://10.10.44.98:9083",proMapper.get("hive.metastore.uris"));
-        Assert.assertEquals(type,proMapper.get("type"));
-
-        return stmt ;
+        return stmt;
     }
 
-    private CreateResourceStmt addSparkResource(ResourceMgr mgr,BrokerMgr brokerMgr, EditLog editLog,
-                             Catalog catalog, Auth auth) throws UserException {
+    private CreateResourceStmt addSparkResource(ResourceMgr mgr, BrokerMgr brokerMgr, EditLog editLog,
+                                                Catalog catalog, Auth auth) throws UserException {
         new Expectations() {
             {
                 catalog.getBrokerMgr();
@@ -246,7 +238,7 @@ public class ResourceMgrTest {
         Assert.assertNotNull(resource);
         Assert.assertEquals(broker, resource.getBroker());
 
-        return stmt ;
+        return stmt;
     }
 
 }
