@@ -31,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
@@ -121,21 +122,20 @@ public class QueryAnalyzer {
                  */
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
                 ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size();
-                        ++fieldIdx) {
+                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
                     Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
                     String database = originField.getRelationAlias() == null ? session.getDatabase() :
                             originField.getRelationAlias().getDb();
                     TableName tableName = new TableName(database, withQuery.getName());
                     outputFields.add(new Field(
-                            withQuery.getColLabels() == null ? originField.getName() :
-                                    withQuery.getColLabels().get(fieldIdx),
+                            withQuery.getColumnOutputNames() == null ? originField.getName() :
+                                    withQuery.getColumnOutputNames().get(fieldIdx),
                             originField.getType(),
                             tableName,
                             originField.getOriginExpression()));
-                    columnOutputNames.add(withQuery.getColLabels() == null ? originField.getName() :
-                            withQuery.getColLabels().get(fieldIdx));
+                    columnOutputNames.add(withQuery.getColumnOutputNames() == null ? originField.getName() :
+                            withQuery.getColumnOutputNames().get(fieldIdx));
                 }
                 withQuery.setColumnOutputNames(columnOutputNames.build());
                 withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
@@ -244,9 +244,11 @@ public class QueryAnalyzer {
             for (Column column : table.getFullSchema()) {
                 Field field;
                 if (table.getBaseSchema().contains(column)) {
-                    field = new Field(column.getName(), column.getType(), tableName, null, true);
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), true);
                 } else {
-                    field = new Field(column.getName(), column.getType(), tableName, null, false);
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), false);
                 }
                 columns.put(field, column);
                 fields.add(field);
@@ -268,11 +270,11 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
                 Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
-                outputFields.add(new Field(
-                        cteRelation.getColLabels() == null ? originField.getName() :
-                                cteRelation.getColLabels().get(fieldIdx),
+                outputFields.add(new Field(cteRelation.getColumnOutputNames() == null ?
+                        originField.getName() : cteRelation.getColumnOutputNames().get(fieldIdx),
                         originField.getType(),
-                        tableName, originField.getOriginExpression()));
+                        tableName,
+                        originField.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
             cteRelation.setScope(scope);
@@ -408,8 +410,7 @@ public class QueryAnalyzer {
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
-                outputFields.add(new Field(field.getName(), field.getType(),
-                        subquery.getAlias(), field.getOriginExpression()));
+                outputFields.add(new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
             subquery.setScope(scope);
@@ -418,13 +419,15 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            process(new QueryStatement(node.getQuery()), scope);
+            Scope queryOutputScope = process(new QueryStatement(node.getQuery()), scope);
 
             View view = node.getView();
             TableName tableName = node.getName();
             List<Field> fields = Lists.newArrayList();
-            for (Column column : view.getBaseSchema()) {
-                Field field = new Field(column.getName(), column.getType(), tableName, null, true);
+            for (int i = 0; i < view.getBaseSchema().size(); ++i) {
+                Column column = view.getBaseSchema().get(i);
+                Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
+                Field field = new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
                 fields.add(field);
             }
 
@@ -506,7 +509,7 @@ public class QueryAnalyzer {
                         if (ordinal < 1 || ordinal > outputExpressions.size()) {
                             throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
                         }
-                        expression = outputExpressions.get((int) ordinal - 1);
+                        expression = new FieldReference((int) ordinal - 1, null);
                     }
 
                     analyzeExpression(expression, new AnalyzeState(), setOpOutputScope);
@@ -520,7 +523,6 @@ public class QueryAnalyzer {
             }
 
             node.setScope(setOpOutputScope);
-            node.setColumnOutputNames(setOpRelations.get(0).getColumnOutputNames());
             return setOpOutputScope;
         }
 
@@ -585,7 +587,10 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < fn.getTableFnReturnTypes().size(); ++i) {
                 Field field = new Field(fn.getDefaultColumnNames().get(i),
-                        fn.getTableFnReturnTypes().get(i), node.getAlias(), null);
+                        fn.getTableFnReturnTypes().get(i), node.getAlias(),
+                        new SlotRef(node.getAlias(),
+                                node.getTableFunction().getDefaultColumnNames().get(i),
+                                node.getTableFunction().getDefaultColumnNames().get(i)));
                 fields.add(field);
             }
 

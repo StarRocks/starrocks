@@ -12,8 +12,6 @@ public abstract class SetOperationRelation extends QueryRelation {
     private final SetQualifier qualifier;
 
     public SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier) {
-        //Use the first column names as the column name of the set-operation
-        super(relations.get(0).getColumnOutputNames());
         this.relations = new ArrayList<>(relations);
         this.qualifier = qualifier;
     }
