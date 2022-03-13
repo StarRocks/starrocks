@@ -328,7 +328,12 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto status = _fragment_ctx->final_status();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
-        _query_ctx->count_down_fragments();
+        if (_query_ctx->count_down_fragments()) {
+            DCHECK(_query_ctx->is_finished());
+            auto query_id = _query_ctx->query_id();
+            DCHECK(!this->is_still_pending_finish());
+            QueryContextManager::instance()->remove(query_id);
+        }
     }
 }
 
