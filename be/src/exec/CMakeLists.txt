@@ -118,6 +118,7 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
+    vectorized/sorting/sort_permute.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp

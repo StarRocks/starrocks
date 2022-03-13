@@ -285,6 +285,12 @@ public:
     virtual void sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
                               Tie& tie, std::pair<int, int> range, bool build_tie) = 0;
 
+    virtual void merge_and_tie(int sort_order, int null_first, PermutatedColumn& lhs, PermutatedColumn& rhs,
+                               std::pair<int, int> lhs_range, std::pair<int, int> rhs_range, Tie& tie,
+                               Permutation& output, int output_begin, int limit) const {
+        CHECK(false) << "not supported";
+    }
+
     // Compares (*this)[left] and rhs[right]. Column rhs should have the same type.
     // Returns negative number, 0, or positive number (*this)[left] is less, equal, greater than
     // rhs[right] respectively.

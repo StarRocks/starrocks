@@ -3,6 +3,9 @@
 #include "chunks_sorter_topn.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_merge.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
@@ -125,6 +128,51 @@ bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
+    if (_compare_strategy == ColumnWise || _compare_strategy == ColumnInc) {
+        return _col_wise_merge(state);
+    } else {
+        return _row_wise_merge(state);
+    }
+}
+
+// Column-wise merge:
+// 1. Sort each raw_chunk
+// 2. Merge all raw_chunk into a large chunk
+// 3. Merge the new-chunk with existed chunk
+Status ChunksSorterTopn::_col_wise_merge(RuntimeState* state) {
+    std::deque<PermutatedChunk> sort_chunks;
+    for (auto& raw_chunk : _raw_chunks.chunks) {
+        PermutatedChunk sort_chunk(raw_chunk);
+        // TODO: partial sort
+        RETURN_IF_ERROR(sort_permutated_chunk(sort_chunk, _sort_order_flag, _null_first_flag));
+        sort_chunks.emplace_back(sort_chunk);
+    }
+    _raw_chunks.clear();
+
+    while (sort_chunks.size() > 1) {
+        auto lhs = sort_chunks.front();
+        sort_chunks.pop_front();
+        auto rhs = sort_chunks.front();
+        sort_chunks.pop_front();
+        ChunkPtr merged = merge_sorted_chunks_and_copy(lhs, rhs, _sort_order_flag, _null_first_flag, _limit);
+
+        sort_chunks.push_back({merged});
+    }
+    PermutatedChunk merged_chunk = sort_chunks.front();
+    if (!_init_merged_segment) {
+        merged_chunk.resize(_limit + _offset);
+        _merged_segment.init(_sort_exprs, merged_chunk.chunk);
+        _init_merged_segment = true;
+    } else {
+        ChunkPtr merged = merge_sorted_chunks_and_copy(merged_chunk, _merged_segment.chunk, _sort_order_flag,
+                                                       _null_first_flag, _limit);
+        _merged_segment.chunk = merged;
+    }
+
+    return Status::OK();
+}
+
+Status ChunksSorterTopn::_row_wise_merge(RuntimeState* state) {
     const size_t chunk_size = _raw_chunks.size_of_rows;
 
     // chunks for this batch.

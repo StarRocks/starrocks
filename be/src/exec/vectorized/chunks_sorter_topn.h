@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
 
@@ -45,6 +46,12 @@ private:
     inline size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
     Status _sort_chunks(RuntimeState* state);
+
+    // Merge chunks in row-wise style
+    Status _row_wise_merge(RuntimeState* state);
+
+    // Merge chunks in column-wise style
+    Status _col_wise_merge(RuntimeState* state);
 
     // build data for top-n
     Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second, DataSegments& segments);

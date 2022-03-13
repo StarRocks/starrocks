@@ -5,6 +5,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "column/json_column.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -156,7 +157,7 @@ void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunksSorterTest, full_sort_incremental) {
+TEST_F(ChunksSorterTest, fullsort_column_wise) {
     std::vector<bool> is_asc, is_null_first;
     is_asc.push_back(false); // cust_key
     is_asc.push_back(true);  // cust_key
@@ -192,6 +193,68 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
+
+    clear_sort_exprs(sort_exprs);
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunksSorterTest, topn_column_wise) {
+    std::vector<bool> is_asc{false, true};
+    std::vector<bool> is_null_first{true, true};
+    std::vector<ExprContext*> sort_exprs;
+    sort_exprs.push_back(new ExprContext(_expr_region.get()));
+    sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+
+    // prepare answer
+    ChunksSorterFullSort full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 16);
+    full_sorter.set_compare_strategy(RowWise);
+    full_sorter.update(_runtime_state.get(), _chunk_1);
+    full_sorter.update(_runtime_state.get(), _chunk_2);
+    full_sorter.update(_runtime_state.get(), _chunk_3);
+    full_sorter.done(_runtime_state.get());
+    ChunkPtr correct_result;
+    bool eos = false;
+    while (!eos) {
+        ChunkPtr page;
+        full_sorter.get_next(&page, &eos);
+        correct_result->append(*page);
+    }
+
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    ASSERT_EQ(16, total_rows);
+    for (int limit = 1; limit <= total_rows; limit++) {
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 0, limit);
+        sorter.set_compare_strategy(ColumnInc);
+        sorter.update(_runtime_state.get(), _chunk_1);
+        sorter.update(_runtime_state.get(), _chunk_2);
+        sorter.update(_runtime_state.get(), _chunk_3);
+        sorter.done(_runtime_state.get());
+
+        bool eos = false;
+        ChunkPtr page_1, page_2;
+        sorter.get_next(&page_1, &eos);
+        ASSERT_FALSE(eos);
+        ASSERT_TRUE(page_1 != nullptr);
+        sorter.get_next(&page_2, &eos);
+        ASSERT_TRUE(eos);
+        ASSERT_TRUE(page_2 == nullptr);
+
+        ASSERT_EQ(limit, page_1->num_rows());
+        std::vector<int32_t> col1 =
+                ColumnHelper::cast_to_raw<TYPE_INT>(correct_result->get_column_by_index(0))->get_data();
+        std::vector<int32_t> col3 =
+                ColumnHelper::cast_to_raw<TYPE_INT>(correct_result->get_column_by_index(2))->get_data();
+        col1.resize(limit);
+        col3.resize(limit);
+        std::vector<int> result_col1;
+        std::vector<int> result_col3;
+        for (size_t i = 0; i < limit; ++i) {
+            result_col1.push_back(page_1->get(i).get(0).get_int32());
+            result_col3.push_back(page_1->get(i).get(2).get_int32());
+        }
+        ASSERT_EQ(col1, result_col1);
+        ASSERT_EQ(col3, result_col3);
+    }
 
     clear_sort_exprs(sort_exprs);
 }
@@ -677,20 +740,25 @@ static ColumnPtr make_string_column(const std::vector<std::string>& data) {
     return res;
 }
 
-template <PrimitiveType ptype>
-static const std::vector<RunTimeCppType<ptype>> unnest_column_to_vector(ColumnPtr column) {
-    return ColumnHelper::cast_to<ptype>(column)->get_data();
+static Permutation make_perm(int size) {
+    Permutation res(size);
+    for (int i = 0; i < size; i++) {
+        res[i].index_in_chunk = i;
+    }
+    return res;
 }
 
-// Combine multiple columns according to permutation
-static ColumnPtr combine_column(const Columns& columns, const Permutation& perm) {
-    if (columns.empty()) {
-        return {};
-    }
-    auto res = columns[0]->clone_empty();
-    for (auto& p : perm) {
-        DCHECK_LT(p.chunk_index, columns.size());
-        res->append_datum(columns[p.chunk_index]->get(p.index_in_chunk));
+template <PrimitiveType ptype, class T = RunTimeCppType<ptype>>
+static const std::vector<T> unnest_column_to_vector(ColumnPtr column) {
+    auto real_column = ColumnHelper::cast_to<ptype>(column);
+    std::vector<T> res;
+    if constexpr (ptype == TYPE_VARCHAR) {
+        auto slice_array = real_column->get_data();
+        for (int i = 0; i < slice_array.size(); i++) {
+            res.push_back(slice_array[i].to_string());
+        }
+    } else {
+        res = real_column->get_data();
     }
     return res;
 }
@@ -707,49 +775,91 @@ TEST_F(ChunksSorterTest, test_merge_sorted) {
     };
     // clang-format on
     for (auto [lhs_input, rhs_input] : inputs) {
-        fmt::print("merge ({}) and ({})\n", fmt::join(lhs_input, ","), fmt::join(rhs_input, ","));
-        auto lhs_column = make_int_column(lhs_input);
-        auto rhs_column = make_int_column(rhs_input);
+        int size = lhs_input.size() + rhs_input.size();
+        for (int limit = 1; limit <= size; limit++) {
+            fmt::print("merge ({}) and ({}) with limit {} \n", fmt::join(lhs_input, ","), fmt::join(rhs_input, ","),
+                       limit);
+            auto lhs_column = make_int_column(lhs_input);
+            auto rhs_column = make_int_column(rhs_input);
+            Permutation lhs_perm = make_perm(lhs_column->size());
+            Permutation rhs_perm = make_perm(rhs_column->size());
+            PermutatedColumn lhs_perm_column(*lhs_column, lhs_perm);
+            PermutatedColumn rhs_perm_column(*rhs_column, rhs_perm);
 
-        Permutation perm;
-        Tie tie;
-        merge_sorted(lhs_column.get(), rhs_column.get(), 0, perm, tie);
-        auto result = combine_column(Columns({lhs_column, rhs_column}), perm);
-        std::vector<int> expected;
-        std::copy(lhs_input.begin(), lhs_input.end(), std::back_inserter(expected));
-        std::copy(rhs_input.begin(), rhs_input.end(), std::back_inserter(expected));
-        std::sort(expected.begin(), expected.end());
-        ASSERT_EQ(expected, unnest_column_to_vector<TYPE_INT>(result));
-        Tie expected_tie(expected.size(), 0);
-        for (int i = 1; i < expected.size(); i++) {
-            expected_tie[i] = expected[i - 1] == expected[i];
+            Permutation result_perm;
+            Tie tie(size, 1);
+            merge_sorted(lhs_perm_column, rhs_perm_column, result_perm, tie, {0, lhs_column->size()},
+                         {0, rhs_column->size()}, 1, 1, limit, 0);
+            auto result = unpermute_column(Columns({lhs_column, rhs_column}), result_perm, result_perm.size());
+            std::vector<int> sorted_result = unnest_column_to_vector<TYPE_INT>(result);
+            ASSERT_TRUE(std::is_sorted(sorted_result.begin(), sorted_result.end()));
+            ASSERT_GE(result_perm.size(), limit);
+
+            Tie expected_tie(sorted_result.size(), 1);
+            for (int i = 1; i < sorted_result.size(); i++) {
+                expected_tie[i] = (sorted_result[i - 1] == sorted_result[i]);
+            }
+            ASSERT_EQ(expected_tie, tie);
         }
-        ASSERT_EQ(expected_tie, tie);
     }
 }
 
+static int compare_columns(const Columns& columns, int lhs_idx, int rhs_idx) {
+    for (int i = 0; i < columns.size(); i++) {
+        int x = columns[i]->compare_at(lhs_idx, rhs_idx, *columns[i], 1);
+        if (x != 0) {
+            return x;
+        }
+    }
+    return 0;
+}
+
 TEST_F(ChunksSorterTest, test_merge_chunk) {
-    Columns chunk1, chunk2;
+    Columns columns1, columns2;
     // setup chunk
-    chunk1.emplace_back(make_int_column({1, 2, 2, 3, 4, 4}));
-    chunk1.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
-    chunk1.emplace_back(make_int_column({5, 6, 7, 8, 9, 10}));
+    columns1.emplace_back(make_int_column({1, 2, 2, 3, 4, 4}));
+    columns1.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
+    columns1.emplace_back(make_int_column({5, 6, 7, 8, 9, 10}));
 
-    chunk2.emplace_back(make_int_column({2, 3, 3, 3, 4, 5}));
-    chunk2.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
-    chunk2.emplace_back(make_int_column({1, 2, 3, 4, 5, 6}));
+    columns2.emplace_back(make_int_column({2, 3, 3, 3, 4, 5}));
+    columns2.emplace_back(make_string_column({"a", "a", "b", "b", "b", "b"}));
+    columns2.emplace_back(make_int_column({1, 2, 3, 4, 5, 6}));
+    Chunk::SlotHashMap slot_map;
+    for (int i = 0; i < 3; i++) {
+        slot_map[i] = i;
+    }
+    ChunkPtr chunk1 = std::make_shared<Chunk>(columns1, slot_map);
+    ChunkPtr chunk2 = std::make_shared<Chunk>(columns2, slot_map);
 
-    Permutation perm;
-    merge_sorted_chunks(chunk1, chunk2, perm);
-    auto result_col1 = combine_column(Columns({chunk1[0], chunk2[0]}), perm);
-    auto result_col2 = combine_column(Columns({chunk1[1], chunk2[1]}), perm);
-    auto result_col3 = combine_column(Columns({chunk1[2], chunk2[2]}), perm);
-    auto unnest_col1 = unnest_column_to_vector<TYPE_INT>(result_col1);
-    auto unnest_col2 = unnest_column_to_vector<TYPE_VARCHAR>(result_col2);
-    auto unnest_col3 = unnest_column_to_vector<TYPE_INT>(result_col3);
-    ASSERT_TRUE(std::is_sorted(unnest_col1.begin(), unnest_col1.end()));
-    ASSERT_TRUE(std::is_sorted(unnest_col2.begin(), unnest_col2.end()));
-    ASSERT_TRUE(std::is_sorted(unnest_col3.begin(), unnest_col3.end()));
+    int total_rows = columns1[0]->size() + columns2[0]->size();
+    std::vector<int> sort_orders(3, 1);
+    std::vector<int> null_firsts(3, 1);
+
+    for (int limit = total_rows; limit >= 1; limit--) {
+        Permutation merge_perm;
+        Permutation lhs_perm = make_perm(total_rows);
+        Permutation rhs_perm = make_perm(total_rows);
+        PermutatedChunk lhs_chunk(chunk1, lhs_perm);
+        PermutatedChunk rhs_chunk(chunk2, lhs_perm);
+
+        merge_sorted_chunks(lhs_chunk, rhs_chunk, sort_orders, null_firsts, merge_perm, limit);
+        auto result_col1 = unpermute_column(Columns({columns1[0], columns2[0]}), merge_perm, limit);
+        auto result_col2 = unpermute_column(Columns({columns1[1], columns2[1]}), merge_perm, limit);
+        auto result_col3 = unpermute_column(Columns({columns1[2], columns2[2]}), merge_perm, limit);
+        auto unnest_col1 = unnest_column_to_vector<TYPE_INT>(result_col1);
+        auto unnest_col2 = unnest_column_to_vector<TYPE_VARCHAR, std::string>(result_col2);
+        auto unnest_col3 = unnest_column_to_vector<TYPE_INT>(result_col3);
+        Columns sorted_columns{result_col1, result_col2, result_col3};
+        fmt::print("merge into column1 limit {}: {}\n", limit, fmt::join(unnest_col1, ","));
+        fmt::print("merge into column2 limit {}: {}\n", limit, fmt::join(unnest_col2, ","));
+        fmt::print("merge into column3 limit {}: {}\n", limit, fmt::join(unnest_col3, ","));
+        for (int i = 1; i < limit; i++) {
+            ASSERT_EQ(unnest_col1[0], 1) << "start from 1";
+            ASSERT_EQ(unnest_col2[0], "a") << "start from 'a'";
+            ASSERT_EQ(unnest_col3[0], 5) << "start from 1";
+            ASSERT_TRUE(compare_columns(sorted_columns, i - 1, i) <= 0) << " the " << i << " row";
+        }
+    }
 }
 
 } // namespace starrocks::vectorized
