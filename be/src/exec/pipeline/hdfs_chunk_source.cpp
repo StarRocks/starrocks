@@ -237,11 +237,7 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     if (is_hdfs_path(native_file_path.c_str())) {
         env = _pool->add(new EnvHdfs());
     } else if (is_object_storage_path(native_file_path.c_str())) {
-#ifdef STARROCKS_WITH_AWS
         env = _pool->add(new EnvS3());
-#else
-        return Status::NotSupported("Does not support read S3 file");
-#endif
     } else {
         env = Env::Default();
     }
