@@ -103,7 +103,6 @@ Status NodeChannel::init(RuntimeState* state) {
     _cur_request.set_index_id(_index_id);
     _cur_request.set_sender_id(_parent->_sender_id);
     _cur_request.set_eos(false);
-    _cur_chunk = std::make_unique<vectorized::Chunk>();
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
@@ -112,8 +111,8 @@ Status NodeChannel::init(RuntimeState* state) {
     }
     RETURN_IF_ERROR(get_block_compression_codec(_compress_type, &_compress_codec));
 
-    if (state->query_options().__isset.load_parallel_request_num) {
-        _max_parallel_request_size = state->query_options().load_parallel_request_num;
+    if (state->query_options().__isset.load_dop) {
+        _max_parallel_request_size = state->query_options().load_dop;
         if (_max_parallel_request_size > 16 || _max_parallel_request_size < 1) {
             _err_st = Status::InternalError(fmt::format("load_parallel_request_size should between [1-16]"));
             return _err_st;
@@ -258,7 +257,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
 
     if (LIKELY(!eos)) {
         SCOPED_TIMER(_parent->_pack_chunk_timer);
-        if (UNLIKELY(_cur_chunk->columns().empty())) {
+        if (UNLIKELY(_cur_chunk == nullptr)) {
             _cur_chunk = input->clone_empty_with_slot();
         }
 
@@ -294,7 +293,10 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
         }
 
     } else {
-        if (_cur_chunk != nullptr) {
+        if (_chunk_queue.size() == 0) {
+            if (_cur_chunk.get() == nullptr) {
+                _cur_chunk = std::make_unique<vectorized::Chunk>();
+            }
             _mem_tracker->consume(_cur_chunk->memory_usage());
             _chunk_queue.emplace_back(std::move(_cur_chunk), _cur_request);
             _cur_chunk = nullptr;

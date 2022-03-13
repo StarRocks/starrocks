@@ -204,9 +204,9 @@ public class StreamLoadPlanner {
         if (streamLoadTask.getLoadParallelRequestNum() != 0) {
             // primary key & unique key should not use parallel write since the order of write is important
             if (destTable.getKeysType() == KeysType.PRIMARY_KEYS || destTable.getKeysType() == KeysType.UNIQUE_KEYS) {
-                queryOptions.setLoad_parallel_request_num(1);
+                queryOptions.setLoad_dop(1);
             } else {
-                queryOptions.setLoad_parallel_request_num(streamLoadTask.getLoadParallelRequestNum());
+                queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());
             }
         }
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.
@@ -229,7 +229,7 @@ public class StreamLoadPlanner {
         }
 
         LOG.info("load job id: {} tx id {} parallel {} compress {}", loadId, streamLoadTask.getTxnId(),
-                queryOptions.getLoad_parallel_request_num(),
+                queryOptions.getLoad_dop(),
                 queryOptions.getTransmission_compression_type());
         return params;
     }

@@ -252,8 +252,8 @@ public class StreamLoadTask {
         if (request.isSetTransmission_compression_type()) {
             compressionType = CompressionUtils.findTCompressionByName(request.getTransmission_compression_type());
         }
-        if (request.isSetLoad_parallel_request_num()) {
-            loadParallelRequestNum = request.getLoad_parallel_request_num();
+        if (request.isSetLoad_dop()) {
+            loadParallelRequestNum = request.getLoad_dop();
         }
     }
 
