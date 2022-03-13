@@ -42,11 +42,6 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 void GlobalDriverExecutor::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
-    if (driver->query_ctx()->is_finished()) {
-        auto query_id = driver->query_ctx()->query_id();
-        DCHECK(!driver->is_still_pending_finish());
-        QueryContextManager::instance()->remove(query_id);
-    }
 }
 
 void GlobalDriverExecutor::worker_thread() {
