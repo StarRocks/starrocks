@@ -622,22 +622,55 @@ TEST_F(ChunksSorterTest, find_zero) {
         for (int zero_pos = 0; zero_pos < len; zero_pos++) {
             bytes = std::vector<uint8_t>(len, 1);
             bytes[zero_pos] = 0;
-            
+
             size_t result = SIMD::find_zero(bytes, 0);
             EXPECT_EQ(zero_pos, result);
-            
+
             // test non-zero
             std::fill(bytes.begin(), bytes.end(), 0);
             bytes[zero_pos] = 1;
             result = SIMD::find_nonzero(bytes, 0);
             EXPECT_EQ(zero_pos, result);
         }
-        
+
         bytes = std::vector<uint8_t>(len, 1);
         EXPECT_EQ(len, SIMD::find_zero(bytes, 0));
         // test nonzero
         std::fill(bytes.begin(), bytes.end(), 0);
         EXPECT_EQ(len, SIMD::find_nonzero(bytes, 0));
+    }
+}
+
+TEST_F(ChunksSorterTest, test_tie) {
+    using Ranges = std::vector<std::pair<int, int>>;
+    Tie tie{0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1};
+    TieIterator iterator(tie);
+    Ranges ranges;
+
+    while (iterator.next()) {
+        ranges.emplace_back(iterator.range_first, iterator.range_last);
+    }
+    Ranges expected = {
+            {0, 4},
+            {4, 7},
+            {7, 9},
+            {9, 11},
+    };
+    ASSERT_EQ(expected, ranges);
+
+    // empty tie
+    {
+        Tie tie{0, 0};
+        TieIterator iterator(tie);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        Tie tie{0, 1};
+        TieIterator iterator(tie);
+        ASSERT_TRUE(iterator.next());
+        ASSERT_EQ(iterator.range_first, 0);
+        ASSERT_EQ(iterator.range_last, 2);
+        ASSERT_FALSE(iterator.next());
     }
 }
 

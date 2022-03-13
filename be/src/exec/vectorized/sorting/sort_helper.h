@@ -33,6 +33,51 @@ struct SorterComparator<Slice> {
     static int compare(const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs); }
 };
 
+struct TieIterator {
+    const Tie& tie;
+    const int begin;
+    const int end;
+
+    // For outer access
+    int range_first;
+    int range_last;
+
+    TieIterator(const Tie& tie) : TieIterator(tie, 0, tie.size()) {}
+
+    TieIterator(const Tie& tie, int begin, int end) : tie(tie), begin(begin), end(end) {
+        range_first = begin;
+        range_last = end;
+        _inner_range_first = begin;
+        _inner_range_last = end;
+    }
+
+    // Iterate the tie
+    // Return false means the loop should terminate
+    bool next() {
+        if (_inner_range_first >= end) {
+            return false;
+        }
+        _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1);
+        if (_inner_range_first >= end) {
+            return false;
+        }
+        _inner_range_first--;
+        _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1);
+        if (_inner_range_last > end) {
+            return false;
+        }
+
+        range_first = _inner_range_first;
+        range_last = _inner_range_last;
+        _inner_range_first = _inner_range_last;
+        return true;
+    }
+
+private:
+    int _inner_range_first;
+    int _inner_range_last;
+};
+
 #ifndef NDEBUG
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
@@ -82,18 +127,11 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
     fmt::print("nullable column before sort: {}\n", dubug_column(column, permutation));
 #endif
 
-    int range_first = range.first;
-    int range_last = 0;
-    while (range_first < range.second) {
-        range_first = SIMD::find_nonzero(tie, range_first + 1);
-        if (range_first >= range.second) {
-            break;
-        }
-        range_first--;
-        range_last = SIMD::find_zero(tie, range_first + 1);
-        if (range_last > range.second) {
-            break;
-        }
+    TieIterator iterator(tie, range.first, range.second);
+    while (iterator.next()) {
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+
         if (range_last - range_first > 1) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
@@ -113,8 +151,6 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
                    dubug_column(column, permutation));
         fmt::print("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
 #endif
-
-        range_first = range_last;
     }
 
 #ifndef NDEBUG
@@ -141,18 +177,11 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, Permut
     int tie_count = 0;
 #endif
 
-    int range_first = range.first;
-    int range_last = 0;
-    while (range_first < range.second) {
-        range_first = SIMD::find_nonzero(tie, range_first + 1);
-        if (range_first >= range.second) {
-            break;
-        }
-        range_first--;
-        range_last = SIMD::find_zero(tie, range_first + 1);
-        if (range_last > range.second) {
-            break;
-        }
+    TieIterator iterator(tie, range.first, range.second);
+    while (iterator.next()) {
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+
         if (range_last - range_first > 1) {
             do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
             if (build_tie) {
@@ -167,8 +196,8 @@ static inline void sort_and_tie_helper(Column* column, bool is_asc_order, Permut
         fmt::print("column after iteration: [{}, {}) {}\n", range_first, range_last, dubug_column(column, permutation));
         fmt::print("tie after iteration: {}\n", fmt::join(tie, ",   "));
 #endif
-        range_first = range_last;
     }
+
 #ifndef NDEBUG
     fmt::print("tie({}) after sort: {}\n", tie_count, fmt::join(tie, ",   "));
     fmt::print("nullable column after sort: {}\n", dubug_column(column, permutation));
