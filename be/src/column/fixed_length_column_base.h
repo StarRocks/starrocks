@@ -156,6 +156,8 @@ public:
     void sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
                       Tie& tie, std::pair<int, int> range, bool build_tie) override;
 
+    void append_permutation(const Columns& columns, const Permutation& perm) override;
+
     void merge_and_tie(int sort_order, int null_first, PermutatedColumn& lhs, PermutatedColumn& rhs,
                        std::pair<int, int> lhs_range, std::pair<int, int> rhs_range, Tie& tie, Permutation& output,
                        int output_begin, int limit) const override;

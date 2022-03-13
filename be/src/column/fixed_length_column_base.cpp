@@ -60,6 +60,21 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
     auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
     this->resize(size);
     return size;
+} 
+
+template <typename T>
+void FixedLengthColumnBase<T>::append_permutation(const Columns& columns, const Permutation& perm) {
+    size_t append_size = perm.size();
+    size_t old_size = _data.size();
+    _data.resize(old_size + append_size);
+    
+    for (int i = 0; i < append_size; i++) {
+        auto& p = perm[i];
+        DCHECK_LT(p.chunk_index, columns.size());
+        DCHECK_LT(p.index_in_chunk, columns[p.chunk_index]->size());
+        const T* raw_data = reinterpret_cast<const T*>(columns[p.chunk_index]->raw_data());
+        _data[old_size + i] = raw_data[p.index_in_chunk];
+    }
 }
 
 template <typename T>

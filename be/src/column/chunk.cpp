@@ -190,6 +190,16 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
     return chunk;
 }
 
+void Chunk::append_permutation(const std::vector<ChunkPtr>& src, const Permutation& perm) {
+    for (size_t col_idx = 0; col_idx < _columns.size(); col_idx++) {
+        Columns columns_of_all_chunk;
+        for (auto& src_chunk : src) {
+            columns_of_all_chunk.push_back(src_chunk->get_column_by_index(col_idx));
+        }
+        _columns[col_idx]->append_permutation(columns_of_all_chunk, perm);
+    }
+}
+
 void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_columns.size(), src.columns().size());
     for (size_t i = 0; i < _columns.size(); ++i) {

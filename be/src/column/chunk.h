@@ -9,6 +9,7 @@
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "common/global_types.h"
 #include "util/phmap/phmap.h"
@@ -151,6 +152,9 @@ public:
     //      size: 2
     // This function will copy the [3, 2] row of src to this chunk.
     void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    // Append permutated chunks
+    void append_permutation(const std::vector<ChunkPtr>& src, const Permutation& perm);
 
     // This function will append data from src according to the input indexes.
     // The columns of src chunk will be destroyed after append。
