@@ -307,6 +307,19 @@ public class BackupHandlerTest {
             Assert.fail();
         }
 
+        {
+            // process backup for primary key, will be forbidden
+            List<TableRef> tblRefs1 = Lists.newArrayList();
+            tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
+            BackupStmt backupStmt1 = new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1,
+                    null);
+            try {
+                handler.process(backupStmt1);
+            } catch (DdlException e1) {
+                Assert.assertEquals(e1.toString(), "com.starrocks.common.DdlException: backup do not support primary key table: test_tbl3");
+            }
+        }
+
         // process restore
         List<TableRef> tblRefs2 = Lists.newArrayList();
         tblRefs2.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
