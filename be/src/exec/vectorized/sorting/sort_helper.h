@@ -10,6 +10,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized//sorting//sort_permute.h"
+#include "runtime/timestamp_value.h"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
@@ -31,6 +32,30 @@ struct SorterComparator {
 template <>
 struct SorterComparator<Slice> {
     static int compare(const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs); }
+};
+
+template <>
+struct SorterComparator<DateValue> {
+    static int compare(const DateValue& lhs, const DateValue& rhs) {
+        auto x = lhs.julian() - rhs.julian();
+        if (x == 0) {
+            return x;
+        } else {
+            return x > 0 ? 1 : -1;
+        }
+    }
+};
+
+template <>
+struct SorterComparator<TimestampValue> {
+    static int compare(TimestampValue lhs, TimestampValue rhs) {
+        auto x = lhs.timestamp() - rhs.timestamp();
+        if (x == 0) {
+            return x;
+        } else {
+            return x > 0 ? 1 : -1;
+        }
+    }
 };
 
 #ifndef NDEBUG

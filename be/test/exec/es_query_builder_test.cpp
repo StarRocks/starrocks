@@ -570,7 +570,7 @@ TEST_F(BooleanQueryBuilderTest, validate_partial) {
 TEST_F(BooleanQueryBuilderTest, validate_compound_and) {
     ObjectPool pool;
     // TODO(yingchun): LSAN will report some errors in this scope, we should improve the code and enable LSAN later.
-    debug::ScopedLeakCheckDisabler disable_lsan;
+    [[maybe_unused]] debug::ScopedLeakCheckDisabler disable_lsan;
     std::string terms_in_field = "fv"; // fv not in [8.0, 16.0]
     int terms_in_field_length = terms_in_field.length();
     TypeDescriptor terms_in_col_type_desc = TypeDescriptor::create_varchar_type(terms_in_field_length);

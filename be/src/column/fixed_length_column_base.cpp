@@ -83,26 +83,7 @@ int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column
     DCHECK(dynamic_cast<const FixedLengthColumnBase<T>*>(&rhs) != nullptr);
     T x = _data[left];
     T y = down_cast<const FixedLengthColumnBase<T>&>(rhs)._data[right];
-    if constexpr (IsDate<T>) {
-        return x.julian() - y.julian();
-    } else if constexpr (IsTimestamp<T>) {
-        Timestamp v = x.timestamp() - y.timestamp();
-        // Implicitly converting Timestamp to int may give wrong result.
-        if (v == 0) {
-            return 0;
-        } else {
-            return v > 0 ? 1 : -1;
-        }
-    } else {
-        // uint8/int8_t, uint16/int16_t, uint32/int32_t, int64, int128, float, double, Decimal, ...
-        if (x > y) {
-            return 1;
-        } else if (x < y) {
-            return -1;
-        } else {
-            return 0;
-        }
-    }
+    return SorterComparator<T>::compare(x, y);
 }
 
 template <typename T>
