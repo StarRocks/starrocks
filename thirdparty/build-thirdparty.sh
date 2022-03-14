@@ -458,6 +458,9 @@ build_rocksdb() {
     cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
     make clean
 
+    OLD_FLAGS=$CFLAGS
+    CFLAGS=""
+
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR}" \
     EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
@@ -465,6 +468,8 @@ build_rocksdb() {
 
     cp librocksdb.a ../../installed/lib/librocksdb.a 
     cp -r include/rocksdb ../../installed/include/
+
+    export CFLAGS=$OLD_FLAGS
 }
 
 # librdkafka
@@ -487,7 +492,7 @@ build_flatbuffers() {
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
   LDFLAGS="-static-libstdc++ -static-libgcc" \
-  ${CMAKE_CMD} ..
+  ${CMAKE_CMD} .. -DFLATBUFFERS_BUILD_TESTS=OFF
   make -j$PARALLEL
   cp flatc  ../../../installed/bin/flatc
   cp -r ../include/flatbuffers  ../../../installed/include/flatbuffers
@@ -740,17 +745,16 @@ build_hyperscan() {
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
-    mkdir -p build
-    cd build
+    mkdir -p build && cd build
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release                \
-                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}  \
-                  -DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC    \
-                  -DCLIENT_PLUGIN_AUTH_GSSAPI=STATIC        \
-                  -DCLIENT_PLUGIN_CLEARTEXT=STATIC          \
-                  -DCLIENT_PLUGIN_DIALOG=STATIC             \
-                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}      \
-                  -DOPENSSL_LIBRARYIES=${TP_INSTALL_DIR}/lib
-    make -j$PARALLEL
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    # we only need build libmariadbclient and headers
+    make -j$PARALLEL mariadbclient
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
+    mkdir -p $TP_INSTALL_DIR/lib/mariadb/
+    cp libmariadbclient.a $TP_INSTALL_DIR/lib/mariadb/
+    # install mariadb headers
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
     make install
 }
 
