@@ -167,6 +167,7 @@ set(EXEC_FILES
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
+        ./storage/level_compaction_policy_test.cpp
         ./storage/vectorized/aggregate_iterator_test.cpp
         ./storage/vectorized/chunk_aggregator_test.cpp
         ./storage/vectorized/chunk_helper_test.cpp

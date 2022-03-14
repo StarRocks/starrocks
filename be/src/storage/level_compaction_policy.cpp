@@ -221,7 +221,7 @@ double LevelCompactionPolicy::_get_base_compaction_score() {
         level_1_rowsets_size += rowset->data_disk_size();
     }
 
-    double num_score = static_cast<double>(segment_num_score) / config::base_compaction_num_cumulative_deltas;
+    double num_score = static_cast<double>(segment_num_score) / config::min_base_compaction_num_singleton_deltas;
     double size_score = static_cast<double>(level_1_rowsets_size) / config::min_base_compaction_size;
 
     double score = std::max(num_score, size_score);
@@ -236,7 +236,7 @@ double LevelCompactionPolicy::_get_base_compaction_score() {
                 << "invalid rowset size. " << _compaction_context->rowset_levels[2].size();
         Rowset* base_rowset = *_compaction_context->rowset_levels[2].begin();
         if (base_rowset->data_disk_size() > 0) {
-            double size_ratio = level_1_rowsets_size / base_rowset->data_disk_size();
+            double size_ratio = static_cast<double>level_1_rowsets_size / base_rowset->data_disk_size();
             if (size_ratio >= config::base_cumulative_delta_ratio) {
                 score = 1.0;
                 LOG(INFO) << "satisfy the base compaction size ratio policy. tablet="
