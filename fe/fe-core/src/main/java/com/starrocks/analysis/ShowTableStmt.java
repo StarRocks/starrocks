@@ -91,7 +91,7 @@ public class ShowTableStmt extends ShowStmt {
             aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
         }
         where = where.substitute(aliasMap);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME, null),
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
     }
 
