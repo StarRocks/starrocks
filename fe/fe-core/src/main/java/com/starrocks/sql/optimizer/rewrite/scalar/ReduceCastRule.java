@@ -127,6 +127,11 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         ScalarOperator child1 = operator.getChild(0);
         ScalarOperator child2 = operator.getChild(1);
         ScalarOperator castChild = child1.getChild(0);
+
+        if (child2.isNull()) {
+            return operator;
+        }
+
         LocalDateTime originalDateTime = ((ConstantOperator) child2).getDatetime();
         LocalDateTime bottomLocalDateTime = ((ConstantOperator) child2).getDatetime().toLocalDate().atTime(0, 0, 0, 0);
         LocalDateTime targetLocalDateTime;
