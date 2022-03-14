@@ -72,3 +72,15 @@ The following bugs are fixed:
 - BE nodes fail because the source data changes during data loading using Broker Load.
 - Some SQL statements report errors after materialized views are created.
 - Query may fail if an SQL clause contains a predicate that supports global dictionary for low-cardinality optimization and a predicate that does not.
+
+## 2.0.3
+
+Release date: March 14, 2022
+
+### BugFix
+
+The following bugs are fixed:
+
+- Query fails when BE nodes are in suspended animation.
+- Query fails when there is no appropriate execution plan for single-tablet table joins.  [#3854](https://github.com/StarRocks/starrocks/issues/3854)
+- A deadlock problem may occur when an FE node collects information to build a global dictionary for low-cardinality optimization. [#3839](https://github.com/StarRocks/starrocks/issues/3839)
