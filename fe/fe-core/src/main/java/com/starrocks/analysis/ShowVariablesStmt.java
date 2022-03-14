@@ -105,7 +105,7 @@ public class ShowVariablesStmt extends ShowStmt {
         // change
         where = where.substitute(aliasMap);
 
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName, null),
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName),
                 where, null, null));
     }
 
