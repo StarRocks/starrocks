@@ -33,51 +33,6 @@ struct SorterComparator<Slice> {
     static int compare(const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs); }
 };
 
-struct TieIterator {
-    const Tie& tie;
-    const int begin;
-    const int end;
-
-    // For outer access
-    int range_first;
-    int range_last;
-
-    TieIterator(const Tie& tie) : TieIterator(tie, 0, tie.size()) {}
-
-    TieIterator(const Tie& tie, int begin, int end) : tie(tie), begin(begin), end(end) {
-        range_first = begin;
-        range_last = end;
-        _inner_range_first = begin;
-        _inner_range_last = end;
-    }
-
-    // Iterate the tie
-    // Return false means the loop should terminate
-    bool next() {
-        if (_inner_range_first >= end) {
-            return false;
-        }
-        _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1);
-        if (_inner_range_first >= end) {
-            return false;
-        }
-        _inner_range_first--;
-        _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1);
-        if (_inner_range_last > end) {
-            return false;
-        }
-
-        range_first = _inner_range_first;
-        range_last = _inner_range_last;
-        _inner_range_first = _inner_range_last;
-        return true;
-    }
-
-private:
-    int _inner_range_first;
-    int _inner_range_last;
-};
-
 #ifndef NDEBUG
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
@@ -88,25 +43,6 @@ static std::string dubug_column(const Column* column, const PermutationType& per
     return res;
 }
 #endif
-
-template <class T, class Container>
-static inline InlinePermutation<T> create_inline_permutation(const SmallPermutation& other,
-                                                             const Container& container) {
-    InlinePermutation<T> inlined(other.size());
-    for (int i = 0; i < other.size(); i++) {
-        int index = other[i].index_in_chunk;
-        inlined[i].index_in_chunk = index;
-        inlined[i].inline_value = container[index];
-    }
-    return inlined;
-}
-
-template <class T>
-static inline void restore_inline_permutation(const InlinePermutation<T>& inlined, SmallPermutation& output) {
-    for (int i = 0; i < inlined.size(); i++) {
-        output[i].index_in_chunk = inlined[i].index_in_chunk;
-    }
-}
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
