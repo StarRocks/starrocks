@@ -271,6 +271,9 @@ public:
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
+    void set_func_version(int func_version) { this->_func_version = func_version; }
+    int func_version() const { return this->_func_version; }
+
 private:
     Status create_error_log_file();
 
@@ -279,6 +282,9 @@ private:
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
+
+    // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
+    int _func_version;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
