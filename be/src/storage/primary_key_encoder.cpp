@@ -93,7 +93,7 @@ void decode_integral(Slice* src, T* v) {
 
 template <int LEN>
 static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
-#ifdef __aarch64__
+#if defined(__aarch64__) || !defined(__SSE4_2__)
     return false;
 #else
     __m128i data;
