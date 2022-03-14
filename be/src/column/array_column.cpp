@@ -329,7 +329,7 @@ void ArrayColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_nu
                                std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie) {
     auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
         // TODO(mofei) direction
-        return compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *this, is_null_first);
+        return compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *this, is_null_first ? -1 : 1);
     };
     sort_and_tie_helper(cancel, this, is_asc_order, permutation, tie, cmp, range, build_tie);
 }
