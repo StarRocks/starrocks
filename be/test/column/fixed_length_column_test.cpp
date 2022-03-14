@@ -553,4 +553,26 @@ TEST(FixedLengthColumnTest, test_xor_checksum) {
     ASSERT_EQ(checksum, expected_checksum);
 }
 
+TEST(FixedLengthColumnTest, test_compare_row) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    for (int i = 0; i <= 100; i++) {
+        column->append(i);
+    }
+
+    CompareVector cmp_vector(column->size());
+
+    // ascending
+    EXPECT_EQ(1, column->compare_row(cmp_vector, {30}, 1, 1));
+    EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
+    EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
+    EXPECT_EQ(1, std::count(cmp_vector.begin(), cmp_vector.end(), 0));
+
+    // descending
+    std::fill(cmp_vector.begin(), cmp_vector.end(), 0);
+    EXPECT_EQ(1, column->compare_row(cmp_vector, {30}, -1, 1));
+    EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
+    EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
+    EXPECT_EQ(1, std::count(cmp_vector.begin(), cmp_vector.end(), 0));
+}
+
 } // namespace starrocks::vectorized

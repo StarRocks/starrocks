@@ -101,8 +101,33 @@ struct DataSegment {
                 compare_column_with_one_row(*data_segments[i].order_by_columns[j], *order_by_columns[j], row_to_sort,
                                             &(*rows_to_compare_array)[i], &(*compare_results_array)[i],
                                             sort_order_flags[j], null_first_flags[j]);
-
                 if ((*rows_to_compare_array)[i].empty()) break;
+            }
+        }
+    }
+
+    static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_columns,
+                                            std::vector<std::vector<int8_t>>* compare_results_array,
+                                            std::vector<DataSegment>& data_segments,
+                                            const std::vector<int>& sort_order_flags,
+                                            const std::vector<int>& null_first_flags) {
+        size_t dats_segment_size = data_segments.size();
+        size_t size = order_by_columns.size();
+
+        for (size_t i = 0; i < dats_segment_size; i++) {
+            auto& columns = data_segments[i].order_by_columns;
+            auto& cmp_result = (*compare_results_array)[i];
+
+            for (size_t col_idx = 0; col_idx < size; col_idx++) {
+                int sort_order = sort_order_flags[col_idx];
+                int null_first = null_first_flags[col_idx];
+                auto& rhs_column = *order_by_columns[col_idx];
+                Datum rhs_value = rhs_column.get(row_to_sort);
+
+                int equal_count = columns[col_idx]->compare_row(cmp_result, rhs_value, sort_order, null_first);
+                if (equal_count == 0) {
+                    break;
+                }
             }
         }
     }
@@ -129,23 +154,14 @@ struct DataSegment {
 
         // first compare with last row of this chunk.
         {
-            std::vector<std::vector<uint64_t>> rows_to_compare_array;
-            rows_to_compare_array.resize(dats_segment_size);
-
             for (size_t i = 0; i < dats_segment_size; ++i) {
                 size_t rows = data_segments[i].chunk->num_rows();
 
                 compare_results_array[i].resize(rows);
-                rows_to_compare_array[i].resize(rows);
-
-                for (size_t j = 0; j < rows; ++j) {
-                    rows_to_compare_array[i][j] = j;
-                }
             }
 
-            // compare all rows of rows_to_compare_array with number_of_rows_to_sort - 1 row of order_by_columns.
-            get_compare_results(number_of_rows_to_sort - 1, order_by_columns, &rows_to_compare_array,
-                                &compare_results_array, data_segments, sort_order_flags, null_first_flags);
+            get_compare_results_colwise(number_of_rows_to_sort - 1, order_by_columns, &compare_results_array,
+                                        data_segments, sort_order_flags, null_first_flags);
         }
 
         // but we only have one compare.
@@ -193,28 +209,15 @@ struct DataSegment {
 
             // second compare with first row of this chunk, use rows from first compare.
             {
-                std::vector<std::vector<uint64_t>> rows_to_compare_array;
-                rows_to_compare_array.resize(dats_segment_size);
-
-                for (size_t i = 0; i < dats_segment_size; ++i) {
-                    size_t rows = data_segments[i].chunk->num_rows();
-
-                    rows_to_compare_array[i].resize(first_size_array[i]);
-                    size_t first_index = 0;
-                    for (size_t j = 0; j < rows; ++j) {
-                        if (compare_results_array[i][j] < 0) {
-                            // used to index datas that belong to LAST RESULT.
-                            rows_to_compare_array[i][first_index] = j;
-                            ++first_index;
+                for (size_t i = 0; i < dats_segment_size; i++) {
+                    for (auto& cmp : compare_results_array[i]) {
+                        if (cmp < 0) {
+                            cmp = 0;
                         }
-
-                        compare_results_array[i][j] = 0;
                     }
                 }
-
-                // compare all rows of rows_to_compare_array with 0 row of order_by_columns.
-                get_compare_results(0, order_by_columns, &rows_to_compare_array, &compare_results_array, data_segments,
-                                    sort_order_flags, null_first_flags);
+                get_compare_results_colwise(0, order_by_columns, &compare_results_array, data_segments,
+                                            sort_order_flags, null_first_flags);
             }
 
             least_num = 0;

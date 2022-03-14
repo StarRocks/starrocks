@@ -130,4 +130,7 @@ private:
     int _inner_range_last;
 };
 
+// Compare result of column, value must be -1,0,1
+using CompareVector = std::vector<int8_t>;
+
 } // namespace starrocks::vectorized

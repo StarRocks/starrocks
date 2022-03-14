@@ -263,4 +263,48 @@ PARALLEL_TEST(NullableColumnTest, test_xor_checksum) {
     ASSERT_EQ(checksum, expected_checksum);
 }
 
+PARALLEL_TEST(NullableColumnTest, test_compare_row) {
+    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    c0->append_datum({});
+    c0->append_datum(1);
+    c0->append_datum(2);
+    c0->append_datum({});
+    c0->append_datum({});
+    c0->append_datum(7);
+    c0->append_datum({});
+    c0->append_datum(8);
+    c0->append_datum({});
+    auto correct = [&](Datum rhs_value, int sort_order, int null_first) {
+        CompareVector res;
+        auto rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        rhs_column->append_datum(rhs_value);
+
+        for (size_t i = 0; i < c0->size(); i++) {
+            if (c0->is_null(i) || rhs_value.is_null()) {
+                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first));
+            } else {
+                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first) * sort_order);
+            }
+        }
+        return res;
+    };
+    auto execute = [&](Datum rhs_value, int sort_order, int null_first) {
+        CompareVector cmp_result(c0->size(), 0);
+        c0->compare_row(cmp_result, rhs_value, sort_order, null_first);
+        return cmp_result;
+    };
+
+    std::vector<Datum> rhs_values = {{0}, {1}, {3}, {4}, {7}, {10}, {}};
+    for (Datum datum : rhs_values) {
+        std::string datum_str = datum.is_null() ? "NULL" : std::to_string(datum.get_int32());
+        for (int sort_order : std::vector<int>{1, -1}) {
+            for (int null_first : std::vector<int>{1, -1}) {
+                fmt::print("Column::compare_row rhs={} sort_order={} null_first={}\n", datum_str, sort_order,
+                           null_first);
+                EXPECT_EQ(correct(datum, sort_order, null_first), execute(datum, sort_order, null_first));
+            }
+        }
+    }
+}
+
 } // namespace starrocks::vectorized

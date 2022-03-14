@@ -109,10 +109,14 @@ inline static size_t find_byte(const std::vector<uint8_t>& list, size_t start, u
 
 // Find position for zero byte, return size of list if not found
 inline size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
-    return find_byte(list, start, 0);
+    return find_byte<uint8_t>(list, start, 0);
 }
 
 inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
-    return find_byte(list, start, 1);
+    return find_byte<uint8_t>(list, start, 1);
+}
+
+inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
+    return find_byte<int8_t>(list, start, 0);
 }
 } // namespace SIMD
