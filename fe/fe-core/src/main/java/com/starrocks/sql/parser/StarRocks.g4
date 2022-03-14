@@ -221,7 +221,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? hint?                                                 #tableName
+    : qualifiedName partitionNames? tabletList? hint?                                     #tableName
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     | '(' relation ')'                                                                    #parenthesizedRelation
@@ -229,6 +229,10 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    ;
+
+tabletList
+    : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
 expressionsWithDefault
@@ -461,7 +465,7 @@ nonReserved
     | PRECEDING | PROPERTIES
     | ROLLUP
     | SECOND | SESSION | SETS | START
-    | TABLES | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
+    | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
     | YEAR
