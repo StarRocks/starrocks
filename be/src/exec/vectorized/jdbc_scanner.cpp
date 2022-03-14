@@ -152,7 +152,6 @@ Status JDBCScanner::_init_jdbc_scanner() {
     _jni_env->CallVoidMethod(_jdbc_scanner, scanner_open);
     CHECK_JAVA_EXCEPTION("open JDBCScanner failed")
 
-
     return Status::OK();
 }
 
