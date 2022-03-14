@@ -110,9 +110,9 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_asc_order, bool is_null_first,
-                                                SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
-                                                bool build_tie) {
+static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColumn* column, bool is_asc_order,
+                                                bool is_null_first, SmallPermutation& permutation, Tie& tie,
+                                                std::pair<int, int> range, bool build_tie) {
     NullData& null_data = column->null_column_data();
     auto null_pred = [&](const SmallPermuteItem& item) -> bool {
         if (is_null_first) {
@@ -141,7 +141,7 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
 
             if (notnull_start < notnull_end) {
                 tie[pivot_start] = 0;
-                column->data_column()->sort_and_tie(is_asc_order, is_null_first, permutation, tie,
+                column->data_column()->sort_and_tie(cancel, is_asc_order, is_null_first, permutation, tie,
                                                     {notnull_start, notnull_end}, build_tie);
             }
         }
@@ -160,15 +160,16 @@ static inline void sort_and_tie_helper_nullable(NullableColumn* column, bool is_
 }
 
 template <class DataComparator, class PermutationType>
-static inline void sort_and_tie_helper(Column* column, bool is_asc_order, PermutationType& permutation, Tie& tie,
-                                       DataComparator cmp, std::pair<int, int> range, bool build_tie) {
+static inline void sort_and_tie_helper(const bool& cancel, Column* column, bool is_asc_order,
+                                       PermutationType& permutation, Tie& tie, DataComparator cmp,
+                                       std::pair<int, int> range, bool build_tie) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](auto begin, auto end) {
         if (is_asc_order) {
-            ::pdqsort(false, begin, end, lesser);
+            ::pdqsort(cancel, begin, end, lesser);
         } else {
-            ::pdqsort(false, begin, end, greater);
+            ::pdqsort(cancel, begin, end, greater);
         }
     };
 #ifndef NDEBUG
