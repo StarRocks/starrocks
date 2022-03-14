@@ -6,6 +6,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -452,5 +454,12 @@ public class AnalyzeSingleTest {
 
         list = SqlParser.parse("select * from t1 where a1 = 'x\"x;asf';", 0);
         Assert.assertEquals(1, list.size());
+    }
+
+    @Test
+    public void testTablet() {
+        StatementBase statementBase = analyzeSuccess("SELECT v1 FROM t0  TABLET(1,2,3) LIMIT 200000");
+        SelectRelation queryRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        Assert.assertEquals("[1, 2, 3]", ((TableRelation) queryRelation.getRelation()).getTabletIds().toString());
     }
 }
