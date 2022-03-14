@@ -31,6 +31,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/load_channel.h"
 #include "serde/protobuf_serde.h"
+#include "storage/storage_engine.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
 #include "util/starrocks_metrics.h"
@@ -200,6 +201,20 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
+
+        // persist txn.
+        auto tablet_ids = request.tablet_ids();
+        std::vector<TabletSharedPtr> tablets(tablet_ids.size());
+        for (const auto tablet_id : tablet_ids) {
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (tablet != nullptr) {
+                tablets.push_back(tablet);
+            }
+        }
+        auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to persist transactions, tablets num: " << tablets.size() << " err: " << st;
+        }
     }
 }
 
