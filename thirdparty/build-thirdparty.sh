@@ -700,9 +700,12 @@ build_breakpad() {
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     mkdir -p src/third_party/lss
     cp $TP_PATCH_DIR/linux_syscall_support.h src/third_party/lss
+    OLD_FLAGS=$CFLAGS
+    unset CFLAGS
     ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
     make -j$PARALLEL
     make install
+    export CFLAGS=$OLD_FLAGS
 }
 
 #hadoop
