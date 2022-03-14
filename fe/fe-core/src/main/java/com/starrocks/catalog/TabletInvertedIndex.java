@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Pair;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
@@ -128,6 +129,12 @@ public class TabletInvertedIndex {
             }
         }
 
+        int backendStorageTypeCnt = -1;
+        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        if (be != null) {
+            backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
+        }
+
         readLock();
         long start = System.currentTimeMillis();
         try {
@@ -167,7 +174,7 @@ public class TabletInvertedIndex {
 
                                 if (needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
                                     LOG.warn("replica {} of tablet {} on backend {} need recovery. "
-                                                    + "replica in FE: {}, report version {}-{}, report schema hash: {},"
+                                                    + "replica in FE: {}, report version {}, report schema hash: {},"
                                                     + " is bad: {}, is version missing: {}",
                                             replica.getId(), tabletId, backendId, replica,
                                             backendTabletInfo.getVersion(),
@@ -182,8 +189,16 @@ public class TabletInvertedIndex {
                                 long partitionId = tabletMeta.getPartitionId();
                                 TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                                 if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
+                                    // If storage medium is less than 1, there is no need to send migration tasks to BE.
+                                    // Because BE will ignore this request.
                                     if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                        tabletMigrationMap.put(storageMedium, tabletId);
+                                        if (backendStorageTypeCnt <= 1) {
+                                            LOG.debug("available storage medium type count is less than 1, " +
+                                                            "no need to send migrate task. tabletId={}, backendId={}.",
+                                                            tabletId, backendId);
+                                        } else {
+                                            tabletMigrationMap.put(storageMedium, tabletId);
+                                        }
                                     }
                                     if (storageMedium != tabletMeta.getStorageMedium()) {
                                         tabletMeta.setStorageMedium(storageMedium);
