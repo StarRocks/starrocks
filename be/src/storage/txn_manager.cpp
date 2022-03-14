@@ -324,6 +324,9 @@ Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId part
 }
 
 Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets) {
+    int64_t duration_ns = 0;
+    SCOPED_RAW_TIMER(&duration_ns);
+
     std::unordered_set<std::string> persited;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {
@@ -340,6 +343,9 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         }
         persited.insert(path);
     }
+
+    StarRocksMetrics::instance()->txn_persist_total.increment(1);
+    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
