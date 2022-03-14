@@ -40,8 +40,6 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.HiveScanPartitionPruneRule;
-import com.starrocks.sql.optimizer.rule.transformation.HudiScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
@@ -104,6 +102,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
@@ -179,8 +178,8 @@ public class RuleSet {
         rewriteRules.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
                 new PartitionPruneRule(),
                 new DistributionPruneRule(),
-                new HiveScanPartitionPruneRule(),
-                new HudiScanPartitionPruneRule(),
+                RemoteScanPartitionPruneRule.HIVE_SCAN,
+                RemoteScanPartitionPruneRule.HUDI_SCAN,
                 new EsScanPartitionPruneRule(),
                 new PartitionPredicatePrune()
         ));
@@ -229,6 +228,7 @@ public class RuleSet {
                 new PushDownPredicateRepeatRule(),
 
                 MergePredicateRule.HIVE_SCAN,
+                MergePredicateRule.HUDI_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
