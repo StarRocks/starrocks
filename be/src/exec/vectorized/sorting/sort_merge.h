@@ -7,12 +7,14 @@
 #include "column/json_column.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "simd/simd.h"
 
 namespace starrocks::vectorized {
 
 struct PermutatedChunk {
     ChunkPtr chunk;
     Permutation perm;
+    bool sorted = false;
 
     PermutatedChunk() = default;
     PermutatedChunk(ChunkPtr in_chunk, const Permutation& in_perm) : chunk(in_chunk), perm(in_perm) {}
@@ -34,6 +36,15 @@ struct PermutatedChunk {
         perm.resize(rows);
     }
 
+    void filter(const std::vector<uint8_t>& filter) {
+        size_t new_rows = SIMD::count_nonzero(filter);
+        chunk->filter(filter);
+        perm.resize(new_rows);
+        for (int i = 0; i < perm.size(); i++) {
+            perm[i].index_in_chunk = i;
+        }
+    }
+
     PermutatedColumn get_permutated_column(int col) const { return PermutatedColumn(*get_column(col), perm); }
 };
 
@@ -42,10 +53,8 @@ struct MergeResult {
         std::unique_ptr<Chunk> res = lhs.chunk->clone_empty();
 
         // TODO: optimize performance
-        std::array<Chunk*, 2> chunks{lhs.chunk.get(), rhs.chunk.get()};
-        for (auto& p : merged) {
-            res->append_safe(*chunks[p.chunk_index], p.index_in_chunk, 1);
-        }
+        std::vector<ChunkPtr> chunks{lhs.chunk, rhs.chunk};
+        res->append_permutation(chunks, merged);
 
         return ChunkPtr(res.release());
     }

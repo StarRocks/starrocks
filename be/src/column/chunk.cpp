@@ -190,6 +190,38 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
     return chunk;
 }
 
+int Chunk::compare_by_row(const Chunk& row) const {
+    size_t cols = num_columns();
+    int cmp = 0;
+    for (int col_idx = 0; col_idx < cols; col_idx++) {
+        cmp = _columns[col_idx]->compare_at(0, 0, *row.get_column_by_index(col_idx), 1);
+        if (cmp != 0) {
+            break;
+        }
+    }
+    return cmp;
+}
+
+void Chunk::filter_by_row_cmp(const Chunk& largest_row, const std::vector<int>& sort_order,
+                              std::vector<uint8_t>& filter) const {
+    DCHECK_EQ(1, largest_row.num_rows());
+    size_t rows = num_rows();
+    size_t cols = num_columns();
+    filter.resize(rows);
+    for (int row_idx = 0; row_idx < rows; row_idx++) {
+        int cmp = 0;
+        for (int col_idx = 0; col_idx < cols; col_idx++) {
+            cmp = _columns[col_idx]->compare_at(row_idx, 0, *largest_row.get_column_by_index(col_idx), 1);
+            if (cmp != 0) {
+                break;
+            }
+        }
+        if (cmp <= 0) {
+            filter[row_idx] = 1;
+        }
+    }
+}
+
 void Chunk::append_permutation(const std::vector<ChunkPtr>& src, const Permutation& perm) {
     for (size_t col_idx = 0; col_idx < _columns.size(); col_idx++) {
         Columns columns_of_all_chunk;

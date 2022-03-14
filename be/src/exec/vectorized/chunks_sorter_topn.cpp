@@ -141,11 +141,37 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 // 3. Merge the new-chunk with existed chunk
 Status ChunksSorterTopn::_col_wise_merge(RuntimeState* state) {
     std::deque<PermutatedChunk> sort_chunks;
+    auto& src_chunk = _merged_segment.chunk;
+    ChunkPtr largest_row;
+
+    if (_init_merged_segment && _merged_segment.chunk->num_rows() >= _limit) {
+        // TODO: filter with smallest row
+        largest_row = src_chunk->clone_empty();
+        largest_row->append_safe(*src_chunk, src_chunk->num_rows() - 1, 1);
+    }
+
+    int sorted_rows = 0;
     for (auto& raw_chunk : _raw_chunks.chunks) {
         PermutatedChunk sort_chunk(raw_chunk);
+        if (!!largest_row) {
+            std::vector<uint8_t> filter;
+            sort_chunk.chunk->filter_by_row_cmp(*largest_row, _sort_order_flag, filter);
+            sort_chunk.filter(filter);
+        }
         // TODO: partial sort
         RETURN_IF_ERROR(sort_permutated_chunk(sort_chunk, _sort_order_flag, _null_first_flag));
-        sort_chunks.emplace_back(sort_chunk);
+        sorted_rows += sort_chunk.num_rows();
+        // assign largest row
+        if (!largest_row && sorted_rows >= _limit) {
+            for (auto& chunk : sort_chunks) {
+                ChunkPtr new_largest = chunk.chunk->clone_empty();
+                new_largest->append_safe(*chunk.chunk, chunk.num_rows() - 1, 1);
+                if (!largest_row || largest_row->compare_by_row(*new_largest) < 0) {
+                    largest_row = new_largest;
+                }
+            }
+        }
+        sort_chunks.emplace_back(std::move(sort_chunk));
     }
     _raw_chunks.clear();
 
@@ -156,8 +182,22 @@ Status ChunksSorterTopn::_col_wise_merge(RuntimeState* state) {
         sort_chunks.pop_front();
         ChunkPtr merged = merge_sorted_chunks_and_copy(lhs, rhs, _sort_order_flag, _null_first_flag, _limit);
 
-        sort_chunks.push_back({merged});
+        PermutatedChunk merged_chunk(merged);
+        if (!!largest_row) {
+            std::vector<uint8_t> filter;
+            merged_chunk.chunk->filter_by_row_cmp(*largest_row, _sort_order_flag, filter);
+            merged_chunk.filter(filter);
+        }
+        if (merged_chunk.chunk->num_rows() >= _limit) {
+            ChunkPtr new_largest = largest_row->clone_empty();
+            new_largest->append_safe(*merged_chunk.chunk, merged_chunk.chunk->num_rows() - 1, 1);
+            if (largest_row->compare_by_row(*new_largest) > 0) {
+                largest_row = new_largest;
+            }
+        }
+        sort_chunks.push_back(std::move(merged_chunk));
     }
+
     PermutatedChunk merged_chunk = sort_chunks.front();
     if (!_init_merged_segment) {
         merged_chunk.resize(_limit + _offset);
