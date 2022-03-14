@@ -525,6 +525,7 @@ public class Function implements Writable {
             fn.setChecksum(checksum);
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
+        fn.setFunc_version(3);
         return fn;
     }
 

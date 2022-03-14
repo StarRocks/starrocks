@@ -127,8 +127,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
-            auto* func =
-                    vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
+            int func_version = fn.__isset.func_version ? fn.func_version : 1;
+            auto* func = vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
+                                                         is_input_nullable, fn.binary_type, func_version);
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -154,8 +155,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             is_input_nullable = true;
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
+            int func_version = fn.__isset.func_version ? fn.func_version : 1;
             auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                         is_input_nullable, fn.binary_type);
+                                                         is_input_nullable, fn.binary_type, func_version);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
