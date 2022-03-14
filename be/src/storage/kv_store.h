@@ -66,6 +66,8 @@ public:
 
     Status compact(uint64_t* size_before, uint64_t* size_after);
 
+    Status flush();
+
     std::string get_stats();
 
     std::string get_root_path();
