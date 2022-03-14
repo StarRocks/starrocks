@@ -135,16 +135,8 @@ Status JDBCScanner::_init_jdbc_scanner() {
     _jni_env->DeleteLocalRef(_jdbc_bridge);
     CHECK_JAVA_EXCEPTION("get JDBCScanner failed")
 
-    // open scanner
     _jdbc_scanner_cls = _jni_env->FindClass(JDBC_SCANNER_CLASS_NAME);
     DCHECK(_jdbc_scanner_cls != nullptr);
-
-    jmethodID scanner_open = _jni_env->GetMethodID(_jdbc_scanner_cls, "open", "()V");
-    DCHECK(scanner_open != nullptr);
-
-    _jni_env->CallVoidMethod(_jdbc_scanner, scanner_open);
-    CHECK_JAVA_EXCEPTION("open JDBCScanner failed")
-
     // init jmethod
     _scanner_has_next = _jni_env->GetMethodID(_jdbc_scanner_cls, "hasNext", "()Z");
     DCHECK(_scanner_has_next != nullptr);
@@ -152,6 +144,13 @@ Status JDBCScanner::_init_jdbc_scanner() {
     DCHECK(_scanner_get_next_chunk != nullptr);
     _scanner_close = _jni_env->GetMethodID(_jdbc_scanner_cls, "close", "()V");
     DCHECK(_scanner_close != nullptr);
+
+    // open scanner
+    jmethodID scanner_open = _jni_env->GetMethodID(_jdbc_scanner_cls, "open", "()V");
+    DCHECK(scanner_open != nullptr);
+
+    _jni_env->CallVoidMethod(_jdbc_scanner, scanner_open);
+    CHECK_JAVA_EXCEPTION("open JDBCScanner failed")
 
     return Status::OK();
 }
