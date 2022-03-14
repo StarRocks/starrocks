@@ -100,6 +100,7 @@ public class StreamLoadPlannerTest {
         request.setLoadId(new TUniqueId(2, 3));
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setLoad_dop(2);
         StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
         StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
         planner.plan(streamLoadTask.getId());

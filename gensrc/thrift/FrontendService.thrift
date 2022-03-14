@@ -523,6 +523,8 @@ struct TStreamLoadPutRequest {
     25: optional i64 thrift_rpc_timeout_ms
     26: optional string json_root
     27: optional bool partial_update
+    28: optional string transmission_compression_type
+    29: optional i32 load_dop
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }

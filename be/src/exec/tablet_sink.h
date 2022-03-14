@@ -39,6 +39,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/global_dicts.h"
 #include "util/bitmap.h"
+#include "util/block_compression.h"
 #include "util/ref_count_closure.h"
 
 namespace starrocks {
@@ -76,59 +77,38 @@ struct AddBatchCounter {
     }
 };
 
-// It's very error-prone to guarantee the handler capture vars' & this closure's destruct sequence.
-// So using create() to get the closure pointer is recommended. We can delete the closure ptr before the capture vars destruction.
-// Delete this point is safe, don't worry about RPC callback will run after ReusableClosure deleted.
 template <typename T>
 class ReusableClosure : public google::protobuf::Closure {
 public:
-    ReusableClosure() : cid(INVALID_BTHREAD_ID) {}
-    ~ReusableClosure() override {
-        // shouldn't delete when Run() is calling or going to be called, wait for current Run() done.
-        join();
-    }
+    ReusableClosure() : cid(INVALID_BTHREAD_ID), _refs(0) {}
+    ~ReusableClosure() { join(); }
 
-    static ReusableClosure<T>* create() { return new ReusableClosure<T>(); }
+    int count() { return _refs.load(); }
 
-    void addFailedHandler(std::function<void()> fn) { failed_handler = std::move(fn); }
-    void addSuccessHandler(std::function<void(const T&, bool)> fn) { success_handler = fn; }
+    void ref() { _refs.fetch_add(1); }
 
-    void join() {
-        if (cid != INVALID_BTHREAD_ID) {
-            brpc::Join(cid);
-        }
-    }
-
-    // plz follow this order: reset() -> set_in_flight() -> send brpc batch
-    void reset() {
-        join();
-        DCHECK(_packet_in_flight == false);
-        cntl.Reset();
-        cid = cntl.call_id();
-    }
-
-    void set_in_flight() {
-        DCHECK(_packet_in_flight == false);
-        _packet_in_flight = true;
-    }
-
-    bool is_packet_in_flight() { return _packet_in_flight; }
-
-    void end_mark() {
-        DCHECK(_is_last_rpc == false);
-        _is_last_rpc = true;
-    }
+    // If unref() returns true, this object should be delete
+    bool unref() { return _refs.fetch_sub(1) == 1; }
 
     void Run() override {
-        DCHECK(_packet_in_flight);
-        if (cntl.Failed()) {
-            LOG(WARNING) << "failed to send brpc batch, error=" << berror(cntl.ErrorCode())
-                         << ", error_text=" << cntl.ErrorText();
-            failed_handler();
-        } else {
-            success_handler(result, _is_last_rpc);
+        if (unref()) {
+            delete this;
         }
-        _packet_in_flight = false;
+    }
+
+    bool join() {
+        if (cid != INVALID_BTHREAD_ID) {
+            brpc::Join(cid);
+            cid = INVALID_BTHREAD_ID;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    void reset() {
+        cntl.Reset();
+        cid = cntl.call_id();
     }
 
     brpc::Controller cntl;
@@ -136,10 +116,7 @@ public:
 
 private:
     brpc::CallId cid;
-    std::atomic<bool> _packet_in_flight{false};
-    std::atomic<bool> _is_last_rpc{false};
-    std::function<void()> failed_handler;
-    std::function<void(const T&, bool)> success_handler;
+    std::atomic<int> _refs;
 };
 
 class NodeChannel {
@@ -157,17 +134,11 @@ public:
     Status open_wait();
 
     Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
-                     uint32_t size);
+                     uint32_t size, bool eos);
 
-    // two ways to stop channel:
-    // 1. mark_close()->close_wait() PS. close_wait() will block waiting for the last AddBatch rpc response.
-    // 2. just cancel()
-    Status mark_close();
     Status close_wait(RuntimeState* state);
 
     void cancel(const Status& err_st);
-
-    int try_send_chunk_and_fetch_status();
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
                      int64_t* mem_exceeded_block_ns, int64_t* queue_push_lock_ns, int64_t* actual_consume_ns) {
@@ -188,6 +159,12 @@ public:
     void clear_all_batches();
 
 private:
+    Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
+    Status _wait_all_prev_request();
+    Status _wait_one_prev_request();
+    bool _check_prev_request_done();
+    Status _serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
@@ -200,30 +177,24 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
     const NodeInfo* _node_info = nullptr;
 
+    CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
+    const BlockCompressionCodec* _compress_codec = nullptr;
+    raw::RawString _compression_scratch;
+
     // this should be set in init() using config
     int _rpc_timeout_ms = 60000;
     int64_t _next_packet_seq = 0;
 
     // user cancel or get some errors
-    std::atomic<bool> _cancelled{false};
+    bool _cancelled{false};
 
     // send finished means the consumer thread which send the rpc can exit
-    std::atomic<bool> _send_finished{false};
-
-    // add batches finished means the last rpc has be responsed, used to check whether this channel can be closed
-    std::atomic<bool> _add_batches_finished{false};
-
-    bool _eos_is_produced{false}; // only for restricting producer behaviors
+    bool _send_finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    std::mutex _pending_batches_lock;
-    std::atomic<int> _pending_batches_num{0};
-    size_t _max_pending_batches_num = 16;
-
     doris::PBackendService_Stub* _stub = nullptr;
     RefCountClosure<PTabletWriterOpenResult>* _open_closure = nullptr;
-    ReusableClosure<PTabletWriterAddBatchResult>* _add_batch_closure = nullptr;
 
     std::vector<TTabletWithPartition> _all_tablets;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
@@ -231,10 +202,14 @@ private:
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
 
+    size_t _max_parallel_request_size = 1;
+    std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
+    PTabletWriterAddChunkRequest _cur_request;
     std::unique_ptr<vectorized::Chunk> _cur_chunk;
     using AddChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunkRequest>;
-    std::queue<AddChunkReq> _pending_chunks;
-    PTabletWriterAddChunkRequest _cur_add_chunk_request;
+    std::deque<AddChunkReq> _chunk_queue;
+    size_t _current_request_index = 0;
+    size_t _max_chunk_queue_size = 8;
 
     int64_t _mem_exceeded_block_ns = 0;
     int64_t _queue_push_lock_ns = 0;
@@ -316,11 +291,6 @@ private:
 
     void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
 
-    // the consumer func of sending pending chunks in every NodeChannel.
-    // use polling & NodeChannel::try_send_chunk_and_fetch_status() to achieve nonblocking sending.
-    // only focus on pending chunks and channel status, the internal errors of NodeChannels will be handled by the productor
-    void _send_chunk_process();
-
     // send chunk data to specific BE channel
     Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& _selection_idx);
 
@@ -401,6 +371,11 @@ private:
     RuntimeProfile::Counter* _close_timer = nullptr;
     RuntimeProfile::Counter* _non_blocking_send_timer = nullptr;
     RuntimeProfile::Counter* _serialize_batch_timer = nullptr;
+    RuntimeProfile::Counter* _wait_response_timer = nullptr;
+    RuntimeProfile::Counter* _compress_timer = nullptr;
+    RuntimeProfile::Counter* _append_attachment_timer = nullptr;
+    RuntimeProfile::Counter* _mark_tablet_timer = nullptr;
+    RuntimeProfile::Counter* _pack_chunk_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;

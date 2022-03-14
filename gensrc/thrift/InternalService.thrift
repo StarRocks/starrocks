@@ -159,6 +159,8 @@ struct TQueryOptions {
   54: optional i32 pipeline_dop;
   // For pipeline query engine
   55: optional TPipelineProfileLevel pipeline_profile_level;
+  // For load degree of parallel
+  56: optional i32 load_dop;
 }
 
 

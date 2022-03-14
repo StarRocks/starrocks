@@ -115,28 +115,31 @@ public:
     Status read(uint8_t* data, size_t* data_size, bool* eof) override {
         size_t bytes_read = 0;
         while (bytes_read < *data_size) {
-            std::unique_lock<std::mutex> l(_lock);
-            while (!_cancelled && !_finished && _buf_queue.empty()) {
-                _get_cond.wait(l);
-            }
-            // cancelled
-            if (_cancelled) {
-                return _err_st;
-            }
-            // finished
-            if (_buf_queue.empty()) {
-                DCHECK(_finished);
-                *data_size = bytes_read;
-                *eof = (bytes_read == 0);
-                return Status::OK();
-            }
-            auto buf = _buf_queue.front();
-            size_t copy_size = std::min(*data_size - bytes_read, buf->remaining());
-            buf->get_bytes((char*)data + bytes_read, copy_size);
-            bytes_read += copy_size;
-            if (!buf->has_remaining()) {
+            if (_read_buf == nullptr || !_read_buf->has_remaining()) {
+                std::unique_lock<std::mutex> l(_lock);
+                while (!_cancelled && !_finished && _buf_queue.empty()) {
+                    _get_cond.wait(l);
+                }
+                // cancelled
+                if (_cancelled) {
+                    return _err_st;
+                }
+                // finished
+                if (_buf_queue.empty()) {
+                    DCHECK(_finished);
+                    *data_size = bytes_read;
+                    *eof = (bytes_read == 0);
+                    return Status::OK();
+                }
+                _read_buf = _buf_queue.front();
                 _buf_queue.pop_front();
-                _buffered_bytes -= buf->limit;
+            }
+
+            size_t copy_size = std::min(*data_size - bytes_read, _read_buf->remaining());
+            _read_buf->get_bytes((char*)data + bytes_read, copy_size);
+            bytes_read += copy_size;
+            if (!_read_buf->has_remaining()) {
+                _buffered_bytes -= _read_buf->limit;
                 _put_cond.notify_one();
             }
         }
@@ -255,6 +258,7 @@ private:
     bool _cancelled{false};
 
     ByteBufferPtr _write_buf;
+    ByteBufferPtr _read_buf;
     Status _err_st = Status::OK();
 };
 
