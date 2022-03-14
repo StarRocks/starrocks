@@ -39,6 +39,7 @@
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
+#include "util/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/monotime.h"
 #include "util/thread.h"
@@ -66,12 +67,17 @@ NodeChannel::~NodeChannel() {
         }
         _open_closure = nullptr;
     }
-    if (_add_batch_closure != nullptr) {
-        // it's safe to delete, but may take some time to wait until brpc joined
-        delete _add_batch_closure;
-        _add_batch_closure = nullptr;
+
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        if (_add_batch_closures[i] != nullptr) {
+            if (_add_batch_closures[i]->unref()) {
+                delete _add_batch_closures[i];
+            }
+            _add_batch_closures[i] = nullptr;
+        }
     }
-    _cur_add_chunk_request.release_id();
+
+    _cur_request.release_id();
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -92,19 +98,33 @@ Status NodeChannel::init(RuntimeState* state) {
         return _err_st;
     }
 
-    // Initialize _cur_add_chunk_request
-    _cur_add_chunk_request.set_allocated_id(&_parent->_load_id);
-    _cur_add_chunk_request.set_index_id(_index_id);
-    _cur_add_chunk_request.set_sender_id(_parent->_sender_id);
-    _cur_add_chunk_request.set_eos(false);
-    _cur_chunk = std::make_unique<vectorized::Chunk>();
+    // Initialize _cur_request
+    _cur_request.set_allocated_id(&_parent->_load_id);
+    _cur_request.set_index_id(_index_id);
+    _cur_request.set_sender_id(_parent->_sender_id);
+    _cur_request.set_eos(false);
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
+
+    if (state->query_options().__isset.transmission_compression_type) {
+        _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+    }
+    RETURN_IF_ERROR(get_block_compression_codec(_compress_type, &_compress_codec));
+
+    if (state->query_options().__isset.load_dop) {
+        _max_parallel_request_size = state->query_options().load_dop;
+        if (_max_parallel_request_size > 16 || _max_parallel_request_size < 1) {
+            _err_st = Status::InternalError(fmt::format("load_parallel_request_size should between [1-16]"));
+            return _err_st;
+        }
+    }
 
     // for get global_dict
     _runtime_state = state;
 
-    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id);
+    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id) +
+                 ", parallel=" + std::to_string(_max_parallel_request_size) +
+                 ", compress_type=" + std::to_string(_compress_type);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";
     return Status::OK();
 }
@@ -175,137 +195,279 @@ Status NodeChannel::open_wait() {
     }
 
     // add batch closure
-    _add_batch_closure = ReusableClosure<PTabletWriterAddBatchResult>::create();
-    _add_batch_closure->addFailedHandler([this]() {
-        _cancelled = true;
-        _err_st = _add_batch_closure->result.status();
-    });
-
-    _add_batch_closure->addSuccessHandler([this](const PTabletWriterAddBatchResult& result, bool is_last_rpc) {
-        Status status(result.status());
-        if (status.ok()) {
-            if (is_last_rpc) {
-                for (auto& tablet : result.tablet_vec()) {
-                    TTabletCommitInfo commit_info;
-                    commit_info.tabletId = tablet.tablet_id();
-                    commit_info.backendId = _node_id;
-                    std::vector<std::string> invalid_dict_cache_columns;
-                    for (auto& col_name : tablet.invalid_dict_cache_columns()) {
-                        invalid_dict_cache_columns.emplace_back(col_name);
-                    }
-                    commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
-
-                    std::vector<std::string> valid_dict_cache_columns;
-                    for (auto& col_name : tablet.valid_dict_cache_columns()) {
-                        valid_dict_cache_columns.emplace_back(col_name);
-                    }
-                    commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
-
-                    _tablet_commit_infos.emplace_back(std::move(commit_info));
-                }
-                _add_batches_finished = true;
-            }
-        } else {
-            _cancelled = true;
-            _err_st = status;
-        }
-
-        if (result.has_execution_time_us()) {
-            _add_batch_counter.add_batch_execution_time_us += result.execution_time_us();
-            _add_batch_counter.add_batch_wait_lock_time_us += result.wait_lock_time_us();
-            _add_batch_counter.add_batch_num++;
-        }
-    });
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
+        closure->ref();
+        _add_batch_closures.emplace_back(closure);
+    }
 
     return status;
 }
 
-Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes,
-                              uint32_t from, uint32_t size) {
-    // If add_row() when _eos_is_produced==true, there must be sth wrong, we can only mark this channel as failed.
-    if (_cancelled | _eos_is_produced) {
-        return _err_st;
+Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst) {
+    VLOG_ROW << "serializing " << src->num_rows() << " rows";
+
+    {
+        SCOPED_RAW_TIMER(&_serialize_batch_ns);
+        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        if (!res.ok()) return res.status();
+        res->Swap(dst);
+    }
+    DCHECK(dst->has_uncompressed_size());
+    DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
+
+    size_t uncompressed_size = dst->uncompressed_size();
+
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
+        return Status::InternalError(fmt::format("The input size for compression should be less than {}",
+                                                 _compress_codec->max_input_size()));
     }
 
-    // We use OlapTableSink mem_tracker which has the same ancestor of _plan node,
-    // so in the ideal case, mem limit is a matter for _plan node.
-    // But there is still some unfinished things, we do mem limit here temporarily.
-    // _cancelled may be set by rpc callback, and it's possible that _cancelled might be set in any of the steps below.
-    // It's fine to do a fake add_row() and return OK, because we will check _cancelled in next add_row() or mark_close().
-    while (!_cancelled && ((_mem_tracker->any_limit_exceeded() && _pending_batches_num > 0) ||
-                           _pending_batches_num >= _max_pending_batches_num)) {
-        SCOPED_RAW_TIMER(&_mem_exceeded_block_ns);
-        SleepFor(MonoDelta::FromMilliseconds(10));
-    }
+    // try compress the ChunkPB data
+    if (_compress_codec != nullptr && uncompressed_size > 0) {
+        SCOPED_TIMER(_parent->_compress_timer);
 
-    if (_cur_chunk->columns().empty()) {
-        _cur_chunk = chunk->clone_empty_with_slot();
-    }
+        // Try compressing data to _compression_scratch, swap if compressed data is smaller
+        int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
-    if (_cur_chunk->num_rows() >= _runtime_state->chunk_size()) {
-        {
-            SCOPED_RAW_TIMER(&_queue_push_lock_ns);
-            std::lock_guard<std::mutex> l(_pending_batches_lock);
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
-            _pending_batches_num++;
+        if (_compression_scratch.size() < max_compressed_size) {
+            _compression_scratch.resize(max_compressed_size);
         }
-        _cur_chunk = chunk->clone_empty_with_slot();
-        _cur_add_chunk_request.clear_tablet_ids();
+
+        Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
+        _compress_codec->compress(dst->data(), &compressed_slice);
+        double compress_ratio = (static_cast<double>(uncompressed_size)) / compressed_slice.size;
+        if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
+            _compression_scratch.resize(compressed_slice.size);
+            dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
+            dst->set_compress_type(_compress_type);
+        }
+
+        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << compressed_slice.size;
     }
 
-    _cur_chunk->append_selective(*chunk, indexes, from, size);
-    for (size_t i = 0; i < size; ++i) {
-        _cur_add_chunk_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
-    }
     return Status::OK();
 }
 
-Status NodeChannel::mark_close() {
-    auto st = none_of({_cancelled, _eos_is_produced});
-    if (!st.ok()) {
+Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_ids, const uint32_t* indexes,
+                              uint32_t from, uint32_t size, bool eos) {
+    if (_cancelled || _send_finished) {
         return _err_st;
     }
 
-    _cur_add_chunk_request.set_eos(true);
-    {
-        std::lock_guard<std::mutex> l(_pending_batches_lock);
-        DCHECK(_cur_chunk != nullptr);
-        _mem_tracker->consume(_cur_chunk->memory_usage());
-        _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
-        _pending_batches_num++;
+    if (LIKELY(!eos)) {
+        SCOPED_TIMER(_parent->_pack_chunk_timer);
+        if (UNLIKELY(_cur_chunk == nullptr)) {
+            _cur_chunk = input->clone_empty_with_slot();
+        }
+
+        // 1. append data
+        _cur_chunk->append_selective(*input, indexes, from, size);
+        for (size_t i = 0; i < size; ++i) {
+            _cur_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
+        }
+
+        if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+            // 2. chunk not full
+            if (_chunk_queue.size() == 0) {
+                return Status::OK();
+            }
+            // passthrough: try to send data if queue not empty
+        } else {
+            // 3. chunk full push back to queue
+            _mem_tracker->consume(_cur_chunk->memory_usage());
+            _chunk_queue.emplace_back(std::move(_cur_chunk), _cur_request);
+            _cur_chunk = input->clone_empty_with_slot();
+            _cur_request.clear_tablet_ids();
+        }
+
+        // 4. check last request
+        if (!_check_prev_request_done()) {
+            if (_chunk_queue.size() > _max_chunk_queue_size || _mem_tracker->limit()) {
+                // 4.1 wait if queue full
+                RETURN_IF_ERROR(_wait_one_prev_request());
+            } else {
+                // 4.2 noblock here so that channel cant send data
+                return Status::OK();
+            }
+        }
+
+    } else {
+        if (_chunk_queue.size() == 0) {
+            if (_cur_chunk.get() == nullptr) {
+                _cur_chunk = std::make_unique<vectorized::Chunk>();
+            }
+            _mem_tracker->consume(_cur_chunk->memory_usage());
+            _chunk_queue.emplace_back(std::move(_cur_chunk), _cur_request);
+            _cur_chunk = nullptr;
+        }
+
+        // try to send chunk in queue first
+        if (_chunk_queue.size() > 1) {
+            eos = false;
+        }
     }
 
-    _eos_is_produced = true;
+    AddChunkReq add_chunk = std::move(_chunk_queue.front());
+    _chunk_queue.pop_front();
+
+    RETURN_IF_ERROR(_wait_one_prev_request());
+
+    SCOPED_RAW_TIMER(&_actual_consume_ns);
+
+    auto request = add_chunk.second;
+    auto chunk = std::move(add_chunk.first);
+
+    _mem_tracker->release(chunk->memory_usage());
+
+    if (UNLIKELY(eos)) {
+        request.set_eos(true);
+        for (auto pid : _parent->_partition_ids) {
+            request.add_partition_ids(pid);
+        }
+
+        // eos request must be the last request
+        _send_finished = true;
+    }
+
+    request.set_packet_seq(_next_packet_seq);
+    if (LIKELY(chunk->num_rows() > 0)) {
+        auto pchunk = request.mutable_chunk();
+        RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
+    }
+
+    _add_batch_closures[_current_request_index]->ref();
+    _add_batch_closures[_current_request_index]->reset();
+    _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+
+    _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                   &_add_batch_closures[_current_request_index]->result,
+                                   _add_batch_closures[_current_request_index]);
+    _next_packet_seq++;
+
+    return Status::OK();
+}
+
+Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure) {
+    if (!closure->join()) {
+        return Status::OK();
+    }
+
+    if (closure->cntl.Failed()) {
+        _cancelled = true;
+        _err_st = Status::InternalError(closure->cntl.ErrorText());
+        return _err_st;
+    }
+
+    Status st(closure->result.status());
+    if (!st.ok()) {
+        _cancelled = true;
+        _err_st = st;
+        return _err_st;
+    }
+
+    if (closure->result.has_execution_time_us()) {
+        _add_batch_counter.add_batch_execution_time_us += closure->result.execution_time_us();
+        _add_batch_counter.add_batch_wait_lock_time_us += closure->result.wait_lock_time_us();
+        _add_batch_counter.add_batch_num++;
+    }
+
+    for (auto& tablet : closure->result.tablet_vec()) {
+        TTabletCommitInfo commit_info;
+        commit_info.tabletId = tablet.tablet_id();
+        commit_info.backendId = _node_id;
+        std::vector<std::string> invalid_dict_cache_columns;
+        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
+            invalid_dict_cache_columns.emplace_back(col_name);
+        }
+        commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+
+        std::vector<std::string> valid_dict_cache_columns;
+        for (auto& col_name : tablet.valid_dict_cache_columns()) {
+            valid_dict_cache_columns.emplace_back(col_name);
+        }
+        commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
+
+        _tablet_commit_infos.emplace_back(std::move(commit_info));
+    }
+
+    return Status::OK();
+}
+
+Status NodeChannel::_wait_all_prev_request() {
+    SCOPED_TIMER(_parent->_wait_response_timer);
+    if (_next_packet_seq == 0) {
+        return Status::OK();
+    }
+    for (auto closure : _add_batch_closures) {
+        RETURN_IF_ERROR(_wait_request(closure));
+    }
+
+    return Status::OK();
+}
+
+bool NodeChannel::_check_prev_request_done() {
+    if (UNLIKELY(_next_packet_seq == 0)) {
+        return true;
+    }
+
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        if (_add_batch_closures[i]->count() == 1) {
+            _current_request_index = i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+Status NodeChannel::_wait_one_prev_request() {
+    SCOPED_TIMER(_parent->_wait_response_timer);
+    if (_next_packet_seq == 0) {
+        return Status::OK();
+    }
+
+    // 1. unblocking check last request for short-circuit
+    // count() == 1 means request already finish so it wouldn't block
+    if (_add_batch_closures[_current_request_index]->count() == 1) {
+        RETURN_IF_ERROR(_wait_request(_add_batch_closures[_current_request_index]));
+        return Status::OK();
+    }
+
+    // 2. unblocking check all other requests
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        if (_add_batch_closures[i]->count() == 1) {
+            _current_request_index = i;
+            RETURN_IF_ERROR(_wait_request(_add_batch_closures[i]));
+            return Status::OK();
+        }
+    }
+
+    // 3. waiting one request
+    // TODO(meegoo): optimize to wait first finish request
+    _current_request_index = 0;
+    RETURN_IF_ERROR(_wait_request(_add_batch_closures[_current_request_index]));
+
     return Status::OK();
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
-    auto st = none_of({_cancelled, !_eos_is_produced});
-    if (!st.ok()) {
+    if (_cancelled) {
         return _err_st;
     }
 
-    // waiting for finished, it may take a long time, so we could't set a timeout
-    MonotonicStopWatch timer;
-    timer.start();
-    while (!_add_batches_finished && !_cancelled) {
-        SleepFor(MonoDelta::FromMilliseconds(1));
+    // 1. send eos request to commit write util finish
+    while (!_send_finished) {
+        RETURN_IF_ERROR(add_chunk(nullptr, nullptr, nullptr, 0, 0, true));
     }
-    timer.stop();
-    VLOG(1) << name() << " close_wait cost: " << timer.elapsed_time() / 1000000 << " ms";
 
-    if (_add_batches_finished) {
-        {
-            std::lock_guard<std::mutex> lg(_pending_batches_lock);
-            CHECK(_pending_chunks.empty()) << name();
-            CHECK(_cur_chunk == nullptr) << name();
-        }
-        state->tablet_commit_infos().insert(state->tablet_commit_infos().end(),
-                                            std::make_move_iterator(_tablet_commit_infos.begin()),
-                                            std::make_move_iterator(_tablet_commit_infos.end()));
-        return Status::OK();
-    }
+    // 2. wait eos request finish
+    RETURN_IF_ERROR(_wait_all_prev_request());
+
+    // 3. commit tablet infos
+    state->tablet_commit_infos().insert(state->tablet_commit_infos().end(),
+                                        std::make_move_iterator(_tablet_commit_infos.begin()),
+                                        std::make_move_iterator(_tablet_commit_infos.end()));
 
     return _err_st;
 }
@@ -329,59 +491,6 @@ void NodeChannel::cancel(const Status& err_st) {
     request.release_id();
 }
 
-int NodeChannel::try_send_chunk_and_fetch_status() {
-    if (_cancelled | _send_finished) {
-        return 0;
-    }
-
-    if (!_add_batch_closure->is_packet_in_flight() && _pending_batches_num > 0) {
-        SCOPED_RAW_TIMER(&_actual_consume_ns);
-        AddChunkReq send_chunk;
-        {
-            std::lock_guard<std::mutex> lg(_pending_batches_lock);
-            DCHECK(!_pending_chunks.empty());
-            send_chunk = std::move(_pending_chunks.front());
-            _pending_chunks.pop();
-            _mem_tracker->release(send_chunk.first->memory_usage());
-            _pending_batches_num--;
-        }
-
-        auto chunk = std::move(send_chunk.first);
-        DCHECK(chunk != nullptr);
-        auto request = std::move(send_chunk.second); // doesn't need to be saved in heap
-
-        // tablet_ids has already set when add row
-        request.set_packet_seq(_next_packet_seq);
-        if (chunk->num_rows() > 0) {
-            SCOPED_RAW_TIMER(&_serialize_batch_ns);
-            StatusOr<ChunkPB> chunk_pb = serde::ProtobufChunkSerde::serialize(*chunk);
-            CHECK(chunk_pb.ok()) << chunk_pb.status(); // FIXME
-            request.mutable_chunk()->Swap(&chunk_pb.value());
-        }
-
-        _add_batch_closure->reset();
-        _add_batch_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
-
-        if (request.eos()) {
-            for (auto pid : _parent->_partition_ids) {
-                request.add_partition_ids(pid);
-            }
-
-            // eos request must be the last request
-            _add_batch_closure->end_mark();
-            _send_finished = true;
-            DCHECK(_pending_batches_num == 0);
-        }
-
-        _add_batch_closure->set_in_flight();
-        _stub->tablet_writer_add_chunk(&_add_batch_closure->cntl, &request, &_add_batch_closure->result,
-                                       _add_batch_closure);
-        _next_packet_seq++;
-    }
-
-    return _send_finished ? 0 : 1;
-}
-
 Status NodeChannel::none_of(std::initializer_list<bool> vars) {
     bool none = std::none_of(vars.begin(), vars.end(), [](bool var) { return var; });
     Status st = Status::OK();
@@ -395,16 +504,6 @@ Status NodeChannel::none_of(std::initializer_list<bool> vars) {
     }
 
     return st;
-}
-
-void NodeChannel::clear_all_batches() {
-    std::lock_guard<std::mutex> lg(_pending_batches_lock);
-    while (!_pending_chunks.empty()) {
-        _pending_chunks.pop();
-    }
-    if (_cur_chunk != nullptr) {
-        _cur_chunk.reset();
-    }
 }
 
 IndexChannel::~IndexChannel() = default;
@@ -453,15 +552,7 @@ OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, co
     }
 }
 
-OlapTableSink::~OlapTableSink() {
-    // We clear NodeChannels' batches here, cuz NodeChannels' batches destruction will use
-    // OlapTableSink::_mem_tracker and its parents.
-    // But their destructions are after OlapTableSink's.
-    // TODO: can be remove after all MemTrackers become shared.
-    for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->clear_all_batches(); });
-    }
-}
+OlapTableSink::~OlapTableSink() {}
 
 Status OlapTableSink::init(const TDataSink& t_sink) {
     DCHECK(t_sink.__isset.olap_table_sink);
@@ -564,8 +655,13 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _non_blocking_send_timer = ADD_TIMER(_profile, "NonBlockingSendTime");
     _serialize_batch_timer = ADD_TIMER(_profile, "SerializeBatchTime");
+    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
+    _compress_timer = ADD_TIMER(_profile, "CompressTime");
+    _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
+    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTimer");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTimer");
+
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
@@ -619,8 +715,6 @@ Status OlapTableSink::open(RuntimeState* state) {
         }
     }
 
-    _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
-    Thread::set_thread_name(_sender_thread, "olap_table_sink");
     return Status::OK();
 }
 
@@ -666,13 +760,13 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         DCHECK_EQ(chunk->get_slot_id_to_index_map().size(), _output_tuple_desc->slots().size());
     }
 
-    SCOPED_RAW_TIMER(&_send_data_ns);
     {
         _validate_selection.assign(num_rows, VALID_SEL_OK);
         SCOPED_RAW_TIMER(&_validate_data_ns);
         _validate_data(state, chunk);
     }
     {
+        SCOPED_TIMER(_pack_chunk_timer);
         uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
         int invalid_row_index = 0;
         _vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
@@ -703,6 +797,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         _number_output_rows += _validate_select_idx.size();
     }
 
+    SCOPED_RAW_TIMER(&_send_data_ns);
     size_t selection_size = _validate_select_idx.size();
     if (selection_size == 0) {
         return Status::OK();
@@ -751,7 +846,8 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
             }
         }
         NodeChannel* node = it.second.get();
-        auto st = node->add_chunk(chunk, _tablet_ids.data(), _node_select_idx.data(), 0, _node_select_idx.size());
+        auto st = node->add_chunk(chunk, _tablet_ids.data(), _node_select_idx.data(), 0, _node_select_idx.size(),
+                                  false /* eos */);
 
         if (!st.ok()) {
             channel->mark_as_failed(node);
@@ -775,10 +871,6 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         int64_t serialize_batch_ns = 0, mem_exceeded_block_ns = 0, queue_push_lock_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(_close_timer);
-            for (auto& index_channel : _channels) {
-                index_channel->for_each_node_channel([](NodeChannel* ch) { ch->mark_close(); });
-            }
-
             bool intolerable_failure = false;
             int ordinal = 0;
             Status err_st = Status::OK();
@@ -820,7 +912,6 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         COUNTER_SET(_send_data_timer, _send_data_ns);
         COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
-        COUNTER_SET(_non_blocking_send_timer, _non_blocking_send_ns);
         COUNTER_SET(_serialize_batch_timer, serialize_batch_ns);
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total =
@@ -838,15 +929,16 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         }
         LOG(INFO) << ss.str();
     } else {
+        COUNTER_SET(_input_rows_counter, _number_input_rows);
+        COUNTER_SET(_output_rows_counter, _number_output_rows);
+        COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
+        COUNTER_SET(_send_data_timer, _send_data_ns);
+        COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
+        COUNTER_SET(_validate_data_timer, _validate_data_ns);
+
         for (auto& channel : _channels) {
             channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
         }
-    }
-
-    // Sender join() must put after node channels mark_close/cancel.
-    // But there is no specific sequence required between sender join() & close_wait().
-    if (_sender_thread.joinable()) {
-        _sender_thread.join();
     }
 
     Expr::close(_output_expr_ctxs, state);
@@ -1057,29 +1149,6 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
             } else {
                 chunk->update_column(new_binary, desc->id());
             }
-        }
-    }
-}
-
-void OlapTableSink::_send_chunk_process() {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
-
-    SCOPED_RAW_TIMER(&_non_blocking_send_ns);
-    while (true) {
-        int running_channels_num = 0;
-        for (auto& index_channel : _channels) {
-            index_channel->for_each_node_channel([&running_channels_num](NodeChannel* ch) {
-                running_channels_num += ch->try_send_chunk_and_fetch_status();
-            });
-        }
-
-        if (running_channels_num == 0) {
-            LOG(INFO) << "Exiting consumer thread, no running channel";
-            return;
-        }
-        // Don't sleep if only one channel
-        if (running_channels_num > 1) {
-            SleepFor(MonoDelta::FromMilliseconds(config::olap_table_sink_send_interval_ms));
         }
     }
 }

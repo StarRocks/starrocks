@@ -156,7 +156,6 @@ public class StreamLoadPlanner {
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
-        LOG.info("use vectorized load: {}, load job id: {}", true, loadId);
         descTable.computeMemLayout();
 
         // create dest sink
@@ -201,6 +200,15 @@ public class StreamLoadPlanner {
         TQueryOptions queryOptions = new TQueryOptions();
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
+        queryOptions.setTransmission_compression_type(streamLoadTask.getTransmisionCompressionType());
+        if (streamLoadTask.getLoadParallelRequestNum() != 0) {
+            // primary key & unique key should not use parallel write since the order of write is important
+            if (destTable.getKeysType() == KeysType.PRIMARY_KEYS || destTable.getKeysType() == KeysType.UNIQUE_KEYS) {
+                queryOptions.setLoad_dop(1);
+            } else {
+                queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());
+            }
+        }
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.
         queryOptions.setMem_limit(streamLoadTask.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadTask.getLoadMemLimit());
@@ -220,7 +228,9 @@ public class StreamLoadPlanner {
             }
         }
 
-        // LOG.debug("stream load txn id: {}, plan: {}", streamLoadTask.getTxnId(), params);
+        LOG.info("load job id: {} tx id {} parallel {} compress {}", loadId, streamLoadTask.getTxnId(),
+                queryOptions.getLoad_dop(),
+                queryOptions.getTransmission_compression_type());
         return params;
     }
 
