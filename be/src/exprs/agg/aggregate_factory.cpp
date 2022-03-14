@@ -857,9 +857,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                PrimitiveType return_type, bool is_null, int agg_func_set_version) {
+                                                PrimitiveType return_type, bool is_null, int func_version) {
     std::string func_name = name;
-    if (agg_func_set_version > 1) {
+    if (func_version > 1) {
         if (name == "multi_distinct_sum") {
             func_name = "multi_distinct_sum2";
         } else if (name == "multi_distinct_count") {
@@ -870,7 +870,7 @@ const AggregateFunction* get_aggregate_function(const std::string& name, Primiti
     auto is_decimal_type = [](PrimitiveType pt) {
         return pt == TYPE_DECIMAL32 || pt == TYPE_DECIMAL64 || pt == TYPE_DECIMAL128;
     };
-    if (agg_func_set_version > 2 && is_decimal_type(arg_type)) {
+    if (func_version > 2 && is_decimal_type(arg_type)) {
         if (name == "sum") {
             func_name = "decimal_sum";
         } else if (name == "avg") {
