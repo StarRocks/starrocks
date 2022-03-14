@@ -159,7 +159,6 @@ build_libevent() {
         ./autogen.sh
     fi
 
-    CFLAGS="-std=c99 -fPIC -D_BSD_SOURCE -fno-omit-frame-pointer -g -ggdb -O2 -I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
     make -j$PARALLEL
@@ -175,8 +174,6 @@ build_openssl() {
     check_if_source_exist $OPENSSL_SOURCE
     cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
-    CXXFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
     LIBDIR="lib" \
@@ -250,7 +247,6 @@ build_protobuf() {
     mv $GTEST_SOURCE gtest
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     ./autogen.sh
-    CXXFLAGS="-fPIC -O2 -I ${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive" \
     ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib --with-zlib-include=${TP_INSTALL_DIR}/include
     make -j$PARALLEL
@@ -334,7 +330,7 @@ build_snappy() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CFLAGS="-O3" CXXFLAGS="-O3" $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
@@ -441,7 +437,6 @@ build_boost() {
 build_leveldb() {
     check_if_source_exist $LEVELDB_SOURCE
     cd $TP_SOURCE_DIR/$LEVELDB_SOURCE
-    CXXFLAGS="-fPIC" \
     LDFLAGS="-L ${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     make -j$PARALLEL
     cp out-static/libleveldb.a ../../installed/lib/libleveldb.a
@@ -493,7 +488,6 @@ build_librdkafka() {
 
     CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
     make -j$PARALLEL
     make install
@@ -506,7 +500,6 @@ build_flatbuffers() {
   mkdir -p $BUILD_DIR
   cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
-  CXXFLAGS="-fPIC -Wno-class-memaccess" \
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} ..
   make -j$PARALLEL
@@ -567,7 +560,6 @@ build_s2() {
     mkdir -p $BUILD_DIR 
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
@@ -646,7 +638,6 @@ build_croaringbitmap() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
@@ -664,7 +655,6 @@ build_orc() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3 -Wno-array-bounds" \
     $CMAKE_CMD ../ -DBUILD_JAVA=OFF \
     -DPROTOBUF_HOME=$TP_INSTALL_DIR \
     -DSNAPPY_HOME=$TP_INSTALL_DIR \
@@ -811,8 +801,9 @@ build_vpack() {
     make install
 }
 
-export CXXFLAGS="-fno-omit-frame-pointer ${CXXFLAGS}"
-export CFLAGS="-fno-omit-frame-pointer ${CFLAGS}"
+export CXXFLAGS="-fno-omit-frame-pointer -Wno-class-memaccess -Wno-class-memaccess -O3 -fPIC -g -I${TP_INCLUDE_DIR}"
+export CPPFLAGS=$CXXFLAGS
+export CFLAGS="-fno-omit-frame-pointer -std=c99 -fPIC -D_BSD_SOURCE -g -ggdb -I${TP_INCLUDE_DIR}"
 
 build_libevent
 build_zlib
