@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Catalog;
@@ -39,6 +40,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
@@ -53,6 +55,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+
 import static com.starrocks.catalog.AggregateType.BITMAP_UNION;
 
 public class CreateTableStmt extends DdlStmt {
@@ -408,7 +411,16 @@ public class CreateTableStmt extends DdlStmt {
 
             // analyze distribution
             if (distributionDesc == null) {
-                throw new AnalysisException("Create olap table should contain distribution desc");
+                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                    if (properties == null) {
+                        properties = Maps.newHashMap();
+                        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+                    }
+                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
+                            Lists.newArrayList(columnDefs.get(0).getName()));
+                } else {
+                    throw new AnalysisException("Create olap table should contain distribution desc");
+                }
             }
             distributionDesc.analyze(columnSet);
         } else if (engineName.equalsIgnoreCase("elasticsearch")) {
@@ -423,7 +435,8 @@ public class CreateTableStmt extends DdlStmt {
         for (ColumnDef columnDef : columnDefs) {
             Column col = columnDef.toColumn();
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
-                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS || keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
+                    || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
+                    keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
                 if (!col.isKey()) {
                     col.setAggregationTypeImplicit(true);
                 }

@@ -189,6 +189,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
+    public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
@@ -457,6 +459,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
+
+    @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean allowDefaultPartition = false;
 
     @VariableMgr.VarAttr(name = "enable_cbo", flag = VariableMgr.INVISIBLE)
     @Deprecated
@@ -843,6 +848,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableExchangePassThrough() {
         return enableExchangePassThrough;
+    }
+
+    public boolean isAllowDefaultPartition() {
+        return allowDefaultPartition;
+    }
+
+    public void setAllowDefaultPartition(boolean allowDefaultPartition) {
+        this.allowDefaultPartition = allowDefaultPartition;
     }
 
     /**

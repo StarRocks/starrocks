@@ -1414,4 +1414,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean use_staros = false;
+    /**
+     * default bucket number when create OLAP table without buckets info
+     */
+    @ConfField(mutable = true)
+    public static int default_bucket_num = 10;
 }

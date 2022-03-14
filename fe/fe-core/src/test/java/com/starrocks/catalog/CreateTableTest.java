@@ -356,4 +356,16 @@ public class CreateTableTest {
 
         ConfigBase.setMutableConfig("use_staros", "false");
     }
+
+    @Test
+    public void testCreateTableWithoutDistribution() {
+        ConnectContext.get().getSessionVariable().setAllowDefaultPartition(true);
+        
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
+                () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
+    }
 }
