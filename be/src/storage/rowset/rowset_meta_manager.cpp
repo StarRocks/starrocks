@@ -51,6 +51,10 @@ Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const
     return meta->put(META_COLUMN_FAMILY_INDEX, key, value);
 }
 
+Status RowsetMetaManager::flush(KVStore* meta) {
+    return meta->flush();
+}
+
 Status RowsetMetaManager::remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id) {
     std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
     return meta->remove(META_COLUMN_FAMILY_INDEX, key);
