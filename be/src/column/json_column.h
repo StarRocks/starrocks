@@ -27,7 +27,7 @@ public:
 
     void append_datum(const Datum& datum) override;
     void sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                      std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie);
+                      Tie& tie, std::pair<int, int> range, bool build_tie);
     int compare_at(size_t left, size_t right, const starrocks::vectorized::Column& rhs,
                    int nan_direction_hint) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;

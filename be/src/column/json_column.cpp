@@ -19,7 +19,7 @@ void JsonColumn::append_datum(const Datum& datum) {
     }
 }
 void JsonColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                              std::vector<uint8_t>& tie, std::pair<int, int> range, bool build_tie) {
+                              Tie& tie, std::pair<int, int> range, bool build_tie) {
     auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
         return get_object(lhs.index_in_chunk)->compare(*get_object(rhs.index_in_chunk));
     };
