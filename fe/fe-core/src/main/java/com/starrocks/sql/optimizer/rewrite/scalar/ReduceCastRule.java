@@ -110,17 +110,18 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return false;
         }
 
-        // decreasing cast cannot be reduced since be use operator not equal
-        // to perform cast from integral to boolean
-        // E.g. cast(cast(10000000000000 as int) as boolean)
-        if (parent.isBoolean() && childSlotSize < grandChildSlotSize) {
+        if (!(parent.isNumericType() || parent.isStringType()) ||
+                !(child.isNumericType() || child.isBoolean()) ||
+                !(grandChild.isNumericType() || grandChild.isBoolean())) {
             return false;
         }
 
         // cascaded cast cannot be reduced if middle type's size is smaller than two sides
+        // e.g. cast(cast(smallint as tinyint) as int)
         if (parentSlotSize > childSlotSize && childSlotSize < grandChildSlotSize) {
             return false;
         }
+
         Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
