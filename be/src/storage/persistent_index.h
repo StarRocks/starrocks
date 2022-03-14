@@ -25,6 +25,16 @@ struct KeysInfo {
     size_t size() const { return key_idxes.size(); }
 };
 
+struct KVRef {
+    const uint8_t* kv_pos;
+    uint64_t hash;
+    KVRef() {}
+    KVRef(const uint8_t* kv_pos, uint64_t hash) : kv_pos(kv_pos), hash(hash) {}
+};
+
+class PersistentIndex;
+class ImmutableIndex;
+
 class MutableIndex {
 public:
     MutableIndex();
@@ -32,12 +42,6 @@ public:
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
-
-    // flush mutable index into immutable index
-    // |num_entry|: num of valid entries in this index(excluding NullIndexValue)
-    // |wb|: file block written to
-    virtual Status flush_to_immutable_index(size_t num_entry, const EditVersion& version,
-                                            fs::WritableBlock& wb) const = 0;
 
     // batch get
     // |n|: size of key/value array
@@ -101,6 +105,20 @@ public:
     // [not thread-safe]
     virtual size_t capacity() = 0;
 
+    // get all key-values pair references by shard, the result will remain valid until next modification
+    // |nshard|: number of shard
+    // |num_entry|: number of entries expected, it should be:
+    //                 the num of KV entries if without_null == false
+    //                 the num of KV entries excluding nulls if without_null == true
+    // |without_null|: whether to include null entries
+    // [not thread-safe]
+    virtual std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
+                                                                 bool without_null) const = 0;
+
+    // flush to immutable index
+    // [not thread-safe]
+    virtual Status flush_to_immutable_index(const std::string& dir, const EditVersion& version) const = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
 
@@ -120,6 +138,13 @@ public:
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
 
 private:
+    friend class PersistentIndex;
+
+    // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
+    // kvs_by_shard may be different from this object's own shard number
+    // NOTE: used by PersistentIndex only
+    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx) const;
+
     Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
 
@@ -244,6 +269,9 @@ private:
     Status _append_wal(size_t n, const void* key, const IndexValue* values);
 
     Status _flush_l0();
+
+    // merge l0 and l1 into new l1, then clear l0
+    Status _merge_compaction();
 
     // index storage directory
     std::string _path;
