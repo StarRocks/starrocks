@@ -96,11 +96,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     }
 
     public ScanOperatorPredicates getScanOperatorPredicates() throws AnalysisException {
-        throw new AnalysisException("Base class calls are not supported");
+        throw new AnalysisException("Operation getScanOperatorPredicates() is not supported by this ScanOperator.");
     }
 
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) throws AnalysisException {
-        throw new AnalysisException("Base class calls are not supported");
+        throw new AnalysisException("Operation setScanOperatorPredicates(...) is not supported by this ScanOperator.");
     }
 
     @Override
