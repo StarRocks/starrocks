@@ -369,6 +369,35 @@ size_t BinaryColumn::filter_range(const Column::Filter& filter, size_t from, siz
     return result_offset;
 }
 
+int BinaryColumn::compare_row(std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order, int null_first) const {
+    DCHECK(sort_order == 1 || sort_order == -1);
+
+    const Container& lhs_datas = get_data();
+    Slice rhs_data = rhs_value.get<Slice>();
+    auto cmp = [&](int lhs_row) {
+        if (sort_order == 1) {
+            return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
+        } else {
+            return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
+        }
+    };
+
+    return compare_row_helper(cmp_result, cmp);
+}
+
+void BinaryColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first,
+                                SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+    DCHECK_GE(size(), permutation.size());
+    using ItemType = InlinePermuteItem<Slice>;
+    auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+        return lhs.inline_value.compare(rhs.inline_value);
+    };
+
+    auto inlined = create_inline_permutation<Slice>(permutation, get_data());
+    sort_and_tie_helper(cancel, this, is_asc_order, inlined, tie, cmp, range, build_tie);
+    restore_inline_permutation(inlined, permutation);
+}
+
 int BinaryColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     const BinaryColumn& right_column = down_cast<const BinaryColumn&>(rhs);
     return get_slice(left).compare(right_column.get_slice(right));

@@ -6,6 +6,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "simd/simd.h"
+#include "storage/null_predicate.h"
+#include "udf/java/java_udf.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
@@ -180,6 +182,58 @@ size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, s
     update_has_null();
     DCHECK_EQ(s1, s2);
     return s1;
+}
+
+// Two step compare:
+// 1. Compare null values, store at temporary result
+// 2. Mask notnull values, and compare not-null values
+int NullableColumn::compare_row(CompareVector& cmp_result, Datum rhs_value, int sort_order, int null_first) const {
+    const NullData& null_data = immutable_null_column_data();
+
+    // Set byte to 0 when it's null/null byte is 1
+    CompareVector null_vector(null_data.size());
+    for (size_t i = 0; i < null_data.size(); i++) {
+        null_vector[i] = (null_data[i] == 1) ? 0 : 1;
+    }
+    auto null_cmp = [&](int lhs_row) -> int {
+        DCHECK(null_data[lhs_row] == 1);
+        return rhs_value.is_null() ? 0 : null_first;
+    };
+    int null_equal_count = compare_row_helper(null_vector, null_cmp);
+
+    int notnull_equal_count = 0;
+    if (rhs_value.is_null()) {
+        for (size_t i = 0; i < null_data.size(); i++) {
+            if (null_data[i] == 0) {
+                cmp_result[i] = -null_first;
+            } else {
+                cmp_result[i] = null_vector[i];
+            }
+        }
+    } else {
+        // 0 means not null, so compare it
+        // 1 means null, not compare it for not-null values
+        CompareVector notnull_vector(null_data.size());
+        for (size_t i = 0; i < null_data.size(); i++) {
+            notnull_vector[i] = null_data[i];
+        }
+
+        notnull_equal_count = _data_column->compare_row(notnull_vector, rhs_value, sort_order, null_first);
+        for (size_t i = 0; i < null_data.size(); i++) {
+            if (null_data[i] == 0) {
+                cmp_result[i] = notnull_vector[i];
+            } else {
+                cmp_result[i] = null_vector[i];
+            }
+        }
+    }
+
+    return null_equal_count + notnull_equal_count;
+}
+
+void NullableColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first,
+                                  SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+    sort_and_tie_helper_nullable(cancel, this, is_asc_order, is_null_first, permutation, tie, range, build_tie);
 }
 
 int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {

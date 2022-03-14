@@ -60,6 +60,39 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
 }
 
 template <typename T>
+int FixedLengthColumnBase<T>::compare_row(std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order,
+                                          int null_first) const {
+    DCHECK(sort_order == 1 || sort_order == -1);
+
+    T rhs_data = rhs_value.get<T>();
+    auto cmp = [&](int lhs_row) {
+        if (sort_order == 1) {
+            return SorterComparator<T>::compare(_data[lhs_row], rhs_data);
+        } else {
+            return -1 * SorterComparator<T>::compare(_data[lhs_row], rhs_data);
+        }
+    };
+
+    return compare_row_helper(cmp_result, cmp);
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first,
+                                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
+                                            bool build_tie) {
+    DCHECK_GE(size(), permutation.size());
+    using ItemType = InlinePermuteItem<T>;
+
+    auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
+        return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
+    };
+
+    auto inlined = create_inline_permutation<T>(permutation, _data);
+    sort_and_tie_helper(cancel, this, is_asc_order, inlined, tie, cmp, range, build_tie);
+    restore_inline_permutation(inlined, permutation);
+}
+
+template <typename T>
 int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     DCHECK_LT(left, _data.size());
     DCHECK_LT(right, rhs.size());

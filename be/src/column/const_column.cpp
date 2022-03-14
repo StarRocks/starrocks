@@ -60,6 +60,15 @@ size_t ConstColumn::filter_range(const Column::Filter& filter, size_t from, size
     return from + count;
 }
 
+int ConstColumn::compare_row(std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order, int null_first) const {
+    return _data->compare_row(cmp_result, rhs_value, sort_order, null_first);
+}
+
+void ConstColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
+                               Tie& tie, std::pair<int, int> range, bool build_tie) {
+    // noop
+}
+
 int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     DCHECK(rhs.is_constant());
     const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
