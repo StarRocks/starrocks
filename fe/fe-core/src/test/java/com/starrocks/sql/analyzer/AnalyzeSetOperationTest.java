@@ -92,4 +92,17 @@ public class AnalyzeSetOperationTest {
         Assert.assertEquals(Type.TINYINT, outColumns.get(1).getType());
         Assert.assertTrue(outColumns.get(1).isNullable());
     }
+
+    @Test
+    public void testWithSort() {
+        analyzeSuccess("select t0.v1 from t0,t1 union all select v7 from t2 order by v1");
+        analyzeSuccess("select v1 from t0,t1 union all select v7 from t2 order by v1");
+        analyzeSuccess("select t0.v1 from t0,t1 union all select v7 from t2 order by t0.v1");
+        analyzeSuccess("select t0.v1,v2 from t0,t1 union all select v7,v8 from t2 order by v2");
+        analyzeFail("select t0.v1 from t0,t1 union all select v7 from t2 order by v2");
+        analyzeFail("select t0.v1 from t0,t1 union all select v7 from t2 order by t1.v4");
+        analyzeFail("select t0.v1 from t0,t1 union all select v7 from t2 order by t2.v7");
+        analyzeFail("select t0.v1 from t0,t1 union all select v7 from t2 order by v7");
+        analyzeFail("select t0.v1 from t0,t1 union all select v7 from t2 order by v8");
+    }
 }
