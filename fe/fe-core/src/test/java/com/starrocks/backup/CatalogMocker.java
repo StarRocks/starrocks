@@ -108,6 +108,10 @@ public class CatalogMocker {
     public static final String TEST_TBL2_NAME = "test_tbl2";
     public static final long TEST_TBL2_ID = 30002;
 
+    // primary key olap table
+    public static final String TEST_TBL3_NAME = "test_tbl3";
+    public static final long TEST_TBL3_ID = 30003;
+
     public static final String TEST_PARTITION1_NAME = "p1";
     public static final long TEST_PARTITION1_ID = 40001;
     public static final String TEST_PARTITION2_NAME = "p2";
@@ -318,6 +322,10 @@ public class CatalogMocker {
                 KeysType.AGG_KEYS, rangePartitionInfo, distributionInfo2);
         Deencapsulation.setField(olapTable2, "baseIndexId", TEST_TBL2_ID);
 
+        OlapTable olapTable3 = new OlapTable(TEST_TBL3_ID, TEST_TBL3_NAME, TEST_TBL_BASE_SCHEMA,
+                KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(olapTable3, "baseIndexId", TEST_TBL3_ID);
+
         LocalTablet baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
         TabletMeta tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL2_ID, TEST_PARTITION1_ID,
                 TEST_TBL2_ID, SCHEMA_HASH, TStorageMedium.HDD);
@@ -383,6 +391,7 @@ public class CatalogMocker {
         olapTable2.setIndexMeta(TEST_ROLLUP_ID, TEST_ROLLUP_NAME, TEST_ROLLUP_SCHEMA, 0, ROLLUP_SCHEMA_HASH,
                 (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
         db.createTable(olapTable2);
+        db.createTable(olapTable3);
 
         return db;
     }
