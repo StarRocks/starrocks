@@ -491,7 +491,6 @@ public class SetTest extends PlanTestBase {
 
         sql = "select * from (select * from t0 order by v1 limit 1) t union select * from t1";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:TOP-N\n" +
                 "  |  order by: <slot 1> 1: v1 ASC\n" +
                 "  |  offset: 0\n" +
@@ -499,5 +498,12 @@ public class SetTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t0"));
+
+        sql = "select v1+v2 from t0 union all select v4 from t1 order by 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC"));
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 4> : 1: v1 + 2: v2"));
     }
 }

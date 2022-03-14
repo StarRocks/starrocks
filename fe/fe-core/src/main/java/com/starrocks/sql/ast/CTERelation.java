@@ -70,8 +70,4 @@ public class CTERelation extends Relation {
             return new TableName(null, name);
         }
     }
-
-    public List<String> getColLabels() {
-        return columnOutputNames;
-    }
 }

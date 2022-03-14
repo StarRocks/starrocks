@@ -8,10 +8,11 @@ import java.util.List;
 
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
+    private final List<String> columnOutputNames;
 
     public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
-        super(columnOutputNames);
         this.rows = new ArrayList<>(rows);
+        this.columnOutputNames = columnOutputNames;
     }
 
     public void addRow(ArrayList<Expr> row) {
@@ -24,6 +25,11 @@ public class ValuesRelation extends QueryRelation {
 
     public List<List<Expr>> getRows() {
         return rows;
+    }
+
+    @Override
+    public List<String> getColumnOutputNames() {
+        return columnOutputNames;
     }
 
     @Override

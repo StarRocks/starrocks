@@ -5,9 +5,9 @@ import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.ArrayList;
@@ -34,21 +34,19 @@ public class ViewDefBuilder {
             }
 
             List<String> selectListString = new ArrayList<>();
-            for (int i = 0; i < selectList.getItems().size(); ++i) {
-                SelectListItem item = selectList.getItems().get(i);
-                if (item.isStar()) {
-                    List<Expr> outputExpression = SelectAnalyzer.expandStar(item, stmt.getRelation());
-                    for (Expr expr : outputExpression) {
-                        selectListString.add(visit(expr) + " AS `" + AST2SQL.toString(expr) + "`");
-                    }
+            for (int i = 0; i < stmt.getOutputExpr().size(); ++i) {
+                Expr expr = stmt.getOutputExpr().get(i);
+                String columnName = stmt.getScope().getRelationFields().getFieldByIndex(i).getName();
+
+                if (expr instanceof FieldReference) {
+                    Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
+                    selectListString.add(field.getRelationAlias().toSql() + "." + "`" + field.getName() + "`"
+                            + " AS `" + columnName + "`");;
                 } else {
-                    if (item.getAlias() != null) {
-                        selectListString.add((visit(item.getExpr()) + " AS `" + item.getAlias()) + "`");
-                    } else {
-                        selectListString.add(visit(item.getExpr()) + " AS `" + AST2SQL.toString(item.getExpr()) + "`");
-                    }
+                    selectListString.add(visit(expr) + " AS `" + columnName + "`");
                 }
             }
+
             sqlBuilder.append(Joiner.on(", ").join(selectListString));
 
             if (stmt.getRelation() != null) {
