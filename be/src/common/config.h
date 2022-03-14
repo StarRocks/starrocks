@@ -665,6 +665,7 @@ CONF_String(object_storage_endpoint, "");
 CONF_Int64(object_storage_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");
+CONF_Int32(orc_file_cache_max_size, "2097152");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
