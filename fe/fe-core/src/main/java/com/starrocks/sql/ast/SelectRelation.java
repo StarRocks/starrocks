@@ -68,7 +68,6 @@ public class SelectRelation extends QueryRelation {
             Expr predicate,
             GroupByClause groupByClause,
             Expr having) {
-        super(null);
         this.selectList = selectList;
         this.relation = fromRelation;
         this.predicate = predicate;
@@ -84,8 +83,6 @@ public class SelectRelation extends QueryRelation {
                           List<OrderByElement> orderBy, Expr having,
                           List<AnalyticExpr> outputAnalytic, List<AnalyticExpr> orderByAnalytic,
                           Map<Expr, FieldId> columnReferences) {
-        super(columnOutputNames);
-
         this.outputExpr = outputExpr;
         this.isDistinct = isDistinct;
         this.orderScope = orderScope;
@@ -109,7 +106,6 @@ public class SelectRelation extends QueryRelation {
     }
 
     public void fillResolvedAST(AnalyzeState analyzeState) {
-        super.setColumnOutputNames(analyzeState.getColumnOutputNames());
         this.outputExpr = analyzeState.getOutputExpressions();
         this.isDistinct = analyzeState.isDistinct();
         this.orderScope = analyzeState.getOrderScope();
