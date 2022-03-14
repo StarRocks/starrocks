@@ -23,12 +23,15 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 
+import java.util.List;
+
 public class SelectListItem implements ParseNode {
     private Expr expr;
     // for "[name.]*"
     private final TableName tblName;
     private final boolean isStar;
     private String alias;
+    private List<SlotRef> expendSlotRefs;
 
     public SelectListItem(Expr expr, String alias) {
         super();
@@ -69,6 +72,14 @@ public class SelectListItem implements ParseNode {
 
     public boolean isStar() {
         return isStar;
+    }
+
+    public List<SlotRef> getExpendSlotRefs() {
+        return expendSlotRefs;
+    }
+
+    public void setExpendSlotRefs(List<SlotRef> expendSlotRefs) {
+        this.expendSlotRefs = expendSlotRefs;
     }
 
     public TableName getTblName() {

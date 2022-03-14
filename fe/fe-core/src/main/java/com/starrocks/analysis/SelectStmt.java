@@ -372,9 +372,9 @@ public class SelectStmt extends QueryStmt {
             if (item.isStar()) {
                 TableName tblName = item.getTblName();
                 if (tblName == null) {
-                    expandStar(analyzer);
+                    expandStar(analyzer, item);
                 } else {
-                    expandStar(analyzer, tblName);
+                    expandStar(analyzer, tblName, item);
                 }
             } else {
                 // Analyze the resultExpr before generating a label to ensure enforcement
@@ -917,7 +917,7 @@ public class SelectStmt extends QueryStmt {
     /**
      * Expand "*" select list item.
      */
-    private void expandStar(Analyzer analyzer) throws AnalysisException {
+    private void expandStar(Analyzer analyzer, SelectListItem item) throws AnalysisException {
         if (fromClause_.isEmpty()) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
         }
@@ -926,20 +926,20 @@ public class SelectStmt extends QueryStmt {
             if (analyzer.isSemiJoined(tableRef.getId())) {
                 continue;
             }
-            expandStar(tableRef.getAliasAsName(), tableRef.getDesc());
+            expandStar(tableRef.getAliasAsName(), tableRef.getDesc(), item);
         }
     }
 
     /**
      * Expand "<tbl>.*" select list item.
      */
-    private void expandStar(Analyzer analyzer, TableName tblName) throws AnalysisException {
+    private void expandStar(Analyzer analyzer, TableName tblName, SelectListItem item) throws AnalysisException {
         Collection<TupleDescriptor> descs = analyzer.getDescriptor(tblName);
         if (descs == null || descs.isEmpty()) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName.getTbl());
         }
         for (TupleDescriptor desc : descs) {
-            expandStar(tblName, desc);
+            expandStar(tblName, desc, item);
         }
     }
 
@@ -947,11 +947,15 @@ public class SelectStmt extends QueryStmt {
      * Expand "*" for a particular tuple descriptor by appending
      * refs for each column to selectListExprs.
      */
-    private void expandStar(TableName tblName, TupleDescriptor desc) {
+    private void expandStar(TableName tblName, TupleDescriptor desc, SelectListItem item) {
+        List<SlotRef> expendColLabels = Lists.newArrayList();
         for (Column col : desc.getTable().getBaseSchema()) {
-            resultExprs.add(new SlotRef(tblName, col.getName()));
+            SlotRef slotRef = new SlotRef(tblName, col.getName());
+            resultExprs.add(slotRef);
             colLabels.add(col.getName());
+            expendColLabels.add(slotRef);
         }
+        item.setExpendSlotRefs(expendColLabels);
     }
 
     /**
@@ -1715,9 +1719,9 @@ public class SelectStmt extends QueryStmt {
             if (item.isStar()) {
                 TableName tblName = item.getTblName();
                 if (tblName == null) {
-                    expandStar(analyzer);
+                    expandStar(analyzer, item);
                 } else {
-                    expandStar(analyzer, tblName);
+                    expandStar(analyzer, tblName, item);
                 }
             } else {
                 // to make sure the sortinfo's AnalyticExpr and resultExprs's AnalyticExpr analytic once
