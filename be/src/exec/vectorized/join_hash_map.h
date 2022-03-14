@@ -223,8 +223,10 @@ template <>
 struct JoinKeyHash<int32_t> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
     std::size_t operator()(const int32_t& value) const {
-#if defined __x86_64__
+#if defined(__x86_64__) && defined(__SSE4_2__)
         size_t hash = _mm_crc32_u32(CRC_SEED, value + 2);
+#elif defined(__x86_64__)
+        size_t hash = crc_hash_32(&value, sizeof(value), CRC_SEED);
 #else
         size_t hash = __crc32cw(CRC_SEED, value + 2);
 #endif
