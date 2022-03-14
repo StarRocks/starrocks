@@ -639,14 +639,14 @@ public class PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
-                        "PROPERTIES (\n" +
-                        "\"type\"=\"jdbc\",\n" +
-                        "\"user\"=\"test_user\",\n" +
-                        "\"password\"=\"test_passwd\",\n" +
-                        "\"driver_url\"=\"test_driver_url\",\n" +
-                        "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
-                        ");")
+                "PROPERTIES (\n" +
+                "\"type\"=\"jdbc\",\n" +
+                "\"user\"=\"test_user\",\n" +
+                "\"password\"=\"test_passwd\",\n" +
+                "\"driver_url\"=\"test_driver_url\",\n" +
+                "\"driver_class\"=\"test.driver.class\",\n" +
+                "\"jdbc_uri\"=\"test_uri\"\n" +
+                ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
@@ -820,6 +820,10 @@ public class PlanTestBase {
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+    }
+
+    public static void assertContains(String text, String pattern) {
+        Assert.assertTrue(text, text.contains(pattern));
     }
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
