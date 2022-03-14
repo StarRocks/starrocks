@@ -20,24 +20,16 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private boolean isMetaQuery;
 
-    public TableRelation(TableName name, PartitionNames partitionNames) {
+    public TableRelation(TableName name) {
         this.name = name;
-        this.partitionNames = partitionNames;
-        tabletIds = Lists.newArrayList();
+        this.partitionNames = null;
+        this.tabletIds = Lists.newArrayList();
     }
 
-    public TableRelation(TableName name, Table table,
-                         Map<Field, Column> columns,
-                         PartitionNames partitionNames,
-                         List<Long> tabletIds,
-                         boolean isMetaQuery) {
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
         this.name = name;
-        this.alias = name;
-        this.table = table;
-        this.columns = columns;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
-        this.isMetaQuery = isMetaQuery;
     }
 
     public TableName getName() {
