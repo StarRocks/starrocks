@@ -102,6 +102,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.io.StringWriter;
@@ -752,7 +753,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
 
-        TableRelation tableRelation = new TableRelation(tableName, partitionNames);
+        List<Long> tabletIds = Lists.newArrayList();
+        if (context.tabletList() != null) {
+            tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
+                    .map(Long::parseLong).collect(toList());
+        }
+
+        TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
         if (context.hint() != null) {
             for (TerminalNode hint : context.hint().IDENTIFIER()) {
                 if (hint.getText().equalsIgnoreCase("_META_")) {
