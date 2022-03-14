@@ -787,9 +787,9 @@ build_vpack() {
     make install
 }
 
-export CXXFLAGS="-fno-omit-frame-pointer -Wno-class-memaccess -Wno-class-memaccess -O3 -fPIC -g -I${TP_INCLUDE_DIR}"
+export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
-export CFLAGS="-fno-omit-frame-pointer -std=c99 -fPIC -D_BSD_SOURCE -g -ggdb -I${TP_INCLUDE_DIR}"
+export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE -I${TP_INCLUDE_DIR}"
 
 build_libevent
 build_zlib
