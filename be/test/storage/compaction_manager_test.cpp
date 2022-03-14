@@ -11,9 +11,9 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_task.h"
 #include "storage/compaction_utils.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks {
 

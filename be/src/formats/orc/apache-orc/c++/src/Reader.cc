@@ -384,23 +384,8 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
-
-    static const uint64_t MAX_ONE_READ_ROW_INDEX_SIZE = 1024 * 1024;
     uint64_t rowIndexSize = currentStripeInfo.indexlength();
-    uint64_t startOffset = offset;
-    // rowIndexBufferData is allocated in rowIndexInputStream
-    std::unique_ptr<SeekableFileInputStream> rowIndexInputStream = nullptr;
-    const char* rowIndexBufferData = nullptr;
-    if (rowIndexSize < MAX_ONE_READ_ROW_INDEX_SIZE) {
-        rowIndexInputStream = std::unique_ptr<SeekableFileInputStream>(new SeekableFileInputStream(
-                contents->stream.get(), startOffset, rowIndexSize, *contents->pool, rowIndexSize));
-        int size = 0;
-        const void* data = nullptr;
-        if (!rowIndexInputStream->Next(&data, &size) || static_cast<uint64_t>(size) != rowIndexSize) {
-            throw ParseError("Failed to read the row index data");
-        }
-        rowIndexBufferData = static_cast<const char*>(data);
-    }
+    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
 
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
@@ -408,16 +393,11 @@ void RowReaderImpl::loadStripeIndex() {
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
-            std::unique_ptr<SeekableInputStream> inputStream = nullptr;
-            if (rowIndexBufferData) {
-                inputStream = std::unique_ptr<SeekableInputStream>(
-                        new SeekableArrayInputStream(rowIndexBufferData + offset - startOffset, pbStream.length()));
-            } else {
-                inputStream = std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                        contents->stream.get(), offset, pbStream.length(), *contents->pool));
-            }
             std::unique_ptr<SeekableInputStream> inStream =
-                    createDecompressor(getCompression(), std::move(inputStream), getCompressionSize(), *contents->pool);
+                    createDecompressor(getCompression(),
+                                       std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
+                                               contents->stream.get(), offset, pbStream.length(), *contents->pool)),
+                                       getCompressionSize(), *contents->pool);
 
             if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
                 proto::RowIndex rowIndex;
@@ -964,9 +944,9 @@ void RowReaderImpl::startNextStripe() {
     while (currentStripe < lastStripe) {
         currentStripeInfo = footer->stripes(static_cast<int>(currentStripe));
         uint64_t fileLength = contents->stream->getLength();
-        if (currentStripeInfo.offset() + currentStripeInfo.indexlength() + currentStripeInfo.datalength() +
-                    currentStripeInfo.footerlength() >=
-            fileLength) {
+        size_t stripeSize =
+                currentStripeInfo.indexlength() + currentStripeInfo.datalength() + currentStripeInfo.footerlength();
+        if ((currentStripeInfo.offset() + stripeSize) >= fileLength) {
             std::stringstream msg;
             msg << "Malformed StripeInformation at stripe index " << currentStripe << ": fileLength=" << fileLength
                 << ", StripeInfo=(offset=" << currentStripeInfo.offset()
@@ -984,6 +964,8 @@ void RowReaderImpl::startNextStripe() {
             }
         }
 
+        contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
+                                       stripeSize);
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
 
@@ -1326,6 +1308,7 @@ std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const 
             throw ParseError("File size too small");
         }
         std::unique_ptr<DataBuffer<char>> buffer(new DataBuffer<char>(*contents->pool, readSize));
+        stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_FILE, 0, fileLength);
         stream->read(buffer->data(), readSize, fileLength - readSize);
 
         postscriptLength = buffer->data()[readSize - 1] & 0xff;
@@ -1423,5 +1406,7 @@ InputStream::~InputStream(){
 uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
     return 128 * 1024;
 }
+
+void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
 
 } // namespace orc
