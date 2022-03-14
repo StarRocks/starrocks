@@ -541,10 +541,10 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     SmallPermutation permutation;
     Tie tie;
     std::pair<int, int> range{0, 0};
-    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
-    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
-    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
-    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, true, permutation, tie, range, false);
 
     // sort all null column
     const int kNullCount = 5;
@@ -555,10 +555,10 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     }
     tie.resize(kNullCount);
     range = {0, kNullCount};
-    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
-    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
-    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
-    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, true, permutation, tie, range, false);
 
     // sort 1 element with 5 nulls
     SmallPermutation expect_perm;
@@ -566,28 +566,28 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
 
-    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, true, permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, false, permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, false, permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, true, permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
@@ -599,19 +599,19 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     reset_permutation(permutation, 1);
     tie = Tie(1, 1);
 
-    nullable_column->sort_and_tie(true, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, true, permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    nullable_column->sort_and_tie(true, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, true, false, permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    nullable_column->sort_and_tie(false, false, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, false, permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    nullable_column->sort_and_tie(false, true, permutation, tie, range, false);
+    nullable_column->sort_and_tie(false, false, true, permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 }

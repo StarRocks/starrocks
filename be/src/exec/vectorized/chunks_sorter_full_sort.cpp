@@ -465,7 +465,7 @@ Status ChunksSorterFullSort::_sort_by_column_inc(RuntimeState* state) {
         bool is_asc_order = (_sort_order_flag[col_index] == 1);
         bool is_null_first = is_asc_order ? (_null_first_flag[col_index] == -1) : (_null_first_flag[col_index] == 1);
         bool build_tie = col_index != _get_number_of_order_by_columns() - 1;
-        column->sort_and_tie(is_asc_order, is_null_first, permutation, tie, range, build_tie);
+        column->sort_and_tie(state->cancelled_ref(), is_asc_order, is_null_first, permutation, tie, range, build_tie);
     }
     for (int i = 0; i < num_rows; i++) {
         _sorted_permutation[i].index_in_chunk = permutation[i].index_in_chunk;
