@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
         Analyzer.analyze(stmt, session);
-        PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
+        PrivilegeChecker.check(stmt, session);
 
         if (stmt instanceof QueryStatement) {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
