@@ -255,11 +255,6 @@ public class HiveMetaClient {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 
         FileSystem fileSystem = getFileSystem(new URI(basePath));
-        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
-        TextFileFormatDesc textFileFormatDesc = new TextFileFormatDesc(
-                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", ","),
-                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
-
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
         HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
@@ -279,7 +274,8 @@ public class HiveMetaClient {
             }
             List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
             fileDescs.add(new HdfsFileDesc(baseFile.getFileName(), "", fileStatus.getLen(),
-                    ImmutableList.copyOf(fileBlockDescs), HdfsFileFormat.isSplittable(sd.getInputFormat()), textFileFormatDesc));
+                    ImmutableList.copyOf(fileBlockDescs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    getTextFileFormatDesc(sd)));
         }
         return fileDescs;
     }
@@ -536,15 +532,18 @@ public class HiveMetaClient {
         }
     }
 
+    public TextFileFormatDesc getTextFileFormatDesc(StorageDescriptor sd) {
+        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
+        return new TextFileFormatDesc(
+                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", "\001"),
+                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
+    }
+
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
                                                 StorageDescriptor sd) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
-        TextFileFormatDesc textFileFormatDesc = new TextFileFormatDesc(
-                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", "\001"),
-                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
 
         // fileSystem.listLocatedStatus is an api to list all statuses and
         // block locations of the files in the given path in one operation.
@@ -560,7 +559,7 @@ public class HiveMetaClient {
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), isSplittable, textFileFormatDesc));
+                        ImmutableList.copyOf(fileBlockDescs), isSplittable, getTextFileFormatDesc(sd)));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

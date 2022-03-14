@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -97,6 +98,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -615,15 +617,7 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
-        @Override
-        public PlanFragment visitPhysicalHudiScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalHudiScanOperator node = (PhysicalHudiScanOperator) optExpression.getOp();
-
-            Table referenceTable = node.getTable();
-            context.getDescTbl().addReferencedTable(referenceTable);
-            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
-            tupleDescriptor.setTable(referenceTable);
-
+        private void prepareContextSlots(PhysicalScanOperator node, ExecPlan context, TupleDescriptor tupleDescriptor) {
             // set slot
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
@@ -633,56 +627,82 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsMaterialized(true);
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
+        }
+
+        private void prepareCommonExpr(HDFSScanNodePredicates scanNodePredicates,
+                                       ScanOperatorPredicates predicates, ExecPlan context) {
+            // set predicate
+            List<ScalarOperator> noEvalPartitionConjuncts = predicates.getNoEvalPartitionConjuncts();
+            List<ScalarOperator> nonPartitionConjuncts = predicates.getNonPartitionConjuncts();
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            for (ScalarOperator noEvalPartitionConjunct : noEvalPartitionConjuncts) {
+                scanNodePredicates.getNoEvalPartitionConjuncts().
+                        add(ScalarOperatorToExpr.buildExecExpression(noEvalPartitionConjunct, formatterContext));
+            }
+            for (ScalarOperator nonPartitionConjunct : nonPartitionConjuncts) {
+                scanNodePredicates.getNonPartitionConjuncts().
+                        add(ScalarOperatorToExpr.buildExecExpression(nonPartitionConjunct, formatterContext));
+            }
+        }
+
+        private void prepareMinMaxExpr(HDFSScanNodePredicates scanNodePredicates,
+                                       ScanOperatorPredicates predicates, ExecPlan context) {
+            /*
+             * populates 'minMaxTuple' with slots for statistics values,
+             * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
+             */
+            List<ScalarOperator> minMaxConjuncts = predicates.getMinMaxConjuncts();
+            TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
+            for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl()
+                                    .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
+                    Column column = predicates.getMinMaxColumnRefMap().get(columnRefOperator);
+                    slotDescriptor.setColumn(column);
+                    slotDescriptor.setIsNullable(column.isAllowNull());
+                    slotDescriptor.setIsMaterialized(true);
+                    context.getColRefToExpr()
+                            .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                }
+            }
+            minMaxTuple.computeMemLayout();
+            scanNodePredicates.setMinMaxTuple(minMaxTuple);
+            ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
+                scanNodePredicates.getMinMaxConjuncts().
+                        add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
+            }
+        }
+
+        @Override
+        public PlanFragment visitPhysicalHudiScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalHudiScanOperator node = (PhysicalHudiScanOperator) optExpression.getOp();
+            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            prepareContextSlots(node, context, tupleDescriptor);
 
             HudiScanNode hudiScanNode =
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
             try {
-                hudiScanNode.setSelectedPartitionIds(node.getSelectedPartitionIds());
-                hudiScanNode.setIdToPartitionKey(node.getIdToPartitionKey());
-                hudiScanNode.getScanRangeLocations(context.getDescTbl());
-                // set predicate
-                List<ScalarOperator> noEvalPartitionConjuncts = node.getNoEvalPartitionConjuncts();
-                List<ScalarOperator> nonPartitionConjuncts = node.getNonPartitionConjuncts();
-                List<ScalarOperator> minMaxConjuncts = node.getMinMaxConjuncts();
-                ScalarOperatorToExpr.FormatterContext formatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getPredictsExpr();
+                scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
 
-                for (ScalarOperator noEvalPartitionConjunct : noEvalPartitionConjuncts) {
-                    hudiScanNode.getNoEvalPartitionConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(noEvalPartitionConjunct, formatterContext));
-                }
-                for (ScalarOperator nonPartitionConjunct : nonPartitionConjuncts) {
-                    hudiScanNode.getNonPartitionConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(nonPartitionConjunct, formatterContext));
-                }
+                hudiScanNode.setupScanRangeLocations(context.getDescTbl());
 
-                /*
-                 * populates 'minMaxTuple' with slots for statistics values,
-                 * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
-                 */
-                TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
-                        SlotDescriptor slotDescriptor =
-                                context.getDescTbl()
-                                        .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
-                        Column column = node.getMinMaxColumnRefMap().get(columnRefOperator);
-                        slotDescriptor.setColumn(column);
-                        slotDescriptor.setIsNullable(column.isAllowNull());
-                        slotDescriptor.setIsMaterialized(true);
-                        context.getColRefToExpr()
-                                .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
-                    }
-                }
-                minMaxTuple.computeMemLayout();
-                hudiScanNode.setMinMaxTuple(minMaxTuple);
-                ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    hudiScanNode.getMinMaxConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
-                }
+                prepareCommonExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+
             } catch (Exception e) {
                 LOG.warn("Hudi scan node get scan range locations failed : " + e);
                 e.printStackTrace();
@@ -703,71 +723,27 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalHiveScan(OptExpression optExpression, ExecPlan context) {
             PhysicalHiveScanOperator node = (PhysicalHiveScanOperator) optExpression.getOp();
+            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
 
             Table referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
 
-            // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             HdfsScanNode hdfsScanNode =
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             try {
-                hdfsScanNode.setSelectedPartitionIds(node.getSelectedPartitionIds());
-                hdfsScanNode.setIdToPartitionKey(node.getIdToPartitionKey());
-                hdfsScanNode.getScanRangeLocations(context.getDescTbl());
-                // set predicate
-                List<ScalarOperator> noEvalPartitionConjuncts = node.getNoEvalPartitionConjuncts();
-                List<ScalarOperator> nonPartitionConjuncts = node.getNonPartitionConjuncts();
-                List<ScalarOperator> minMaxConjuncts = node.getMinMaxConjuncts();
-                ScalarOperatorToExpr.FormatterContext formatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getPredictsExpr();
+                scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
 
-                for (ScalarOperator noEvalPartitionConjunct : noEvalPartitionConjuncts) {
-                    hdfsScanNode.getNoEvalPartitionConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(noEvalPartitionConjunct, formatterContext));
-                }
-                for (ScalarOperator nonPartitionConjunct : nonPartitionConjuncts) {
-                    hdfsScanNode.getNonPartitionConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(nonPartitionConjunct, formatterContext));
-                }
+                hdfsScanNode.setupScanRangeLocations(context.getDescTbl());
 
-                /*
-                 * populates 'minMaxTuple' with slots for statistics values,
-                 * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
-                 */
-                TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
-                        SlotDescriptor slotDescriptor =
-                                context.getDescTbl()
-                                        .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
-                        Column column = node.getMinMaxColumnRefMap().get(columnRefOperator);
-                        slotDescriptor.setColumn(column);
-                        slotDescriptor.setIsNullable(column.isAllowNull());
-                        slotDescriptor.setIsMaterialized(true);
-                        context.getColRefToExpr()
-                                .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
-                    }
-                }
-                minMaxTuple.computeMemLayout();
-                hdfsScanNode.setMinMaxTuple(minMaxTuple);
-                ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    hdfsScanNode.getMinMaxConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
-                }
+                prepareCommonExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context);
             } catch (Exception e) {
                 LOG.warn("Hdfs scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);

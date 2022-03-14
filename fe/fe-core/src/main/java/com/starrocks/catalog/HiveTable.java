@@ -37,6 +37,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
@@ -73,7 +74,7 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
  * So we still remains the hive.metastore.uris property for compatible, but hive table only set hive.metastore.uris
  * dose not support query.
  */
-public class HiveTable extends Table {
+public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HiveTable.class);
 
     private static final String PROPERTY_MISSING_MSG =
@@ -126,12 +127,9 @@ public class HiveTable extends Table {
         return hiveTable;
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
-        List<Column> partColumns = Lists.newArrayList();
-        for (String columnName : partColumnNames) {
-            partColumns.add(nameToColumn.get(columnName));
-        }
-        return partColumns;
+        return HiveMetaStoreTableUtils.getPartitionColumns(this.nameToColumn, partColumnNames);
     }
 
     public List<String> getPartitionColumnNames() {
@@ -159,40 +157,28 @@ public class HiveTable extends Table {
 
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
         List<Column> partColumns = getPartitionColumns();
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionKeys(resourceName, hiveDb, hiveTable, partColumns);
+        return HiveMetaStoreTableUtils.getPartitionKeys(resourceName, hiveDb, hiveTable, partColumns);
     }
 
-    public HivePartition getPartition(PartitionKey partitionKey) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartition(resourceName, hiveDb, hiveTable, partitionKey);
+    @Override
+    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
+        return HiveMetaStoreTableUtils.getPartitions(resourceName, hiveDb, hiveTable, partitionKeys);
     }
 
-    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys)
-            throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitions(resourceName, hiveDb, hiveTable, partitionKeys);
-    }
-
+    @Override
     public HiveTableStats getTableStats() throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, hiveDb, hiveTable);
+        return HiveMetaStoreTableUtils.getTableStats(resourceName, hiveDb, hiveTable);
     }
 
+    @Override
     public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKeys);
+        return HiveMetaStoreTableUtils.getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKeys);
     }
 
+    @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
-        // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
-        List<String> allColumnNames = new ArrayList<>(this.nameToColumn.keySet());
-        Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
-                .getTableLevelColumnStats(resourceName, hiveDb, hiveTable, getPartitionColumns(), allColumnNames);
-        Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
-        for (String columnName : columnNames) {
-            result.put(columnName, allColumnStats.get(columnName));
-        }
-        return result;
+        return HiveMetaStoreTableUtils.getTableLevelColumnStats(resourceName, hiveDb, hiveTable,
+                this.nameToColumn, columnNames, getPartitionColumns());
     }
 
     public void refreshTableCache() throws DdlException {
@@ -246,43 +232,10 @@ public class HiveTable extends Table {
      * Computes and returns the number of rows scanned based on the per-partition row count stats
      * TODO: consider missing or corrupted partition stats
      */
+    @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
-        if (partitions == null) {
-            try {
-                partitions = Lists.newArrayList(getPartitionKeys().keySet());
-            } catch (DdlException e) {
-                LOG.warn("table {} gets partitions failed.", name, e);
-                return -1;
-            }
-        }
-        if (partitions.isEmpty()) {
-            return 0;
-        }
-
-        long numRows = -1;
-
-        List<HivePartitionStats> partitionsStats = Lists.newArrayList();
-        try {
-            partitionsStats = getPartitionsStats(partitions);
-        } catch (DdlException e) {
-            LOG.warn("table {} gets partitions stats failed.", name, e);
-        }
-
-        for (int i = 0; i < partitionsStats.size(); i++) {
-            long partNumRows = partitionsStats.get(i).getNumRows();
-            long partTotalFileBytes = partitionsStats.get(i).getTotalFileBytes();
-            // -1: missing stats
-            if (partNumRows > -1) {
-                if (numRows == -1) {
-                    numRows = 0;
-                }
-                numRows += partNumRows;
-            } else {
-                LOG.debug("table {} partition {} stats abnormal. num rows: {}, total file bytes: {}",
-                        name, partitions.get(i), partNumRows, partTotalFileBytes);
-            }
-        }
-        return numRows;
+        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(resourceName, hiveDb, hiveTable,
+                partitions, getPartitionColumns());
     }
 
     private void validate(Map<String, String> properties) throws DdlException {

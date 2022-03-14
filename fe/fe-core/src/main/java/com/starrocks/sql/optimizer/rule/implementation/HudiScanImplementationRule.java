@@ -26,12 +26,7 @@ public class HudiScanImplementationRule extends ImplementationRule {
         if (scan.getTableType() == Table.TableType.HUDI) {
             PhysicalHudiScanOperator physicalHudiScan = new PhysicalHudiScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
-                    scan.getSelectedPartitionIds(),
-                    scan.getIdToPartitionKey(),
-                    scan.getNoEvalPartitionConjuncts(),
-                    scan.getNonPartitionConjuncts(),
-                    scan.getMinMaxConjuncts(),
-                    scan.getMinMaxColumnRefMap(),
+                    scan.getScanOperatorPredicates(),
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());

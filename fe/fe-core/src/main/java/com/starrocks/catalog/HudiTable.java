@@ -16,6 +16,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
@@ -39,14 +40,17 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class HudiTable extends Table {
+/**
+ * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
+ * This logic should be decoupled from metastore when the related interfaces are ready.
+ */
+public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
     private static final String PROPERTY_MISSING_MSG =
@@ -97,34 +101,6 @@ public class HudiTable extends Table {
         return table;
     }
 
-    public List<Column> getPartitionColumns() {
-        List<Column> partColumns = Lists.newArrayList();
-        for (String columnName : partColumnNames) {
-            partColumns.add(nameToColumn.get(columnName));
-        }
-        return partColumns;
-    }
-
-    public List<String> getPartitionColumnNames() {
-        return partColumnNames;
-    }
-
-    public List<String> getDataColumnNames() {
-        return dataColumnNames;
-    }
-
-    public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
-        List<Column> partColumns = getPartitionColumns();
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionKeys(resourceName, db, table, partColumns);
-    }
-
-    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys)
-            throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getHudiPartitions(resourceName, db, table, partitionKeys);
-    }
-
     public String getResourceName() {
         return resourceName;
     }
@@ -137,69 +113,52 @@ public class HudiTable extends Table {
         return hudiProperties.get(HUDI_BASE_PATH);
     }
 
-    public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
-        // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
-        List<String> allColumnNames = new ArrayList<>(this.nameToColumn.keySet());
-        Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
-                .getTableLevelColumnStats(resourceName, db, table, getPartitionColumns(), allColumnNames);
-        Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
-        for (String columnName : columnNames) {
-            result.put(columnName, allColumnStats.get(columnName));
-        }
-        return result;
+    @Override
+    public List<Column> getPartitionColumns() {
+        return HiveMetaStoreTableUtils.getPartitionColumns(this.nameToColumn, partColumnNames);
     }
 
+    public List<String> getPartitionColumnNames() {
+        return partColumnNames;
+    }
+
+    public List<String> getDataColumnNames() {
+        return dataColumnNames;
+    }
+
+    public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
+        List<Column> partColumns = getPartitionColumns();
+        return HiveMetaStoreTableUtils.getPartitionKeys(resourceName, db, table, partColumns);
+    }
+
+    @Override
+    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
+        return HiveMetaStoreTableUtils.getPartitions(resourceName, db, table, partitionKeys);
+    }
+
+    @Override
     public HiveTableStats getTableStats() throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, db, table);
+        return HiveMetaStoreTableUtils.getTableStats(resourceName, db, table);
     }
 
+    @Override
     public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionsStats(resourceName, db, table, partitionKeys);
+        return HiveMetaStoreTableUtils.getPartitionsStats(resourceName, db, table, partitionKeys);
+    }
+
+    @Override
+    public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
+        return HiveMetaStoreTableUtils.getTableLevelColumnStats(resourceName, db, table,
+                this.nameToColumn, columnNames, getPartitionColumns());
     }
 
     /**
      * Computes and returns the number of rows scanned based on the per-partition row count stats
      * TODO: consider missing or corrupted partition stats
      */
+    @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
-        if (partitions == null) {
-            try {
-                partitions = Lists.newArrayList(getPartitionKeys().keySet());
-            } catch (DdlException e) {
-                LOG.warn("Failed to get table {} partitions.", name, e);
-                return -1;
-            }
-        }
-        if (partitions.isEmpty()) {
-            return 0;
-        }
-
-        long numRows = -1;
-
-        List<HivePartitionStats> partitionsStats = Lists.newArrayList();
-        try {
-            partitionsStats = getPartitionsStats(partitions);
-        } catch (DdlException e) {
-            LOG.warn("Failed to get table {} partitions stats.", name, e);
-        }
-
-
-        for (int i = 0; i < partitionsStats.size(); i++) {
-            long partNumRows = partitionsStats.get(i).getNumRows();
-            long partTotalFileBytes = partitionsStats.get(i).getTotalFileBytes();
-            // -1: missing stats
-            if (partNumRows > -1) {
-                if (numRows == -1) {
-                    numRows = 0;
-                }
-                numRows += partNumRows;
-            } else {
-                LOG.debug("Table {} partition {} stats is invalid. num rows: {}, total file bytes: {}",
-                        name, partitions.get(i), partNumRows, partTotalFileBytes);
-            }
-        }
-        return numRows;
+        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(resourceName, db, table, partitions, getPartitionColumns());
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
