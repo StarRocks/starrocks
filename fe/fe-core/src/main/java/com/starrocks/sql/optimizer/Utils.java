@@ -7,8 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -374,13 +373,14 @@ public class Utils {
                 List<ColumnStatistic> columnStatisticList =
                         Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
-            } else if (operator instanceof LogicalHiveScanOperator) {
-                HiveTable hiveTable = (HiveTable) scanOperator.getTable();
+            } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
                 try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap = hiveTable.getTableLevelColumnStats(colNames);
+                    Map<String, HiveColumnStats> hiveColumnStatisticMap = hiveMetaStoreTable.getTableLevelColumnStats(colNames);
                     return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
                 } catch (Exception e) {
-                    LOG.warn("hive table {} get column failed. error : {}", hiveTable.getName(), e);
+                    LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
+                            scanOperator.getTable().getName(), e);
                     return true;
                 }
             } else if (operator instanceof LogicalIcebergScanOperator) {
@@ -392,15 +392,6 @@ public class Utils {
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {
                     LOG.warn("Iceberg table {} get column failed. error : {}", table.getName(), e);
-                    return true;
-                }
-            } else if (operator instanceof LogicalHudiScanOperator) {
-                HudiTable hudiTable = (HudiTable) scanOperator.getTable();
-                try {
-                    Map<String, HiveColumnStats> hudiColumnStatisticMap = hudiTable.getTableLevelColumnStats(colNames);
-                    return hudiColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
-                } catch (Exception e) {
-                    LOG.warn("Hudi table {} get column failed. error : {}", hudiTable.getName(), e);
                     return true;
                 }
             } else {

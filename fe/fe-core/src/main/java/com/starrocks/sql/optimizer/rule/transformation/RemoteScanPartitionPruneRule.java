@@ -8,7 +8,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -19,7 +19,8 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -38,42 +39,44 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-public class HudiScanPartitionPruneRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(HudiScanPartitionPruneRule.class);
+public class RemoteScanPartitionPruneRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
 
-    public HudiScanPartitionPruneRule() {
-        super(RuleType.TF_PARTITION_PRUNE, Pattern.create(OperatorType.LOGICAL_HUDI_SCAN));
+    public static final RemoteScanPartitionPruneRule HIVE_SCAN = new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final RemoteScanPartitionPruneRule HUDI_SCAN = new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
+
+    public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
+        super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalHudiScanOperator operator = (LogicalHudiScanOperator) input.getOp();
-        if (operator.getTableType() == Table.TableType.HUDI) {
-            // partitionColumnName -> (LiteralExpr -> partition ids)
-            // no null partitions in this map, used by ListPartitionPruner
-            Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
-            // Store partitions with null partition values separately, used by ListPartitionPruner
-            // partitionColumnName -> null partitionIds
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
+        // partitionColumnName -> (LiteralExpr -> partition ids)
+        // no null partitions in this map, used by ListPartitionPruner
+        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        // Store partitions with null partition values separately, used by ListPartitionPruner
+        // partitionColumnName -> null partitionIds
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
 
-            try {
-                initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
-                classifyConjuncts(operator, columnToPartitionValuesMap);
-                computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
-            } catch (Exception e) {
-                LOG.warn("Hudi table partition prune failed : " + e);
-                throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
-            }
+        try {
+            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+            classifyConjuncts(operator, columnToPartitionValuesMap);
+            computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+        } catch (Exception e) {
+            LOG.warn("HMS table partition prune failed : " + e);
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
         }
         return Collections.emptyList();
     }
 
-    private void initPartitionInfo(LogicalHudiScanOperator operator,
+    private void initPartitionInfo(LogicalScanOperator operator,
                                    Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                    Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-                                   OptimizerContext context) throws DdlException {
-        HudiTable hudiTable = (HudiTable) operator.getTable();
-        List<Column> partitionColumns = hudiTable.getPartitionColumns();
+                                   OptimizerContext context) throws DdlException, AnalysisException {
+        Table table = operator.getTable();
+        HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+        List<Column> partitionColumns = hiveMetaStoreTable.getPartitionColumns();
         List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
         for (Column column : partitionColumns) {
             ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
@@ -86,7 +89,7 @@ public class HudiScanPartitionPruneRule extends TransformationRule {
         // 1. partitionColumns is empty
         // 2. partitionKeys size = 1
         // 3. key.getKeys() is empty
-        Map<PartitionKey, Long> partitionKeys = hudiTable.getPartitionKeys();
+        Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
         for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
             PartitionKey key = entry.getKey();
             long partitionId = entry.getValue();
@@ -103,43 +106,47 @@ public class HudiScanPartitionPruneRule extends TransformationRule {
                         .computeIfAbsent(literal, k -> Sets.newHashSet());
                 partitions.add(partitionId);
             }
-            operator.getIdToPartitionKey().put(partitionId, key);
+            operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}",
-                hudiTable.getName(), columnToPartitionValuesMap, columnToNullPartitions);
+                table.getName(), columnToPartitionValuesMap, columnToNullPartitions);
     }
 
-    private void classifyConjuncts(LogicalHudiScanOperator operator,
-                                   Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap) {
+    private void classifyConjuncts(LogicalScanOperator operator,
+                                   Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+            throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
             if (!columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
-                operator.getPartitionConjuncts().add(scalarOperator);
+                operator.getScanOperatorPredicates().getPartitionConjuncts().add(scalarOperator);
             } else {
-                operator.getNonPartitionConjuncts().add(scalarOperator);
+                operator.getScanOperatorPredicates().getNonPartitionConjuncts().add(scalarOperator);
             }
         }
     }
 
-    private void computePartitionInfo(LogicalHudiScanOperator operator,
+    private void computePartitionInfo(LogicalScanOperator operator,
                                       Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                       Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
                                       OptimizerContext context) throws AnalysisException {
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         ListPartitionPruner partitionPruner =
                 new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
-                        operator.getPartitionConjuncts());
+                        scanOperatorPredicates.getPartitionConjuncts());
         Collection<Long> selectedPartitionIds = partitionPruner.prune();
         if (selectedPartitionIds == null) {
-            selectedPartitionIds = operator.getIdToPartitionKey().keySet();
+            selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
         }
-        operator.setSelectedPartitionIds(selectedPartitionIds);
-        operator.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+        scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+        scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
 
         computeMinMaxConjuncts(operator, context);
     }
 
-    private void computeMinMaxConjuncts(LogicalHudiScanOperator operator, OptimizerContext context) {
-        for (ScalarOperator scalarOperator : operator.getNonPartitionConjuncts()) {
+    private void computeMinMaxConjuncts(LogicalScanOperator operator, OptimizerContext context)
+            throws AnalysisException {
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
+        for (ScalarOperator scalarOperator : scanOperatorPredicates.getNonPartitionConjuncts()) {
             if (isSupportedMinMaxConjuncts(scalarOperator)) {
                 addMinMaxConjuncts(scalarOperator, operator, context);
             }
@@ -172,9 +179,9 @@ public class HudiScanPartitionPruneRule extends TransformationRule {
         }
     }
 
-    private void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalHudiScanOperator operator,
-                                    OptimizerContext context) {
-        List<ScalarOperator> minMaxConjuncts = operator.getMinMaxConjuncts();
+    private void addMinMaxConjuncts(ScalarOperator scalarOperator, LogicalScanOperator operator,
+                                    OptimizerContext context) throws AnalysisException {
+        List<ScalarOperator> minMaxConjuncts = operator.getScanOperatorPredicates().getMinMaxConjuncts();
         if (scalarOperator instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) scalarOperator;
             ScalarOperator leftChild = binaryPredicateOperator.getChild(0);
@@ -214,10 +221,11 @@ public class HudiScanPartitionPruneRule extends TransformationRule {
 
     private BinaryPredicateOperator buildMinMaxConjunct(BinaryPredicateOperator.BinaryType type,
                                                         ScalarOperator left, ScalarOperator right,
-                                                        LogicalHudiScanOperator operator,
-                                                        OptimizerContext context) {
+                                                        LogicalScanOperator operator,
+                                                        OptimizerContext context) throws AnalysisException {
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         ColumnRefOperator newColumnRef = context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
-        operator.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));
+        scanOperatorPredicates.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));
         return new BinaryPredicateOperator(type, newColumnRef, right);
     }
 }
