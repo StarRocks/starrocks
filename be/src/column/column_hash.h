@@ -4,8 +4,13 @@
 
 #include <cstdint>
 
-#if defined(__x86_64__)
+#ifdef __SSE4_2__
 #include <nmmintrin.h>
+#endif
+
+#ifdef __SSE2__
+#include <emmintrin.h>
+#include <xmmintrin.h>
 #endif
 
 #include "util/hash_util.hpp"
@@ -103,6 +108,9 @@ public:
 };
 
 static uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
+#if defined(__x86_64__) && !defined(__SSE4_2__)
+    return crc32(hash, (const unsigned char*)data, bytes);
+#else
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % 4 /*sizeof(uint32_t)*/;
 
@@ -134,9 +142,13 @@ static uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     // for anyone who only uses the first several bits of the hash.
     hash = (hash << 16u) | (hash >> 16u);
     return hash;
+#endif
 }
 
 static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
+#if defined(__x86_64__) && !defined(__SSE4_2__)
+    return crc32(hash, (const unsigned char*)data, length);
+#else
     if (UNLIKELY(length < 8)) {
         return crc_hash_32(data, length, hash);
     }
@@ -145,7 +157,7 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
     while (words--) {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__)
         hash = __crc32cd(hash, unaligned_load<uint32_t>(p));
@@ -165,6 +177,7 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #endif
     p += sizeof(uint64_t);
     return hash;
+#endif
 }
 
 // TODO: 0x811C9DC5 is not prime number
@@ -255,8 +268,10 @@ public:
 };
 
 inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__SSE4_2__)
     return _mm_crc32_u64(seed, value);
+#elif defined(__x86_64__)
+    return crc32(seed, (const unsigned char*)&value, sizeof(uint64_t));
 #elif defined(__aarch64__)
     return __crc32cd(seed, value);
 #else
@@ -265,9 +280,12 @@ inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
 }
 
 inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed) {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__SSE4_2__)
     uint64_t hash = _mm_crc32_u64(seed, value0);
     hash = _mm_crc32_u64(hash, value1);
+#elif defined(__x86_64__)
+    hash = crc32(seed, (const unsigned char*)&value0, sizeof(uint64_t));
+    hash = crc32(hash, (const unsigned char*)&value1, sizeof(uint64_t));
 #elif defined(__aarch64__)
     uint64_t hash = __crc32cd(seed, value0);
     hash = __crc32cd(hash, value1);
