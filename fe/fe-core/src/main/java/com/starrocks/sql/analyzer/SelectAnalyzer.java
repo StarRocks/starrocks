@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -18,23 +17,12 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
-import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.TableFunctionRelation;
-import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.ArrayList;
@@ -70,11 +58,10 @@ public class SelectAnalyzer {
 
         List<Expr> outputExpressions =
                 analyzeSelect(selectList, fromRelation, groupByClause != null, analyzeState, sourceScope);
-        Scope outputScope = computeAndAssignOutputScope(selectList, analyzeState, sourceScope);
+        Scope outputScope = analyzeState.getOutputScope();
 
-        List<Expr> groupByExpressions =
-                new ArrayList<>(
-                        analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        List<Expr> groupByExpressions = new ArrayList<>(
+                analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
         if (selectList.isDistinct()) {
             groupByExpressions.addAll(outputExpressions);
         }
@@ -170,12 +157,13 @@ public class SelectAnalyzer {
     private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
                                      AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
-        List<String> columnOutputNames = new ArrayList<>();
+        ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
 
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
-                List<Field> fields = item.getTblName() == null ? scope.getRelationFields().getAllFields()
-                        : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName());
+                List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
+                        : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
+                        .stream().filter(Field::isVisible).collect(Collectors.toList());
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {
                         throw new SemanticException("Table %s not found", item.getTblName());
@@ -187,15 +175,7 @@ public class SelectAnalyzer {
                             INTERNAL_ERROR);
                 }
 
-                columnOutputNames.addAll(expandStar(item, fromRelation).stream().map(AST2SQL::toString)
-                        .collect(Collectors.toList()));
-
                 for (Field field : fields) {
-                    //shadow column is not visible
-                    if (!field.isVisible()) {
-                        continue;
-                    }
-
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*
                      * Generate a special "SlotRef" as FieldReference,
@@ -207,15 +187,19 @@ public class SelectAnalyzer {
                     analyzeExpression(fieldReference, analyzeState, scope);
                     outputExpressionBuilder.add(fieldReference);
                 }
-            } else {
-                if (item.getAlias() != null) {
-                    columnOutputNames.add(item.getAlias());
-                } else {
-                    columnOutputNames.add(AST2SQL.toString(item.getExpr()));
-                }
+                outputFields.addAll(fields);
 
+            } else {
+                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
+
+                if (item.getExpr() instanceof SlotRef) {
+                    outputFields.add(new Field(name, item.getExpr().getType(),
+                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
+                } else {
+                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                }
             }
 
             if (selectList.isDistinct()) {
@@ -238,9 +222,8 @@ public class SelectAnalyzer {
         }
 
         List<Expr> outputExpr = outputExpressionBuilder.build();
-        Preconditions.checkArgument(outputExpr.size() == columnOutputNames.size());
         analyzeState.setOutputExpression(outputExpr);
-        analyzeState.setColumnOutputNames(columnOutputNames);
+        analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
         return outputExpressionBuilder.build();
     }
 
@@ -416,7 +399,7 @@ public class SelectAnalyzer {
 
                     List<List<Expr>> groupingSets =
                             Sets.powerSet(IntStream.range(0, rewriteOriGrouping.size())
-                                    .boxed().collect(Collectors.toSet())).stream()
+                                            .boxed().collect(Collectors.toSet())).stream()
                                     .map(l -> l.stream().map(rewriteOriGrouping::get).collect(Collectors.toList()))
                                     .collect(Collectors.toList());
 
@@ -544,155 +527,7 @@ public class SelectAnalyzer {
         return orderScope;
     }
 
-    private Scope computeAndAssignOutputScope(SelectList selectList, AnalyzeState analyzeState, Scope scope) {
-        ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-
-        for (SelectListItem item : selectList.getItems()) {
-            if (item.isStar()) {
-                if (item.getTblName() == null) {
-                    outputFields.addAll(scope.getRelationFields().getAllFields()
-                            .stream().filter(Field::isVisible)
-                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
-                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
-                } else {
-                    outputFields.addAll(scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName())
-                            .stream().filter(Field::isVisible)
-                            .map(f -> new Field(f.getName(), f.getType(), f.getRelationAlias(),
-                                    f.getOriginExpression(), f.isVisible())).collect(Collectors.toList()));
-                }
-            } else {
-                String name;
-                TableName relationAlias = null;
-                if (item.getAlias() != null) {
-                    name = item.getAlias();
-                } else {
-                    name = AST2SQL.toString(item.getExpr());
-                }
-
-                outputFields.add(new Field(name, item.getExpr().getType(), relationAlias, item.getExpr()));
-            }
-        }
-        Scope outputScope = new Scope(RelationId.anonymous(), new RelationFields(outputFields.build()));
-
-        analyzeState.setOutputScope(outputScope);
-        return outputScope;
-    }
-
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
-    }
-
-    public static List<Expr> expandStar(SelectListItem item, Relation fromRelation) {
-        List<Expr> outputExpressions = Lists.newArrayList();
-        outputExpressions.addAll(new AstVisitor<List<Expr>, Void>() {
-            @Override
-            public List<Expr> visitCTE(CTERelation node, Void context) {
-                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                    List<Expr> outputExpressions = new ArrayList<>();
-                    for (String outputName : node.getColumnOutputNames()) {
-                        outputExpressions.add(new SlotRef(node.getAlias(), outputName, outputName));
-                    }
-                    return outputExpressions;
-                } else {
-                    return new ArrayList<>();
-                }
-            }
-
-            @Override
-            public List<Expr> visitJoin(JoinRelation node, Void context) {
-                if (node.getType().isLeftSemiAntiJoin()) {
-                    return visit(node.getLeft());
-                } else if (node.getType().isRightSemiAntiJoin()) {
-                    return visit(node.getRight());
-                } else {
-                    return Streams.concat(visit(node.getLeft()).stream(), visit(node.getRight()).stream())
-                            .collect(Collectors.toList());
-                }
-            }
-
-            @Override
-            public List<Expr> visitSelect(SelectRelation node, Void context) {
-                List<Expr> outputExpression = Lists.newArrayList();
-                for (SelectListItem item : node.getSelectList().getItems()) {
-                    if (item.isStar()) {
-                        outputExpression.addAll(expandStar(item, node.getRelation()));
-                    } else {
-                        outputExpression.add(item.getExpr());
-                    }
-                }
-                return outputExpression;
-            }
-
-            @Override
-            public List<Expr> visitSetOp(SetOperationRelation node, Void context) {
-                return node.getOutputExpression();
-            }
-
-            @Override
-            public List<Expr> visitSubquery(SubqueryRelation node, Void context) {
-                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                    List<Expr> outputExpressions = new ArrayList<>();
-                    for (String outputName : node.getQuery().getColumnOutputNames()) {
-                        outputExpressions.add(new SlotRef(node.getAlias(), outputName, outputName));
-                    }
-                    return outputExpressions;
-                } else {
-                    return new ArrayList<>();
-                }
-            }
-
-            @Override
-            public List<Expr> visitView(ViewRelation node, Void context) {
-                if (item.getTblName() == null || item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                    List<Expr> outputExpressions = new ArrayList<>();
-                    for (Column column : node.getView().getBaseSchema()) {
-                        outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
-                    }
-
-                    return outputExpressions;
-                } else {
-                    return new ArrayList<>();
-                }
-            }
-
-            @Override
-            public List<Expr> visitTable(TableRelation node, Void context) {
-                if (item.getTblName() == null) {
-                    List<Expr> outputExpressions = new ArrayList<>();
-                    for (Column column : node.getTable().getBaseSchema()) {
-                        outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
-                    }
-                    return outputExpressions;
-                } else {
-                    if (!item.getTblName().getTbl().equals(node.getAlias().getTbl())) {
-                        return new ArrayList<>();
-                    } else {
-                        List<Expr> outputExpressions = new ArrayList<>();
-                        for (Column column : node.getTable().getBaseSchema()) {
-                            outputExpressions.add(new SlotRef(node.getAlias(), column.getName(), column.getName()));
-                        }
-                        return outputExpressions;
-                    }
-                }
-            }
-
-            @Override
-            public List<Expr> visitTableFunction(TableFunctionRelation node, Void context) {
-                List<Expr> outputExpressions = Lists.newArrayList();
-                for (int i = 0; i < node.getTableFunction().getDefaultColumnNames().size(); ++i) {
-                    outputExpressions.add(new SlotRef(node.getAlias(),
-                            node.getTableFunction().getDefaultColumnNames().get(i),
-                            node.getTableFunction().getDefaultColumnNames().get(i))
-                    );
-                }
-                return outputExpressions;
-            }
-
-            @Override
-            public List<Expr> visitValues(ValuesRelation node, Void context) {
-                return node.getRows().get(0);
-            }
-        }.visit(fromRelation));
-        return outputExpressions;
     }
 }
