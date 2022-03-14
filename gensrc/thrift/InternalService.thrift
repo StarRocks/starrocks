@@ -303,6 +303,7 @@ struct TExecPlanFragmentParams {
 
   53: optional WorkGroup.TWorkGroup workgroup
   54: optional bool enable_resource_group
+  55: optional i32 func_version
 }
 
 struct TExecPlanFragmentResult {
