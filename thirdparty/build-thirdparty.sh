@@ -175,7 +175,6 @@ build_openssl() {
     cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
 
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     LIBDIR="lib" \
     ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
     make -j$PARALLEL
@@ -192,7 +191,7 @@ build_thrift() {
     fi
 
     echo ${TP_LIB_DIR}
-    ./configure CPPFLAGS="-I${TP_INCLUDE_DIR}" LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lcrypto -ldl -lssl" CFLAGS="-fPIC" \
+    ./configure LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lcrypto -ldl -lssl"
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
@@ -276,9 +275,7 @@ build_glog() {
     rm -rf config.*
     autoreconf -i
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fpermissive -fPIC" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
     make -j$PARALLEL 
     make install
@@ -358,13 +355,8 @@ build_gperftools() {
         ./autogen.sh
     fi
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     LD_LIBRARY_PATH="${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    LD_LIBRARY_PATH="${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
@@ -375,9 +367,7 @@ build_zlib() {
     check_if_source_exist $ZLIB_SOURCE
     cd $TP_SOURCE_DIR/$ZLIB_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC -O3" \
     ./configure --prefix=$TP_INSTALL_DIR --static
     make -j$PARALLEL 
     make install
@@ -397,7 +387,6 @@ build_bzip() {
     check_if_source_exist $BZIP_SOURCE
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
 
-    CFLAGS="-fPIC"
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
 }
 
@@ -406,9 +395,7 @@ build_curl() {
     check_if_source_exist $CURL_SOURCE
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -ldl" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
     --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --disable-ldap --enable-ipv6
     make -j$PARALLEL
@@ -486,7 +473,6 @@ build_librdkafka() {
 
     cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
     make -j$PARALLEL
