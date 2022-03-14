@@ -3,40 +3,22 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class LogicalHudiScanOperator extends LogicalScanOperator {
     private final Table.TableType tableType;
-    // id -> partition key
-    private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
-    private Collection<Long> selectedPartitionIds = Lists.newArrayList();
-
-    // partitionConjuncts contains partition filters.
-    private List<ScalarOperator> partitionConjuncts = Lists.newArrayList();
-    // After partition pruner prune, conjuncts that are not evaled will be send to backend.
-    private List<ScalarOperator> noEvalPartitionConjuncts = Lists.newArrayList();
-    // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
-    private List<ScalarOperator> nonPartitionConjuncts = Lists.newArrayList();
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet/Orc files.
-    private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
-    // Map of columnRefOperator to column which column in minMaxConjuncts
-    private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private Set<String> partitionColumns = Sets.newHashSet();
 
     public LogicalHudiScanOperator(Table table,
@@ -66,13 +48,7 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
                 builder.getProjection());
 
         this.tableType = builder.tableType;
-        this.idToPartitionKey = builder.idToPartitionKey;
-        this.selectedPartitionIds = builder.selectedPartitionIds;
-        this.partitionConjuncts = builder.partitionConjuncts;
-        this.noEvalPartitionConjuncts = builder.noEvalPartitionConjuncts;
-        this.nonPartitionConjuncts = builder.nonPartitionConjuncts;
-        this.minMaxConjuncts = builder.minMaxConjuncts;
-        this.minMaxColumnRefMap = builder.minMaxColumnRefMap;
+        this.predicates = builder.predicates;
         this.partitionColumns = builder.partitionColumns;
     }
 
@@ -84,36 +60,14 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         return partitionColumns;
     }
 
-    public Map<Long, PartitionKey> getIdToPartitionKey() {
-        return idToPartitionKey;
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return this.predicates;
     }
 
-    public List<ScalarOperator> getPartitionConjuncts() {
-        return partitionConjuncts;
-    }
-
-    public List<ScalarOperator> getNoEvalPartitionConjuncts() {
-        return noEvalPartitionConjuncts;
-    }
-
-    public List<ScalarOperator> getNonPartitionConjuncts() {
-        return nonPartitionConjuncts;
-    }
-
-    public Collection<Long> getSelectedPartitionIds() {
-        return selectedPartitionIds;
-    }
-
-    public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
-        this.selectedPartitionIds = selectedPartitionIds;
-    }
-
-    public List<ScalarOperator> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
-        return minMaxColumnRefMap;
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
     }
 
     @Override
@@ -124,13 +78,7 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHudiScanOperator, LogicalHudiScanOperator.Builder> {
         private Table.TableType tableType;
-        private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
-        private Collection<Long> selectedPartitionIds = Lists.newArrayList();
-        private List<ScalarOperator> partitionConjuncts = Lists.newArrayList();
-        private List<ScalarOperator> noEvalPartitionConjuncts = Lists.newArrayList();
-        private List<ScalarOperator> nonPartitionConjuncts = Lists.newArrayList();
-        private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
-        private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
         private Set<String> partitionColumns = Sets.newHashSet();
 
         @Override
@@ -143,13 +91,7 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             this.tableType = scanOperator.tableType;
-            this.idToPartitionKey = scanOperator.idToPartitionKey;
-            this.selectedPartitionIds = scanOperator.selectedPartitionIds;
-            this.partitionConjuncts = scanOperator.partitionConjuncts;
-            this.noEvalPartitionConjuncts = scanOperator.noEvalPartitionConjuncts;
-            this.nonPartitionConjuncts = scanOperator.nonPartitionConjuncts;
-            this.minMaxConjuncts = scanOperator.minMaxConjuncts;
-            this.minMaxColumnRefMap = scanOperator.minMaxColumnRefMap;
+            this.predicates = scanOperator.predicates;
             this.partitionColumns = scanOperator.partitionColumns;
             return this;
         }
