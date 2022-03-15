@@ -247,7 +247,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 if (isKey && hasReplaceColumn) {
                     throw new DdlException(
-                            "Can not drop key column when rollup has value column with REPLACE aggregation metho");
+                            "Can not drop key column when rollup has value column with REPLACE aggregation method");
                 }
             }
         }
