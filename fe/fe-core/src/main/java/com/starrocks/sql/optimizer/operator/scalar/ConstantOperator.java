@@ -59,7 +59,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s")
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.")
                     .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL).toFormatter();
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
