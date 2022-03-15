@@ -32,6 +32,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,5 +129,9 @@ public class CreateViewStmt extends BaseViewStmt {
         List<String> colNames = cols.stream().map(ColWithComment::getColName).collect(Collectors.toList());
         viewDefStmt.substituteSelectListForCreateView(tmpAnalyzer, colNames);
         inlineViewDef = viewDefStmt.toSql();
+    }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateViewStatement(this, context);
     }
 }

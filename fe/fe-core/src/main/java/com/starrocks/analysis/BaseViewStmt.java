@@ -180,5 +180,4 @@ public class BaseViewStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitBaseViewStatement(this, context);
     }
-
 }

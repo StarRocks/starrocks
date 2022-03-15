@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyzeStmt;
@@ -16,7 +17,9 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -65,8 +68,16 @@ public abstract class AstVisitor<R, C> {
         return visitNode(statement, context);
     }
 
-    public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
+    public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitAlterViewStatement(AlterViewStmt statement, C context) {
+        return visitBaseViewStatement(statement, context);
+    }
+
+    public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
@@ -78,19 +89,23 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateViewStatement(CreateViewStmt statement, C context) {
+        return visitBaseViewStatement(statement, context);
+    }
+
     public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     public R visitDropWorkGroupStatement(DropWorkGroupStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitDDLStatement(statement, context);
     }
 
     public R visitQueryStatement(QueryStatement node, C context) {
