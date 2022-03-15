@@ -22,6 +22,7 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -49,6 +50,8 @@ public class Frontend implements Writable {
     private String feVersion;
 
     private boolean isAlive = false;
+
+    private int heartbeatRetryTimes = 0;
 
     public Frontend() {
     }
@@ -130,12 +133,17 @@ public class Frontend implements Writable {
             feVersion = hbResponse.getFeVersion();
             heartbeatErrMsg = "";
             isChanged = true;
+            this.heartbeatRetryTimes = 0;
         } else {
-            if (isAlive) {
-                isAlive = false;
-                isChanged = true;
+            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
+                this.heartbeatRetryTimes++;
+            } else {
+                if (isAlive) {
+                    isAlive = false;
+                    isChanged = true;
+                }
+                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
             }
-            heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
         }
         return isChanged;
     }
