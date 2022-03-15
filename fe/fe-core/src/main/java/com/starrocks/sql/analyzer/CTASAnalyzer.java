@@ -11,6 +11,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Catalog;
@@ -24,6 +25,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +45,11 @@ public class CTASAnalyzer {
 
         // Pair<TableName, Pair<ColumnName, ColumnAlias>>
         Map<Pair<String, Pair<String, String>>, Table> columnNameToTable = Maps.newHashMap();
-        Map<String, Table> tableRefToTable = AnalyzerUtils.collectAllTable(queryStatement);
+        Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+        Map<String, Table> tableRefToTable = new HashMap<>();
+        for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+            tableRefToTable.put(t.getKey().getTbl(), t.getValue());
+        }
 
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;

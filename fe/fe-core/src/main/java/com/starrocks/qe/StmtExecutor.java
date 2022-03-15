@@ -1034,21 +1034,20 @@ public class StmtExecutor {
     }
 
     private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof QueryStmt
-                || statement instanceof InsertStmt
-                || statement instanceof CreateTableAsSelectStmt
-                || statement instanceof QueryStatement
-                || statement instanceof CreateViewStmt
-                || statement instanceof AlterViewStmt
-                || statement instanceof CreateWorkGroupStmt
+        return statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof InsertStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowTableStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof ShowColumnStmt
                 || statement instanceof ShowTableStatusStmt
-                || statement instanceof ShowVariablesStmt;
+                || statement instanceof ShowVariablesStmt
+                || statement instanceof ShowWorkGroupStmt;
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {

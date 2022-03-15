@@ -154,23 +154,23 @@ public class AnalyzerUtils {
     }
 
     //Get all the table used
-    public static Map<String, Table> collectAllTable(StatementBase statementBase) {
-        Map<String, Table> tables = Maps.newHashMap();
+    public static Map<TableName, Table> collectAllTable(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.TableCollector(tables).visit(statementBase);
         return tables;
     }
 
     private static class TableCollector extends AstVisitor<Void, Void> {
-        private final Map<String, Table> tables;
+        protected final Map<TableName, Table> tables;
 
-        public TableCollector(Map<String, Table> dbs) {
+        public TableCollector(Map<TableName, Table> dbs) {
             this.tables = dbs;
         }
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
-            tables.put(table.getName(), table);
+            tables.put(node.getTableName(), table);
             return visit(node.getQueryStatement());
         }
 
@@ -222,7 +222,26 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getAlias().getTbl(), table);
+            tables.put(node.getName(), table);
+            return null;
+        }
+    }
+
+    public static Map<TableName, Table> collectAllTableWithAlias(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableCollectorWithAlias(tables).visit(statementBase);
+        return tables;
+    }
+
+    private static class TableCollectorWithAlias extends TableCollector {
+        public TableCollectorWithAlias(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            tables.put(node.getAlias(), table);
             return null;
         }
     }
