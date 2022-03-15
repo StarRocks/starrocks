@@ -473,9 +473,7 @@ public class ExpressionAnalyzer {
                     throw new SemanticException("Time Type can not used in %s function",
                             fnName);
                 }
-            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3) ||
-                    // truncate have only decimal version
-                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 fn = getDecimalV3Function(node, argumentTypes);
             } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
@@ -580,8 +578,7 @@ public class ExpressionAnalyzer {
                         .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
             } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
                     DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equalsIgnoreCase(fnName) ||
-                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+                    FunctionSet.IF.equalsIgnoreCase(fnName)) {
                 // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
                 // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
                 List<Type> argTypes;
@@ -595,12 +592,7 @@ public class ExpressionAnalyzer {
                 Type returnType = fn.getReturnType();
                 // Decimal v3 function return type maybe need change
                 if (returnType.isDecimalV3() && commonType.isValid()) {
-                    if (FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
-                        // Function truncate_decimal may change the scale, we need to calculate the scale of the return type
-                        returnType = DecimalV3FunctionAnalyzer.getReturnTypeOfTruncate(node, argTypes);
-                    } else {
-                        returnType = commonType;
-                    }
+                    returnType = commonType;
                 }
                 ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
                         fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
@@ -614,6 +606,12 @@ public class ExpressionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
 
                 fn = newFn;
+            } else if (FunctionSet.TRUNCATE.equalsIgnoreCase(fnName)) {
+                // Decimal version of truncate may change the scale, we need to calculate the scale of the return type
+                // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
+                List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
+                        .collect(Collectors.toList());
+                fn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, fn, argTypes);
             }
             return fn;
         }

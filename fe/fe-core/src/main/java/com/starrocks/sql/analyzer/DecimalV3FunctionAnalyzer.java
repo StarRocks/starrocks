@@ -7,12 +7,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 
 import java.util.Arrays;
@@ -82,7 +82,7 @@ public class DecimalV3FunctionAnalyzer {
             return ScalarType.createDecimalV3Type(widerPrimitiveType, precision, scale);
         }
 
-        if (FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+        if (FunctionSet.TRUNCATE.equalsIgnoreCase(fnName)) {
             return argTypes[0].isDecimalV3() ?
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, argTypes[0].getPrecision(),
                             ((ScalarType) argTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
@@ -112,13 +112,13 @@ public class DecimalV3FunctionAnalyzer {
         return Type.INVALID;
     }
 
-    public static Type getReturnTypeOfTruncate(FunctionCallExpr node, List<Type> argTypes) {
-        Type firstArgType = argTypes.get(0);
+    public static Function getFnOfTruncate(FunctionCallExpr node, Function fn, List<Type> argumentTypes) {
+        Type firstArgType = argumentTypes.get(0);
         Expr secondArg = node.getParams().exprs().get(1);
 
-        // TODO(hcf) How to deduce the type of return
+        // Double version of truncate
         if (!firstArgType.isDecimalV3()) {
-            return Type.DEFAULT_DECIMAL128;
+            return fn;
         }
 
         // For simplicity, we use decimal128(38, ?) as return type, so we only need to
@@ -127,6 +127,7 @@ public class DecimalV3FunctionAnalyzer {
         final PrimitiveType returnPrimitiveType = PrimitiveType.DECIMAL128;
         final int returnPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
         final int returnScale;
+        final Type returnType;
 
         if (secondArg instanceof IntLiteral) {
             final int expectedScale = (int) ((IntLiteral) secondArg).getValue();
@@ -146,20 +147,31 @@ public class DecimalV3FunctionAnalyzer {
                 // Scale reduce
                 returnScale = expectedScale;
             }
+            returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else if (Expr.containsSlotRef(secondArg)) {
             returnScale = originalScale;
+            returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            throw new StarRocksPlannerException(
-                    "Second arg of function truncate_decimal must be int literal or slotRef expression.",
-                    ErrorType.USER_ERROR);
+            return Expr.getBuiltinFunction(FunctionSet.TRUNCATE, new Type[] {Type.DOUBLE, Type.INT},
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
-        return ScalarType.createType(returnPrimitiveType, -1, returnPrecision,
-                returnScale);
+        ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argumentTypes, returnType,
+                fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
+                ((ScalarFunction) fn).getPrepareFnSymbol(),
+                ((ScalarFunction) fn).getCloseFnSymbol());
+        newFn.setFunctionId(fn.getFunctionId());
+        newFn.setChecksum(fn.getChecksum());
+        newFn.setBinaryType(fn.getBinaryType());
+        newFn.setHasVarArgs(fn.hasVarArgs());
+        newFn.setId(fn.getId());
+        newFn.setUserVisible(fn.isUserVisible());
+
+        return newFn;
     }
 
     public static AggregateFunction rectifyAggregationFunction(AggregateFunction fn, Type argType, Type returnType) {
-        if (argType.isDecimalV3()) {
+        if (argType.isDecimalV2() || argType.isDecimalV3()) {
             if (fn.functionName().equals(FunctionSet.COUNT)) {
                 // count function return type always bigint
                 returnType = fn.getReturnType();

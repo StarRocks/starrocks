@@ -342,8 +342,7 @@ public class Function implements Writable {
             if (other.argTypes[i].matchesType(this.argTypes[i])) {
                 continue;
             }
-            if (this.argTypes[i].isDecimalV3() ||
-                    !Type.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
+            if (!Type.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
                 return false;
             }
         }
@@ -353,8 +352,7 @@ public class Function implements Writable {
                 if (other.argTypes[i].matchesType(getVarArgsType())) {
                     continue;
                 }
-                if (getVarArgsType().isDecimalV3() ||
-                        !Type.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
+                if (!Type.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
                     return false;
                 }
             }
