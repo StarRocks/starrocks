@@ -1393,4 +1393,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long min_routine_load_lag_for_metrics = 10000;
+
+    /**
+     * The heartbeat timeout of be/broker/fe.
+     * the default is 5 seconds
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_timeout_second = 5;
+
+    /**
+     * The heartbeat retry times of be/broker/fe.
+     * the default is 3
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_retry_times = 3;
 }
