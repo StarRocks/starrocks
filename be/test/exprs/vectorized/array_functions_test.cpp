@@ -3890,6 +3890,18 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
     ASSERT_TRUE(v->get_data()[4]);
 }
 
+TEST_F(ArrayFunctionsTest, array_overlap_with_onlynull) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+
+    auto src_column2 = ColumnHelper::create_const_null_column(1);
+
+    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    auto dest_column = overlap.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->only_null());
+}
+
 TEST_F(ArrayFunctionsTest, array_intersect_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});

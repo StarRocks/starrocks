@@ -449,6 +449,8 @@ public:
 private:
     template <typename HashSet>
     static ColumnPtr _array_overlap(const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
         size_t chunk_size = columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
 
