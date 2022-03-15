@@ -199,7 +199,7 @@ public class View extends Table {
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
             throw new UserException(
-                    String.format("Failed to parse view-definition statement of view: %s", name));
+                    String.format("Failed to parse view-definition statement of view: %s", name), e);
         }
         // Make sure the view definition parses to a query statement.
         if (!(node instanceof QueryStatement)) {
