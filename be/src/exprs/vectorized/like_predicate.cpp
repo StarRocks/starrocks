@@ -71,15 +71,11 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
     context->set_function_state(scope, state);
 
     // go row regex
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     auto column = context->get_constant_column(1);
-    if (column->only_null() || column->is_null(0)) {
-        return Status::OK();
-    }
-
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     std::string pattern_str = pattern.to_string();
     std::string search_string;
@@ -135,15 +131,11 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     state->function = &regex_fn;
 
     // go row regex
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     auto column = context->get_constant_column(1);
-    if (column->only_null() || column->is_null(0)) {
-        return Status::OK();
-    }
-
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     std::string pattern_str = pattern.to_string();
     std::string search_string;
