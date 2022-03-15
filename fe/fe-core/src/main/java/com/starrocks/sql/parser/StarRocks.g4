@@ -302,11 +302,7 @@ primaryExpression
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
-    | IF '(' (expression (',' expression)*)? ')'                                          #functionCall
-    | LEFT '(' expression ',' expression ')'                                              #functionCall
-    | RIGHT '(' expression ',' expression ')'                                             #functionCall
-    | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'                   #functionCall
-    | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'                  #functionCall
+    | specialFunctionExpression                                                           #specialFunction
     | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -328,6 +324,22 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER '(' ')'
+    ;
+
+specialFunctionExpression
+    : CHAR '(' expression ')'
+    | DAY '(' expression ')'
+    | HOUR '(' expression ')'
+    | IF '(' (expression (',' expression)*)? ')'
+    | LEFT '(' expression ',' expression ')'
+    | MINUTE '(' expression ')'
+    | MONTH '(' expression ')'
+    | RIGHT '(' expression ',' expression ')'
+    | SECOND '(' expression ')'
+    | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'
+    | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'
+    //| WEEK '(' expression ')' TODO: Support week(expr) function
+    | YEAR '(' expression ')'
     ;
 
 windowFunction
@@ -358,7 +370,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
     ;
 
 type
@@ -468,5 +480,6 @@ nonReserved
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
+    | WEEK
     | YEAR
     ;
