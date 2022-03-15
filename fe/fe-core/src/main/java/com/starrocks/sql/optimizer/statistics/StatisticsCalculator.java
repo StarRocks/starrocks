@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -509,17 +510,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return Math.max(rowCount, 1);
         } else if (Table.TableType.HIVE == table.getType() || Table.TableType.HUDI == table.getType()) {
             try {
+                ScanOperatorPredicates predicates = null;
                 if (node.isLogical()) {
-                    LogicalScanOperator scanOperator = (LogicalScanOperator) node;
-                    return Math.max(computeHMSTableTableRowCount(table,
-                            scanOperator.getScanOperatorPredicates().getSelectedPartitionIds(),
-                            scanOperator.getScanOperatorPredicates().getIdToPartitionKey()), 1);
+                    predicates = ((LogicalScanOperator) node).getScanOperatorPredicates();
                 } else {
-                    PhysicalScanOperator scanOperator = (PhysicalScanOperator) node;
-                    return Math.max(computeHMSTableTableRowCount(table,
-                            scanOperator.getScanOperatorPredicates().getSelectedPartitionIds(),
-                            scanOperator.getScanOperatorPredicates().getIdToPartitionKey()), 1);
+                    predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
                 }
+                return Math.max(computeHMSTableTableRowCount(table,
+                        predicates.getSelectedPartitionIds(),
+                        predicates.getIdToPartitionKey()), 1);
             } catch (DdlException | AnalysisException e) {
                 LOG.warn("compute hive table row count failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
