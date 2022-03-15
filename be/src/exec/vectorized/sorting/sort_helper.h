@@ -58,7 +58,6 @@ struct SorterComparator<TimestampValue> {
     }
 };
 
-#ifndef NDEBUG
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
     std::string res;
@@ -67,7 +66,6 @@ static std::string dubug_column(const Column* column, const PermutationType& per
     }
     return res;
 }
-#endif
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
@@ -83,10 +81,8 @@ static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColu
         }
     };
 
-#ifndef NDEBUG
-    fmt::print("nullable column tie before sort: {}\n", fmt::join(tie, ","));
-    fmt::print("nullable column before sort: {}\n", dubug_column(column, permutation));
-#endif
+    VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
+    VLOG(2) << fmt::format("nullable column before sort: {}\n", dubug_column(column, permutation));
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -107,17 +103,13 @@ static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColu
             }
         }
 
-#ifndef NDEBUG
-        fmt::print("column after iteration: [{}, {}): {}\n", range_first, range_last,
-                   dubug_column(column, permutation));
-        fmt::print("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
-#endif
+        VLOG(3) << fmt::format("column after iteration: [{}, {}): {}\n", range_first, range_last,
+                               dubug_column(column, permutation));
+        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
     }
 
-#ifndef NDEBUG
-    fmt::print("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
-    fmt::print("nullable column after sort: {}\n", dubug_column(column, permutation));
-#endif
+    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
+    VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
 }
 
 template <class DataComparator, class PermutationType>
@@ -133,11 +125,9 @@ static inline void sort_and_tie_helper(const bool& cancel, Column* column, bool 
             ::pdqsort(cancel, begin, end, greater);
         }
     };
-#ifndef NDEBUG
-    fmt::print("tie before sort: {}\n", fmt::join(tie, ","));
-    fmt::print("column before sort: {}\n", dubug_column(column, permutation));
-    int tie_count = 0;
-#endif
+
+    VLOG(2) << fmt::format("tie before sort: {}\n", fmt::join(tie, ","));
+    VLOG(2) << fmt::format("column before sort: {}\n", dubug_column(column, permutation));
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -153,17 +143,14 @@ static inline void sort_and_tie_helper(const bool& cancel, Column* column, bool 
                 }
             }
         }
-#ifndef NDEBUG
-        tie_count++;
-        fmt::print("column after iteration: [{}, {}) {}\n", range_first, range_last, dubug_column(column, permutation));
-        fmt::print("tie after iteration: {}\n", fmt::join(tie, ",   "));
-#endif
+
+        VLOG(3) << fmt::format("column after iteration: [{}, {}) {}\n", range_first, range_last,
+                               dubug_column(column, permutation));
+        VLOG(3) << fmt::format("tie after iteration: {}\n", fmt::join(tie, ",   "));
     }
 
-#ifndef NDEBUG
-    fmt::print("tie({}) after sort: {}\n", tie_count, fmt::join(tie, ",   "));
-    fmt::print("nullable column after sort: {}\n", dubug_column(column, permutation));
-#endif
+    VLOG(2) << fmt::format("tie after sort: {}\n", fmt::join(tie, ",   "));
+    VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
 }
 
 } // namespace starrocks::vectorized
