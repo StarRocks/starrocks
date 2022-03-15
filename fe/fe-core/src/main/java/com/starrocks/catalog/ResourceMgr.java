@@ -68,7 +68,7 @@ public class ResourceMgr implements Writable {
 
     }
 
-    private void readLock(){
+    private void readLock() {
         this.rwLock.readLock().lock();
     }
 
@@ -76,11 +76,11 @@ public class ResourceMgr implements Writable {
         this.rwLock.readLock().unlock();
     }
 
-    private void writeLock(){
+    private void writeLock() {
         this.rwLock.writeLock().lock();
     }
 
-    private void writeUnLock(){
+    private void writeUnLock() {
         this.rwLock.writeLock().unlock();
     }
 
