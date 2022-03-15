@@ -126,7 +126,7 @@ public:
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override;
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) override;
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
     Status delete_file(const std::string& url) override;
 

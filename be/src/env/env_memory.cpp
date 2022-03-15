@@ -260,13 +260,13 @@ public:
     }
 
     Status get_children(const butil::FilePath& path, std::vector<std::string>* file) {
-        return iterate_dir(path, [&](const char* filename) -> bool {
+        return iterate_dir(path, [&](std::string_view filename) -> bool {
             file->emplace_back(filename);
             return true;
         });
     }
 
-    Status iterate_dir(const butil::FilePath& path, const std::function<bool(const char*)>& cb) {
+    Status iterate_dir(const butil::FilePath& path, const std::function<bool(std::string_view)>& cb) {
         auto inode = get_inode(path);
         if (inode == nullptr || inode->type != kDir) {
             return Status::NotFound(path.value());
@@ -332,7 +332,7 @@ public:
 
     Status delete_dir(const butil::FilePath& dirname) {
         bool empty_dir = true;
-        RETURN_IF_ERROR(iterate_dir(dirname, [&](const char*) -> bool {
+        RETURN_IF_ERROR(iterate_dir(dirname, [&](std::string_view) -> bool {
             empty_dir = false;
             return false;
         }));
@@ -427,7 +427,7 @@ private:
     // prerequisite: |path| exist and is a directory.
     bool _is_directory_empty(const butil::FilePath& path) {
         bool empty_dir = true;
-        Status st = iterate_dir(path, [&](const char*) -> bool {
+        Status st = iterate_dir(path, [&](std::string_view) -> bool {
             empty_dir = false;
             return false;
         });
@@ -507,7 +507,7 @@ Status EnvMemory::get_children(const std::string& dir, std::vector<std::string>*
     return _impl->get_children(butil::FilePath(new_path), file);
 }
 
-Status EnvMemory::iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) {
+Status EnvMemory::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->iterate_dir(butil::FilePath(new_path), cb);
