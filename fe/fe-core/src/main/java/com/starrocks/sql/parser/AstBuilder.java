@@ -1134,23 +1134,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
-        if (context.IF() != null) {
-            return new FunctionCallExpr("if", visit(context.expression(), Expr.class));
-        } else if (context.LEFT() != null) {
-            return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
-        } else if (context.RIGHT() != null) {
-            return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
-        }
-
-        if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
-            String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
-            UnitIdentifier e1 = (UnitIdentifier) visit(context.unitIdentifier());
-            Expr e2 = (Expr) visit(context.expression(0));
-            Expr e3 = (Expr) visit(context.expression(1));
-
-            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getDescription());
-        }
-
         boolean isStar = context.ASTERISK_SYMBOL() != null;
         boolean distinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
 
@@ -1258,6 +1241,44 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new InformationFunction(context.name.getText().toUpperCase());
         }
         throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
+    public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
+        if (context.CHAR() != null) {
+            return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
+        } else if (context.DAY() != null) {
+            return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
+        } else if (context.HOUR() != null) {
+            return new FunctionCallExpr("hour", visit(context.expression(), Expr.class));
+        } else if (context.IF() != null) {
+            return new FunctionCallExpr("if", visit(context.expression(), Expr.class));
+        } else if (context.LEFT() != null) {
+            return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
+        } else if (context.MINUTE() != null) {
+            return new FunctionCallExpr("minute", visit(context.expression(), Expr.class));
+        } else if (context.MONTH() != null) {
+            return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
+        } else if (context.RIGHT() != null) {
+            return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
+        } else if (context.SECOND() != null) {
+            return new FunctionCallExpr("second", visit(context.expression(), Expr.class));
+        } else if (context.YEAR() != null) {
+            return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
+        }
+
+
+        if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
+            String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
+            UnitIdentifier e1 = (UnitIdentifier) visit(context.unitIdentifier());
+            Expr e2 = (Expr) visit(context.expression(0));
+            Expr e3 = (Expr) visit(context.expression(1));
+
+            return new TimestampArithmeticExpr(functionName, e3, e2, e1.getDescription());
+        }
+
+        throw new SemanticException("No matching function with signature: %s(%s).", context.getText(),
+                visit(context.expression(), Expr.class));
     }
 
     @Override
