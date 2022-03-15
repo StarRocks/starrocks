@@ -48,12 +48,12 @@ vectorized_functions = [
     [10120, "floor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
 
+    [10129, "truncate", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::truncate_decimal128"],
     [10130, "round", "BIGINT", ["DOUBLE"], "MathFunctions::round"],
     [10131, "dround", "BIGINT", ["DOUBLE"], "MathFunctions::round"],
     [10132, "round", "DOUBLE", ["DOUBLE", "INT"], "MathFunctions::round_up_to"],
     [10133, "dround", "DOUBLE", ["DOUBLE", "INT"], "MathFunctions::round_up_to"],
     [10134, "truncate", "DOUBLE", ["DOUBLE", "INT"], "MathFunctions::truncate"],
-    [10135, "truncate_decimal", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::truncate_decimal128"],
 
     [10140, "ln", "DOUBLE", ["DOUBLE"], "MathFunctions::ln"],
     [10141, "dlog1", "DOUBLE", ["DOUBLE"], "MathFunctions::ln"],
