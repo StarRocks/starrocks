@@ -63,7 +63,7 @@ bool FunctionContext::is_notnull_constant_column(int i) const {
     }
 
     auto& col = _impl->_constant_columns[i];
-    return !!col && col->is_constant() && !col->is_null(i);
+    return !!col && col->is_constant() && !col->is_null(0);
 }
 
 starrocks::vectorized::ColumnPtr FunctionContext::get_constant_column(int i) const {
