@@ -199,7 +199,7 @@ Status EncryptionFunctions::sha2_prepare(FunctionContext* context, FunctionConte
         return Status::OK();
     }
 
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
