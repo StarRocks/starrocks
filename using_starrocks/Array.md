@@ -45,7 +45,7 @@ distributed by hash(c0) buckets 3;
 
 数组类型有以下限制
 
-* 只能在duplicate table中定义数组列（2.0版本开始支持Primary key和Unique key中使用数组类型）
+* 只能在duplicate table中定义数组列（2.1版本开始支持Primary key和Unique key中使用数组类型）
 * 数组列不能作为key列(以后可能支持)
 * 数组列不能作为distribution列
 * 数组列不能作为partition列
