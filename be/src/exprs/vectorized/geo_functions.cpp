@@ -89,8 +89,7 @@ Status GeoFunctions::st_circle_prepare(FunctionContext* ctx, FunctionContext::Fu
     auto lng = ctx->get_constant_column(0);
     auto lat = ctx->get_constant_column(1);
     auto radius = ctx->get_constant_column(2);
-    if (lng->only_null() || lng->is_null(0) || lat->only_null() || lat->is_null(0) || radius->only_null() ||
-        radius->is_null(0)) {
+    if (lng->only_null() || lat->only_null() || radius->only_null()) {
         state->is_null = true;
     } else {
         std::unique_ptr<GeoCircle> circle(new GeoCircle());
@@ -319,7 +318,7 @@ Status GeoFunctions::st_contains_prepare(FunctionContext* ctx, FunctionContext::
     for (int i = 0; !contains_ctx->is_null && i < 2; ++i) {
         if (ctx->is_constant_column(i)) {
             auto str_column = ctx->get_constant_column(i);
-            if (str_column->only_null() || str_column->is_null(0)) {
+            if (str_column->only_null()) {
                 contains_ctx->is_null = true;
             } else {
                 auto str_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(str_column);
@@ -393,7 +392,7 @@ Status GeoFunctions::st_from_wkt_prepare_common(FunctionContext* ctx, FunctionCo
 
     auto state = new StConstructState();
     auto str_column = ctx->get_constant_column(0);
-    if (str_column->only_null() || str_column->is_null(0)) {
+    if (str_column->only_null()) {
         state->is_null = true;
     } else {
         auto str_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(str_column);
