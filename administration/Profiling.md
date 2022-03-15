@@ -110,7 +110,7 @@ PROPERTIES(
 
 使用过程中，建议优先使用星型模型，可以在保证灵活的基础上获得高效的指标分析效果，但是对于有高并发或者低延迟要求的业务，还是可以选择宽表模型进行加速，StarRocks也可以提供与ClickHouse相当的宽表查询性能。
 
-### 分区(parition)和分桶(bucket)
+### 分区(partition)和分桶(bucket)
 
 StarRocks支持两级分区存储, 第一层为RANGE分区(partition), 第二层为HASH分桶(bucket)。
 

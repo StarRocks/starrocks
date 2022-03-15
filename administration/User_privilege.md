@@ -77,27 +77,27 @@ ADMIN\_PRIV 和 GRANT\_PRIV 权限同时拥有授予权限的权限，较为特�
 
 * CREATE USER
 
-* 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户可以创建新用户。
+  * 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户可以创建新用户。
 
 * DROP USER
 
-* 只有 ADMIN 权限可以删除用户。
+  * 只有 ADMIN 权限可以删除用户。
 
 * CREATE/DROP ROLE
 
-* 只有 ADMIN 权限可以创建角色。
+  * 只有 ADMIN 权限可以创建角色。
 
 * GRANT/REVOKE
 
-* 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以授予或撤销任意用户的权限。
-* 拥有 DATABASE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定数据库的权限。
-* 拥有 TABLE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定数据库中指定表的权限。
+  * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以授予或撤销任意**用户**的权限。
+  * 拥有 DATABASE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定**数据库**的权限。
+  * 拥有 TABLE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定数据库中**指定表**的权限。
 
 * SET PASSWORD
 
-* 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以设置任意用户的密码。
-* 普通用户可以设置自己对应的 User Identity 的密码。自己对应的 User Identity 可以通过 SELECT CURRENT\_USER(); 命令查看。
-* 拥有非 GLOBAL 层级 GRANT 权限的用户，不可以设置已存在用户的密码，仅能在创建用户时指定密码。
+  * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以设置任意用户的密码。
+  * 普通用户可以设置自己对应的 User Identity 的密码。自己对应的 User Identity 可以通过 SELECT CURRENT_USER(); 命令查看。
+  * 拥有非 GLOBAL 层级 GRANT 权限的用户，不可以设置已存在用户的密码，仅能在创建用户时指定密码。
 
 ## 其他说明
 

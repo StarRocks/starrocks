@@ -57,7 +57,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     * FLOAT（4字节）
     支持科学计数法
 
-    * DOUBLE（12字节）
+    * DOUBLE（8字节）
     支持科学计数法
 
     * DECIMAL[(precision, scale)] (16字节)
@@ -77,7 +77,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     定长字符串。长度范围：1 ~ 255。默认为1
 
     * VARCHAR[(length)]
-    变长字符串。长度范围：1 ~ 65533
+    变长字符串。长度范围：1 ~ 1048576
 
     * HLL (1~16385个字节)
     hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用

@@ -1,509 +1,399 @@
-# 性能测试
+# SSB 性能测试
 
-## 测试方法
+## 一、测试结论
 
-为了方便用户快速的了解StarRocks的性能指标，这里我们提供了一个标准的Star schema benchmark的测试方法和工具仅供参考。
+Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。Clickhouse 通过改写 SSB，将星型模型打平转化成宽表，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、Apache Druid 和 Clickhouse 在 SSB 单表数据集上的性能对比结果，并记录了在用户经常碰到的低基数聚合场景下 StarRocks 和 ClickHouse 的性能对比结果。测试结论如下：
 
-Star schema benchmark（以下简称SSB）是学术界和工业界广泛使用的一个星型模型测试集，通过这个测试集合也可以容易的和其他OLAP产品进行性能对比。
+- 在标准测试数据集的 13 个查询上，ClickHouse 的整体查询时间是 StarRocks 的 1.7 倍，Apache Druid 的整体查询时间是 StarRocks 的 2.2 倍。
+- 在 StarRocks 启用 bitmap index 和 cache 的情况下，性能更胜一筹，尤其在 Q2.2 Q2.3 Q3.3 上有显著提升。整体性能是 ClickHouse 的 2.2 倍，Apache Druid 的 2.9 倍。
 
-## 测试准备
+![整体性能对比](../assets/7.1-1.png)
 
-### 环境准备
+- 在标准测试数据集上，我们选取了一些常见的低基数聚合场景。ClickHouse 的整体查询时间是 StarRocks 的 2.26 倍。
 
-* 硬件环境准备，StarRocks对机器没有严格要求，建议大于8C 32G，磁盘是SSD/SATA均可，网络建议万兆网卡。
-* 集群部署参考 [集群部署](../administration/Deployment.md)
-* 系统参数参考 [配置参数](../administration/Configuration.md)
-* 下载ssb-poc工具集
+![性能对比低基数聚合](../assets/7.1-2.png)
 
-### SSB SQL(多表)
+在 SSB 单表和用户经常碰到的低基数聚合场景下对比了 StarRocks 和 ClickHouse 的性能指标。采用 3x16core 64GB 内存的云主机，在 6 亿行的数据规模进行测试。
 
-~~~sql
---Q1.1
-select sum(lo_revenue) as revenue
-from lineorder join dates on lo_orderdate = d_datekey
-where d_year = 1993 and lo_discount between 1 and 3 and lo_quantity < 25;
---Q1.2
-select sum(lo_revenue) as revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-where d_yearmonthnum = 199401
-and lo_discount between 4 and 6
-and lo_quantity between 26 and 35;
---Q1.3
-select sum(lo_revenue) as revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-where d_weeknuminyear = 6 and d_year = 1994
-and lo_discount between 5 and 7
-and lo_quantity between 26 and 35;
---Q2.1
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_category = 'MFGR#12' and s_region = 'AMERICA'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q2.2
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_brand between 'MFGR#2221' and 'MFGR#2228' and s_region = 'ASIA'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q2.3
-select sum(lo_revenue) as lo_revenue, d_year, p_brand
-from lineorder
-join dates on lo_orderdate = d_datekey
-join part on lo_partkey = p_partkey
-join supplier on lo_suppkey = s_suppkey
-where p_brand = 'MFGR#2239' and s_region = 'EUROPE'
-group by d_year, p_brand
-order by d_year, p_brand;
---Q3.1
-select c_nation, s_nation, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where c_region = 'ASIA' and s_region = 'ASIA'and d_year >= 1992 and d_year <= 1997
-group by c_nation, s_nation, d_year
-order by d_year asc, lo_revenue desc;
---Q3.2
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where c_nation = 'UNITED STATES' and s_nation = 'UNITED STATES'
-and d_year >= 1992 and d_year <= 1997
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q3.3
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where (c_city='UNITED KI1' or c_city='UNITED KI5')
-and (s_city='UNITED KI1' or s_city='UNITED KI5')
-and d_year >= 1992 and d_year <= 1997
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q3.4
-select c_city, s_city, d_year, sum(lo_revenue) as lo_revenue
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-where (c_city='UNITED KI1' or c_city='UNITED KI5') and (s_city='UNITED KI1' or s_city='UNITED KI5') and d_yearmonth = 'Dec1997'
-group by c_city, s_city, d_year
-order by d_year asc, lo_revenue desc;
---Q4.1
-select d_year, c_nation, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA' and s_region = 'AMERICA' and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')
-group by d_year, c_nation
-order by d_year, c_nation;
---Q4.2
-select d_year, s_nation, p_category, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA'and s_region = 'AMERICA'
-and (d_year = 1997 or d_year = 1998)
-and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')
-group by d_year, s_nation, p_category
-order by d_year, s_nation, p_category;
---Q4.3
-select d_year, s_city, p_brand, sum(lo_revenue) - sum(lo_supplycost) as profit
-from lineorder
-join dates on lo_orderdate = d_datekey
-join customer on lo_custkey = c_custkey
-join supplier on lo_suppkey = s_suppkey
-join part on lo_partkey = p_partkey
-where c_region = 'AMERICA'and s_nation = 'UNITED STATES'
-and (d_year = 1997 or d_year = 1998)
-and p_category = 'MFGR#14'
-group by d_year, s_city, p_brand
-order by d_year, s_city, p_brand;
-~~~
+## 二、测试准备
 
-## 测试流程
+### （一）硬件环境
 
-### 数据创建
+| 机器     | 3台 阿里云主机                                               |
+| -------- | ------------------------------------------------------------ |
+| CPU      | 16coreIntel(R) Xeon(R) Platinum 8269CY CPU @ 2.50GHzcache size : 36608 KB |
+| 内存     | 64GB                                                         |
+| 网络带宽 | 5Gbits/s                                                     |
+| 磁盘     | ESSD 高效云盘                                                |
 
-#### 下载ssb-poc工具包并编译
+### （二）软件环境
 
-~~~shell
-wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.9.3.zip
-unzip ssb-poc-0.9.3.zip
+StarRocks，Apache Druid 和 Clickhouse 部署在相同配置的机器上分别进行启动测试。
+
+- StarRocks 部署 3BE 1FE；
+- Clickhouse 部署三个节点后建立分布式表；
+- Apache Druid 多一台 8core 的 master 主机，部署了 Broker/Coordinator/Overlord/Router（但是测试压力不在 master，影响较小可以忽略），Historical/MiddleManager 混合部署在与 SR，CK 同等配置的主机上。
+
+内核版本：Linux 3.10.0-1127.13.1.el7.x86_64
+
+操作系统版本：CentOS Linux release 7.8.2003
+
+软件版本：StarRocks 社区版 2.1，Aapche Druid 0.20.1，Clickhouse 21.9
+
+## 三、测试数据与结果
+
+### （一）测试数据
+
+| 表名           | 行数  | 解释             |
+| -------------- | ----- | ---------------- |
+| lineorder      | 6亿   | SSB 商品订单表   |
+| customer       | 300万 | SSB 客户表       |
+| part           | 140万 | SSB 零部件表     |
+| supplier       | 20万  | SSB 供应商表     |
+| dates          | 2556  | 日期表           |
+| lineorder_flat | 6亿   | SSB 打平后的宽表 |
+
+### （二）测试 SQL
+
+#### 1. 单表测试 SQL
+
+```SQL
+--Q1.1 
+SELECT sum(lo_extendedprice * lo_discount) AS `revenue` 
+FROM lineorder_flat 
+WHERE lo_orderdate >= '1993-01-01' and lo_orderdate <= '1993-12-31' AND lo_discount BETWEEN 1 AND 3 AND lo_quantity < 25; 
+
+--Q1.2 
+SELECT sum(lo_extendedprice * lo_discount) AS revenue FROM lineorder_flat  
+WHERE lo_orderdate >= '1994-01-01' and lo_orderdate <= '1994-01-31' AND lo_discount BETWEEN 4 AND 6 AND lo_quantity BETWEEN 26 AND 35; 
+
+--Q1.3 
+SELECT sum(lo_extendedprice * lo_discount) AS revenue 
+FROM lineorder_flat 
+WHERE weekofyear(lo_orderdate) = 6 AND lo_orderdate >= '1994-01-01' and lo_orderdate <= '1994-12-31' 
+ AND lo_discount BETWEEN 5 AND 7 AND lo_quantity BETWEEN 26 AND 35; 
+
+--Q2.1 
+SELECT sum(lo_revenue), year(lo_orderdate) AS year,  p_brand 
+FROM lineorder_flat 
+WHERE p_category = 'MFGR#12' AND s_region = 'AMERICA' 
+GROUP BY year,  p_brand 
+ORDER BY year, p_brand; 
+
+--Q2.2 
+SELECT 
+sum(lo_revenue), year(lo_orderdate) AS year, p_brand 
+FROM lineorder_flat 
+WHERE p_brand >= 'MFGR#2221' AND p_brand <= 'MFGR#2228' AND s_region = 'ASIA' 
+GROUP BY year,  p_brand 
+ORDER BY year, p_brand; 
+
+--Q2.3 
+SELECT sum(lo_revenue),  year(lo_orderdate) AS year, p_brand 
+FROM lineorder_flat 
+WHERE p_brand = 'MFGR#2239' AND s_region = 'EUROPE' 
+GROUP BY  year,  p_brand 
+ORDER BY year, p_brand; 
+
+--Q3.1 
+SELECT c_nation, s_nation,  year(lo_orderdate) AS year, sum(lo_revenue) AS revenue FROM lineorder_flat 
+WHERE c_region = 'ASIA' AND s_region = 'ASIA' AND lo_orderdate  >= '1992-01-01' AND lo_orderdate   <= '1997-12-31' 
+GROUP BY c_nation, s_nation, year 
+ORDER BY  year ASC, revenue DESC; 
+
+--Q3.2 
+SELECT  c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue
+FROM lineorder_flat 
+WHERE c_nation = 'UNITED STATES' AND s_nation = 'UNITED STATES' AND lo_orderdate  >= '1992-01-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city, s_city, year 
+ORDER BY year ASC, revenue DESC; 
+
+--Q3.3 
+SELECT c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue 
+FROM lineorder_flat 
+WHERE c_city in ( 'UNITED KI1' ,'UNITED KI5') AND s_city in ( 'UNITED KI1' ,'UNITED KI5') AND lo_orderdate  >= '1992-01-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city, s_city, year 
+ORDER BY year ASC, revenue DESC; 
+
+--Q3.4 
+SELECT c_city, s_city, year(lo_orderdate) AS year, sum(lo_revenue) AS revenue 
+FROM lineorder_flat 
+WHERE c_city in ('UNITED KI1', 'UNITED KI5') AND s_city in ( 'UNITED KI1',  'UNITED KI5') AND  lo_orderdate  >= '1997-12-01' AND lo_orderdate <= '1997-12-31' 
+GROUP BY c_city,  s_city, year 
+ORDER BY year ASC, revenue DESC; 
+
+--Q4.1 
+SELECT year(lo_orderdate) AS year, c_nation,  sum(lo_revenue - lo_supplycost) AS profit FROM lineorder_flat 
+WHERE c_region = 'AMERICA' AND s_region = 'AMERICA' AND p_mfgr in ( 'MFGR#1' , 'MFGR#2') 
+GROUP BY year, c_nation 
+ORDER BY year ASC, c_nation ASC; 
+
+--Q4.2 
+SELECT year(lo_orderdate) AS year, 
+    s_nation, p_category, sum(lo_revenue - lo_supplycost) AS profit 
+FROM lineorder_flat 
+WHERE c_region = 'AMERICA' AND s_region = 'AMERICA' AND lo_orderdate >= '1997-01-01' and lo_orderdate <= '1998-12-31' AND  p_mfgr in ( 'MFGR#1' , 'MFGR#2') 
+GROUP BY year, s_nation,  p_category 
+ORDER BY  year ASC, s_nation ASC, p_category ASC; 
+
+--Q4.3 
+SELECT year(lo_orderdate) AS year, s_city, p_brand, 
+    sum(lo_revenue - lo_supplycost) AS profit 
+FROM lineorder_flat 
+WHERE s_nation = 'UNITED STATES' AND lo_orderdate >= '1997-01-01' and lo_orderdate <= '1998-12-31' AND p_category = 'MFGR#14' 
+GROUP BY  year,  s_city, p_brand 
+ORDER BY year ASC,  s_city ASC,  p_brand ASC; 
+```
+
+#### 2. 单表低基数测试 SQL
+
+```SQL
+--Q1
+select count(*),lo_shipmode from lineorder_flat group by lo_shipmode;
+--Q2
+select count(distinct lo_shipmode) from lineorder_flat;
+--Q3
+select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority;
+--Q4
+select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority,lo_shippriority;
+--Q5
+select count(*),lo_shipmode,s_city from lineorder_flat group by lo_shipmode,s_city;
+--Q6
+select count(*) from lineorder_flat group by c_city,s_city;
+--Q7
+select count(*) from lineorder_flat group by lo_shipmode,lo_orderdate;
+--Q8
+select count(*) from lineorder_flat group by lo_orderdate,s_nation,s_region;
+--Q9
+select count(*) from lineorder_flat group by c_city,s_city,c_nation,s_nation;
+--Q10
+select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation) t;
+--Q11
+select count(*) from (select count(*) from lineorder_flat_distributed group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t;
+--Q12
+select count(*) from (select count(*) from lineorder_flat group by substr(lo_shipmode,2),lower(lo_orderpriority),p_category,s_nation,c_nation,s_region,p_mfgr) t;
+```
+
+### （三）测试结果
+
+#### 1. SSB 单表测试结果
+
+> StarRocks 与 ClickHouse、Druid 的性能对比，分别使用 ClickHouse、Druid 的查询时间除以 StarRocks 的查询时间，且结果数字越大代表 StarRocks 性能越好。
+
+|      | StarRocks-2.1(ms) | StarRocks-2.1-index(ms) | ClickHouse-21.9(ms) | ClickHouse/StarRocks 性能对比 | Druid-0.20.1(ms) | Druid/StarRocks 性能对比 |
+| ---- | ----------------- | ----------------------- | ------------------- | ----------------------------- | ---------------- | ------------------------ |
+| Q1.1 | 47                | 40                      | 65                  | 1.38                          | 650              | 13.83                    |
+| Q1.2 | 20                | 13                      | 69                  | 3.45                          | 260              | 13.00                    |
+| Q1.3 | 37                | 33                      | 31                  | 0.84                          | 810              | 21.89                    |
+| Q2.1 | 190               | 127                     | 273                 | 1.44                          | 290              | 1.53                     |
+| Q2.2 | 140               | 53                      | 307                 | 2.19                          | 340              | 2.43                     |
+| Q2.3 | 70                | 37                      | 224                 | 3.20                          | 130              | 1.86                     |
+| Q3.1 | 330               | 370                     | 481                 | 1.46                          | 370              | 1.12                     |
+| Q3.2 | 147               | 113                     | 361                 | 2.46                          | 190              | 1.29                     |
+| Q3.3 | 103               | 30                      | 367                 | 3.56                          | 120              | 1.17                     |
+| Q3.4 | 30                | 20                      | 29                  | 0.97                          | 60               | 2.00                     |
+| Q4.1 | 570               | 453                     | 475                 | 0.83                          | 510              | 0.89                     |
+| Q4.2 | 100               | 73                      | 256                 | 2.56                          | 190              | 1.90                     |
+| Q4.3 | 53                | 40                      | 180                 | 3.40                          | 210              | 3.96                     |
+| sum  | 1837              | 1402                    | 3118                | 1.70                          | 4130             | 2.25                     |
+
+#### 2. 低基数聚合测试结果
+
+|      | SQL                                                          | 查询类型                                  | 结果集 的基数 | StarRocks (ms) | ClickHouse (ms) | 性能提升倍数(CK/SR) | Druid (ms) | 性能提升倍数(Druid/SR) |
+| ---- | ------------------------------------------------------------ | ----------------------------------------- | ------------- | -------------- | --------------- | ------------------- | ---------- | ---------------------- |
+| Q1   | select count(*),lo_shipmode from lineorder_flat group by lo_shipmode; | group by 1 个低基数列 (<50)               | 7             | 380            | 198             | 0.5                 | 341        | 0.9                    |
+| Q2   | select count(distinct lo_shipmode) from lineorder_flat;      | count distinct 1 个低基数列 (<50)         | 1             | 280            | 1055            | 3.8                 | 304        | 1.1                    |
+| Q3   | select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority; | group by 2 个低基数列                     | 35            | 470            | 1275            | 2.7                 | 1072       | 2.3                    |
+| Q4   | select count(*),lo_shipmode,lo_orderpriority from lineorder_flat group by lo_shipmode,lo_orderpriority,lo_shippriority; | group by 2 个低基数列和一个int列          | 35            | 550            | 1431            | 2.6                 | 1391       | 2.5                    |
+| Q5   | select count(*),lo_shipmode,s_city from lineorder_flat group by lo_shipmode,s_city; | group by 2 个低基数列（7 * 250）          | 1750          | 430            | 1273            | 3.0                 | 1513       | 3.5                    |
+| Q6   | select count(*) from lineorder_flat group by c_city,s_city;  | group by 2 个低基数列  (250 * 250)        | 62500         | 790            | 4236            | 5.4                 | 3146       | 4.0                    |
+| Q7   | select count(*) from lineorder_flat group by lo_shipmode,lo_orderdate; | group by 1 个低基数列 (<50) 和 1 个日期列 | 16842         | 650            | 804             | 1.2                 | 1825       | 2.8                    |
+| Q8   | select count(*) from lineorder_flat group by lo_orderdate,s_nation,s_region; | group by 2 个低基数列 (<50) 和 1 个日期列 | 60150         | 550            | 1357            | 2.5                 | 2255       | 4.1                    |
+| Q9   | select count(*) from lineorder_flat group by c_city,s_city,c_nation,s_nation; | group by 4 个低基数列                     | 62500         | 1160           | 5683            | 4.9                 | 4502       | 3.9                    |
+| Q10  | select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation) t; | group by 5 个低基数列 (<50)               | 546875        | 4430           | 7635            | 1.7                 | 11956      | 2.7                    |
+| Q11  | select count(*) from (select count(*) from lineorder_flat_distributed group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t; | group by 6 个低基数列 (<50)               | 546875        | 4250           | 8540            | 2.0                 | 12817      | 3.0                    |
+| Q12  | select count(*) from (select count(*) from lineorder_flat group by substr(lo_shipmode,2),lower(lo_orderpriority),p_category,s_nation,c_nation,s_region,p_mfgr) t; | group by 7 个包含函数计算的低基数列 (<50) | 468750        | 4620           | 8538            | 1.8                 | 18582      | 4.0                    |
+| sum  |                                                              |                                           |               | 18560          | 42025           | 2.3                 | 59704      | 3.2                    |
+
+## 四、测试步骤
+
+ClickHouse 的建表导入参考[官方文档](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)，StarRocks 的数据生成导入流程如下。
+
+### （一）数据生成
+
+首先下载 ssb-poc 工具包并编译。
+
+```Bash
+wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.10.0.zip
+unzip ssb-poc-0.10.0.zip
+cd ssb-poc-0.10.0
 cd ssb-poc
 make && make install  
-~~~
+```
 
-所有相关工具都会安装到output目录
+所有相关工具安装到 output 目录。
 
-#### 生成数据
+进入 output 目录，生成数据。
 
-~~~shell
-# 生成100G数据脚本
+```Bash
 cd output
 bin/gen-ssb.sh 100 data_dir
+```
 
-# 生成1T数据脚本
-cd output
-bin/gen-ssb.sh 1000 data_dir
-~~~
+### （二）创建表结构
 
-这里会在data\_dir目录下生成100GB规模的数据
+修改配置文件 conf/starrocks.conf，指定脚本操作的集群地址，用户名和密码，数据库名等。
 
-#### 建表
-
-建表中有三个注意事项，这几个选择会比较大的影响到测试结果：
-
-1. Bucket的数量选择和分桶键的选择
-
-    Bucket的数量是对性能影响比较大的因素之一，首先我们希望选择合理的分桶键（DISTRIBUTED BY HASH(key))，来保证数据在各个bucket中尽可能均衡，如果碰到数据倾斜严重的数据可以使用多列作为分桶键，或者采用MD5 hash以后作为分桶键，具体可以参考[分桶键选择](../table_design/Data_distribution.md#3-分桶列如何选择)，这里我们都统一使用唯一的key列。
-
-2. 建表的数据类型
-
-    数据类型的选择对性能测试的结果是有一定影响的，比如Decimal|String的运算一般比int|bigint要慢，所以在实际场景中我们应该尽可能准确的使用数据类型，从而达到最好的效果，比如可以使用Int|Bigint的字段就尽量避免使用String，如果是日期类型也多使用Date|Datetime以及相对应的时间日期函数，而不是用string和相关字符串操作函数来处理，针对SSB的数据集合，为了体现各个数据类型的效果，我们在多表Join的测试中都采用了Int|Bigint来处理，在lineorder_flat这个打平的宽表中，我们采用了Decimal|date等类型方便。
-
-      >如果需要做和其他系统的对比，可以参考Kylin和Clickhouse的官方文档中推荐的SSB建表方式，对建表语句进行微调。
-      >
-      >[Kylin的建表方式](https://github.com/Kyligence/ssb-kylin/blob/master/hive/1_create_basic.sql)
-      >
-      >[Clickhouse的建表方式](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)
-
-3. 字段是否可以为空
-
-    StarRocks的建表这里都采取的NOT NULL关键字，因为在SSB生成的标准数据集合中并没有空字段。
-
-以下为建表语句，无需执行，可通过执行create_db_table脚本(脚本路径：ssb-poc-0.9.3/ssb-poc/output/bin/create_db_table.sh)进行建表，建表语句中进行了默认分桶数配置。针对我们三台BE的环境我们采取的建表方式如下：
-
-~~~sql
-# lineorder表建表语句，测试数据量级是100G时
-CREATE TABLE `lineorder` (
-  `lo_orderkey` int(11) NOT NULL COMMENT "",
-  `lo_linenumber` int(11) NOT NULL COMMENT "",
-  `lo_custkey` int(11) NOT NULL COMMENT "",
-  `lo_partkey` int(11) NOT NULL COMMENT "",
-  `lo_suppkey` int(11) NOT NULL COMMENT "",
-  `lo_orderdate` int(11) NOT NULL COMMENT "",
-  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
-  `lo_shippriority` int(11) NOT NULL COMMENT "",
-  `lo_quantity` int(11) NOT NULL COMMENT "",
-  `lo_extendedprice` int(11) NOT NULL COMMENT "",
-  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
-  `lo_discount` int(11) NOT NULL COMMENT "",
-  `lo_revenue` int(11) NOT NULL COMMENT "",
-  `lo_supplycost` int(11) NOT NULL COMMENT "",
-  `lo_tax` int(11) NOT NULL COMMENT "",
-  `lo_commitdate` int(11) NOT NULL COMMENT "",
-  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`lo_orderkey`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`lo_orderdate`)
-(PARTITION p1 VALUES [("-2147483648"), ("19930101")),
-PARTITION p2 VALUES [("19930101"), ("19940101")),
-PARTITION p3 VALUES [("19940101"), ("19950101")),
-PARTITION p4 VALUES [("19950101"), ("19960101")),
-PARTITION p5 VALUES [("19960101"), ("19970101")),
-PARTITION p6 VALUES [("19970101"), ("19980101")),
-PARTITION p7 VALUES [("19980101"), ("19990101")))
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-# lineorder表建表语句，测试数据量级是1T时
-CREATE TABLE `lineorder` (
-  `lo_orderkey` bigint(20) NOT NULL COMMENT "",
-  `lo_linenumber` int(11) NOT NULL COMMENT "",
-  `lo_custkey` int(11) NOT NULL COMMENT "",
-  `lo_partkey` int(11) NOT NULL COMMENT "",
-  `lo_suppkey` int(11) NOT NULL COMMENT "",
-  `lo_orderdate` int(11) NOT NULL COMMENT "",
-  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
-  `lo_shippriority` int(11) NOT NULL COMMENT "",
-  `lo_quantity` int(11) NOT NULL COMMENT "",
-  `lo_extendedprice` int(11) NOT NULL COMMENT "",
-  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
-  `lo_discount` int(11) NOT NULL COMMENT "",
-  `lo_revenue` int(11) NOT NULL COMMENT "",
-  `lo_supplycost` int(11) NOT NULL COMMENT "",
-  `lo_tax` int(11) NOT NULL COMMENT "",
-  `lo_commitdate` int(11) NOT NULL COMMENT "",
-  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`lo_orderkey`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`lo_orderdate`)
-(PARTITION p1 VALUES [("-2147483648"), ("19930101")),
-PARTITION p2 VALUES [("19930101"), ("19940101")),
-PARTITION p3 VALUES [("19940101"), ("19950101")),
-PARTITION p4 VALUES [("19950101"), ("19960101")),
-PARTITION p5 VALUES [("19960101"), ("19970101")),
-PARTITION p6 VALUES [("19970101"), ("19980101")),
-PARTITION p7 VALUES [("19980101"), ("19990101")))
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 120
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-CREATE TABLE IF NOT EXISTS `customer` (
-  `c_custkey` int(11) NOT NULL COMMENT "",
-  `c_name` varchar(26) NOT NULL COMMENT "",
-  `c_address` varchar(41) NOT NULL COMMENT "",
-  `c_city` varchar(11) NOT NULL COMMENT "",
-  `c_nation` varchar(16) NOT NULL COMMENT "",
-  `c_region` varchar(13) NOT NULL COMMENT "",
-  `c_phone` varchar(16) NOT NULL COMMENT "",
-  `c_mktsegment` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`c_custkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-
-CREATE TABLE IF NOT EXISTS `dates` (
-  `d_datekey` int(11) NOT NULL COMMENT "",
-  `d_date` varchar(20) NOT NULL COMMENT "",
-  `d_dayofweek` varchar(10) NOT NULL COMMENT "",
-  `d_month` varchar(11) NOT NULL COMMENT "",
-  `d_year` int(11) NOT NULL COMMENT "",
-  `d_yearmonthnum` int(11) NOT NULL COMMENT "",
-  `d_yearmonth` varchar(9) NOT NULL COMMENT "",
-  `d_daynuminweek` int(11) NOT NULL COMMENT "",
-  `d_daynuminmonth` int(11) NOT NULL COMMENT "",
-  `d_daynuminyear` int(11) NOT NULL COMMENT "",
-  `d_monthnuminyear` int(11) NOT NULL COMMENT "",
-  `d_weeknuminyear` int(11) NOT NULL COMMENT "",
-  `d_sellingseason` varchar(14) NOT NULL COMMENT "",
-  `d_lastdayinweekfl` int(11) NOT NULL COMMENT "",
-  `d_lastdayinmonthfl` int(11) NOT NULL COMMENT "",
-  `d_holidayfl` int(11) NOT NULL COMMENT "",
-  `d_weekdayfl` int(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`d_datekey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1
-PROPERTIES (
-    "replication_num" = "1"
-);
-
- CREATE TABLE IF NOT EXISTS `supplier` (
-  `s_suppkey` int(11) NOT NULL COMMENT "",
-  `s_name` varchar(26) NOT NULL COMMENT "",
-  `s_address` varchar(26) NOT NULL COMMENT "",
-  `s_city` varchar(11) NOT NULL COMMENT "",
-  `s_nation` varchar(16) NOT NULL COMMENT "",
-  `s_region` varchar(13) NOT NULL COMMENT "",
-  `s_phone` varchar(16) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`s_suppkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-CREATE TABLE IF NOT EXISTS `part` (
-  `p_partkey` int(11) NOT NULL COMMENT "",
-  `p_name` varchar(23) NOT NULL COMMENT "",
-  `p_mfgr` varchar(7) NOT NULL COMMENT "",
-  `p_category` varchar(8) NOT NULL COMMENT "",
-  `p_brand` varchar(10) NOT NULL COMMENT "",
-  `p_color` varchar(12) NOT NULL COMMENT "",
-  `p_type` varchar(26) NOT NULL COMMENT "",
-  `p_size` int(11) NOT NULL COMMENT "",
-  `p_container` varchar(11) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`p_partkey`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-# lineorder_flat表建表语句，测试数据量级是100G时
-CREATE TABLE `lineorder_flat` (
-  `LO_ORDERDATE` date NOT NULL COMMENT "",
-  `LO_ORDERKEY` int(11) NOT NULL COMMENT "",
-  `LO_LINENUMBER` tinyint(4) NOT NULL COMMENT "",
-  `LO_CUSTKEY` int(11) NOT NULL COMMENT "",
-  `LO_PARTKEY` int(11) NOT NULL COMMENT "",
-  `LO_SUPPKEY` int(11) NOT NULL COMMENT "",
-  `LO_ORDERPRIORITY` varchar(100) NOT NULL COMMENT "",
-  `LO_SHIPPRIORITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_QUANTITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_EXTENDEDPRICE` int(11) NOT NULL COMMENT "",
-  `LO_ORDTOTALPRICE` int(11) NOT NULL COMMENT "",
-  `LO_DISCOUNT` tinyint(4) NOT NULL COMMENT "",
-  `LO_REVENUE` int(11) NOT NULL COMMENT "",
-  `LO_SUPPLYCOST` int(11) NOT NULL COMMENT "",
-  `LO_TAX` tinyint(4) NOT NULL COMMENT "",
-  `LO_COMMITDATE` date NOT NULL COMMENT "",
-  `LO_SHIPMODE` varchar(100) NOT NULL COMMENT "",
-  `C_NAME` varchar(100) NOT NULL COMMENT "",
-  `C_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `C_CITY` varchar(100) NOT NULL COMMENT "",
-  `C_NATION` varchar(100) NOT NULL COMMENT "",
-  `C_REGION` varchar(100) NOT NULL COMMENT "",
-  `C_PHONE` varchar(100) NOT NULL COMMENT "",
-  `C_MKTSEGMENT` varchar(100) NOT NULL COMMENT "",
-  `S_NAME` varchar(100) NOT NULL COMMENT "",
-  `S_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `S_CITY` varchar(100) NOT NULL COMMENT "",
-  `S_NATION` varchar(100) NOT NULL COMMENT "",
-  `S_REGION` varchar(100) NOT NULL COMMENT "",
-  `S_PHONE` varchar(100) NOT NULL COMMENT "",
-  `P_NAME` varchar(100) NOT NULL COMMENT "",
-  `P_MFGR` varchar(100) NOT NULL COMMENT "",
-  `P_CATEGORY` varchar(100) NOT NULL COMMENT "",
-  `P_BRAND` varchar(100) NOT NULL COMMENT "",
-  `P_COLOR` varchar(100) NOT NULL COMMENT "",
-  `P_TYPE` varchar(100) NOT NULL COMMENT "",
-  `P_SIZE` tinyint(4) NOT NULL COMMENT "",
-  `P_CONTAINER` varchar(100) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`LO_ORDERDATE`, `LO_ORDERKEY`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`LO_ORDERDATE`)
-(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 48
-PROPERTIES (
-    "replication_num" = "1"
-);
-
-# lineorder_flat表建表语句，测试数据量级是1T时
-CREATE TABLE `lineorder_flat` (
-  `LO_ORDERDATE` date NOT NULL COMMENT "",
-  `LO_ORDERKEY` bigint(20) NOT NULL COMMENT "",
-  `LO_LINENUMBER` tinyint(4) NOT NULL COMMENT "",
-  `LO_CUSTKEY` int(11) NOT NULL COMMENT "",
-  `LO_PARTKEY` int(11) NOT NULL COMMENT "",
-  `LO_SUPPKEY` int(11) NOT NULL COMMENT "",
-  `LO_ORDERPRIORITY` varchar(100) NOT NULL COMMENT "",
-  `LO_SHIPPRIORITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_QUANTITY` tinyint(4) NOT NULL COMMENT "",
-  `LO_EXTENDEDPRICE` int(11) NOT NULL COMMENT "",
-  `LO_ORDTOTALPRICE` int(11) NOT NULL COMMENT "",
-  `LO_DISCOUNT` tinyint(4) NOT NULL COMMENT "",
-  `LO_REVENUE` int(11) NOT NULL COMMENT "",
-  `LO_SUPPLYCOST` int(11) NOT NULL COMMENT "",
-  `LO_TAX` tinyint(4) NOT NULL COMMENT "",
-  `LO_COMMITDATE` date NOT NULL COMMENT "",
-  `LO_SHIPMODE` varchar(100) NOT NULL COMMENT "",
-  `C_NAME` varchar(100) NOT NULL COMMENT "",
-  `C_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `C_CITY` varchar(100) NOT NULL COMMENT "",
-  `C_NATION` varchar(100) NOT NULL COMMENT "",
-  `C_REGION` varchar(100) NOT NULL COMMENT "",
-  `C_PHONE` varchar(100) NOT NULL COMMENT "",
-  `C_MKTSEGMENT` varchar(100) NOT NULL COMMENT "",
-  `S_NAME` varchar(100) NOT NULL COMMENT "",
-  `S_ADDRESS` varchar(100) NOT NULL COMMENT "",
-  `S_CITY` varchar(100) NOT NULL COMMENT "",
-  `S_NATION` varchar(100) NOT NULL COMMENT "",
-  `S_REGION` varchar(100) NOT NULL COMMENT "",
-  `S_PHONE` varchar(100) NOT NULL COMMENT "",
-  `P_NAME` varchar(100) NOT NULL COMMENT "",
-  `P_MFGR` varchar(100) NOT NULL COMMENT "",
-  `P_CATEGORY` varchar(100) NOT NULL COMMENT "",
-  `P_BRAND` varchar(100) NOT NULL COMMENT "",
-  `P_COLOR` varchar(100) NOT NULL COMMENT "",
-  `P_TYPE` varchar(100) NOT NULL COMMENT "",
-  `P_SIZE` tinyint(4) NOT NULL COMMENT "",
-  `P_CONTAINER` varchar(100) NOT NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`LO_ORDERDATE`, `LO_ORDERKEY`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`LO_ORDERDATE`)
-(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120
-PROPERTIES (
-    "replication_num" = "1"
-);
-~~~
-
-修改配置文件后连接集群
-
-~~~shell
-# for mysql cmd
-mysql_host: test1
-mysql_port: 9030
-mysql_user: root
-mysql_password:
-starrocks_db: ssb
+```Bash
+ # for mysql cmd
+ mysql_host: 192.168.1.1
+ mysql_port: 9030
+ mysql_user: root
+ mysql_password:
+ database: ssb
 
 # cluster ports
-http_port: 8030
-be_heartbeat_port: 9050
-broker_port: 8000
+  http_port: 8030
+  be_heartbeat_port: 9050
+  broker_port: 8000
 
-# parallel_fragment_exec_instance_num 设置并行度，建议是每个集群节点逻辑核数的一半，以下以8为例
-parallel_num: 8
+# parallel_fragment_exec_instance_num 设置并行度,建议是每个集群节点逻辑核数的一半,以下以8为例
+  parallel_num: 8
+ ...
+```
 
-...
-~~~
+执行脚本建表。
 
-执行建表脚本。如需根据集群规模，节点配置等因素重新规划某个表的分桶数进行建表，可在执行脚本后将对应的表删除。然后通过执行更改后的上面的语句进行创建。
-
-~~~shell
+```Bash
 # 测试100G数据
  bin/create_db_table.sh ddl_100
- 
-# 测试1T数据
- bin/create_db_table.sh ddl_1000
-~~~
+```
 
-完成后我们创建了6张表：lineorder, supplier, dates, customer, part, lineorder\_flat
+以下为"lineorder_flat"表建表语句。在上一步脚本中已经创建"lineorder_flat"表，并进行了默认分桶数配置。您可以删除该表，然后根据集群规模节点配置重新规划分桶数再进行创建，可实现更好测试效果。
 
-### 数据导入
+```SQL
+CREATE TABLE `lineorder_flat` (
+  `lo_orderdate` date NOT NULL COMMENT "",
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` tinyint(4) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(100) NOT NULL COMMENT "",
+  `lo_shippriority` tinyint(4) NOT NULL COMMENT "",
+  `lo_quantity` tinyint(4) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` tinyint(4) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` tinyint(4) NOT NULL COMMENT "",
+  `lo_commitdate` date NOT NULL COMMENT "",
+  `lo_shipmode` varchar(100) NOT NULL COMMENT "",
+  `c_name` varchar(100) NOT NULL COMMENT "",
+  `c_address` varchar(100) NOT NULL COMMENT "",
+  `c_city` varchar(100) NOT NULL COMMENT "",
+  `c_nation` varchar(100) NOT NULL COMMENT "",
+  `c_region` varchar(100) NOT NULL COMMENT "",
+  `c_phone` varchar(100) NOT NULL COMMENT "",
+  `c_mktsegment` varchar(100) NOT NULL COMMENT "",
+  `s_region` varchar(100) NOT NULL COMMENT "",
+  `s_nation` varchar(100) NOT NULL COMMENT "",
+  `s_city` varchar(100) NOT NULL COMMENT "",
+  `s_name` varchar(100) NOT NULL COMMENT "",
+  `s_address` varchar(100) NOT NULL COMMENT "",
+  `s_phone` varchar(100) NOT NULL COMMENT "",
+  `p_name` varchar(100) NOT NULL COMMENT "",
+  `p_mfgr` varchar(100) NOT NULL COMMENT "",
+  `p_category` varchar(100) NOT NULL COMMENT "",
+  `p_brand` varchar(100) NOT NULL COMMENT "",
+  `p_color` varchar(100) NOT NULL COMMENT "",
+  `p_type` varchar(100) NOT NULL COMMENT "",
+  `p_size` tinyint(4) NOT NULL COMMENT "",
+  `p_container` varchar(100) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderdate`, `lo_orderkey`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`lo_orderdate`)
+(START ("1992-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR))
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+```
 
-这里我们通过stream load导入数据
+同时修改 BE 的 page_cache 参数，并重启 BE。
 
-~~~shell
+```Bash
+disable_storage_page_cache=false; -- 开启page_cache
+storage_page_cache_limit=4294967296; --设置page_cache的大小
+```
+
+如您希望测试创建 bitmap_index 情况下的性能，可以进行如下操作。如您希望直接测试标准性能，请跳过此步骤进行数据导入。
+
+对所有字符串列创建 bitmap_index。
+
+```sql
+--对 lo_orderpriority、lo_shipmode、c_name、c_address、c_city、c_nation、c_region、c_phone、c_mktsegment、s_region、s_nation、s_city、s_name、s_address、s_phone、p_name、p_mfgr、p_category、p_brand、p_color、p_type、p_container 创建bitmap_index
+
+CREATE INDEX bitmap_lo_orderpriority ON lineorder_flat (lo_orderpriority) USING BITMAP;
+CREATE INDEX bitmap_lo_shipmode ON lineorder_flat (lo_shipmode) USING BITMAP;
+CREATE INDEX bitmap_c_name ON lineorder_flat (c_name) USING BITMAP;
+CREATE INDEX bitmap_c_address ON lineorder_flat (c_address) USING BITMAP;
+CREATE INDEX bitmap_c_city ON lineorder_flat (c_city) USING BITMAP;
+CREATE INDEX bitmap_c_nation ON lineorder_flat (c_nation) USING BITMAP;
+CREATE INDEX bitmap_c_region ON lineorder_flat (c_region) USING BITMAP;
+CREATE INDEX bitmap_c_phone ON lineorder_flat (c_phone) USING BITMAP;
+CREATE INDEX bitmap_c_mktsegment ON lineorder_flat (c_mktsegment) USING BITMAP;
+CREATE INDEX bitmap_s_region ON lineorder_flat (s_region) USING BITMAP;
+CREATE INDEX bitmap_s_nation ON lineorder_flat (s_nation) USING BITMAP;
+CREATE INDEX bitmap_s_city ON lineorder_flat (s_city) USING BITMAP;
+CREATE INDEX bitmap_s_name ON lineorder_flat (s_name) USING BITMAP;
+CREATE INDEX bitmap_s_address ON lineorder_flat (s_address) USING BITMAP;
+CREATE INDEX bitmap_s_phone ON lineorder_flat (s_phone) USING BITMAP;
+CREATE INDEX bitmap_p_name ON lineorder_flat (p_name) USING BITMAP;
+CREATE INDEX bitmap_p_mfgr ON lineorder_flat (p_mfgr) USING BITMAP;
+CREATE INDEX bitmap_p_category ON lineorder_flat (p_category) USING BITMAP;
+CREATE INDEX bitmap_p_brand ON lineorder_flat (p_brand) USING BITMAP;
+CREATE INDEX bitmap_p_color ON lineorder_flat (p_color) USING BITMAP;
+CREATE INDEX bitmap_p_type ON lineorder_flat (p_type) USING BITMAP;
+CREATE INDEX bitmap_p_container ON lineorder_flat (p_container) USING BITMAP;
+```
+
+修改BE参数并重启BE。
+
+```SQL
+bitmap_max_filter_ratio=1000; 
+```
+
+### （三）数据导入
+
+使用 Stream load 导入单表数据。
+
+```Bash
 bin/stream_load.sh data_dir
-~~~
+```
 
-data\_dir是之前生成的数据目录
+插入数据到宽表 lineorder_flat。
 
-### 查询
+```Bash
+bin/flat_insert.sh 
+```
 
-首先在客户端执行命令，修改并行度(类似clickhouse set max_threads = 8)
+### （四）数据查询
 
-~~~shell
-# 设置并行度，建议是每个集群节点逻辑核数的一半,以下以8为例
-set global parallel_fragment_exec_instance_num = 8;
-~~~
+1. SSB query
 
-测试ssb多表查询 (SQL 参见 share/ssb\_test/sql/ssb/)
+   ```Bash
+   bin/benchmark.sh -p -d ssb
 
-~~~shell
-bin/benchmark.sh -p -d ssb
-~~~
+   bin/benchmark.sh -p -d ssb-flat
+   ```
 
-测试ssb宽表查询(SQL 参见 share/ssb\_test/sql/ssb-flat/)
+2. 低基数query
 
-~~~shell
-# 向宽表中插入数据
-bin/flat_insert.sh
-# 执行查询
-bin/benchmark.sh -p -d ssb-flat
-~~~
+   ```Bash
+   bin/benchmark.sh -p -d ssb-low_cardinality
+   ```
