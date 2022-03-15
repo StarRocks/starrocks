@@ -559,6 +559,11 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
         {
             vpack::ObjectBuilder ob(&builder);
             for (int i = 0; i < viewers.size(); i += 2) {
+                if (viewers[i].is_null(row)) {
+                    ok = false;
+                    break;
+                }
+                
                 JsonValue* field_name = viewers[i].value(row);
                 vpack::Slice field_name_slice = field_name->to_vslice();
                 DCHECK(field_name != nullptr);
@@ -573,7 +578,7 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
                     ok = false;
                     break;
                 }
-                if (i + 1 < viewers.size()) {
+                if (i + 1 < viewers.size() && !viewers[i+1].is_null(row)) {
                     JsonValue* field_value = viewers[i + 1].value(row);
                     DCHECK(field_value != nullptr);
                     builder.add(field_name->to_vslice().stringRef(), field_value->to_vslice());
