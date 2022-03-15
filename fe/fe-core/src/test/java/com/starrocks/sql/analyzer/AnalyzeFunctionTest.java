@@ -156,4 +156,16 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00') AS `TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')`",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
     }
+
+    @Test
+    public void testSpecialFunction() {
+        analyzeSuccess("select char('A')");
+        analyzeSuccess("select day('2022-01-01 00:00:00')");
+        analyzeSuccess("select hour('2022-01-01 00:00:00')");
+        analyzeSuccess("select minute('2022-01-01 00:00:00')");
+        analyzeSuccess("select month('2022-01-01 00:00:00')");
+        analyzeSuccess("select second('2022-01-01 00:00:00')");
+        //analyzeSuccess("select week('2022-01-01 00:00:00')");
+        analyzeSuccess("select year('2022-01-01 00:00:00')");
+    }
 }
