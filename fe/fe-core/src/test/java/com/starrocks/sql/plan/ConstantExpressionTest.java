@@ -42,7 +42,7 @@ public class ConstantExpressionTest {
 
     private static void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
         String explainString = UtFrameUtils.getFragmentPlan(connectContext, sql);
-        Assert.assertTrue(explainString.contains("constant exprs: \n         " + result));
+        Assert.assertTrue(explainString.contains(": " + result));
     }
 
     private static void testFragmentPlanContains(String sql, String result) throws Exception {

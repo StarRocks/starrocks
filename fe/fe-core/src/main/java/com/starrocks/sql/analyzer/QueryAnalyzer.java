@@ -410,7 +410,8 @@ public class QueryAnalyzer {
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
-                outputFields.add(new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
+                outputFields.add(
+                        new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
             subquery.setScope(scope);
@@ -427,7 +428,8 @@ public class QueryAnalyzer {
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
-                Field field = new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
+                Field field =
+                        new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
                 fields.add(field);
             }
 
@@ -551,7 +553,8 @@ public class QueryAnalyzer {
             }
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
-                fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx], null,
+                fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
+                        node.getAlias(),
                         rows.get(0).get(fieldIdx)));
             }
 

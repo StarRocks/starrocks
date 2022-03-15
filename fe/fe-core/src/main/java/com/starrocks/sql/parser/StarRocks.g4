@@ -117,7 +117,6 @@ queryTerm
 
 queryPrimary
     : querySpecification                           #queryPrimaryDefault
-    | VALUES rowConstructor (',' rowConstructor)*  #inlineTable
     | subquery                                     #subqueryPrimary
     ;
 
@@ -222,6 +221,7 @@ columnAliases
 
 relationPrimary
     : qualifiedName partitionNames? tabletList? hint?                                     #tableName
+    | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     | '(' relation ')'                                                                    #parenthesizedRelation

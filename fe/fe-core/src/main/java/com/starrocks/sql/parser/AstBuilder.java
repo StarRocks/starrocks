@@ -78,7 +78,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -203,6 +202,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (int i = 0; i < rows.get(0).size(); ++i) {
                 colNames.add("column_" + i);
             }
+
             queryStatement = new QueryStatement(new ValuesRelation(rows, colNames));
         } else {
             queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -537,23 +537,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        /*
+          from == null means a statement without from or from dual, add a single row of null values here,
+          so that the semantics are the same, and the processing of subsequent query logic can be simplified,
+          such as select sum(1) or select sum(1) from dual, will be converted to select sum(1) from (values(null)) t.
+          This can share the same logic as select sum(1) from table
+         */
         if (from == null) {
             ArrayList<Expr> row = new ArrayList<>();
             List<String> columnNames = new ArrayList<>();
-            for (SelectListItem selectListItem : selectItems) {
-                row.add(selectListItem.getExpr());
-
-                String name;
-                if (selectListItem.getAlias() != null) {
-                    name = selectListItem.getAlias();
-                } else {
-                    name = AST2SQL.toString(selectListItem.getExpr());
-                }
-                columnNames.add(name);
-            }
+            row.add(NullLiteral.create(Type.NULL));
+            columnNames.add("");
             List<ArrayList<Expr>> rows = new ArrayList<>();
             rows.add(row);
-            return new ValuesRelation(rows, columnNames);
+            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
+            valuesRelation.setNullValues(true);
+            from = valuesRelation;
         }
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
@@ -1265,7 +1264,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.YEAR() != null) {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
         }
-
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
             String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";

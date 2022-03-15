@@ -17,6 +17,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -478,14 +479,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                "  `id` int(11) NULL COMMENT \"\",\n" +
-                "  `id2` bitmap bitmap_union NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`id`)\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                " \"replication_num\" = \"1\"\n" +
-                ");")
+                        "  `id` int(11) NULL COMMENT \"\",\n" +
+                        "  `id2` bitmap bitmap_union NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`id`)\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        " \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -639,14 +640,14 @@ public class PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
-                "PROPERTIES (\n" +
-                "\"type\"=\"jdbc\",\n" +
-                "\"user\"=\"test_user\",\n" +
-                "\"password\"=\"test_passwd\",\n" +
-                "\"driver_url\"=\"test_driver_url\",\n" +
-                "\"driver_class\"=\"test.driver.class\",\n" +
-                "\"jdbc_uri\"=\"test_uri\"\n" +
-                ");")
+                        "PROPERTIES (\n" +
+                        "\"type\"=\"jdbc\",\n" +
+                        "\"user\"=\"test_user\",\n" +
+                        "\"password\"=\"test_passwd\",\n" +
+                        "\"driver_url\"=\"test_driver_url\",\n" +
+                        "\"driver_class\"=\"test.driver.class\",\n" +
+                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
@@ -804,9 +805,9 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -1119,5 +1120,14 @@ public class PlanTestBase {
         }
 
         Assert.assertEquals(expect, actual);
+    }
+
+    protected void assertPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
     }
 }
