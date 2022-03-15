@@ -71,15 +71,11 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     ColumnPtr path = context->get_constant_column(1);
-    if (path->only_null()) {
-        return Status::OK();
-    }
-
     auto path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path);
     std::string path_str(path_value.data, path_value.size);
     // Must remove or replace the escape sequence.
@@ -412,8 +408,7 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
 
 Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                                starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_constant_column(1)->only_null() ||
-        !context->is_constant_column(1)) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
