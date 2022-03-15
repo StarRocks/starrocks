@@ -103,7 +103,7 @@ public class ResourceMgr implements Writable {
             Catalog.getCurrentCatalog().getEditLog().logDropResource(new DropResourceOperationLog(name));
             LOG.info("drop resource success. resource name: {}", name);
         } finally {
-            rwlock.writeLock().lock();
+            rwlock.writeLock().unlock();
         }
     }
 
