@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,7 +55,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
-    private static java.time.format.DateTimeFormatter DATE_TIME_FORMATTER_MS
+    private static final DateTimeFormatter DATE_TIME_FORMATTER_MS
             = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
