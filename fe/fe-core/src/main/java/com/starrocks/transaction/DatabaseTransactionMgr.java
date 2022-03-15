@@ -35,6 +35,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -479,52 +480,67 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
 
+                boolean useStarOS = partition.isUseStarOS();
+
                 List<MaterializedIndex> allIndices = transactionState.getPartitionLoadedTblIndexes(tableId, partition);
                 int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getId());
                 for (MaterializedIndex index : allIndices) {
                     for (Tablet tablet : index.getTablets()) {
                         int successReplicaNum = 0;
                         long tabletId = tablet.getId();
-                        Set<Long> tabletBackends = ((LocalTablet) tablet).getBackendIds();
-                        totalInvolvedBackends.addAll(tabletBackends);
                         Set<Long> commitBackends = tabletToBackends.get(tabletId);
-                        // save the error replica ids for current tablet
-                        // this param is used for log
-                        Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
-                        for (long tabletBackend : tabletBackends) {
-                            Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
-                            if (replica == null) {
-                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
-                                throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                        + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
+
+                        if (useStarOS) {
+                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            totalInvolvedBackends.add(backendId);
+                            if (!commitBackends.contains(backendId)) {
+                                throw new TransactionCommitFailedException(
+                                        "Primary backend: " + backendId + " does not in commit backends: " +
+                                                Joiner.on(",").join(commitBackends));
                             }
-                            // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
-                            // if the commit backends is null, set all replicas as error replicas
-                            if (commitBackends != null && commitBackends.contains(tabletBackend)) {
-                                // if the backend load success but the backend has some errors previously, then it is not a normal replica
-                                // ignore it but not log it
-                                // for example, a replica is in clone state
-                                if (replica.getLastFailedVersion() < 0) {
-                                    ++successReplicaNum;
+                        } else {
+                            Set<Long> tabletBackends = tablet.getBackendIds();
+                            totalInvolvedBackends.addAll(tabletBackends);
+
+                            // save the error replica ids for current tablet
+                            // this param is used for log
+                            Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
+                            for (long tabletBackend : tabletBackends) {
+                                Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
+                                if (replica == null) {
+                                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(tabletBackend);
+                                    throw new TransactionCommitFailedException("Not found replicas of tablet. "
+                                            + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                                 }
-                            } else {
-                                errorBackendIdsForTablet.add(tabletBackend);
-                                errorReplicaIds.add(replica.getId());
-                                // not remove rollup task here, because the commit maybe failed
-                                // remove rollup task when commit successfully
+                                // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
+                                // if the commit backends is null, set all replicas as error replicas
+                                if (commitBackends != null && commitBackends.contains(tabletBackend)) {
+                                    // if the backend load success but the backend has some errors previously, then it is not a normal replica
+                                    // ignore it but not log it
+                                    // for example, a replica is in clone state
+                                    if (replica.getLastFailedVersion() < 0) {
+                                        ++successReplicaNum;
+                                    }
+                                } else {
+                                    errorBackendIdsForTablet.add(tabletBackend);
+                                    errorReplicaIds.add(replica.getId());
+                                    // not remove rollup task here, because the commit maybe failed
+                                    // remove rollup task when commit successfully
+                                }
                             }
-                        }
 
-                        if (successReplicaNum < quorumReplicaNum) {
-                            List<String> errorBackends = new ArrayList<String>();
-                            for (long backendId : errorBackendIdsForTablet) {
-                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
-                                errorBackends.add(backend.getHost());
+                            if (successReplicaNum < quorumReplicaNum) {
+                                List<String> errorBackends = new ArrayList<String>();
+                                for (long backendId : errorBackendIdsForTablet) {
+                                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                                    errorBackends.add(backend.getHost());
+                                }
+
+                                LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
+                                        tablet.getId(), transactionId, tablet.getId(),
+                                        Joiner.on(",").join(errorBackends));
+                                throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                             }
-
-                            LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
-                                     tablet.getId(), transactionId, tablet.getId(), Joiner.on(",").join(errorBackends));
-                            throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                         }
                     }
                 }
@@ -662,6 +678,10 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
+                    if (partition.isUseStarOS()) {
+                        continue;
+                    }
+
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
@@ -764,6 +784,11 @@ public class DatabaseTransactionMgr {
                         transactionState.setErrorMsg(errMsg);
                         return;
                     }
+
+                    if (partition.isUseStarOS()) {
+                        continue;
+                    }
+
                     int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId);
 
                     List<MaterializedIndex> allIndices =
@@ -1278,14 +1303,16 @@ public class DatabaseTransactionMgr {
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
                 Partition partition = table.getPartition(partitionId);
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex index : allIndices) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            if (errorReplicaIds.contains(replica.getId())) {
-                                // should get from transaction state
-                                replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
+                if (!partition.isUseStarOS()) {
+                    List<MaterializedIndex> allIndices =
+                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    for (MaterializedIndex index : allIndices) {
+                        for (Tablet tablet : index.getTablets()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                if (errorReplicaIds.contains(replica.getId())) {
+                                    // should get from transaction state
+                                    replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
+                                }
                             }
                         }
                     }
@@ -1306,45 +1333,47 @@ public class DatabaseTransactionMgr {
                 long partitionId = partitionCommitInfo.getPartitionId();
                 long newCommitVersion = partitionCommitInfo.getVersion();
                 Partition partition = table.getPartition(partitionId);
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex index : allIndices) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            long lastFailedVersion = replica.getLastFailedVersion();
-                            long newVersion = newCommitVersion;
-                            long lastSucessVersion = replica.getLastSuccessVersion();
-                            if (!errorReplicaIds.contains(replica.getId())) {
-                                if (replica.getLastFailedVersion() > 0) {
-                                    // if the replica is a failed replica, then not changing version
-                                    newVersion = replica.getVersion();
-                                } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
-                                    // this means the replica has error in the past, but we did not observe it
-                                    // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
-                                    // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
-                                    // then we will detect this and set C's last failed version to 10 and last success version to 11
-                                    // this logic has to be replayed in checkpoint thread
-                                    lastFailedVersion = partition.getVisibleVersion();
-                                    newVersion = replica.getVersion();
-                                }
+                if (!partition.isUseStarOS()) {
+                    List<MaterializedIndex> allIndices =
+                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    for (MaterializedIndex index : allIndices) {
+                        for (Tablet tablet : index.getTablets()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                long lastFailedVersion = replica.getLastFailedVersion();
+                                long newVersion = newCommitVersion;
+                                long lastSucessVersion = replica.getLastSuccessVersion();
+                                if (!errorReplicaIds.contains(replica.getId())) {
+                                    if (replica.getLastFailedVersion() > 0) {
+                                        // if the replica is a failed replica, then not changing version
+                                        newVersion = replica.getVersion();
+                                    } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                        // this means the replica has error in the past, but we did not observe it
+                                        // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
+                                        // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
+                                        // then we will detect this and set C's last failed version to 10 and last success version to 11
+                                        // this logic has to be replayed in checkpoint thread
+                                        lastFailedVersion = partition.getVisibleVersion();
+                                        newVersion = replica.getVersion();
+                                    }
 
-                                // success version always move forward
-                                lastSucessVersion = newCommitVersion;
-                            } else {
-                                // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
-                                // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
-                                // Using this method, B,C will publish failed, and fe will publish again, not update their last failed version
-                                // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
-                                // and loading will go on.
-                                newVersion = replica.getVersion();
-                                if (newCommitVersion > lastFailedVersion) {
-                                    lastFailedVersion = newCommitVersion;
+                                    // success version always move forward
+                                    lastSucessVersion = newCommitVersion;
+                                } else {
+                                    // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
+                                    // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
+                                    // Using this method, B,C will publish failed, and fe will publish again, not update their last failed version
+                                    // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
+                                    // and loading will go on.
+                                    newVersion = replica.getVersion();
+                                    if (newCommitVersion > lastFailedVersion) {
+                                        lastFailedVersion = newCommitVersion;
+                                    }
                                 }
+                                replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                             }
-                            replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                         }
-                    }
-                } // end for indices
+                    } // end for indices
+                }
                 long version = partitionCommitInfo.getVersion();
                 long versionTime = partitionCommitInfo.getVersionTime();
                 partition.updateVisibleVersion(version, versionTime);
