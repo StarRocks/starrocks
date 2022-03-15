@@ -238,24 +238,14 @@ Status StringFunctions::sub_str_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    if (!context->is_constant_column(1)) {
+    // TODO(kks): improve this case if necessary
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
-    } else {
-        // TODO(kks): improve this case if necessary
-        if (context->get_constant_column(1)->only_null()) {
-            return Status::OK();
-        }
     }
 
-    if (context->get_num_args() == 3) {
-        if (!context->is_constant_column(2)) {
-            return Status::OK();
-        } else {
-            // TODO(kks): improve this case if necessary
-            if (context->get_constant_column(2)->only_null()) {
-                return Status::OK();
-            }
-        }
+    // TODO(kks): improve this case if necessary
+    if (context->get_num_args() == 3 && !context->is_notnull_constant_column(2)) {
+        return Status::OK();
     }
 
     state->is_const = true;
@@ -291,12 +281,7 @@ Status StringFunctions::left_or_right_prepare(starrocks_udf::FunctionContext* co
         return Status::OK();
     }
     // const null case is handled by non_const implementation.
-    if (!context->is_constant_column(0) || context->get_constant_column(0)->only_null()) {
-        return Status::OK();
-    }
-
-    // const null case is handled by non_const implementation.
-    if (!context->is_constant_column(1) || context->get_constant_column(1)->only_null()) {
+    if (!context->is_notnull_constant_column(0) || !context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
@@ -326,10 +311,9 @@ Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
     state->is_oversize = false;
     const auto num_args = context->get_num_args();
     for (auto i = 1; i < num_args; ++i) {
-        if (!context->is_constant_column(i) ||
-            // For code simpleness, we only handle const varchar args in the following code.
-            // For only null column, we let concat_not_const function handle
-            context->get_constant_column(i)->only_null()) {
+        // For code simpleness, we only handle const varchar args in the following code.
+        // For only null column, we let concat_not_const function handle
+        if (!context->is_notnull_constant_column(i)) {
             state->is_const = false;
         }
     }
@@ -1038,7 +1022,7 @@ Status StringFunctions::pad_prepare(starrocks_udf::FunctionContext* context,
     context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
 
     // const null case is handled by non_const implementation.
-    if (!context->is_constant_column(2) || context->get_constant_column(2)->only_null()) {
+    if (!context->is_notnull_constant_column(2)) {
         return Status::OK();
     }
 
@@ -1049,7 +1033,7 @@ Status StringFunctions::pad_prepare(starrocks_udf::FunctionContext* context,
     state->fill_is_utf8 = state->fill.size > get_utf8_index(state->fill, &state->fill_utf8_index);
 
     // const null case is handled by non_const implementation.
-    if (!context->is_constant_column(1) || context->get_constant_column(1)->only_null()) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
@@ -2525,16 +2509,12 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
     state->options->set_dot_nl(true);
 
     // go row regex
-    if (!context->is_constant_column(1)) {
-        return Status::OK();
-    }
-
-    auto column = context->get_constant_column(1);
-    if (column->only_null() || column->is_null(0)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     state->const_pattern = true;
+    auto column = context->get_constant_column(1);
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     std::string pattern_str = pattern.to_string();
     state->regex = std::make_unique<re2::RE2>(pattern_str, *(state->options));
@@ -2825,15 +2805,12 @@ Status StringFunctions::parse_url_prepare(starrocks_udf::FunctionContext* contex
     ParseUrlState* state = new ParseUrlState();
     context->set_function_state(scope, state);
 
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
-    auto column = context->get_constant_column(1);
-    if (column->only_null() || column->is_null(0)) {
-        return Status::OK();
-    }
     state->const_pattern = true;
+    auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     state->url_part.reset(new UrlParser::UrlPart);
     *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
