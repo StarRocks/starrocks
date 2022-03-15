@@ -351,14 +351,12 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     if (_compare_strategy != Default) {
         strategy = _compare_strategy;
     } else {
-        /*
+        // TODO: turn on the ColumnInc strategy
         if (_get_number_of_order_by_columns() <= 3) {
             strategy = ColumnWise;
         } else {
             strategy = RowWise;
         }
-        */
-        // TODO
         strategy = ColumnInc;
     }
     if (strategy == ColumnInc) {
