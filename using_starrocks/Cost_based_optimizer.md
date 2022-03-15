@@ -1,166 +1,160 @@
+# CBO优化器
 
-# CBO 优化器
+StarRocks 1.16.0 版本推出CBO优化器（Cost-based Optimizer ）。StarRocks 1.19及以上版本，该特性默认开启。CBO优化器能够基于成本选择最优的执行计划，大幅提升复杂查询的效率和性能。
 
-## 背景介绍
+## 什么是CBO优化器
 
-在 1.16.0 版本，StarRocks推出的新优化器，可以针对复杂 Ad-hoc 场景生成更优的执行计划。StarRocks采用cascades技术框架，实现基于成本（Cost-based Optimizer 后面简称CBO）的查询规划框架，新增了更多的统计信息来完善成本估算，也补充了各种全新的查询转换（Transformation）和实现（Implementation）规则，能够在数万级别查询计划空间中快速找到最优计划。
+CBO优化器采用Cascades框架，使用多种统计信息来完善成本估算，同时补充逻辑转换（Transformation Rule）和物理实现（Implementation Rule）规则，能够在数万级别执行计划的搜索空间中，选择成本最低的最优执行计划。
 
-## 使用说明
+CBO优化器会使用StarRocks定期采集的多种统计信息，例如行数，列的平均大小、基数信息、NULL值数据量、MAX/MIN值等，这些统计信息存储在`_statistics_.table_statistic_v1`中。
 
-### 查询启用新优化器
+统计信息支持全量或抽样的采集类型，并且支持手动或自动定期的采集方式，可以帮助CBO优化器完善成本估算，选择最优执行计划。
 
-全局粒度开启：
+| 采集类型 | 采集方式         | 说明                                                         | 优缺点                                                       |
+| -------- | ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 全量采集 | 手动和自动定期。 | 对整个表的所有数据，计算统计信息。                           | 优点：全量采集的统计信息准确，能够帮助CBO更准确地评估执行计划。 缺点：全量采集消耗大量系统资源，速度慢。 |
+| 抽样采集 | 手动和自动定期。 | 从表的每一个分区（Partition）中均匀抽取N行数据，计算统计信息。 | 优点：抽样采集消耗较少的系统资源，速度快。 缺点：抽样采集的统计信息存在一定误差，可能会影响CBO评估执行计划的准确性。 |
 
-~~~SQL
-set global enable_cbo = true;
-~~~
+> - 手动采集：手动执行一次采集任务，采集统计信息。
+> - 自动定期采集：周期性执行采集任务，采集统计信息。采集间隔时间默认为一天。StarRocks默认每隔两个小时检查数据是否更新。如果检查到数据更新，且距离上一次采集时间已超过采集间隔时间（默认为一天），则StarRocks会重新采集统计信息；反之，则StarRocks不重新采集统计信息。
 
-Session 粒度开启：
+## 采集统计信息
 
-~~~SQL
-set enable_cbo = true;
+CBO优化器开启后，需要使用统计信息，统计信息默认为抽样且自动定期采集。抽样行数为20万行，采集间隔时间为一天。每隔两小时StarRocks会检查数据是否更新。您也可以按照业务需要，进行如下设置，调整统计信息的采集类型（全量或抽样）和采集方式（手动或自动定期）。
 
-~~~
+### 全量采集
 
-单个 SQL 粒度开启：
+选择采集方式（手动或自动定期），并执行相关命令。相关参数说明，请参见[参数说明](./Cost_based_optimizer.md/#参数说明)。
 
-~~~SQL
-SELECT /*+ SET_VAR(enable_cbo = true) */ * from table;
-~~~
+- 如果为手动采集，您可以执行如下命令。
 
-> 在1.19版本已经默认打开了CBO。
+```SQL
+ANALYZE FULL TABLE tbl_name(columnA, columnB, columnC...);
+```
 
-### 统计信息采集
+- 如果为自动定期采集，您可以执行如下命令，设置采集间隔时间、检查间隔时间。
 
-StarRocks会定时采集统计信息，包括但不限于：行数，平均大小、基数信息、NULL值数据量、MAX/MIN值等等，数据会存储在`_statistics_.table_statistic_v1`中，当前支持抽样和全量两种收集类型：
+> 如果多个自动定期采集任务的采集对象完全一致，则CBO仅运行最新创建的自动定期采集任务(即ID最大的任务)。
 
-* 抽样收集：
+```SQL
+-- 定期全量采集所有数据库的统计信息。
+CREATE ANALYZE FULL ALL 
+PROPERTIES(
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
 
-    会均匀的从每一个partition中抽取N行数据进行统计信息计算，抽样行数可以通过参数指定。优点在于收集任务消耗的资源少，速度快，缺点在于收集的统计信息不准确，对优化器的帮助有限，默认一般为抽样收集，抽样的行数默认为20万行，采集周期为1天，数据未更新不会重新收集。抽样收集可以通过手动或者定时的方式进行主动触发。
+-- 定期全量采集指定数据库下所有表的统计信息。
+CREATE ANALYZE FULL DATABASE db_name 
+PROPERTIES(
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
 
-* 全量收集
+-- 定期全量采集指定表、列的统计信息。
+CREATE ANALYZE FULL TABLE tbl_name(columnA, columnB, columnC...) 
+PROPERTIES(
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
+```
 
-    使用整个表的所有数据计算统计信息。优点在于收集到的统计信息准确，优化器可以更好的评估执行计划，但是缺点也比较明显，收集任务消耗资源非常大，速度慢，默认不会进行全量收集，用户可以按需对部分表进行全量收集。全量收集可以使用手动或者定时的方式进行主动触发。
+示例：
 
-* 支持的收集方式：
+```SQL
+-- 定期全量采集tpch数据库下所有表的统计信息，采集间隔时间为默认，检查间隔时间为默认。
+CREATE ANALYZE FULL DATABASE tpch;
+```
 
-  * 手动Analyze收集: 通过手动触发Analyze命令收集统计信息
+### 抽样采集
 
-  * 定期Analyze收集: 通过Analyze Job定期收集指定的库/表/列的统计信息，当数据更新后，会定期收集统计信息，数据未更新则不重新收集数据
+选择采集方式（手动或自动定期），并执行相关命令。相关参数说明，请参见[参数说明](./Cost_based_optimizer.md/#参数说明)。
 
-* Analyze调度策略：
+- 如果为手动采集，您可以执行如下命令，设置抽样行数。
 
-  * 手动Analyze收集：立刻生效进行调度
-  
-  * 定期Analyze收集：每张表收集的间隔默认为一天，可以通过命令参数`update_interval_sec`控制频率，默认每2小时检查一次
-
-### ANALYZE 相关命令
-
-#### Show Analyze
-
-~~~SQL
--- 展示所有的Analyze Job信息
-SHOW ANALYZE;
-~~~
-
-#### Analyze
-
-抽样采集
-
-~~~SQL
+```SQL
 ANALYZE TABLE tbl_name(columnA, columnB, columnC...)
 PROPERTIES(
-    "sample_collect_rows" = "10"
+    "sample_collect_rows" = "100000"
 );
-~~~
+```
 
-全量收集
+- 如果为自动定期采集，您可以执行如下命令，设置抽样行数、采集间隔时间、检查间隔时间。
 
-~~~SQL
-ANALYZE FULL TABLE tbl_name(columnA, columnB, columnC...);
+> 如果多个自动定期采集任务的采集对象完全一致，则CBO仅运行最新创建的自动定期采集任务(即ID最大的任务)。
 
-~~~
+```SQL
+-- 定期抽样采集所有数据库的统计信息。
+CREATE ANALYZE ALL
+PROPERTIES(
+    "sample_collect_rows" = "100000",
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
 
-#### Analyze Job
+-- 定期抽样采集指定数据库下所有表的统计信息。
+CREATE ANALYZE DATABASE db_name
+PROPERTIES(
+    "sample_collect_rows" = "100000",
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
 
-可以通过Analyze Job创建一个指定数据库/表/列的统计任务，每个任务有自己的执行周期以及配置，会常驻执行。
-当有多个Job中指定了收集同一个列时，会按照最新(job id最大)的Job中指定的配置执行。
+-- 定期抽样采集指定表、列的统计信息。
+CREATE ANALYZE TABLE tbl_name(columnA, columnB, columnC...)
+PROPERTIES(
+    "sample_collect_rows" = "100000",
+    "update_interval_sec" = "43200",
+    "collect_interval_sec" = "3600"
+);
+```
 
-抽样收集
+示例：
 
-~~~SQL
--- 定期抽样采集所有数据库的统计信息
-CREATE ANALYZE ALL PROPERTIES(...);
+```SQL
+-- 每隔43200秒（12小时）定期抽样采集所有数据库的统计信息，检查间隔时间为默认。
+CREATE ANALYZE ALL PROPERTIES("update_interval_sec" = "43200");
 
--- 定期抽样采集指定数据库下所有表的统计信息
-CREATE ANALYZE DATABASE db_name PROPERTIES(...);
+-- 定期抽样采集test表中v1列的统计信息，采集间隔时间为默认，检查间隔时间为默认。
+CREATE ANALYZE TABLE test(v1);
+```
 
--- 定期抽样采集指定表、列的统计信息
-CREATE ANALYZE TABLE tbl_name(columnA, columnB, columnC...) PROPERTIES(...);
-~~~
+### 查询或删除采集任务
 
-全量收集
+执行如下命令，显示所有采集任务。
 
-~~~SQL
--- 定期全量采集所有数据库的统计信息
-CREATE ANALYZE FULL ALL PROPERTIES(...);
+```SQL
+SHOW ANALYZE;
+```
 
--- 定期全量采集指定数据库下所有表的统计信息
-CREATE ANALYZE FULL DATABASE db_name PROPERTIES(...);
+执行如下命令，删除指定采集任务。
 
--- 定期全量采集指定表、列的统计信息
-CREATE ANALYZE FULL TABLE tbl_name(columnA, columnB, columnC...) PROPERTIES(...);
-~~~
+> `ID`为采集任务ID，可以通过`SHOW ANALYZE`获取。
 
-删除Job
+```SQL
+DROP ANALYZE <ID>;
+```
 
-~~~SQL
--- 删除Analyze job，id可以通过SHOW ANALYZE获取
-DROP ANALYZE <id>;
-~~~
+### 参数说明
 
-示例&说明
+- `sample_collect_rows`：抽样采集时的抽样行数。
+- `update_interval_sec`：自动定期任务的采集间隔时间，默认为86400（一天），单位为秒。
+- `collect_interval_sec`：自动定期任务中，检测数据更新的间隔时间，默认为7200（两小时），单位为秒。自动定期任务执行时，StarRocks每隔一段时间会检查表中数据是否更新，如果检查到数据更新，且距离上一次采集时间已超过`update_interval_sec`，则StarRocks会重新采集统计信息；反之，则StarRocks不重新采集统计信息。
 
-~~~SQL
--- 每隔100秒定期抽样采集所有数据库的统计信息
-CREATE ANALYZE ALL PROPERTIES("update_interval_sec" = "100");
+## FE配置项
 
--- 定期全量采集tpch数据库下所有表的统计信息
-CREATE ANALYZE FULL DATABASE tpch;
+您可以在FE配置文件fe.conf中，查询或修改统计信息采集的默认配置。
 
--- 定期抽样采集test表中v1列的统计信息
-CREATE ANALYZE TABLE test(v1)
-~~~
-
-参数说明：
-
-* update_interval_sec：统计任务收集的间隔时间，单位为秒
-* sample_collect_rows：抽样的行数
-
-#### FE 相关配置
-
-fe.conf中的相关配置项
-
-~~~conf
-# 统计信息收集功能开关
+```Plain%20Text
+# 是否采集统计信息。
 enable_statistic_collect = true;
 
-# 统计信息功能执行周期，默认为2小时
+# 自动定期任务中，检测数据更新的间隔时间，默认为7200（两小时），单位为秒。
 statistic_collect_interval_sec = 7200;
 
-# 统计信息Job的默认收集间隔时间，默认为1天
+# 自动定期任务的采集间隔时间，默认为86400（一天），单位为秒。
 statistic_update_interval_sec = 86400;
 
-# 采样统计信息Job的默认采样行数，默认为200000行
+# 采样统计信息Job的默认采样行数，默认为200000行。
 statistic_sample_collect_rows = 200000;
-~~~
-
-### 新优化器结果验证
-
-StarRocks提供一个新旧优化器**对比**的工具，用于回放fe中的audit.log，可以检查新优化器查询结果是否有误，在使用新优化器前，**建议使用StarRocks提供的对比工具检查一段时间**：
-
-1. 确认已经修改了FE的统计信息收集配置。
-2. 下载测试工具，Oracle JDK版本 [new\_planner\_test.zip](http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/new_planner_test.zip)，Open JDK版本 [open\_jdk\_new\_planner\_test.zip](http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/open_jdk_new_planner_test.zip) ，然后解压。
-3. 按照README配置StarRocks的端口地址，FE的http_port，以及用户名密码。
-4. 使用命令`java -jar new_planner_test.jar $fe.audit.log.path`执行测试，测试脚本会执行fe.audit.log 中的查询请求，并进行比对，分析查询结果并记录日志。
-5. 执行的结果会记录在result文件夹中，如果在result中包含慢查询，可以将result文件夹打包提交给StarRocks，协助我们修复问题。
+```
