@@ -515,7 +515,7 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
             }
 
             auto seed_column = context->get_constant_column(0);
-            if (seed_column->only_null() || seed_column->is_null(0)) {
+            if (seed_column->only_null()) {
                 return Status::OK();
             }
 
