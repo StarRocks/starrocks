@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
@@ -63,6 +64,11 @@ public class CreateTableTest {
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         Catalog.getCurrentCatalog().createTable(createTableStmt);
+    }
+
+    private static void alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        Catalog.getCurrentCatalog().alterTable(alterTableStmt);
     }
 
     @Test
@@ -214,5 +220,70 @@ public class CreateTableTest {
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    /**
+     * Disable json on unique/primary/aggregate key
+     */
+    @Test
+    public void testAlterJsonTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_bloomfilter (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 JSON\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type JSON",
+                () -> alterTable("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_unique_key MODIFY COLUMN k2 JSON"));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table do not support modify column",
+                () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
     }
 }
