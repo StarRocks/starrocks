@@ -77,7 +77,6 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "scale")
     private int scale;
 
-
     protected ScalarType(PrimitiveType type) {
         this.type = type;
     }
