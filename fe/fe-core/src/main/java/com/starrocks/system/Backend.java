@@ -24,6 +24,7 @@ package com.starrocks.system;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -691,6 +693,20 @@ public class Backend implements Writable {
 
     private long getDiskNumByStorageMedium(TStorageMedium storageMedium) {
         return disksRef.values().stream().filter(v -> v.getStorageMedium() == storageMedium).count();
+    }
+
+    public int getAvailableBackendStorageTypeCnt() {
+        if (!this.isAlive.get()) {
+            return 0;
+        }
+        ImmutableMap<String, DiskInfo> disks = this.getDisks();
+        Set<TStorageMedium> set = Sets.newHashSet();
+        for (DiskInfo diskInfo : disks.values()) {
+            if (diskInfo.getState() == DiskState.ONLINE) {
+                set.add(diskInfo.getStorageMedium());
+            }
+        }
+        return set.size();
     }
 
     private int getDiskNum() {
