@@ -68,6 +68,7 @@ private:
     friend class TabletScanner;
 
     constexpr static const int kMaxConcurrency = 50;
+    constexpr static const int kMaxScannerPerRange = 64;
 
     template <typename T>
     class Stack {
