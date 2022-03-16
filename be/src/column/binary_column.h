@@ -191,11 +191,6 @@ public:
     ColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Column::Filter& filter, size_t start, size_t to) override;
 
-    int compare_row(std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order, int null_first) const override;
-
-    void sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                      Tie& tie, std::pair<int, int> range, bool build_tie) override;
-
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     void fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const override;
