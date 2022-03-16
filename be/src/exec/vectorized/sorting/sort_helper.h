@@ -156,38 +156,6 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
     return Status::OK();
 }
 
-// Compare a column with datum, store result into a vector
-// For column-wise compare, only consider rows that are equal at previous columns
-// @return number of rows that are equal
-template <class DataComparator>
-inline int compare_row_helper(CompareVector& cmp_vector, DataComparator cmp) {
-    // For sparse array, use SIMD to skip data
-    // For dense array, just iterate all bytes
 
-    int equal_count = 0;
-    if (SIMD::count_zero(cmp_vector) > cmp_vector.size() / 8) {
-        for (size_t i = 0; i < cmp_vector.size(); i++) {
-            // Only consider rows that are queal at previous columns
-            if (cmp_vector[i] == 0) {
-                cmp_vector[i] = cmp(i);
-                equal_count += (cmp_vector[i] == 0);
-            }
-        }
-    } else {
-        int idx = 0;
-        while (true) {
-            int pos = SIMD::find_zero(cmp_vector, idx);
-            if (pos >= cmp_vector.size()) {
-                break;
-            }
-
-            cmp_vector[pos] = cmp(pos);
-            equal_count += (cmp_vector[pos] == 0);
-            idx = pos + 1;
-        }
-    }
-
-    return equal_count;
-}
 
 } // namespace starrocks::vectorized

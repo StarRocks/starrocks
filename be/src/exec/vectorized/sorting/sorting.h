@@ -26,5 +26,7 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
 // @param rhs_value the compare value
 int compare_column(const ColumnPtr column, std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order,
                    int null_first);
+void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, const std::vector<Datum>& rhs_values,
+                     const std::vector<int>& sort_orders, const std::vector<int>& null_firsts);
 
 } // namespace starrocks::vectorized

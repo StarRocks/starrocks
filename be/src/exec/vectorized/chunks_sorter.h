@@ -38,6 +38,7 @@ struct DataSegment {
         }
     }
 
+    // Deprecated
     // compare every row in incoming_column with number_of_row_to_compare row with base_column,
     // save result compare_results, and collect equal rows of incoming_column as rows_to_compare use to
     // comapre with next column.
@@ -72,6 +73,7 @@ struct DataSegment {
         rows_to_compare->resize(next_index - rows_to_compare->data());
     }
 
+    // Deprecated
     // compare data from incoming_column with number_of_row_to_compare of base_column.
     static void compare_column_with_one_row(Column& incoming_column, Column& base_column,
                                             size_t number_of_row_to_compare, std::vector<uint64_t>* rows_to_compare,
@@ -86,6 +88,7 @@ struct DataSegment {
         }
     }
 
+    // Deprecated
     // compare all indexs of rows_to_compare_array from data_segments with row_to_sort of order_by_columns
     // through every column until get result as compare_results_array.
     // rows_to_compare_array is used to save rows that should compare next column.
@@ -116,20 +119,12 @@ struct DataSegment {
         size_t size = order_by_columns.size();
 
         for (size_t i = 0; i < dats_segment_size; i++) {
-            auto& columns = data_segments[i].order_by_columns;
-            auto& cmp_result = (*compare_results_array)[i];
-
+            std::vector<Datum> rhs_values;
             for (size_t col_idx = 0; col_idx < size; col_idx++) {
-                int sort_order = sort_order_flags[col_idx];
-                int null_first = null_first_flags[col_idx];
-                auto& rhs_column = *order_by_columns[col_idx];
-                Datum rhs_value = rhs_column.get(row_to_sort);
-
-                int equal_count = compare_column(columns[col_idx], cmp_result, rhs_value, sort_order, null_first);
-                if (equal_count == 0) {
-                    break;
-                }
+                rhs_values.push_back(order_by_columns[col_idx]->get(row_to_sort));
             }
+            compare_columns(order_by_columns, (*compare_results_array)[i], rhs_values, sort_order_flags,
+                            null_first_flags);
         }
     }
 

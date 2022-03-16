@@ -12,6 +12,54 @@
 
 namespace starrocks::vectorized {
 
+
+// Compare a column with datum, store result into a vector
+// For column-wise compare, only consider rows that are equal at previous columns
+// @return number of rows that are equal
+template <class DataComparator>
+inline int compare_row_helper(CompareVector& cmp_vector, DataComparator cmp) {
+    DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 0 || x == -1 || x == 1; }));
+
+    // For sparse array, use SIMD to skip data
+    // For dense array, just iterate all bytes
+    int equal_count = 0;
+    if (SIMD::count_zero(cmp_vector) > cmp_vector.size() / 8) {
+        for (size_t i = 0; i < cmp_vector.size(); i++) {
+            // Only consider rows that are queal at previous columns
+            if (cmp_vector[i] == 0) {
+                cmp_vector[i] = cmp(i);
+                equal_count += (cmp_vector[i] == 0);
+            }
+        }
+    } else {
+        int idx = 0;
+        while (true) {
+            int pos = SIMD::find_zero(cmp_vector, idx);
+            if (pos >= cmp_vector.size()) {
+                break;
+            }
+
+            cmp_vector[pos] = cmp(pos);
+            equal_count += (cmp_vector[pos] == 0);
+            idx = pos + 1;
+        }
+    }
+
+    return equal_count;
+}
+
+// ColumnCompare compare a chunk with a rowj
+// A plain implementation is iterate all rows in chunk, and compare the left row with right row.
+// The problem of this way is the compare overhead, since it must implement as virtual function call.
+// So here we introduce the column-wise compare algorithm:
+// 1. compare the first left jcolumn with the first value in right row, save result in cmp_vector
+// 2. compare the second left column only if the first left column is equal to first right value
+// 3. repeat the second step until the last column
+//
+// In this way, the compare procedure is conducted in column-wise style, which eliminated the compare
+// function call.
+// And the compare result for each column is represented as a vector of int8_t, which takes only a little
+// bit of memory footprint and could support fast navigate.
 class ColumnCompare final : public ColumnVisitorAdapter<ColumnCompare> {
 public:
     explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first)
@@ -162,6 +210,25 @@ int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
     return compare.get_equal_count();
+}
+
+void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
+                     const std::vector<int>& sort_orders, const std::vector<int>& null_firsts) {
+    if (columns.empty()) {
+        return;
+    }
+    DCHECK_EQ(rhs_values.size(), columns.size());
+
+    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+        int sort_order = sort_orders[col_idx];
+        int null_first = null_firsts[col_idx];
+        Datum rhs_value = rhs_values[col_idx];
+
+        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_order, null_first);
+        if (equal_count == 0) {
+            break;
+        }
+    }
 }
 
 } // namespace starrocks::vectorized
