@@ -44,7 +44,6 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.SignStyle;
-import java.time.format.TextStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.Set;
@@ -482,18 +481,6 @@ public class ScalarOperatorFunctions {
                     case 'j': // %j Day of year (001..366)
                         builder.appendValue(ChronoField.DAY_OF_YEAR, 3);
                         break;
-                    case 'p': // %p AM or PM
-                        builder.appendText(ChronoField.AMPM_OF_DAY, TextStyle.FULL);
-                        break;
-                    case 'r': // %r Time, 12-hour (hh:mm:ss followed by AM or PM)
-                        builder.appendValue(ChronoField.CLOCK_HOUR_OF_AMPM, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
-                                .appendLiteral(' ')
-                                .appendText(ChronoField.AMPM_OF_DAY, TextStyle.FULL);
-                        break;
                     case 'S': // %S Seconds (00..59)
                     case 's': // %s Seconds (00..59)
                         builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
@@ -514,15 +501,15 @@ public class ScalarOperatorFunctions {
                     case 'y': // %y Year, numeric (two digits)
                         builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 2020);
                         break;
-                    case 'w': // %w Day of the week (0=Sunday..6=Saturday)
-                        builder.appendValue(ChronoField.DAY_OF_WEEK, 1);
-                        break;
                     case 'f': // %f Microseconds (000000..999999)
                         builder.appendValue(ChronoField.MICRO_OF_SECOND, 6);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);
                         break;
+                    case 'p': // %p AM or PM
+                    case 'r': // %r Time, 12-hour (hh:mm:ss followed by AM or PM)
+                    case 'w': // %w Day of the week (0=Sunday..6=Saturday)
                     case 'U': // %U Week (00..53), where Sunday is the first day of the week
                     case 'W': // %W Weekday name (Sunday..Saturday)
                     case 'x': // %x Year for the week, where Monday is the first day of the week, numeric, four digits; used with %v
