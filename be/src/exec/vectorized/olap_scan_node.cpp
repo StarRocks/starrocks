@@ -495,7 +495,6 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             segment_nums += rowset->num_segments();
         }
         COUNTER_UPDATE(_segment_counter, segment_nums);
-
         int scanners_per_tablet = std::min(segment_nums, kMaxScannerPerRange / _scan_ranges.size());
 
         int num_ranges = key_ranges.size();
@@ -504,6 +503,9 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             std::vector<OlapScanRange*> agg_key_ranges;
             agg_key_ranges.push_back(key_ranges[i].get());
             i++;
+            // each scanner could only handle TabletReaderParams, so each scanner could only
+            // 'le' or 'lt' range
+            // TODO:fix limit
             for (int j = 1; i < num_ranges && j < ranges_per_scanner &&
                             key_ranges[i]->end_include == key_ranges[i - 1]->end_include;
                  ++j, ++i) {
