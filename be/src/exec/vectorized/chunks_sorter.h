@@ -4,7 +4,11 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
+<<<<<<< HEAD
 #include "exec/vectorized/sorting/sort_permute.h"
+=======
+#include "exec/vectorized//sorting//sort_permute.h"
+>>>>>>> 4a1f4da8 (refactor compare_column with ColumnVisitor)
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
