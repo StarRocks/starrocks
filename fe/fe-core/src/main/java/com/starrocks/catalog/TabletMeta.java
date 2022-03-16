@@ -82,6 +82,10 @@ public class TabletMeta {
         this.storageMedium = storageMedium;
     }
 
+    public boolean isUseStarOS() {
+        return CatalogUtils.isUseStarOS(storageMedium);
+    }
+
     public int getNewSchemaHash() {
         lock.readLock().lock();
         try {
