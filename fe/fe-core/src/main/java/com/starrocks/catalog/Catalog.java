@@ -4375,6 +4375,12 @@ public class Catalog {
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
+        columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
+        columns.add(new Column("_hoodie_commit_seqno", Type.STRING, true));
+        columns.add(new Column("_hoodie_record_key", Type.STRING, true));
+        columns.add(new Column("_hoodie_partition_path", Type.STRING, true));
+        columns.add(new Column("_hoodie_file_name", Type.STRING, true));
+
         long tableId = getNextId();
         HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
         // partition key, commented for show partition key
