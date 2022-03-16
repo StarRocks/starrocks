@@ -2519,6 +2519,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             _set_error(msg);
             return Status::InternalError(msg);
         }
+        // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same block_mgr
         if (block_mgr == nullptr) {
             ASSIGN_OR_RETURN(block_mgr, fs::fs_util::block_manager(rowset->rowset_path()));
         }

@@ -331,8 +331,8 @@ Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t re
 FileBlockManager::FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts)
         : _env(std::move(env)), _opts(std::move(opts)) {
 #ifdef BE_TEST
-    _file_cache = std::make_unique<FileCache<RandomAccessFile>("Readable file cache",
-                                                               config::file_descriptor_cache_capacity);
+    _file_cache = std::make_unique <
+                  FileCache<RandomAccessFile>("Readable file cache", config::file_descriptor_cache_capacity);
 #else
     _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
                                                                 StorageEngine::instance()->file_cache());
