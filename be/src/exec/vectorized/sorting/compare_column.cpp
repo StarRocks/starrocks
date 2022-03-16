@@ -12,7 +12,6 @@
 
 namespace starrocks::vectorized {
 
-
 // Compare a column with datum, store result into a vector
 // For column-wise compare, only consider rows that are equal at previous columns
 // @return number of rows that are equal
@@ -20,15 +19,14 @@ template <class DataComparator>
 inline int compare_row_helper(CompareVector& cmp_vector, DataComparator cmp) {
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 0 || x == -1 || x == 1; }));
 
+    // TODO(mofei) optimize the compare with SIMD
     // For sparse array, use SIMD to skip data
     // For dense array, just iterate all bytes
-    int equal_count = 0;
     if (SIMD::count_zero(cmp_vector) > cmp_vector.size() / 8) {
         for (size_t i = 0; i < cmp_vector.size(); i++) {
             // Only consider rows that are queal at previous columns
             if (cmp_vector[i] == 0) {
                 cmp_vector[i] = cmp(i);
-                equal_count += (cmp_vector[i] == 0);
             }
         }
     } else {
@@ -40,12 +38,11 @@ inline int compare_row_helper(CompareVector& cmp_vector, DataComparator cmp) {
             }
 
             cmp_vector[pos] = cmp(pos);
-            equal_count += (cmp_vector[pos] == 0);
             idx = pos + 1;
         }
     }
 
-    return equal_count;
+    return SIMD::count_zero(cmp_vector);
 }
 
 // ColumnCompare compare a chunk with a rowj
