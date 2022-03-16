@@ -164,7 +164,6 @@ private:
     RuntimeProfile::Counter* _tablet_counter = nullptr;
     RuntimeProfile::Counter* _io_task_counter = nullptr;
     RuntimeProfile::Counter* _task_concurrency = nullptr;
-    RuntimeProfile::Counter* _segment_counter = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;

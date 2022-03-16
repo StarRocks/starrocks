@@ -52,7 +52,6 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
 
     _tablet_counter = ADD_COUNTER(runtime_profile(), "TabletCount ", TUnit::UNIT);
-    _segment_counter = ADD_COUNTER(runtime_profile(), "SegmentCount ", TUnit::UNIT);
     _io_task_counter = ADD_COUNTER(runtime_profile(), "IOTaskCount ", TUnit::UNIT);
     _task_concurrency = ADD_COUNTER(runtime_profile(), "ScanConcurrency ", TUnit::UNIT);
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
@@ -494,7 +493,6 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
         for (const auto& rowset : tablet_rowset) {
             segment_nums += rowset->num_segments();
         }
-        COUNTER_UPDATE(_segment_counter, segment_nums);
         int scanners_per_tablet = std::min(segment_nums, kMaxScannerPerRange / _scan_ranges.size());
 
         int num_ranges = key_ranges.size();
