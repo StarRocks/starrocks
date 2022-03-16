@@ -1292,7 +1292,8 @@ Status PersistentIndex::_check_and_flush_l0() {
     if (_l1 != nullptr) {
         _l1->file_size(&l1_file_size);
     }
-    if (l0_mem_size <= l0_flush_size_min && l1_file_size / l0_mem_size > l0_l1_merge_ratio) {
+    if (l0_mem_size <= l0_flush_size_min &&
+        ((l0_mem_size <= l0_snapshot_size_max) || (l1_file_size / l0_mem_size > 10))) {
         return Status::OK();
     }
     // flush _l0
