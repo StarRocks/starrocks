@@ -38,7 +38,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 // ====== evaluation + check rules ========
 
 #define DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                          \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {   \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                          \
         using VectorizedUnaryFunction = VectorizedStrictUnaryFunction<NAME##Impl>;                             \
         if constexpr (pt_is_decimal<TYPE>) {                                                                   \
             const auto& type = context->get_return_type();                                                     \
@@ -49,41 +49,41 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
         }                                                                                                      \
     }
 
-#define DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                        \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, ZeroCheck>;            \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+#define DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {             \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, ZeroCheck>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
     }
 
-#define DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                    \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NegativeCheck>;        \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+#define DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                 \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NegativeCheck>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));           \
     }
 
-#define DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NonPositiveCheck>;     \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+#define DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                            \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                    \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NonPositiveCheck>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));              \
     }
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                  \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NanCheck>;            \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                       \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {             \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NanCheck>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
     }
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN)                             \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NULL_FN>;             \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                  \
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN)                 \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {            \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NULL_FN>; \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));      \
     }
 
-#define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                         \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;           \
-        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),          \
-                                                                             VECTORIZED_FN_ARGS(1));         \
+#define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                 \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                \
+        using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;   \
+        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
+                                                                             VECTORIZED_FN_ARGS(1)); \
     }
 
 // ============ math function macro ==========
@@ -97,13 +97,13 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
 #define DEFINE_MATH_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {           \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                                  \
         return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
 
 #define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                 \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {  \
+    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                         \
         return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
                 VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                \
     }
@@ -133,11 +133,11 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
 // ============ math function impl ==========
-ColumnPtr MathFunctions::pi(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+ColumnPtr MathFunctions::pi(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_PI, 1);
 }
 
-ColumnPtr MathFunctions::e(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+ColumnPtr MathFunctions::e(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_E, 1);
 }
 
@@ -409,9 +409,9 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
     return std::string(buf + max_digits - result_len, result_len);
 }
 
-template <bool keep_scale>
-void MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
-                                     bool* is_over_flow) {
+template <DecimalRoundRule rule, bool keep_scale>
+void MathFunctions::decimal_round(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
+                                  bool* is_over_flow) {
     *is_over_flow = false;
     int32_t dec = rv;
     if (dec < 0) {
@@ -428,17 +428,17 @@ void MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale,
             // E.g. 1.2345 --(scale up by 2)--> 1.234500 --(scale down by 2) --> 1.2345
             *res = lv;
         } else {
-            (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+            (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, true, true>(
                     lv, get_scale_factor<int128_t>(scale_diff), res);
         }
     } else if (scale_diff < 0) {
         // Up scale and down scale cannot offset when keep scale is set
         // E.g. 1.2345 --(scale down by 2)--> 1.23 --(scale up by 2) --> 1.2300
-        (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, false, true>(
+        (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, false, true>(
                 lv, get_scale_factor<int128_t>(-scale_diff), res);
         if (keep_scale) {
             int128_t new_res;
-            (*is_over_flow) |= DecimalV3Cast::to_decimal_truncate<int128_t, int128_t, int128_t, true, true>(
+            (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, true, true>(
                     *res, get_scale_factor<int128_t>(-scale_diff), &new_res);
             *res = new_res;
         }
@@ -447,7 +447,8 @@ void MathFunctions::decimal_truncate(const int128_t& lv, const int32_t& l_scale,
     }
 }
 
-ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+template <DecimalRoundRule rule>
+ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& columns) {
     const auto& type = context->get_return_type();
 
     ColumnPtr c0 = columns[0];
@@ -494,7 +495,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
     if (c0_is_const && c1_is_const) {
         bool is_over_flow;
-        MathFunctions::decimal_truncate<false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
+        MathFunctions::decimal_round<rule, false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
         if (is_over_flow) {
             res = ColumnHelper::create_const_null_column(c0->size());
         } else {
@@ -503,7 +504,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<true>(raw_c0[0], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_round<rule, true>(raw_c0[0], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
@@ -512,7 +513,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     } else if (c1_is_const) {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<false>(raw_c0[i], original_scale, raw_c1[0], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_round<rule, false>(raw_c0[i], original_scale, raw_c1[0], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
@@ -521,7 +522,7 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     } else {
         for (auto i = 0; i < size; i++) {
             bool is_over_flow;
-            MathFunctions::decimal_truncate<true>(raw_c0[i], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
+            MathFunctions::decimal_round<rule, true>(raw_c0[i], original_scale, raw_c1[i], &raw_res[i], &is_over_flow);
             if (is_over_flow) {
                 has_null = true;
                 raw_null_flags[i] = 1;
@@ -536,7 +537,23 @@ ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const sta
     }
 }
 
-ColumnPtr MathFunctions::conv_int(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const Columns& columns) {
+    return decimal_round<DecimalRoundRule::ROUND_TRUNCATE>(context, columns);
+}
+
+ColumnPtr MathFunctions::round_decimal128(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    Columns new_columns;
+    new_columns.push_back(columns[0]);
+    new_columns.push_back(ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(0, columns[0]->size()));
+    return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
+}
+
+ColumnPtr MathFunctions::round_up_to_decimal128(FunctionContext* context, const Columns& columns) {
+    return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, columns);
+}
+
+ColumnPtr MathFunctions::conv_int(FunctionContext* context, const Columns& columns) {
     auto bigint = ColumnViewer<TYPE_BIGINT>(columns[0]);
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
@@ -571,7 +588,7 @@ ColumnPtr MathFunctions::conv_int(FunctionContext* context, const starrocks::vec
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr MathFunctions::conv_string(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& columns) {
     auto string_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);

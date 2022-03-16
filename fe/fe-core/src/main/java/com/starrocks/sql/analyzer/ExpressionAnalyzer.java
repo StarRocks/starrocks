@@ -513,7 +513,13 @@ public class ExpressionAnalyzer {
                     throw new SemanticException("Time Type can not used in %s function",
                             fnName);
                 }
-            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
+                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+                // Since the priority of decimal version is higher than double version (according functionId),
+                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
+                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
+                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
+                // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
             } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
@@ -646,12 +652,12 @@ public class ExpressionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
 
                 fn = newFn;
-            } else if (FunctionSet.TRUNCATE.equalsIgnoreCase(fnName)) {
-                // Decimal version of truncate may change the scale, we need to calculate the scale of the return type
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
+                // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
                 // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
                 List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
                         .collect(Collectors.toList());
-                fn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, fn, argTypes);
+                fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
             }
             return fn;
         }
