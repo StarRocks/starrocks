@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/datum.h"
 #include "common/status.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 
@@ -19,5 +20,11 @@ Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_a
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
                             const std::vector<int>& null_firsts, Permutation* permutation);
+
+// Compare the column with the `rhs_value`, which must have the some type with column.
+// @param cmp_result compare result is written into this array, value must within -1,0,1
+// @param rhs_value the compare value
+int compare_column(const ColumnPtr column, std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order,
+                   int null_first);
 
 } // namespace starrocks::vectorized

@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/vectorized//sorting//sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
@@ -124,7 +125,7 @@ struct DataSegment {
                 auto& rhs_column = *order_by_columns[col_idx];
                 Datum rhs_value = rhs_column.get(row_to_sort);
 
-                int equal_count = columns[col_idx]->compare_row(cmp_result, rhs_value, sort_order, null_first);
+                int equal_count = compare_column(columns[col_idx], cmp_result, rhs_value, sort_order, null_first);
                 if (equal_count == 0) {
                     break;
                 }

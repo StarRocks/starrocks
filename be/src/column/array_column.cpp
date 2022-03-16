@@ -324,26 +324,6 @@ size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size
     return result_offset;
 }
 
-int ArrayColumn::compare_row(std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order, int null_first) const {
-    // Convert the datum to a array column
-    auto rhs_column = _elements->clone_empty();
-    auto& datum_array = rhs_value.get_array();
-    for (auto& x : datum_array) {
-        rhs_column->append_datum(x);
-    }
-    auto cmp = [&](int lhs_index) { return compare_at(lhs_index, 0, *rhs_column, null_first) * sort_order; };
-    return compare_row_helper(cmp_result, cmp);
-}
-
-void ArrayColumn::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                               Tie& tie, std::pair<int, int> range, bool build_tie) {
-    auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-        // TODO(mofei) direction
-        return compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *this, is_null_first ? -1 : 1);
-    };
-    sort_and_tie_helper(cancel, this, is_asc_order, permutation, tie, cmp, range, build_tie);
-}
-
 int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const {
     const ArrayColumn& rhs = down_cast<const ArrayColumn&>(right_column);
 

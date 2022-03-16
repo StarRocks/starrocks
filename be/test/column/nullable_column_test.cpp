@@ -6,6 +6,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
@@ -290,7 +291,7 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     };
     auto execute = [&](Datum rhs_value, int sort_order, int null_first) {
         CompareVector cmp_result(c0->size(), 0);
-        c0->compare_row(cmp_result, rhs_value, sort_order, null_first);
+        compare_column(c0, cmp_result, rhs_value, sort_order, null_first);
         return cmp_result;
     };
 

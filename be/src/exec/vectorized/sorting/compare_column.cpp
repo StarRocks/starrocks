@@ -1,0 +1,167 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+#include "column/array_column.h"
+#include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/datum.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_permute.h"
+
+namespace starrocks::vectorized {
+
+class ColumnCompare final : public ColumnVisitorAdapter<ColumnCompare> {
+public:
+    explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first)
+            : ColumnVisitorAdapter(this),
+              _cmp_vector(cmp_vector),
+              _rhs_value(rhs_value),
+              _sort_order(sort_order),
+              _null_first(null_first) {}
+
+    Status do_visit(const vectorized::NullableColumn& column) {
+        // Two step compare:
+        // 1. Compare null values, store at temporary result
+        // 2. Mask notnull values, and compare not-null values
+        const NullData& null_data = column.immutable_null_column_data();
+
+        // Set byte to 0 when it's null/null byte is 1
+        CompareVector null_vector(null_data.size());
+        for (size_t i = 0; i < null_data.size(); i++) {
+            null_vector[i] = (null_data[i] == 1) ? 0 : 1;
+        }
+        auto null_cmp = [&](int lhs_row) -> int {
+            DCHECK(null_data[lhs_row] == 1);
+            return _rhs_value.is_null() ? 0 : _null_first;
+        };
+        int null_equal_count = compare_row_helper(null_vector, null_cmp);
+
+        int notnull_equal_count = 0;
+        if (_rhs_value.is_null()) {
+            for (size_t i = 0; i < null_data.size(); i++) {
+                if (null_data[i] == 0) {
+                    _cmp_vector[i] = -_null_first;
+                } else {
+                    _cmp_vector[i] = null_vector[i];
+                }
+            }
+        } else {
+            // 0 means not null, so compare it
+            // 1 means null, not compare it for not-null values
+            CompareVector notnull_vector(null_data.size());
+            for (size_t i = 0; i < null_data.size(); i++) {
+                notnull_vector[i] = null_data[i];
+            }
+
+            notnull_equal_count =
+                    compare_column(column.data_column(), notnull_vector, _rhs_value, _sort_order, _null_first);
+            for (size_t i = 0; i < null_data.size(); i++) {
+                if (null_data[i] == 0) {
+                    _cmp_vector[i] = notnull_vector[i];
+                } else {
+                    _cmp_vector[i] = null_vector[i];
+                }
+            }
+        }
+
+        _equal_count = null_equal_count + notnull_equal_count;
+
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::ConstColumn& column) {
+        _equal_count = compare_column(column.data_column(), _cmp_vector, _rhs_value, _sort_order, _null_first);
+
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::ArrayColumn& column) {
+        // Convert the datum to a array column
+        auto rhs_column = column.elements().clone_empty();
+        auto& datum_array = _rhs_value.get_array();
+        for (auto& x : datum_array) {
+            rhs_column->append_datum(x);
+        }
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::BinaryColumn& column) {
+        const BinaryColumn::Container& lhs_datas = column.get_data();
+        Slice rhs_data = _rhs_value.get<Slice>();
+
+        auto cmp = [&](int lhs_row) {
+            if (_sort_order == 1) {
+                return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
+            } else {
+                return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
+            }
+        };
+        _equal_count = compare_row_helper(_cmp_vector, cmp);
+
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+        T rhs_data = _rhs_value.get<T>();
+        auto& lhs_data = column.get_data();
+        auto cmp = [&](int lhs_row) {
+            if (_sort_order == 1) {
+                return SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data);
+            } else {
+                return -1 * SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data);
+            }
+        };
+
+        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+        DCHECK(false) << "not support object column sort_and_tie";
+
+        return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const vectorized::JsonColumn& column) {
+        auto& lhs_data = column.get_data();
+        const JsonValue& rhs_json = *_rhs_value.get_json();
+        auto cmp = [&](int lhs_row) {
+            if (_sort_order == 1) {
+                return lhs_data[lhs_row]->compare(rhs_json);
+            } else {
+                return -1 * lhs_data[lhs_row]->compare(rhs_json);
+            }
+        };
+
+        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        return Status::OK();
+    }
+
+    int get_equal_count() { return _equal_count; }
+
+private:
+    CompareVector& _cmp_vector;
+    Datum _rhs_value;
+    int _sort_order;
+    int _null_first;
+
+    int _equal_count = 0; // Output equal count of compare
+};
+
+int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first) {
+    ColumnCompare compare(cmp_vector, rhs_value, sort_order, null_first);
+
+    [[maybe_unused]] Status st = column->accept(&compare);
+    DCHECK(st.ok());
+    return compare.get_equal_count();
+}
+
+} // namespace starrocks::vectorized

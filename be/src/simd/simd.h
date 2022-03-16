@@ -96,7 +96,8 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
 }
 
 // NOTE: memchr is much faster than a plain SIMD implementation
-inline static size_t find_byte(const std::vector<uint8_t>& list, size_t start, uint8_t byte) {
+template <class T>
+inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte) {
     if (start >= list.size()) {
         return start;
     }
@@ -104,7 +105,7 @@ inline static size_t find_byte(const std::vector<uint8_t>& list, size_t start, u
     if (p == nullptr) {
         return list.size();
     }
-    return (uint8_t*)p - list.data();
+    return (T*)p - list.data();
 }
 
 // Find position for zero byte, return size of list if not found

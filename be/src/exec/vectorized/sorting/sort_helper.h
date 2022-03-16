@@ -9,8 +9,8 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/vectorized//sorting//sort_column.h"
 #include "exec/vectorized//sorting//sort_permute.h"
+#include "exec/vectorized//sorting//sorting.h"
 #include "runtime/timestamp_value.h"
 #include "util/orlp/pdqsort.h"
 

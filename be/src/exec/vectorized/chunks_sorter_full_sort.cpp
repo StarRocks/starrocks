@@ -3,8 +3,8 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "column/type_traits.h"
-#include "exec/vectorized/sorting/sort_column.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
