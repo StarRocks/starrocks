@@ -34,6 +34,8 @@ Status JDBCScanner::open(RuntimeState* state) {
         return Status::InternalError("Cannot get jni env");
     }
 
+    _init_profile();
+
     RETURN_IF_ERROR(_init_jdbc_bridge());
 
     RETURN_IF_ERROR(_init_jdbc_scan_context(state));
@@ -41,6 +43,17 @@ Status JDBCScanner::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_jdbc_scanner());
 
     RETURN_IF_ERROR(_init_column_class_name());
+
+    // init JDBCUtil method
+    _jdbc_util_cls = _jni_env->FindClass(JDBC_UTIL_CLASS_NAME);
+    DCHECK(_jdbc_util_cls != nullptr);
+    _util_format_date =
+            _jni_env->GetStaticMethodID(_jdbc_util_cls, "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
+    DCHECK(_util_format_date != nullptr);
+    _util_format_localdatetime = _jni_env->GetStaticMethodID(_jdbc_util_cls, "formatLocalDatetime",
+                                                             "(Ljava/time/LocalDateTime;)Ljava/lang/String;");
+    DCHECK(_util_format_localdatetime != nullptr);
+
     return Status::OK();
 }
 
@@ -155,13 +168,21 @@ Status JDBCScanner::_init_jdbc_scanner() {
     return Status::OK();
 }
 
+void JDBCScanner::_init_profile() {
+    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IoTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
+    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunkTime");
+    _runtime_profile->add_info_string("Query", _scan_ctx.sql);
+}
+
 Status JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
     auto type = slot_desc->type().type;
     if (java_class == "java.lang.Integer") {
-        if (type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
+        if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is Integer, please set the type to "
-                                "one of smallint,int,bigint",
+                                "one of tinyint,smallint,int,bigint",
                                 slot_desc->col_name()));
         }
     } else if (java_class == "java.lang.String") {
@@ -207,6 +228,12 @@ Status JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescr
                     fmt::format("Type mismatches on column[{}], JDBC result type is Date, please set the type to date",
                                 slot_desc->col_name()));
         }
+    } else if (java_class == "java.time.LocalDateTime") {
+        if (type != TYPE_DATETIME) {
+            return Status::NotSupported(fmt::format(
+                    "Type mismatches on column[{}], JDBC result type is LocalDateTime, please set the type to datetime",
+                    slot_desc->col_name()));
+        }
     } else if (java_class == "java.math.BigDecimal") {
         if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128) {
             return Status::NotSupported(fmt::format(
@@ -249,6 +276,8 @@ Status JDBCScanner::_has_next(bool* result) {
 }
 
 Status JDBCScanner::_get_next_chunk(jobject* chunk) {
+    SCOPED_TIMER(_profile.io_timer);
+    COUNTER_UPDATE(_profile.io_counter, 1);
     *chunk = _jni_env->CallObjectMethod(_jdbc_scanner, _scanner_get_next_chunk);
     CHECK_JAVA_EXCEPTION("getNextChunk failed")
     return Status::OK();
@@ -365,10 +394,12 @@ Status JDBCScanner::_append_value_from_result(jobject jval, std::function<CppTyp
 }
 
 Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
+    SCOPED_TIMER(_profile.fill_chunk_timer);
     auto& helper = JVMFunctionHelper::getInstance();
     jobject first_column = helper.list_get(jchunk, 0);
     int num_rows = helper.list_size(first_column);
     _jni_env->DeleteLocalRef(first_column);
+    COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
 
     for (size_t col_idx = 0; col_idx < _slot_descs.size(); col_idx++) {
         SlotDescriptor* slot_desc = _slot_descs[col_idx];
@@ -408,6 +439,11 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
             for (int i = 0; i < num_rows; i++) {
                 RETURN_IF_ERROR(_append_date_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
             }
+        } else if (column_class == "java.time.LocalDateTime") {
+            DCHECK(slot_desc->type().type == TYPE_DATETIME);
+            for (int i = 0; i < num_rows; i++) {
+                RETURN_IF_ERROR(_append_localdatetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+            }
         } else if (column_class == "java.math.BigDecimal") {
             for (int i = 0; i < num_rows; i++) {
                 RETURN_IF_ERROR(_append_decimal_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
@@ -434,6 +470,20 @@ Status JDBCScanner::_append_datetime_val(jobject jval, SlotDescriptor* slot_desc
     return Status::OK();
 }
 
+Status JDBCScanner::_append_localdatetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
+    PROCESS_NULL_VALUE(jval, column)
+    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
+
+    std::string localdatetime_str = _get_localdatetime_string(jval);
+    TimestampValue tsv;
+    if (!tsv.from_datetime_format_str(localdatetime_str.c_str(), localdatetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
+        return Status::DataQualityError(fmt::format("Invalid datetime value occurs on column[{}], value is [{}]",
+                                                    slot_desc->col_name(), localdatetime_str));
+    }
+    _append_data<TYPE_DATETIME, TimestampValue>(column, tsv);
+    return Status::OK();
+}
+
 Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
     DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
@@ -449,14 +499,16 @@ Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Co
 }
 
 std::string JDBCScanner::_get_date_string(jobject jval) {
-    jclass jdbc_util_cls = _jni_env->FindClass(JDBC_UTIL_CLASS_NAME);
-    DCHECK(jdbc_util_cls != nullptr);
-    jmethodID format_date =
-            _jni_env->GetStaticMethodID(jdbc_util_cls, "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
-    DCHECK(format_date != nullptr);
-    jstring date_str = (jstring)_jni_env->CallStaticObjectMethod(jdbc_util_cls, format_date, jval);
+    jstring date_str = (jstring)_jni_env->CallStaticObjectMethod(_jdbc_util_cls, _util_format_date, jval);
     std::string result = JVMFunctionHelper::getInstance().to_string(date_str);
     _jni_env->DeleteLocalRef(date_str);
+    return result;
+}
+
+std::string JDBCScanner::_get_localdatetime_string(jobject jval) {
+    jstring datetime_str = (jstring)_jni_env->CallStaticObjectMethod(_jdbc_util_cls, _util_format_localdatetime, jval);
+    std::string result = JVMFunctionHelper::getInstance().to_string(datetime_str);
+    _jni_env->DeleteLocalRef(datetime_str);
     return result;
 }
 
