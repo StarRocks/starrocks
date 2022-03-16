@@ -194,10 +194,6 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%l")).getVarchar());
         Assert.assertEquals("01",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%m")).getVarchar());
-        Assert.assertEquals("PM",
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%p")).getVarchar());
-        Assert.assertEquals("01:04:05 PM",
-                ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%r")).getVarchar());
         Assert.assertEquals("05",
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%S")).getVarchar());
         Assert.assertEquals("05",
