@@ -285,23 +285,49 @@ static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     return bytes.size();
 }
 
-static void BM_find_zero(benchmark::State& state) {
-    std::vector<uint8_t> bytes(1024, 1);
-    
+static void BM_find_zero_plain(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
     for (auto _ : state) {
         benchmark::DoNotOptimize(plain_find_zero(bytes));
     }
 }
-BENCHMARK(BM_find_zero);
+BENCHMARK(BM_find_zero_plain)->Range(8, 8 << 12);
 
 static void BM_find_zero_simd(benchmark::State& state) {
-    std::vector<uint8_t> bytes(1024, 1);
-    
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
     for (auto _ : state) {
         benchmark::DoNotOptimize(SIMD::find_zero(bytes, 0));
     }
 }
-BENCHMARK(BM_find_zero_simd);
+BENCHMARK(BM_find_zero_simd)->Range(8, 8 << 12);
+
+static void BM_find_zero_stdfind(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(std::find(bytes.begin(), bytes.end(), 0));
+    }
+}
+BENCHMARK(BM_find_zero_stdfind)->Range(8, 8 << 12);
+
+static void BM_find_zero_memchr(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(memchr(bytes.data(), 0, bytes.size()));
+    }
+}
+BENCHMARK(BM_find_zero_memchr)->Range(8, 8 << 12);
 
 } // namespace starrocks::vectorized
 

@@ -276,15 +276,6 @@ public:
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
 
-    // Sort this column incrementally, and build tie for the next column
-    // @param is_asc_order ascending order or descending order
-    // @param is_null_first null first or null last
-    // @param permutation input and output permutation
-    // @param tie input and output tie
-    // @param range sort range, {0, 0} means not build tie but sort data
-    virtual void sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                              Tie& tie, std::pair<int, int> range, bool build_tie) = 0;
-
     // Compares (*this)[left] and rhs[right]. Column rhs should have the same type.
     // Returns negative number, 0, or positive number (*this)[left] is less, equal, greater than
     // rhs[right] respectively.

@@ -3,7 +3,7 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "column/type_traits.h"
-#include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/sort_column.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
@@ -451,25 +451,9 @@ Status ChunksSorterFullSort::_sort_by_row_cmp(RuntimeState* state) {
 // Sort in column-wise and incremental style
 Status ChunksSorterFullSort::_sort_by_column_inc(RuntimeState* state) {
     SCOPED_TIMER(_sort_timer);
-    if (_get_number_of_order_by_columns() < 1) {
-        return Status::OK();
-    }
-    size_t num_rows = _sorted_permutation.size();
-    Tie tie(num_rows, 1);
-    std::pair<int, int> range{0, num_rows};
-    SmallPermutation permutation = create_small_permutation(num_rows);
 
-    for (int col_index = 0; col_index < _get_number_of_order_by_columns(); col_index++) {
-        Column* column = _sorted_segment->order_by_columns[col_index].get();
-        bool is_asc_order = (_sort_order_flag[col_index] == 1);
-        bool is_null_first = is_asc_order ? (_null_first_flag[col_index] == -1) : (_null_first_flag[col_index] == 1);
-        bool build_tie = col_index != _get_number_of_order_by_columns() - 1;
-        column->sort_and_tie(state->cancelled_ref(), is_asc_order, is_null_first, permutation, tie, range, build_tie);
-    }
-
-    restore_small_permutation(permutation, _sorted_permutation);
-
-    return Status::OK();
+    return sort_and_tie_columns(state->cancelled_ref(), _sorted_segment->order_by_columns, _sort_order_flag,
+                                _null_first_flag, &_sorted_permutation);
 }
 
 // Sort in column style to avoid calling virtual methods of Column.

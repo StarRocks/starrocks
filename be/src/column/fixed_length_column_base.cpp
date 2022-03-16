@@ -61,22 +61,6 @@ size_t FixedLengthColumnBase<T>::filter_range(const Column::Filter& filter, size
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::sort_and_tie(const bool& cancel, bool is_asc_order, bool is_null_first,
-                                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
-                                            bool build_tie) {
-    DCHECK_GE(size(), permutation.size());
-    using ItemType = InlinePermuteItem<T>;
-
-    auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
-        return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
-    };
-
-    auto inlined = create_inline_permutation<T>(permutation, _data);
-    sort_and_tie_helper(cancel, this, is_asc_order, inlined, tie, cmp, range, build_tie);
-    restore_inline_permutation(inlined, permutation);
-}
-
-template <typename T>
 int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     DCHECK_LT(left, _data.size());
     DCHECK_LT(right, rhs.size());

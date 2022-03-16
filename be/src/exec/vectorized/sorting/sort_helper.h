@@ -9,6 +9,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/vectorized//sorting//sort_column.h"
 #include "exec/vectorized//sorting//sort_permute.h"
 #include "runtime/timestamp_value.h"
 #include "util/orlp/pdqsort.h"
@@ -69,10 +70,10 @@ static std::string dubug_column(const Column* column, const PermutationType& per
 
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColumn* column, bool is_asc_order,
-                                                bool is_null_first, SmallPermutation& permutation, Tie& tie,
-                                                std::pair<int, int> range, bool build_tie) {
-    NullData& null_data = column->null_column_data();
+static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column, bool is_asc_order,
+                                                  bool is_null_first, SmallPermutation& permutation, Tie& tie,
+                                                  std::pair<int, int> range, bool build_tie) {
+    const NullData& null_data = column->immutable_null_column_data();
     auto null_pred = [&](const SmallPermuteItem& item) -> bool {
         if (is_null_first) {
             return null_data[item.index_in_chunk] == 1;
@@ -98,8 +99,8 @@ static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColu
 
             if (notnull_start < notnull_end) {
                 tie[pivot_start] = 0;
-                column->data_column()->sort_and_tie(cancel, is_asc_order, is_null_first, permutation, tie,
-                                                    {notnull_start, notnull_end}, build_tie);
+                RETURN_IF_ERROR(sort_and_tie_column(cancel, column->data_column(), is_asc_order, is_null_first,
+                                                    permutation, tie, {notnull_start, notnull_end}, build_tie));
             }
         }
 
@@ -110,12 +111,14 @@ static inline void sort_and_tie_helper_nullable(const bool& cancel, NullableColu
 
     VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
     VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
+
+    return Status::OK();
 }
 
 template <class DataComparator, class PermutationType>
-static inline void sort_and_tie_helper(const bool& cancel, Column* column, bool is_asc_order,
-                                       PermutationType& permutation, Tie& tie, DataComparator cmp,
-                                       std::pair<int, int> range, bool build_tie) {
+static inline Status sort_and_tie_helper(const bool& cancel, const Column* column, bool is_asc_order,
+                                         PermutationType& permutation, Tie& tie, DataComparator cmp,
+                                         std::pair<int, int> range, bool build_tie) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](auto begin, auto end) {
@@ -151,6 +154,7 @@ static inline void sort_and_tie_helper(const bool& cancel, Column* column, bool 
 
     VLOG(2) << fmt::format("tie after sort: {}\n", fmt::join(tie, ",   "));
     VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized
