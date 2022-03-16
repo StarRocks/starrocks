@@ -21,9 +21,16 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
+
 public abstract class DdlStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDDLStatement(this, context);
     }
 }

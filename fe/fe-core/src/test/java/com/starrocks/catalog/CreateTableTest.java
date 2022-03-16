@@ -21,13 +21,16 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -63,6 +66,11 @@ public class CreateTableTest {
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         Catalog.getCurrentCatalog().createTable(createTableStmt);
+    }
+
+    private static void alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        Catalog.getCurrentCatalog().alterTable(alterTableStmt);
     }
 
     @Test
@@ -225,5 +233,127 @@ public class CreateTableTest {
                         "(k1 int(40), j json, j1 json, j2 json)\n" +
                         "primary key(k1)\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    /**
+     * Disable json on unique/primary/aggregate key
+     */
+    @Test
+    public void testAlterJsonTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_bloomfilter (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 JSON\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type JSON",
+                () -> alterTable("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_unique_key MODIFY COLUMN k2 JSON"));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_json_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "JSON must be used in duplicate key",
+                () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table do not support modify column",
+                () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
+    }
+
+    private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {
+        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
+        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Table table = db.getTable(tableName);
+        Assert.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        for (Partition partition : olapTable.getAllPartitions()) {
+            Assert.assertTrue(partition.isUseStarOS());
+        }
+    }
+
+    private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {
+        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
+        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Table table = db.getTable(tableName);
+        Assert.assertTrue(table != null);
+        db.dropTable(tableName);
+        table = db.getTable(tableName);
+        Assert.assertTrue(table == null);
+    }
+
+    @Test
+    public void testCreateOlapTableWithStarOSTablet() throws DdlException {
+        ConfigBase.setMutableConfig("use_staros", "true");
+
+        // normal
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
+                        "distributed by hash(key1) buckets 3\n" +
+                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
+        checkOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
+        dropOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.multi_partition_aggregate_key (key1 date, key2 varchar(10), v bigint sum)\n" +
+                        "partition by range(key1)\n" +
+                        "(partition p1 values less than (\"2022-03-01\"),\n" +
+                        " partition p2 values less than (\"2022-04-01\"))\n" +
+                        "distributed by hash(key2) buckets 3\n" +
+                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
+        checkOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
+        dropOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.multi_partition_unique_key (key1 int, key2 varchar(10), v bigint)\n" +
+                        "unique key (key1, key2)\n" +
+                        "partition by range(key1)\n" +
+                        "(partition p1 values less than (\"10\"),\n" +
+                        " partition p2 values less than (\"20\"))\n" +
+                        "distributed by hash(key2) buckets 3\n" +
+                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
+        checkOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
+        dropOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
+
+        ConfigBase.setMutableConfig("use_staros", "false");
     }
 }

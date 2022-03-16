@@ -62,14 +62,30 @@ public class ResourceMgr implements Writable {
     @SerializedName(value = "nameToResource")
     private final HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
-    private final ReentrantReadWriteLock rwlock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public ResourceMgr() {
 
     }
 
+    private void readLock() {
+        this.rwLock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        this.rwLock.readLock().unlock();
+    }
+
+    private void writeLock() {
+        this.rwLock.writeLock().lock();
+    }
+
+    private void writeUnLock() {
+        this.rwLock.writeLock().unlock();
+    }
+
     public void createResource(CreateResourceStmt stmt) throws DdlException {
-        rwlock.writeLock().lock();
+        this.writeLock();
         try {
             Resource resource = Resource.fromStmt(stmt);
             String resourceName = stmt.getResourceName();
@@ -80,7 +96,7 @@ public class ResourceMgr implements Writable {
             Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
             LOG.info("create resource success. resource: {}", resource);
         } finally {
-            rwlock.writeLock().unlock();
+            this.writeUnLock();
         }
     }
 
@@ -89,7 +105,7 @@ public class ResourceMgr implements Writable {
     }
 
     public void dropResource(DropResourceStmt stmt) throws DdlException {
-        rwlock.writeLock().lock();
+        this.writeLock();
         try {
             String name = stmt.getResourceName();
             Resource resource = nameToResource.remove(name);
@@ -103,7 +119,7 @@ public class ResourceMgr implements Writable {
             Catalog.getCurrentCatalog().getEditLog().logDropResource(new DropResourceOperationLog(name));
             LOG.info("drop resource success. resource name: {}", name);
         } finally {
-            rwlock.writeLock().lock();
+            this.writeUnLock();
         }
     }
 
@@ -119,20 +135,20 @@ public class ResourceMgr implements Writable {
     }
 
     public boolean containsResource(String name) {
-        rwlock.readLock().lock();
+        this.readLock();
         try {
             return nameToResource.containsKey(name);
         } finally {
-            rwlock.readLock().unlock();
+            this.readUnlock();
         }
     }
 
     public Resource getResource(String name) {
-        rwlock.readLock().lock();
+        this.readLock();
         try {
             return nameToResource.get(name);
         } finally {
-            rwlock.readLock().unlock();
+            this.readUnlock();
         }
     }
 
@@ -143,7 +159,7 @@ public class ResourceMgr implements Writable {
      * @throws DdlException
      */
     public void alterResource(AlterResourceStmt stmt) throws DdlException {
-        rwlock.writeLock().lock();
+        this.writeLock();
         try {
             // check if the target resource exists .
             String name = stmt.getResourceName();
@@ -163,25 +179,25 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Alter resource statement only support external hive now");
             }
         } finally {
-            rwlock.writeLock().unlock();
+            this.writeUnLock();
         }
     }
 
     public int getResourceNum() {
-        rwlock.readLock().lock();
+        this.readLock();
         try {
             return nameToResource.size();
         } finally {
-            rwlock.readLock().unlock();
+            this.readUnlock();
         }
     }
 
     public List<List<String>> getResourcesInfo() {
-        rwlock.readLock().lock();
+        this.readLock();
         try {
             return procNode.fetchResult().getRows();
         } finally {
-            rwlock.readLock().unlock();
+            this.readUnlock();
         }
     }
 

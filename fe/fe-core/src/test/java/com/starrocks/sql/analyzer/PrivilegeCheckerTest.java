@@ -8,10 +8,10 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -33,19 +33,15 @@ public class PrivilegeCheckerTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
 
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
-        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, ctx);
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+        auth.createUser(createUserStmt);
 
         testUser = new UserIdentity("test", "%");
         testUser.analyze("default_cluster");
-
-        auth = new Auth();
-        TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
-        auth.createUser(createUserStmt);
-        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
     }
 
     @AfterClass
@@ -56,37 +52,109 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testTableAs() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "select count(*) from db1.tbl1 as a";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        PrivilegeChecker.check(statementBase, auth, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
     }
 
     @Test
     public void testInlineView() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "select count(*) from (select count(*) from db1.tbl1) as a";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        PrivilegeChecker.check(statementBase, auth, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
     }
 
     @Test
     public void testWithNormal() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "with tmp as (select * from db1.tbl1) select count(*) from tmp;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        PrivilegeChecker.check(statementBase, auth, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
     }
 
     @Test
     public void testWithNested() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createTestUserCtx(testUser);
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "with tmp as (select * from db1.tbl1) " +
                 "select a.k1, b.k2, b.k1 from (select k1, k2 from tmp) a " +
                 "left join (select k1, k2 from tmp) b on a.k1 = b.k1;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        PrivilegeChecker.check(statementBase, auth, ctx);
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
     }
 
+    @Test
+    public void testSelectTable() throws Exception {
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        String sql = "select count(*) from db1.tbl1 as a";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testInsertStatement() throws Exception {
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+
+        String sql = "insert into db1.tbl1 select 1,2,3,4";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testCreateView() throws Exception {
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+
+        String sql = "create view db1.v as select 1,2,3";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        sql = "create view db1.v as select * from db1.tbl1";
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
 }
