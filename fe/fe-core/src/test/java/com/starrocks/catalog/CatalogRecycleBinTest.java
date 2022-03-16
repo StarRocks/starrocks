@@ -7,10 +7,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.loadv2.SparkLoadAppHandle;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletType;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CatalogRecycleBinTest {
@@ -99,4 +106,140 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(0, tables.size());
     }
 
+    @Test
+    public void testAddTabletToInvertedIndexWithLocalTablet(@Mocked Catalog catalog, @Mocked Database db) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long replicaId = 10L;
+        long backendId = 20L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        // Replica
+        Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+
+        // Tablet
+        LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(replica1);
+        tablet.addReplica(replica2);
+        tablet.addReplica(replica3);
+
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+
+        // Partition
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        partition.setPartitionInfo(partitionInfo);
+
+        // Table
+        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+        new Expectations() {
+            {
+                Catalog.getCurrentInvertedIndex();
+                result = invertedIndex;
+            }
+        };
+
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        bin.recycleTable(dbId, table);
+        bin.addTabletToInvertedIndex();
+
+        // Check
+        TabletMeta tabletMeta1 = invertedIndex.getTabletMeta(tabletId);
+        Assert.assertTrue(tabletMeta1 != null);
+        Assert.assertFalse(tabletMeta1.isUseStarOS());
+        Assert.assertEquals(TStorageMedium.SSD, tabletMeta1.getStorageMedium());
+        Assert.assertEquals(replica1, invertedIndex.getReplica(tabletId, backendId));
+        Assert.assertEquals(replica2, invertedIndex.getReplica(tabletId, backendId + 1));
+        Assert.assertEquals(replica3, invertedIndex.getReplica(tabletId, backendId + 2));
+    }
+
+    @Test
+    public void testAddTabletToInvertedIndexWithStarOSTablet(@Mocked Catalog catalog, @Mocked Database db) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tablet1Id = 10L;
+        long tablet2Id = 11L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        // Tablet
+        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
+        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.S3));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        index.setUseStarOS(partitionInfo.isUseStarOS(partitionId));
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.S3);
+        index.addTablet(tablet1, tabletMeta);
+        index.addTablet(tablet2, tabletMeta);
+
+        // Partition
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        partition.setPartitionInfo(partitionInfo);
+
+        // Table
+        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+        new Expectations() {
+            {
+                Catalog.getCurrentInvertedIndex();
+                result = invertedIndex;
+            }
+        };
+
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        bin.recycleTable(dbId, table);
+        bin.addTabletToInvertedIndex();
+
+        // Check
+        TabletMeta tabletMeta1 = invertedIndex.getTabletMeta(tablet1Id);
+        Assert.assertTrue(tabletMeta1 != null);
+        Assert.assertTrue(tabletMeta1.isUseStarOS());
+        Assert.assertEquals(TStorageMedium.S3, tabletMeta1.getStorageMedium());
+    }
 }

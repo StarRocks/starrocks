@@ -596,6 +596,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -603,8 +604,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            invertedIndex.addReplica(tabletId, replica);
+                        if (!useStarOS) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
                         }
                     }
                 } // end for indices
@@ -617,6 +620,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             long tableId = partitionInfo.getTableId();
             Partition partition = partitionInfo.getPartition();
             long partitionId = partition.getId();
+            boolean useStarOS = partition.isUseStarOS();
 
             // we need to get olap table to get schema hash info
             // first find it in catalog. if not found, it should be in recycle bin
@@ -655,8 +659,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                        invertedIndex.addReplica(tabletId, replica);
+                    if (!useStarOS) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            invertedIndex.addReplica(tabletId, replica);
+                        }
                     }
                 }
             } // end for indices

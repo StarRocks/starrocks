@@ -1407,4 +1407,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int heartbeat_retry_times = 3;
+
+    /**
+     * Temporary use, it will be removed later.
+     * Set true if using StarOS to manage tablets, such as storage medium is S3.
+     */
+    @ConfField(mutable = true)
+    public static boolean use_staros = false;
 }
