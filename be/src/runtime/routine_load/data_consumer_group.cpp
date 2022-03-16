@@ -171,8 +171,10 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
 
-            (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()), static_cast<size_t>(msg->len()),
-                                             row_delimiter);
+            if (!(msg->len() == 0 && dynamic_cast<DummyKafkaMessage*>(msg) != nullptr)) {
+                (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
+                                                 static_cast<size_t>(msg->len()), row_delimiter);
+            }
 
             if (st.ok()) {
                 received_rows++;

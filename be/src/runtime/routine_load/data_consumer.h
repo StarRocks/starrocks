@@ -156,4 +156,54 @@ private:
     std::shared_ptr<KafkaConsumerPipe> _k_consumer_pipe;
 };
 
+class DummyKafkaMessage : public RdKafka::Message {
+public:
+    DummyKafkaMessage(int32_t partition, int64_t offset) : _partition(partition), _offset(offset){};
+    ~DummyKafkaMessage(){};
+
+    DummyKafkaMessage() = delete;
+    DummyKafkaMessage(const DummyKafkaMessage&) = delete;
+
+    std::string errstr() const override { return ""; }
+
+    RdKafka::ErrorCode err() const override { return RdKafka::ERR_NO_ERROR; }
+
+    RdKafka::Topic* topic() const override { return nullptr; }
+
+    std::string topic_name() const override { return ""; }
+
+    int32_t partition() const override { return _partition; }
+
+    void* payload() const override { return nullptr; }
+
+    size_t len() const override { return 0; }
+
+    const std::string* key() const override { return nullptr; }
+
+    const void* key_pointer() const override { return nullptr; }
+
+    size_t key_len() const override { return 0; }
+
+    int64_t offset() const override { return _offset; }
+
+    RdKafka::MessageTimestamp timestamp() const override { return RdKafka::MessageTimestamp{}; }
+
+    void* msg_opaque() const override { return nullptr; }
+
+    int64_t latency() const override { return 0; }
+
+    struct rd_kafka_message_s* c_ptr() override {
+        return nullptr;
+    }
+
+    RdKafka::Message::Status status() const override { return RdKafka::Message::MSG_STATUS_NOT_PERSISTED; }
+    RdKafka::Headers* headers() override { return nullptr; }
+    RdKafka::Headers* headers(RdKafka::ErrorCode* err) override { return nullptr; }
+    int32_t broker_id() const override { return 0; }
+
+private:
+    int32_t _partition;
+    int64_t _offset;
+};
+
 } // end namespace starrocks

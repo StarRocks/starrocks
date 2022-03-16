@@ -170,6 +170,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
     Status st = Status::OK();
     MonotonicStopWatch consumer_watch;
     MonotonicStopWatch watch;
+    bool is_timeout = false;
     watch.start();
     while (true) {
         {
@@ -184,6 +185,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         }
 
         bool done = false;
+        is_timeout = false;
         // consume 1 message at a time
         consumer_watch.start();
         std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(1000 /* timeout, ms */));
@@ -203,6 +205,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             // leave the status as OK, because this may happend
             // if there is no data in kafka.
             LOG(INFO) << "kafka consume timeout: " << _id;
+            is_timeout = true;
             break;
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
             done = true;
@@ -225,13 +228,30 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         }
     }
 
+    if (is_timeout) {
+        std::vector<RdKafka::TopicPartition*> partitions;
+        auto err = _k_consumer->assignment(partitions);
+        if (err != RdKafka::ERR_NO_ERROR) {
+            LOG(WARNING) << "failed to get kafka consumer assignment: " << RdKafka::err2str(err);
+        }
+
+        err = _k_consumer->position(partitions);
+        if (err != RdKafka::ERR_NO_ERROR) {
+            LOG(WARNING) << "failed to get kafka consumer position: " << RdKafka::err2str(err);
+        }
+
+        for (const auto& partition : partitions) {
+            (void)queue->blocking_put(new DummyKafkaMessage(partition->partition(), partition->offset() - 1));
+        }
+    }
+
     LOG(INFO) << "kafka consume done: " << _id << ", grp: " << _grp_id << ". cancelled: " << _cancelled
               << ", left time(ms): " << left_time << ", total cost(ms): " << watch.elapsed_time() / 1000 / 1000
               << ", consume cost(ms): " << consumer_watch.elapsed_time() / 1000 / 1000
               << ", received rows: " << received_rows << ", put rows: " << put_rows;
 
     return st;
-}
+} // namespace starrocks
 
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
