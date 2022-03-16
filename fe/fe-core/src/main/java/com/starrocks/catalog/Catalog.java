@@ -4497,8 +4497,24 @@ public class Catalog {
         // 1.1 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
-            sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
-            sb.append(";");
+            sb.append("CREATE VIEW `").append(table.getName()).append("`\n(\n");
+            int idx = 0;
+            int maxIdx = table.getBaseSchema().size();
+            for (Column column : table.getBaseSchema()) {
+                sb.append(column.getName());
+                if (!Strings.isNullOrEmpty(column.getComment())) {
+                    sb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                }
+                if (++idx != maxIdx) {
+                    sb.append(",");
+                }
+                sb.append("\n");
+            }
+            sb.append(")\n");
+            if (!Strings.isNullOrEmpty(view.getComment())) {
+                sb.append("COMMENT \"").append(view.getComment()).append("\"\n");
+            }
+            sb.append("AS\n").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
