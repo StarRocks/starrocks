@@ -111,7 +111,7 @@ public class HudiTableTest {
                 hiveRepository.getTable(resourceName, hudiDb, hudiTable);
                 result = msTable;
 
-                schemaUtil.getTableAvroSchemaWithoutMetadataFields();
+                schemaUtil.getTableAvroSchema();
                 result = hudiSchema;
             }
         };
