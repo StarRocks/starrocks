@@ -494,6 +494,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             segment_nums += rowset->num_segments();
         }
         int scanners_per_tablet = std::min(segment_nums, kMaxScannerPerRange / _scan_ranges.size());
+        scanners_per_tablet = std::max(1, scanners_per_tablet);
 
         int num_ranges = key_ranges.size();
         int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
