@@ -404,6 +404,10 @@ public class ExpressionAnalyzer {
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
             for (Type type : list) {
+                // TODO(mofei) support it
+                if (type.isJsonType()) {
+                    throw new SemanticException("InPredicate of JSON is not supported");
+                }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
                             "in predicate type " + type.toSql() + " with type " + compatibleType.toSql()

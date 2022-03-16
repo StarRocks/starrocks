@@ -59,6 +59,15 @@ public class PropertyAnalyzerTest {
         Assert.assertEquals(Sets.newHashSet("k1"), bfColumns);
     }
 
+    private void assertBloomFilterNotSupport(Map<String, String> properties, List<Column> columns, String columnName) {
+        properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, columnName);
+        try {
+            PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid bloom filter column '" + columnName + "'"));
+        }
+    }
+
     @Test
     public void testBfColumnsError() {
         List<Column> columns = Lists.newArrayList();
@@ -67,6 +76,8 @@ public class PropertyAnalyzerTest {
         columns.add(new Column("k3", Type.BOOLEAN));
         columns.add(new Column("v1", Type.VARCHAR, false, AggregateType.REPLACE, "", ""));
         columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("kjson", Type.JSON));
+        columns.add(new Column("khll", Type.HLL));
         columns.get(0).setIsKey(true);
         columns.get(1).setIsKey(true);
 
@@ -88,21 +99,11 @@ public class PropertyAnalyzerTest {
             Assert.assertTrue(e.getMessage().contains("Invalid bloom filter column 'k4'"));
         }
 
-        // tinyint not supported
-        properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "k2");
-        try {
-            PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid bloom filter column 'k2'"));
-        }
-
-        // bool not supported
-        properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "k3");
-        try {
-            PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid bloom filter column 'k3'"));
-        }
+        // not supported
+        assertBloomFilterNotSupport(properties, columns, "k2");
+        assertBloomFilterNotSupport(properties, columns, "k3");
+        assertBloomFilterNotSupport(properties, columns, "kjson");
+        assertBloomFilterNotSupport(properties, columns, "khll");
 
         // not replace value
         properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "v2");

@@ -159,10 +159,10 @@ build_libevent() {
         ./autogen.sh
     fi
 
-    CFLAGS="-std=c99 -fPIC -D_BSD_SOURCE -fno-omit-frame-pointer -g -ggdb -O2 -I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 build_openssl() {
@@ -174,13 +174,11 @@ build_openssl() {
     check_if_source_exist $OPENSSL_SOURCE
     cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
-    CXXFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     LIBDIR="lib" \
     ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
-    make -j$PARALLEL && make install_sw
+    make -j$PARALLEL
+    make install_sw
 }
 
 # thrift
@@ -193,7 +191,7 @@ build_thrift() {
     fi
 
     echo ${TP_LIB_DIR}
-    ./configure CPPFLAGS="-I${TP_INCLUDE_DIR}" LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lcrypto -ldl -lssl" CFLAGS="-fPIC" \
+    ./configure LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lcrypto -ldl -lssl" \
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
@@ -204,7 +202,8 @@ build_thrift() {
         mv compiler/cpp/thrifty.hh compiler/cpp/thrifty.h
     fi
 
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # llvm
@@ -227,11 +226,13 @@ build_llvm() {
     fi
 
     cd $TP_SOURCE_DIR
-    mkdir -p llvm-build && cd llvm-build
+    mkdir -p llvm-build
+    cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DLLVM_REQUIRES_RTTI:Bool=True -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} -DLLVM_ENABLE_TERMINFO=OFF LLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_ENABLE_PIC=true -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE="RELEASE" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/llvm ../$LLVM_SOURCE
-    make -j$PARALLEL REQUIRES_RTTI=1 && make install
+    make -j$PARALLEL REQUIRES_RTTI=1
+    make install
 }
 
 # protobuf
@@ -239,12 +240,16 @@ build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     rm -fr gmock
-    mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/$GTEST_NAME \
-    && mv $GTEST_SOURCE gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
-    CXXFLAGS="-fPIC -O2 -I ${TP_INCLUDE_DIR}" \
+    mkdir gmock 
+    cd gmock 
+    tar xf ${TP_SOURCE_DIR}/$GTEST_NAME 
+    mv $GTEST_SOURCE gtest
+    cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
+    ./autogen.sh
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive" \
     ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib --with-zlib-include=${TP_INSTALL_DIR}/include
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # gflags
@@ -252,11 +257,13 @@ build_gflags() {
     check_if_source_exist $GFLAGS_SOURCE
 
     cd $TP_SOURCE_DIR/$GFLAGS_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # glog
@@ -268,11 +275,10 @@ build_glog() {
     rm -rf config.*
     autoreconf -i
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fpermissive -fPIC" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
 }
 
 # gtest
@@ -280,11 +286,13 @@ build_gtest() {
     check_if_source_exist $GTEST_SOURCE
 
     cd $TP_SOURCE_DIR/$GTEST_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
 }
 
 # rapidjson
@@ -301,11 +309,13 @@ build_simdjson() {
     cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE
 
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     $CMAKE_CMD -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
     $CMAKE_CMD --build .
-    mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
+    mkdir -p $TP_INSTALL_DIR/lib
 
+    cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
     cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/* $TP_INCLUDE_DIR/
 }
 
@@ -314,23 +324,26 @@ build_snappy() {
     check_if_source_exist $SNAPPY_SOURCE
     cd $TP_SOURCE_DIR/$SNAPPY_SOURCE
 
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CFLAGS="-O3" CXXFLAGS="-O3" $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
     -DSNAPPY_BUILD_TESTS=0 ../
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib && cp $TP_INSTALL_DIR/lib64/libsnappy.a $TP_INSTALL_DIR/lib/libsnappy.a
+        mkdir -p $TP_INSTALL_DIR/lib
+        cp $TP_INSTALL_DIR/lib64/libsnappy.a $TP_INSTALL_DIR/lib/libsnappy.a
     fi
 
     #build for libarrow.a
-    cp $TP_INCLUDE_DIR/snappy/snappy-c.h  $TP_INCLUDE_DIR/snappy-c.h && \
-    cp $TP_INCLUDE_DIR/snappy/snappy-sinksource.h  $TP_INCLUDE_DIR/snappy-sinksource.h && \
-    cp $TP_INCLUDE_DIR/snappy/snappy-stubs-public.h  $TP_INCLUDE_DIR/snappy-stubs-public.h && \
-    cp $TP_INCLUDE_DIR/snappy/snappy.h  $TP_INCLUDE_DIR/snappy.h && \
+    cp $TP_INCLUDE_DIR/snappy/snappy-c.h  $TP_INCLUDE_DIR/snappy-c.h
+    cp $TP_INCLUDE_DIR/snappy/snappy-sinksource.h  $TP_INCLUDE_DIR/snappy-sinksource.h
+    cp $TP_INCLUDE_DIR/snappy/snappy-stubs-public.h  $TP_INCLUDE_DIR/snappy-stubs-public.h
+    cp $TP_INCLUDE_DIR/snappy/snappy.h  $TP_INCLUDE_DIR/snappy.h
     cp $TP_INSTALL_DIR/lib/libsnappy.a $TP_INSTALL_DIR/libsnappy.a
 }
 
@@ -342,15 +355,11 @@ build_gperftools() {
         ./autogen.sh
     fi
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     LD_LIBRARY_PATH="${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    LD_LIBRARY_PATH="${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # zlib
@@ -358,11 +367,10 @@ build_zlib() {
     check_if_source_exist $ZLIB_SOURCE
     cd $TP_SOURCE_DIR/$ZLIB_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC -O3" \
     ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
 }
 
 # lz4
@@ -379,7 +387,6 @@ build_bzip() {
     check_if_source_exist $BZIP_SOURCE
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
 
-    CFLAGS="-fPIC"
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
 }
 
@@ -388,12 +395,11 @@ build_curl() {
     check_if_source_exist $CURL_SOURCE
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -ldl" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
     --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --disable-ldap --enable-ipv6
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # re2
@@ -418,7 +424,6 @@ build_boost() {
 build_leveldb() {
     check_if_source_exist $LEVELDB_SOURCE
     cd $TP_SOURCE_DIR/$LEVELDB_SOURCE
-    CXXFLAGS="-fPIC" \
     LDFLAGS="-L ${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     make -j$PARALLEL
     cp out-static/libleveldb.a ../../installed/lib/libleveldb.a
@@ -430,16 +435,19 @@ build_brpc() {
     check_if_source_exist $BRPC_SOURCE
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DBRPC_WITH_GLOG=ON -DWITH_GLOG=ON -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
     -DProtobuf_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib64 && cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
+        mkdir -p $TP_INSTALL_DIR/lib64 
+        cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
     fi
 }
 
@@ -447,14 +455,21 @@ build_brpc() {
 build_rocksdb() {
     check_if_source_exist $ROCKSDB_SOURCE
 
-    cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE && make clean
+    cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
+    make clean
+
+    OLD_FLAGS=$CFLAGS
+    CFLAGS=""
 
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR}" \
     EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
-    PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib && \
-    cp librocksdb.a ../../installed/lib/librocksdb.a && \
+    PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
+
+    cp librocksdb.a ../../installed/lib/librocksdb.a 
     cp -r include/rocksdb ../../installed/include/
+
+    export CFLAGS=$OLD_FLAGS
 }
 
 # librdkafka
@@ -463,22 +478,21 @@ build_librdkafka() {
 
     cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
 
-    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # flatbuffers
 build_flatbuffers() {
   check_if_source_exist $FLATBUFFERS_SOURCE
   cd $TP_SOURCE_DIR/$FLATBUFFERS_SOURCE
-  mkdir -p $BUILD_DIR && cd $BUILD_DIR
+  mkdir -p $BUILD_DIR
+  cd $BUILD_DIR
   rm -rf CMakeCache.txt CMakeFiles/
-  CXXFLAGS="-fPIC -Wno-class-memaccess" \
   LDFLAGS="-static-libstdc++ -static-libgcc" \
-  ${CMAKE_CMD} ..
+  ${CMAKE_CMD} .. -DFLATBUFFERS_BUILD_TESTS=OFF
   make -j$PARALLEL
   cp flatc  ../../../installed/bin/flatc
   cp -r ../include/flatbuffers  ../../../installed/include/flatbuffers
@@ -488,7 +502,9 @@ build_flatbuffers() {
 # arrow
 build_arrow() {
     check_if_source_exist $ARROW_SOURCE
-    cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp && mkdir -p release && cd release
+    cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp
+    mkdir -p release
+    cd release
     export ARROW_BROTLI_URL=${TP_SOURCE_DIR}/${BROTLI_NAME}
     export ARROW_GLOG_URL=${TP_SOURCE_DIR}/${GLOG_NAME}
     export ARROW_LZ4_URL=${TP_SOURCE_DIR}/${LZ4_NAME}
@@ -511,7 +527,8 @@ build_arrow() {
     -DLZ4_ROOT=$TP_INSTALL_DIR/ \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
 
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
     #copy dep libs
     cp -rf ./jemalloc_ep-prefix/src/jemalloc_ep/dist/lib/libjemalloc_pic.a $TP_INSTALL_DIR/lib64/libjemalloc.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
@@ -523,16 +540,17 @@ build_arrow() {
         cp -rf ./zstd_ep-install/lib/libzstd.a $TP_INSTALL_DIR/lib64/libzstd.a
     fi
     # copy zstd headers
-    mkdir -p ${TP_INSTALL_DIR}/include/zstd && cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
+    mkdir -p ${TP_INSTALL_DIR}/include/zstd 
+    cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 }
 
 # s2
 build_s2() {
     check_if_source_exist $S2_SOURCE
     cd $TP_SOURCE_DIR/$S2_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR 
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
@@ -542,7 +560,8 @@ build_s2() {
     -DGLOG_ROOT_DIR="$TP_INSTALL_DIR/include" \
     -DWITH_GLOG=ON \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
 }
 
 # bitshuffle
@@ -602,11 +621,14 @@ build_croaringbitmap() {
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         FORCE_AVX=FALSE
     fi
+    if [[ `cat /proc/cpuinfo |grep avx|wc -l` == "0" ]]; then
+        FORCE_AVX=FALSE
+    fi
     check_if_source_exist $CROARINGBITMAP_SOURCE
     cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
@@ -614,15 +636,16 @@ build_croaringbitmap() {
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    make -j$PARALLEL && make install
+    make -j$PARALLEL 
+    make install
 }
 #orc
 build_orc() {
     check_if_source_exist $ORC_SOURCE
     cd $TP_SOURCE_DIR/$ORC_SOURCE
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    CXXFLAGS="-O3 -Wno-array-bounds" \
     $CMAKE_CMD ../ -DBUILD_JAVA=OFF \
     -DPROTOBUF_HOME=$TP_INSTALL_DIR \
     -DSNAPPY_HOME=$TP_INSTALL_DIR \
@@ -634,7 +657,8 @@ build_orc() {
     -DBUILD_CPP_TESTS=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR
 
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 #cctz
@@ -642,24 +666,28 @@ build_cctz() {
     check_if_source_exist $CCTZ_SOURCE
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
 
-    make -j$PARALLEL && PREFIX=${TP_INSTALL_DIR} make install
+    make -j$PARALLEL 
+    PREFIX=${TP_INSTALL_DIR} make install
 }
 
 #fmt
 build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
-    mkdir -p build && cd build
+    mkdir -p build
+    cd build
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 #ryu
 build_ryu() {
     check_if_source_exist $RYU_SOURCE
     cd $TP_SOURCE_DIR/$RYU_SOURCE/ryu
-    make -j$PARALLEL && make install DESTDIR=${TP_INSTALL_DIR}
+    make -j$PARALLEL
+    make install DESTDIR=${TP_INSTALL_DIR}
     mkdir -p $TP_INSTALL_DIR/include/ryu
     mv $TP_INSTALL_DIR/include/ryu.h $TP_INSTALL_DIR/include/ryu
     # copy to 64 to compatable with current CMake
@@ -672,8 +700,12 @@ build_breakpad() {
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     mkdir -p src/third_party/lss
     cp $TP_PATCH_DIR/linux_syscall_support.h src/third_party/lss
+    OLD_FLAGS=$CFLAGS
+    unset CFLAGS
     ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
+    export CFLAGS=$OLD_FLAGS
 }
 
 #hadoop
@@ -697,7 +729,8 @@ build_ragel() {
     check_if_source_exist $RAGEL_SOURCE
     cd $TP_SOURCE_DIR/$RAGEL_SOURCE
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 #hyperscan
@@ -707,25 +740,25 @@ build_hyperscan() {
     export PATH=$TP_INSTALL_DIR/bin:$PATH
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 #mariadb-connector-c
-# static link plugins refer to:
-# https://mariadb.com/kb/en/configuration-settings-for-building-connectorc/
 build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release                \
-                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}  \
-                  -DCLIENT_PLUGIN_SHA256_PASSWORD=STATIC    \
-                  -DCLIENT_PLUGIN_AUTH_GSSAPI=STATIC        \
-                  -DCLIENT_PLUGIN_CLEARTEXT=STATIC          \
-                  -DCLIENT_PLUGIN_DIALOG=STATIC             \
-                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}      \
-                  -DOPENSSL_LIBRARYIES=${TP_INSTALL_DIR}/lib
-    make -j$PARALLEL && make install
+                  -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    # we only need build libmariadbclient and headers
+    make -j$PARALLEL mariadbclient
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/libmariadb
+    mkdir -p $TP_INSTALL_DIR/lib/mariadb/
+    cp libmariadbclient.a $TP_INSTALL_DIR/lib/mariadb/
+    # install mariadb headers
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
+    make install
 }
 
 # aliyun_oss_jars
@@ -742,24 +775,28 @@ build_aws_cpp_sdk() {
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a
     cd build
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
 # velocypack
 build_vpack() {
     check_if_source_exist $VPACK_SOURCE
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
-    mkdir -p build && cd build
+    mkdir -p build
+    cd build
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
 
-    make -j$PARALLEL && make install
+    make -j$PARALLEL
+    make install
 }
 
-export CXXFLAGS="-fno-omit-frame-pointer ${CXXFLAGS}"
-export CFLAGS="-fno-omit-frame-pointer ${CFLAGS}"
+export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
+export CPPFLAGS=$CXXFLAGS
+export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE -I${TP_INCLUDE_DIR}"
 
 build_libevent
 build_zlib

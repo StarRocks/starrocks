@@ -13,7 +13,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 
-public class TranslateOperatorTest extends PlanTestBase {
+public class JsonTypeTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -59,6 +59,29 @@ public class TranslateOperatorTest extends PlanTestBase {
                 "json_query(parse_json('1'), '$.k1')");
         assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
                 "json_query(2: v_json, '$.k1')");
+    }
+
+    @Test
+    public void testPredicateImplicitCast() throws Exception {
+        List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
+        for (String operator : operators) {
+            assertPlanContains(String.format("select parse_json('1') %s 1", operator),
+                    String.format("parse_json('1') %s CAST(1 AS JSON)", operator));
+            assertPlanContains(String.format("select parse_json('1') %s 3.14", operator),
+                    String.format("parse_json('1') %s CAST(3.14 AS JSON)", operator));
+            assertPlanContains(String.format("select parse_json('1') %s 'a'", operator),
+                    String.format("parse_json('1') %s CAST('a' AS JSON)", operator));
+            assertPlanContains(String.format("select parse_json('1') %s false", operator),
+                    String.format("parse_json('1') %s CAST(false AS JSON)", operator));
+        }
+
+        try {
+            getFragmentPlan("select parse_json('1') in (1, 2, 3)");
+            getFragmentPlan("select parse_json('1') in (parse_json('1'), parse_json('2')");
+            Assert.fail("should throw");
+        } catch (SemanticException e) {
+            Assert.assertEquals("InPredicate of JSON is not supported", e.getMessage());
+        }
     }
 
     /**
