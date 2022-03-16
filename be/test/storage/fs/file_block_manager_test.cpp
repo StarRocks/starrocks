@@ -54,7 +54,6 @@ protected:
 TEST_F(FileBlockManagerTest, NormalTest) {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
-    bm_opts.enable_metric = false;
     Env* env = Env::Default();
     std::unique_ptr<fs::FileBlockManager> fbm(new fs::FileBlockManager(env, std::move(bm_opts)));
 
