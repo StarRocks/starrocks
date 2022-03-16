@@ -4,7 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized//sorting//sort_permute.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"

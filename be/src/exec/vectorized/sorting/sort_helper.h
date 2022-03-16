@@ -2,10 +2,6 @@
 
 #pragma once
 
-#if defined(__SSE2__)
-#include <emmintrin.h>
-#endif
-
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -134,6 +130,9 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
+        if (cancel) {
+            return Status::Cancelled("Sort cancelled");
+        }
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
