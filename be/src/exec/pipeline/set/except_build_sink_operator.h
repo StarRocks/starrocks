@@ -39,13 +39,14 @@ public:
 
     bool is_finished() const override { return _is_finished || _except_ctx->is_finished(); }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _except_ctx->finish_build_ht();
+        return Status::OK();
     }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -75,7 +76,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;

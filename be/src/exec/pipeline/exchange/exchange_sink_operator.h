@@ -41,7 +41,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override { return false; }
 
@@ -51,9 +51,9 @@ public:
 
     bool pending_finish() const override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    void set_cancelled(RuntimeState* state) override;
+    Status set_cancelled(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -166,7 +166,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<SinkBuffer> _buffer;

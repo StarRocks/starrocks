@@ -27,7 +27,7 @@ public:
     ~HashJoinBuildOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";
@@ -35,7 +35,7 @@ public:
     }
     bool need_input() const override { return !is_finished(); }
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
@@ -64,7 +64,7 @@ public:
                                  TJoinDistributionMode::type distribution_mode);
     ~HashJoinBuildOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:

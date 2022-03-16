@@ -28,11 +28,11 @@ public:
         return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
     }
 
-    void set_finished(RuntimeState* state) override { _except_ctx->set_finished(); }
+    Status set_finished(RuntimeState* state) override { return _except_ctx->set_finished(); }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<ExceptContext> _except_ctx;
@@ -54,7 +54,7 @@ public:
                 _dependency_index);
     }
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;

@@ -14,13 +14,13 @@ bool AggregateBlockingSourceOperator::is_finished() const {
     return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
-void AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
-    _aggregator->set_finished();
+Status AggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
+    return _aggregator->set_finished();
 }
 
-void AggregateBlockingSourceOperator::close(RuntimeState* state) {
+Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
-    SourceOperator::close(state);
+    return SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {

@@ -4,9 +4,9 @@
 
 namespace starrocks::pipeline {
 
-void IntersectProbeSinkOperator::close(RuntimeState* state) {
+Status IntersectProbeSinkOperator::close(RuntimeState* state) {
     _intersect_ctx->unref(state);
-    Operator::close(state);
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> IntersectProbeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -26,10 +26,9 @@ Status IntersectProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void IntersectProbeSinkOperatorFactory::close(RuntimeState* state) {
+Status IntersectProbeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_dst_exprs, state);
-
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

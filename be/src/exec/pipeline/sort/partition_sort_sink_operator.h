@@ -51,7 +51,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override { return false; }
 
@@ -63,7 +63,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
@@ -110,7 +110,7 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<SortContextFactory> _sort_context_factory;

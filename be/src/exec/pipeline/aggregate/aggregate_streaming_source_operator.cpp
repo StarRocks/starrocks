@@ -43,17 +43,18 @@ bool AggregateStreamingSourceOperator::is_finished() const {
     return _is_finished;
 }
 
-void AggregateStreamingSourceOperator::set_finishing(RuntimeState* state) {
+Status AggregateStreamingSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
-void AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
-    _aggregator->set_finished();
+Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
+    return _aggregator->set_finished();
 }
 
-void AggregateStreamingSourceOperator::close(RuntimeState* state) {
+Status AggregateStreamingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
-    SourceOperator::close(state);
+    return SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {

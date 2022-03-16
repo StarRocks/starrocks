@@ -33,7 +33,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override { return _cur_chunk != nullptr; }
 
@@ -41,7 +41,10 @@ public:
 
     bool is_finished() const override { return _is_finished && _cur_chunk == nullptr; }
 
-    void set_finishing(RuntimeState* state) override { _is_finished = true; }
+    Status set_finishing(RuntimeState* state) override {
+        _is_finished = true;
+        return Status::OK();
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -79,7 +82,7 @@ public:
 
     Status prepare(RuntimeState* state);
 
-    void close(RuntimeState* state);
+    Status close(RuntimeState* state);
 
 private:
     std::vector<int32_t> _encode_column_cids;

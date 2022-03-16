@@ -34,9 +34,6 @@ public:
 
     bool is_finished() const override { return !has_output(); };
 
-    // finish is noop.
-    void set_finishing(RuntimeState* state) override{};
-
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
@@ -71,7 +68,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     const std::vector<SlotDescriptor*>& _dst_slots;

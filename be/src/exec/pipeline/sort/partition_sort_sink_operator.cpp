@@ -25,9 +25,9 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void PartitionSortSinkOperator::close(RuntimeState* state) {
+Status PartitionSortSinkOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
-    Operator::close(state);
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
@@ -41,13 +41,14 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectoriz
     return Status::OK();
 }
 
-void PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
-    _chunks_sorter->finish(state);
+Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    RETURN_IF_ERROR(_chunks_sorter->finish(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.
     _sort_context->finish_partition(_chunks_sorter->get_partition_rows());
     _is_finished = true;
+    return Status::OK();
 }
 
 Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -88,10 +89,10 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
     return ope;
 }
 
-void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
+Status PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_analytic_partition_exprs, state);
     _sort_exec_exprs.close(state);
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

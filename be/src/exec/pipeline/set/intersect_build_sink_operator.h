@@ -42,13 +42,14 @@ public:
 
     bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _intersect_ctx->finish_build_ht();
+        return Status::OK();
     }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -78,7 +79,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;

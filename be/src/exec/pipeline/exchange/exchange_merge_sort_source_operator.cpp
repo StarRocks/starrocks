@@ -22,8 +22,8 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
-    Operator::close(state);
+Status ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
+    return Operator::close(state);
 }
 
 bool ExchangeMergeSortSourceOperator::has_output() const {
@@ -38,9 +38,10 @@ bool ExchangeMergeSortSourceOperator::is_finished() const {
     }
 }
 
-void ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
+Status ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-    return _stream_recvr->close();
+    _stream_recvr->close();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
@@ -133,9 +134,9 @@ Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
+Status ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
     _sort_exec_exprs->close(state);
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

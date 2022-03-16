@@ -46,7 +46,7 @@ public:
     // data inside is processed.
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual void set_finishing(RuntimeState* state) {}
+    virtual Status set_finishing(RuntimeState* state) { return Status::OK(); }
 
     // set_finished is used to shutdown both input and output stream of a operator and after its invocation
     // buffered data inside the operator is cleared.
@@ -58,13 +58,13 @@ public:
     // set_finishing function.
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual void set_finished(RuntimeState* state) {}
+    virtual Status set_finished(RuntimeState* state) { return Status::OK(); }
 
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // - When the fragment exits abnormally, the stage operator will become to CANCELLED between FINISHED and CLOSE.
     // - When the fragment exits normally, there isn't CANCELLED stage for the drivers.
     // Sometimes, the operator need to realize it is cancelled to stop earlier than normal, such as ExchangeSink.
-    virtual void set_cancelled(RuntimeState* state) {}
+    virtual Status set_cancelled(RuntimeState* state) { return Status::OK(); }
 
     // when local runtime filters are ready, the operator should bound its corresponding runtime in-filters.
     virtual void set_precondition_ready(RuntimeState* state);
@@ -72,7 +72,7 @@ public:
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual void close(RuntimeState* state);
+    virtual Status close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
@@ -192,7 +192,7 @@ public:
     virtual bool is_source() const { return false; }
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
-    virtual void close(RuntimeState* state);
+    virtual Status close(RuntimeState* state);
     std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
 
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core

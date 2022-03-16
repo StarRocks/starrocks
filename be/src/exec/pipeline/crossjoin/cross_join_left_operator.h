@@ -30,9 +30,9 @@ public:
 
     ~CrossJoinLeftOperator() override = default;
 
-    void close(RuntimeState* state) override {
+    Status close(RuntimeState* state) override {
         _cross_join_context->unref(state);
-        Operator::close(state);
+        return Operator::close(state);
     }
 
     bool is_ready() const override { return _cross_join_context->is_right_finished(); }
@@ -67,9 +67,15 @@ public:
         return _is_finished && _is_curr_probe_chunk_finished();
     }
 
-    void set_finishing(RuntimeState* state) override { _is_finished = true; }
+    Status set_finishing(RuntimeState* state) override {
+        _is_finished = true;
+        return Status::OK();
+    }
 
-    void set_finished(RuntimeState* state) override { _cross_join_context->set_finished(); }
+    Status set_finished(RuntimeState* state) override {
+        _cross_join_context->set_finished();
+        return Status::OK();
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -164,7 +170,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     void _init_row_desc();

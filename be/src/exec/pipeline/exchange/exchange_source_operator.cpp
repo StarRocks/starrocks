@@ -24,10 +24,11 @@ bool ExchangeSourceOperator::is_finished() const {
     return _stream_recvr->is_finished();
 }
 
-void ExchangeSourceOperator::set_finishing(RuntimeState* state) {
+Status ExchangeSourceOperator::set_finishing(RuntimeState* state) {
     _is_finishing = true;
     _stream_recvr->short_circuit_for_pipeline(_driver_sequence);
     static_cast<ExchangeSourceOperatorFactory*>(_factory)->close_stream_recvr();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* state) {

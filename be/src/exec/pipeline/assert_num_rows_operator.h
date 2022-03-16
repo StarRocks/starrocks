@@ -31,7 +31,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -39,7 +39,7 @@ public:
     bool need_input() const override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override;
 
 private:
@@ -71,7 +71,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     int64_t _desired_num_rows;

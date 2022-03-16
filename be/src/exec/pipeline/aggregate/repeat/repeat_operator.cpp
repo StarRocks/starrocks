@@ -18,8 +18,9 @@ bool RepeatOperator::is_finished() const {
     return _is_finished && _repeat_times_last >= _repeat_times_required;
 }
 
-void RepeatOperator::set_finishing(RuntimeState* state) {
+Status RepeatOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
 bool RepeatOperator::has_output() const {

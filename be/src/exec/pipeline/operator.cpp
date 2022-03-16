@@ -65,7 +65,7 @@ RuntimeFilterHub* Operator::runtime_filter_hub() {
     return _factory->runtime_filter_hub();
 }
 
-void Operator::close(RuntimeState* state) {
+Status Operator::close(RuntimeState* state) {
     if (auto* rf_bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
@@ -76,6 +76,7 @@ void Operator::close(RuntimeState* state) {
     _runtime_profile->total_time_counter()->set(0L);
     _common_metrics->total_time_counter()->set(0L);
     _unique_metrics->total_time_counter()->set(0L);
+    return Status::OK();
 }
 
 std::vector<ExprContext*>& Operator::runtime_in_filters() {
@@ -169,10 +170,11 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void OperatorFactory::close(RuntimeState* state) {
+Status OperatorFactory::close(RuntimeState* state) {
     if (_runtime_filter_collector) {
         _runtime_filter_collector->close(state);
     }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

@@ -8,13 +8,13 @@ StatusOr<vectorized::ChunkPtr> IntersectOutputSourceOperator::pull_chunk(Runtime
     return _intersect_ctx->pull_chunk(state);
 }
 
-void IntersectOutputSourceOperator::close(RuntimeState* state) {
+Status IntersectOutputSourceOperator::close(RuntimeState* state) {
     _intersect_ctx->unref(state);
-    Operator::close(state);
+    return Operator::close(state);
 }
 
-void IntersectOutputSourceOperatorFactory::close(RuntimeState* state) {
-    SourceOperatorFactory::close(state);
+Status IntersectOutputSourceOperatorFactory::close(RuntimeState* state) {
+    return SourceOperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

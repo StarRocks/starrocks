@@ -25,7 +25,7 @@ public:
 
     ~LocalMergeSortSourceOperator() override = default;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -35,8 +35,8 @@ public:
 
     void add_morsel(Morsel* morsel) {}
 
-    void set_finishing(RuntimeState* state) override;
-    void set_finished(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;

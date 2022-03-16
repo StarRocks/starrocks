@@ -8,12 +8,12 @@
 namespace starrocks::pipeline {
 
 Status DictDecodeOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
     return Status::OK();
 }
 
-void DictDecodeOperator::close(RuntimeState* state) {
-    Operator::close(state);
+Status DictDecodeOperator::close(RuntimeState* state) {
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
@@ -108,9 +108,9 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void DictDecodeOperatorFactory::close(RuntimeState* state) {
+Status DictDecodeOperatorFactory::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

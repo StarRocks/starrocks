@@ -12,12 +12,12 @@ Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     return _aggregator->open(state);
 }
 
-void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
+Status AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
-    Operator::close(state);
+    return Operator::close(state);
 }
 
-void AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
@@ -38,6 +38,7 @@ void AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     _aggregator->sink_complete();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeState* state) {

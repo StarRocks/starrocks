@@ -192,7 +192,6 @@ public:
 private:
     bool _prev_check;
 };
-
 #define TRY_CATCH_BAD_ALLOC(stmt)                                                           \
     do {                                                                                    \
         try {                                                                               \
@@ -200,6 +199,7 @@ private:
             DeferOp op([&] { tls_thread_status.set_is_catched(prev); });                    \
             { stmt; }                                                                       \
         } catch (std::bad_alloc const&) {                                                   \
+            LOG(WARNING) << "Throw std::bad_alloc";                                         \
             MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
             tls_exceed_mem_tracker = nullptr;                                               \
             if (LIKELY(exceed_tracker != nullptr)) {                                        \

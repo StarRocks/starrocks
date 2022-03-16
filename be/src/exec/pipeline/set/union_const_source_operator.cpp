@@ -54,12 +54,12 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void UnionConstSourceOperatorFactory::close(RuntimeState* state) {
+Status UnionConstSourceOperatorFactory::close(RuntimeState* state) {
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
 
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

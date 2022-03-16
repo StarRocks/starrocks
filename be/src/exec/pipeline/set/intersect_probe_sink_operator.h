@@ -38,12 +38,13 @@ public:
                (_is_finished || _intersect_ctx->is_ht_empty());
     }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _intersect_ctx->finish_probe_ht();
+        return Status::OK();
     }
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -76,7 +77,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;

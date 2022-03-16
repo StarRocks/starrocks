@@ -24,8 +24,8 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void AssertNumRowsOperator::close(RuntimeState* state) {
-    Operator::close(state);
+Status AssertNumRowsOperator::close(RuntimeState* state) {
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* state) {
@@ -60,8 +60,9 @@ Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const vectorized::
     return Status::OK();
 }
 
-void AssertNumRowsOperator::set_finishing(RuntimeState* state) {
+Status AssertNumRowsOperator::set_finishing(RuntimeState* state) {
     _input_finished = true;
+    return Status::OK();
 }
 
 bool AssertNumRowsOperator::is_finished() const {
@@ -73,8 +74,9 @@ Status AssertNumRowsOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void AssertNumRowsOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
+Status AssertNumRowsOperatorFactory::close(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::close(state));
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

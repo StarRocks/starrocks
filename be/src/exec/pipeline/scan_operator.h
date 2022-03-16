@@ -20,7 +20,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -28,7 +28,7 @@ public:
 
     bool is_finished() const override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -76,7 +76,7 @@ public:
     bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;

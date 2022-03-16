@@ -16,8 +16,9 @@ bool TableFunctionOperator::is_finished() const {
     return _is_finished && !has_output();
 }
 
-void TableFunctionOperator::set_finishing(RuntimeState* state) {
+Status TableFunctionOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
 Status TableFunctionOperator::prepare(RuntimeState* state) {

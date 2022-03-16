@@ -390,8 +390,9 @@ bool ExchangeSinkOperator::pending_finish() const {
     return !_buffer->is_finished();
 }
 
-void ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
+Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
     _buffer->cancel_one_sinker();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -522,7 +523,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     return Status::OK();
 }
 
-void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
+Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_chunk_request != nullptr) {
@@ -539,10 +540,11 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+    return Status::OK();
 }
 
-void ExchangeSinkOperator::close(RuntimeState* state) {
-    Operator::close(state);
+Status ExchangeSinkOperator::close(RuntimeState* state) {
+    return Operator::close(state);
 }
 
 Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
@@ -644,9 +646,9 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+Status ExchangeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_partition_expr_ctxs, state);
-    OperatorFactory::close(state);
+    return OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

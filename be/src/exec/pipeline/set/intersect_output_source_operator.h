@@ -29,11 +29,14 @@ public:
         return _intersect_ctx->is_dependency_finished(_dependency_index) && _intersect_ctx->is_output_finished();
     }
 
-    void set_finished(RuntimeState* state) override { _intersect_ctx->set_finished(); }
+    Status set_finished(RuntimeState* state) override {
+        _intersect_ctx->set_finished();
+        return Status::OK();
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<IntersectContext> _intersect_ctx;
@@ -55,7 +58,7 @@ public:
                 _dependency_index);
     }
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;

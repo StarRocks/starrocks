@@ -21,7 +21,7 @@ public:
         _except_ctx->ref();
     }
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool need_input() const override {
         return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
@@ -36,9 +36,10 @@ public:
         return _except_ctx->is_dependency_finished(_dependency_index) && (_is_finished || _except_ctx->is_ht_empty());
     }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _except_ctx->finish_probe_ht();
+        return Status::OK();
     }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -72,7 +73,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
 private:
     ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;

@@ -21,14 +21,14 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     bool has_output() const override;
     bool need_input() const override;
 
     bool is_finished() const override;
-    void set_finishing(RuntimeState* state) override;
-    void set_finished(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
     bool is_ready() const override;
     std::string get_name() const override {
@@ -54,7 +54,7 @@ public:
     ~HashJoinProbeOperatorFactory() override = default;
 
     Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
+    Status close(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
