@@ -10,7 +10,9 @@
 namespace starrocks::vectorized {
 
 JDBCScanNode::JDBCScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _jdbc_scan_node(tnode.jdbc_scan_node) {}
+        : ScanNode(pool, tnode, descs), _jdbc_scan_node(tnode.jdbc_scan_node) {
+    _name = "jdbc_scan";
+}
 
 Status JDBCScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));

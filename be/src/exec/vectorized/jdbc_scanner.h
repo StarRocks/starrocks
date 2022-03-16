@@ -6,8 +6,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline/scan_operator.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks::vectorized {
@@ -22,10 +24,20 @@ struct JDBCScanContext {
     std::map<std::string, std::string> properties;
 };
 
+struct JDBCScannerProfile {
+    RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* io_timer = nullptr;
+    RuntimeProfile::Counter* io_counter = nullptr;
+    RuntimeProfile::Counter* fill_chunk_timer = nullptr;
+};
+
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc)
-            : _scan_ctx(context), _tuple_desc(tuple_desc), _slot_descs(tuple_desc->slots()) {}
+    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, pipeline::ScanOperator* op)
+            : _scan_ctx(context),
+              _tuple_desc(tuple_desc),
+              _slot_descs(tuple_desc->slots()),
+              _runtime_profile(op->unique_metrics()) {}
 
     ~JDBCScanner();
 
@@ -36,6 +48,8 @@ public:
     Status close(RuntimeState* state);
 
 private:
+    void _init_profile();
+
     Status _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
 
     Status _init_jdbc_bridge();
@@ -63,11 +77,15 @@ private:
 
     Status _append_datetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column);
 
+    Status _append_localdatetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column);
+
     Status _append_date_val(jobject jval, SlotDescriptor* slot_desc, Column* column);
 
     Status _append_decimal_val(jobject jval, SlotDescriptor* slot_desc, Column* column);
 
     std::string _get_date_string(jobject jval);
+
+    std::string _get_localdatetime_string(jobject jval);
 
     JDBCScanContext _scan_ctx;
     // result tuple desc
@@ -81,16 +99,22 @@ private:
 
     jclass _jdbc_bridge_cls;
     jclass _jdbc_scanner_cls;
+    jclass _jdbc_util_cls;
 
     jmethodID _scanner_has_next;
     jmethodID _scanner_get_next_chunk;
     jmethodID _scanner_close;
-
+    // JDBCUtil method
+    jmethodID _util_format_date;
+    jmethodID _util_format_localdatetime;
     // _jdbc_bridge and _jdbc_scan_context are only used for cross-function passing,
     // they will be invalid after invoking _init_jdbc_scanner
     jobject _jdbc_bridge;
     jobject _jdbc_scan_context;
     jobject _jdbc_scanner;
+
+    RuntimeProfile* _runtime_profile = nullptr;
+    JDBCScannerProfile _profile;
 
     static constexpr const char* JDBC_BRIDGE_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCBridge";
     static constexpr const char* JDBC_SCAN_CONTEXT_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanContext";
