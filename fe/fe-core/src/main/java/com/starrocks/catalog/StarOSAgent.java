@@ -5,10 +5,12 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.system.Backend;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +35,16 @@ public class StarOSAgent {
         long workerId = client.getPrimaryWorkerIdByShard(shardId);
         Worker worker = client.getWorker(workerId);
         return Catalog.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
+    }
+
+    public Set<Long> getBackendIdsByShard(long shardId) {
+        Set<Long> backendIds = Sets.newHashSet();
+        for (long workerId : client.getWorkerIdsByShard(shardId)) {
+            Worker worker = client.getWorker(workerId);
+            long backendId = Catalog.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
+            backendIds.add(backendId);
+        }
+        return backendIds;
     }
 
     // Mock StarClient

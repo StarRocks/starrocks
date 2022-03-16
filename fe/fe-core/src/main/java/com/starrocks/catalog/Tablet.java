@@ -24,6 +24,8 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
+import java.util.Set;
+
 /**
  * This abstract class represents the base olap tablet related metadata.
  */
@@ -44,6 +46,8 @@ public abstract class Tablet extends MetaObject implements Writable {
     public abstract long getDataSize();
 
     public abstract long getRowCount(long version);
+
+    public abstract Set<Long> getBackendIds();
 
     @Override
     public String toString() {
