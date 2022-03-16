@@ -4,17 +4,12 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/vectorized//sorting//sort_permute.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
-struct PermutationItem {
-    uint32_t chunk_index;
-    uint32_t index_in_chunk;
-    uint32_t permutation_index;
-};
-using Permutation = std::vector<PermutationItem>;
 
 struct DataSegment {
     ChunkPtr chunk;
@@ -264,12 +259,6 @@ struct DataSegment {
     }
 };
 using DataSegments = std::vector<DataSegment>;
-
-enum CompareStrategy {
-    Default = 0,
-    RowWise = 1,
-    ColumnWise = 2,
-};
 
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {

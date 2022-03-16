@@ -120,6 +120,7 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_helper.cpp
     vectorized/jdbc_scan_node.cpp
     vectorized/jdbc_scanner.cpp
+    vectorized/sorting/sort_column.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
