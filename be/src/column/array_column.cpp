@@ -6,7 +6,6 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exec/vectorized/sorting/sort_helper.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"

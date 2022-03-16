@@ -2,7 +2,6 @@
 
 #include "column/json_column.h"
 
-#include "exec/vectorized/sorting/sort_helper.h"
 #include "glog/logging.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"

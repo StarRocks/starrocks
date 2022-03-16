@@ -8,7 +8,6 @@
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
-#include "storage/uint24.h"
 #include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"

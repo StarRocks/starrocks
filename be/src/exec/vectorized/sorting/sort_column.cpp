@@ -7,7 +7,6 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_adapter.h"
 #include "exec/vectorized/sorting/sort_helper.h"
-#include "exec/vectorized/sorting/sort_permute.h"
 
 namespace starrocks::vectorized {
 

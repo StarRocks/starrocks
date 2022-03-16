@@ -2,8 +2,6 @@
 
 #include "column/binary_column.h"
 
-#include "exec/vectorized/sorting/sort_helper.h"
-
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
