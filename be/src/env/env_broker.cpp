@@ -417,7 +417,7 @@ Status EnvBroker::get_children(const std::string& dir, std::vector<std::string>*
     return Status::NotSupported("EnvBroker::get_children");
 }
 
-Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) {
+Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::vector<std::string> files;
     RETURN_IF_ERROR(get_children(dir, &files));
     for (const auto& f : files) {

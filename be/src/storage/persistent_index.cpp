@@ -1246,10 +1246,10 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& version) {
     std::string file_name = strings::Substitute("index.l0.$0.$1", version.major(), version.minor());
     std::string prefix("index.l0");
     std::string dir = _path;
-    auto cb = [&](const char* name) -> bool {
+    auto cb = [&](std::string_view name) -> bool {
         std::string full(name);
         if (full.compare(0, prefix.length(), prefix) == 0 && full.compare(file_name) != 0) {
-            std::string path = dir + "/" + name;
+            std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
             Status st = Env::Default()->delete_file(path);
             if (!st.ok()) {

@@ -2,8 +2,7 @@
 
 #include "exec/pipeline/hdfs_chunk_source.h"
 
-#include "env/env_hdfs.h"
-#include "env/env_s3.h"
+#include "env/env.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
@@ -233,20 +232,13 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    Env* env = nullptr;
-    if (is_hdfs_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvHdfs());
-    } else if (is_object_storage_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvS3());
-    } else {
-        env = Env::Default();
-    }
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_bloom_filters;
     scanner_params.scan_ranges = {&scan_range};
-    scanner_params.env = env;
+    scanner_params.env = _pool->add(env.release());
     scanner_params.path = native_file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
