@@ -6,8 +6,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "simd/simd.h"
-#include "storage/null_predicate.h"
-#include "udf/java/java_udf.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
