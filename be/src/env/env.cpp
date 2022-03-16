@@ -80,11 +80,11 @@ class EnvGlobalInitializer {
 public:
     EnvGlobalInitializer() {
         Env::Register("posix://.*", [](std::string_view /*uri*/) { return new_env_posix(); });
-        Env::Register("hdfs://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvHdfs>(); });
-        Env::Register("oss://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3a://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3n://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
+        Env::Register("hdfs://.*", [](std::string_view /*uri*/) { return new_env_hdfs(); });
+        Env::Register("oss://.*", [](std::string_view /*uri*/) { return new_env_s3(); });
+        Env::Register("s3a://.*", [](std::string_view /*uri*/) { return new_env_s3(); });
+        Env::Register("s3n://.*", [](std::string_view /*uri*/) { return new_env_s3(); });
+        Env::Register("s3://.*", [](std::string_view /*uri*/) { return new_env_s3(); });
     }
 };
 

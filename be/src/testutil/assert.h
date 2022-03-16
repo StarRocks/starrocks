@@ -28,6 +28,12 @@
         EXPECT_TRUE(st.ok()) << st; \
     } while (0)
 
+#define EXPECT_ERROR(stmt)     \
+    do {                       \
+        auto&& st = (stmt);    \
+        EXPECT_TRUE(!st.ok()); \
+    } while (0)
+
 #define EXPECT_STATUS(expect, stmt)                                  \
     do {                                                             \
         Status exp = (expect);                                       \

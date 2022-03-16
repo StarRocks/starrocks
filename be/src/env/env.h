@@ -135,7 +135,7 @@ public:
     //         NotFound if "dir" does not exist, the calling process does not have
     //                  permission to access "dir", or if "dir" is invalid.
     //         IOError if an IO Error was encountered
-    virtual Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) = 0;
+    virtual Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) = 0;
 
     // Delete the named file.
     virtual Status delete_file(const std::string& fname) = 0;

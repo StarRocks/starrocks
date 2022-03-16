@@ -22,6 +22,7 @@
 #include "util/file_utils.h"
 
 #include <fcntl.h>
+#include <fmt/format.h>
 #include <openssl/md5.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -96,9 +97,9 @@ Status FileUtils::remove_paths(const std::vector<std::string>& paths) {
 }
 
 Status FileUtils::list_files(Env* env, const std::string& dir, std::vector<std::string>* files) {
-    auto cb = [files](const char* name) -> bool {
+    auto cb = [files](std::string_view name) -> bool {
         if (!is_dot_or_dotdot(name)) {
-            files->push_back(name);
+            files->emplace_back(name);
         }
         return true;
     };
@@ -107,22 +108,22 @@ Status FileUtils::list_files(Env* env, const std::string& dir, std::vector<std::
 
 Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files,
                                   Env* env) {
-    auto cb = [path, dirs, files, env](const char* name) -> bool {
+    auto cb = [path, dirs, files, env](std::string_view name) -> bool {
         if (is_dot_or_dotdot(name)) {
             return true;
         }
 
-        std::string temp_path = path + "/" + name;
+        std::string temp_path = fmt::format("{}/{}", path, name);
         bool is_dir;
 
         auto st = env->is_directory(temp_path, &is_dir);
         if (st.ok()) {
             if (is_dir) {
                 if (dirs != nullptr) {
-                    dirs->insert(name);
+                    dirs->emplace(name);
                 }
             } else if (files != nullptr) {
-                files->insert(name);
+                files->emplace(name);
             }
         } else {
             LOG(WARNING) << "check path " << path << "is directory error: " << st.to_string();
@@ -135,7 +136,7 @@ Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>
 }
 
 Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* count) {
-    auto cb = [count](const char* name) -> bool {
+    auto cb = [count](std::string_view name) -> bool {
         if (!is_dot_or_dotdot(name)) {
             *count += 1;
         }

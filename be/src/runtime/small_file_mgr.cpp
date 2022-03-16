@@ -58,11 +58,11 @@ Status SmallFileMgr::init() {
 Status SmallFileMgr::_load_local_files() {
     RETURN_IF_ERROR(FileUtils::create_dir(_local_path));
 
-    auto scan_cb = [this](const char* file) {
+    auto scan_cb = [this](std::string_view file) {
         if (is_dot_or_dotdot(file)) {
             return true;
         }
-        auto st = _load_single_file(_local_path, file);
+        auto st = _load_single_file(_local_path, std::string(file));
         if (!st.ok()) {
             LOG(WARNING) << "load small file failed: " << st.get_error_msg();
         }
