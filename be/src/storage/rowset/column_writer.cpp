@@ -720,7 +720,7 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                 auto [run, is_null] = pair;
                 size_t num_add = run;
                 if (!is_null) {
-                    if(_page_builder == nullptr) {
+                    if (_page_builder == nullptr) {
                         set_encoding(DEFAULT_ENCODING);
                     }
                     num_add = _page_builder->add(ptr, run);
