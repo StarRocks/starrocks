@@ -155,8 +155,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
             continue;
         }
 
-        _params.range = key_range->begin_include ? "ge" : "gt";
-        _params.end_range = key_range->end_include ? "le" : "lt";
+        _params.range = "ge";
+        _params.end_range = "le";
 
         _params.start_key.push_back(key_range->begin_scan_range);
         _params.end_key.push_back(key_range->end_scan_range);
