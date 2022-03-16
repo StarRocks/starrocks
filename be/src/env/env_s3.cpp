@@ -276,7 +276,7 @@ public:
 
     Status delete_dir(const std::string& dirname) override;
 
-    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvS3::sync_dir"); }
+    Status sync_dir(const std::string& dirname) override;
 
     Status is_directory(const std::string& path, bool* is_dir) override;
 
@@ -537,6 +537,14 @@ Status EnvS3::delete_dir(const std::string& dirname) {
     } else {
         return to_status(del_outcome.GetError().GetErrorType(), del_outcome.GetError().GetMessage());
     }
+}
+
+Status EnvS3::sync_dir(const std::string& dirname) {
+    // The only thing we need to do is check whether the directory exist or not.
+    bool is_dir = false;
+    RETURN_IF_ERROR(is_directory(dirname, &is_dir));
+    if (is_dir) return Status::OK();
+    return Status::NotFound(fmt::format("{} not directory", dirname));
 }
 
 std::unique_ptr<Env> new_env_s3() {

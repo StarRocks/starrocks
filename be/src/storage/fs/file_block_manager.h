@@ -65,9 +65,7 @@ struct BlockManagerMetrics;
 // The file-backed block manager.
 class FileBlockManager : public BlockManager {
 public:
-    // Note: all objects passed as pointers should remain alive for the lifetime
-    // of the block manager.
-    FileBlockManager(Env* env, BlockManagerOptions opts);
+    explicit FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts);
     ~FileBlockManager() override;
 
     Status open() override;
@@ -98,10 +96,10 @@ private:
     // Synchronizes the metadata for a block with the given location.
     Status _sync_metadata(const std::string& path);
 
-    Env* env() const { return _env; }
+    Env* env() const { return _env.get(); }
 
     // For manipulating files.
-    Env* _env;
+    std::shared_ptr<Env> _env;
 
     // The options that the FileBlockManager was created with.
     const BlockManagerOptions _opts;
