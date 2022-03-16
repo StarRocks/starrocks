@@ -175,6 +175,7 @@ CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
 // Number of olap scanner thread pool size.
 CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
+CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
 CONF_Int32(udf_thread_pool_size, "1");
