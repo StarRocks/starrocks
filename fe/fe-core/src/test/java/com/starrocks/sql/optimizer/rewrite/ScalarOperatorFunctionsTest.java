@@ -240,9 +240,6 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
                         ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
-        Assert.assertEquals("5",
-                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
-                        ConstantOperator.createVarchar("%w")).getVarchar());
 
         Assert.assertEquals("asdfafdfsçv",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
