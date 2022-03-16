@@ -105,13 +105,13 @@ show tablet from lineitem where State="ALTER";
 多张大表关联时，旧planner有时没有自动谓词下推，比如：
 
 ```sql
-A JION B ON A.col1=B.col1 JOIN C on B.col1=C.col1 where A.col1='北京' ，
+A JOIN B ON A.col1=B.col1 JOIN C on B.col1=C.col1 where A.col1='北京' ，
 ```
 
 可以更改为：
 
 ```sql
-A JION B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='北京'，
+A JOIN B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='北京'，
 ```
 
 或者升级较新版本并开启CBO，然后会有此类谓词下推操作，优化查询性能。
