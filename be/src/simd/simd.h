@@ -97,6 +97,9 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
 
 // NOTE: memchr is much faster than a plain SIMD implementation
 inline static size_t find_byte(const std::vector<uint8_t>& list, size_t start, uint8_t byte) {
+    if (start >= list.size()) {
+        return start;
+    }
     const void* p = std::memchr((const void*)(list.data() + start), byte, list.size() - start);
     if (p == nullptr) {
         return list.size();
