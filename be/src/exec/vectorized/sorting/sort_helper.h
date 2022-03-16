@@ -156,6 +156,4 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
     return Status::OK();
 }
 
-
-
 } // namespace starrocks::vectorized
