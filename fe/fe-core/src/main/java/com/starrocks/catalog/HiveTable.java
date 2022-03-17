@@ -196,17 +196,17 @@ public class HiveTable extends Table {
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
-        boolean needRefreshColumn = allHiveColumns.size() == this.fullSchema.size();
-        if (needRefreshColumn) {
+        boolean needRefreshColumn = allHiveColumns.size() != this.fullSchema.size();
+        if (!needRefreshColumn) {
             for (Column column : fullSchema) {
                 FieldSchema fieldSchema = allHiveColumns.get(column.getName());
                 if (fieldSchema == null) {
-                    needRefreshColumn = false;
+                    needRefreshColumn = true;
                     break;
                 }
             }
         }
-        if (needRefreshColumn) {
+        if (!needRefreshColumn) {
             Catalog.getCurrentCatalog().getHiveRepository()
                     .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
                             new ArrayList<>(nameToColumn.keySet()));
