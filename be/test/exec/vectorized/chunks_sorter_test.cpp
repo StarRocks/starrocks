@@ -233,12 +233,12 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
         const size_t Size = 16;
-        int32_t permutation[Size] = {69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
+        std::vector<int32_t> permutation{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
         std::vector<int32_t> result;
         for (size_t i = 0; i < Size; ++i) {
-            EXPECT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
             result.push_back(page_1->get(i).get(0).get_int32());
         }
+        EXPECT_EQ(permutation, result);
         fmt::print("result: {}\n", fmt::join(result, ","));
     }
 
@@ -248,8 +248,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
 // NOLINTNEXTLINE
 TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     std::vector<bool> is_asc, is_null_first;
-    is_asc.push_back(false); // region
-    is_asc.push_back(true);  // cust_key
+    is_asc.push_back(true);  // region
+    is_asc.push_back(false); // cust_key
     is_null_first.push_back(false);
     is_null_first.push_back(false);
     std::vector<ExprContext*> sort_exprs;
@@ -280,12 +280,12 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
         const size_t Size = 16;
-        std::vector<int32_t> permutation{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71};
+        std::vector<int32_t> permutation{58, 56, 55, 54, 52, 49, 41, 24, 16, 12, 6, 4, 2, 71, 70, 69};
         std::vector<int32_t> result;
         for (size_t i = 0; i < Size; ++i) {
             result.push_back(page_1->get(i).get(0).get_int32());
         }
-        ASSERT_EQ(permutation, result);
+        EXPECT_EQ(permutation, result);
     }
 
     clear_sort_exprs(sort_exprs);
@@ -356,10 +356,6 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
     for (auto strategy : all_compare_strategy()) {
-        // TODO(mofei) fix it
-        if (strategy == ColumnInc) {
-            continue;
-        }
         std::cerr << "sort with strategy: " << strategy << std::endl;
         ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 2);
         sorter.set_compare_strategy(strategy);
@@ -664,9 +660,15 @@ TEST_F(ChunksSorterTest, test_tie) {
     };
     ASSERT_EQ(expected, ranges);
 
-    // empty tie
     {
+        // Empty tie
         Tie tie{0, 0};
+        TieIterator iterator(tie);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        // Empty tie
+        Tie tie{0, 0, 0, 0};
         TieIterator iterator(tie);
         ASSERT_FALSE(iterator.next());
     }
@@ -676,6 +678,42 @@ TEST_F(ChunksSorterTest, test_tie) {
         ASSERT_TRUE(iterator.next());
         ASSERT_EQ(iterator.range_first, 0);
         ASSERT_EQ(iterator.range_last, 2);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        // Partial tie all 1
+        Tie tie{1, 1, 1, 1, 1, 1};
+        TieIterator iterator(tie, 0, 5);
+        ASSERT_TRUE(iterator.next());
+        ASSERT_EQ(iterator.range_first, 0);
+        ASSERT_EQ(iterator.range_last, 5);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        // Partial tie with prefix 0
+        Tie tie{0, 1, 1, 1, 1, 1};
+        TieIterator iterator(tie, 0, 5);
+        ASSERT_TRUE(iterator.next());
+        ASSERT_EQ(iterator.range_first, 0);
+        ASSERT_EQ(iterator.range_last, 5);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        // Partial tie with suffix 0
+        Tie tie{0, 1, 1, 1, 0, 1};
+        TieIterator iterator(tie, 0, 5);
+        ASSERT_TRUE(iterator.next());
+        ASSERT_EQ(iterator.range_first, 0);
+        ASSERT_EQ(iterator.range_last, 4);
+        ASSERT_FALSE(iterator.next());
+    }
+    {
+        // Partial tie with prefix 0, start from 1
+        Tie tie{0, 1, 1, 1, 1, 1};
+        TieIterator iterator(tie, 1, 5);
+        ASSERT_TRUE(iterator.next());
+        ASSERT_EQ(iterator.range_first, 1);
+        ASSERT_EQ(iterator.range_last, 5);
         ASSERT_FALSE(iterator.next());
     }
 }

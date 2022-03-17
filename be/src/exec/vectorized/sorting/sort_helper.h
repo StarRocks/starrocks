@@ -90,13 +90,31 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
             int pivot_start = pivot_iter - permutation.begin();
-            int notnull_start = is_null_first ? pivot_start : range_first;
-            int notnull_end = is_null_first ? range_last : pivot_start;
+            int notnull_start, notnull_end;
+            int null_start, null_end;
+            if (is_null_first) {
+                null_start = range_first;
+                null_end = pivot_start;
+                notnull_start = pivot_start;
+                notnull_end = range_last;
+            } else {
+                notnull_start = range_first;
+                notnull_end = pivot_start;
+                null_start = pivot_start;
+                null_end = range_last;
+            }
 
             if (notnull_start < notnull_end) {
                 tie[notnull_start] = 0;
                 RETURN_IF_ERROR(sort_and_tie_column(cancel, column->data_column(), is_asc_order, is_null_first,
                                                     permutation, tie, {notnull_start, notnull_end}, build_tie));
+            }
+            if (range_first <= null_start && null_start < range_last) {
+                // Mark all null as 0, they don
+                std::fill(tie.begin() + null_start, tie.begin() + null_end, 1);
+
+                // Cut off null and non-null
+                tie[null_start] = 0;
             }
         }
 

@@ -105,25 +105,7 @@ struct TieIterator {
 
     // Iterate the tie
     // Return false means the loop should terminate
-    bool next() {
-        if (_inner_range_first >= end) {
-            return false;
-        }
-        _inner_range_first = SIMD::find_nonzero(tie, _inner_range_first + 1);
-        if (_inner_range_first >= end) {
-            return false;
-        }
-        _inner_range_first--;
-        _inner_range_last = SIMD::find_zero(tie, _inner_range_first + 1);
-        if (_inner_range_last > end) {
-            return false;
-        }
-
-        range_first = _inner_range_first;
-        range_last = _inner_range_last;
-        _inner_range_first = _inner_range_last;
-        return true;
-    }
+    bool next();
 
 private:
     int _inner_range_first;
