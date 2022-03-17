@@ -277,8 +277,6 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                         Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
                     }
                     tableToRemove.add(tableInfo);
-                    // log
-                    LOG.info("prepare erase table[{}-{}].", tableId, table.getName());
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                         break;
@@ -290,10 +288,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         List<Long> tableIdList = Lists.newArrayList();
         if (!tableToRemove.isEmpty()) {
             for (RecycleTableInfo tableInfo : tableToRemove) {
-                long tableId = tableInfo.getTable().getId();
+                Table table = tableInfo.getTable();
+                long tableId = table.getId();
                 idToRecycleTime.remove(tableId);
-                nameToTableInfo.remove(tableInfo.dbId, tableInfo.getTable().getName());
+                nameToTableInfo.remove(tableInfo.dbId, table.getName());
                 idToTableInfo.remove(tableInfo.dbId, tableId);
+                LOG.info("erase table[{}-{}] in memory finished.", tableId, table.getName());
                 tableIdList.add(tableId);
             }
             Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
