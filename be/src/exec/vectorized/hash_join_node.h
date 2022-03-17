@@ -120,6 +120,7 @@ private:
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
+    RuntimeProfile::Counter* _probe_gather_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;
     RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* _build_push_down_expr_timer = nullptr;

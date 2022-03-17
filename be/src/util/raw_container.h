@@ -66,6 +66,54 @@ private:
     static const size_t _trailing = trailing;
 };
 
+template <typename T, std::size_t N = 16>
+class AlignmentAllocator {
+public:
+    typedef T value_type;
+    typedef std::size_t size_type;
+    typedef std::ptrdiff_t difference_type;
+
+    typedef T* pointer;
+    typedef const T* const_pointer;
+
+    typedef T& reference;
+    typedef const T& const_reference;
+
+public:
+    inline AlignmentAllocator() throw() {}
+
+    template <typename T2>
+    inline AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw() {}
+
+    inline ~AlignmentAllocator() throw() {}
+
+    inline pointer adress(reference r) { return &r; }
+
+    inline const_pointer adress(const_reference r) const { return &r; }
+
+    inline pointer allocate(size_type n) { return (pointer)std::aligned_alloc(N, n * sizeof(value_type)); }
+
+    inline void deallocate(pointer p, size_type) { free(p); }
+
+    inline void construct(pointer p, const value_type& wert) { new (p) value_type(wert); }
+
+    inline void destroy(pointer p) { p->~value_type(); }
+
+    inline size_type max_size() const throw() { return size_type(-1) / sizeof(value_type); }
+
+    template <typename T2>
+    struct rebind {
+        typedef AlignmentAllocator<T2, N> other;
+    };
+
+    bool operator!=(const AlignmentAllocator<T, N>& other) const { return !(*this == other); }
+
+    // Returns true if and only if storage allocated from *this
+    // can be deallocated from other, and vice versa.
+    // Always returns true for stateless allocators.
+    bool operator==(const AlignmentAllocator<T, N>& other) const { return true; }
+};
+
 // https://github.com/StarRocks/starrocks/issues/233
 // older versions of CXX11 string abi are cow semantic and our optimization to provide raw_string causes crashes.
 //
@@ -93,6 +141,9 @@ using RawVector = std::vector<T, RawAllocator<T, 0>>;
 
 template <class T>
 using RawVectorPad16 = std::vector<T, RawAllocator<T, 16>>;
+
+template <class T>
+using Aligned32Vector = std::vector<T, AlignmentAllocator<T, 32>>;
 
 template <class T>
 static inline void make_room(std::vector<T>* v, size_t n) {

@@ -1,5 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "simd/gather.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -246,17 +247,17 @@ void JoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items, HashT
             }
             probe_state->null_array = &nullable_column->null_column()->get_data();
         } else {
-            for (size_t i = 0; i < probe_row_count; i++) {
-                probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-            }
+            SIMDGather::aligned_gather(table_items.first.data(), probe_state->buckets.data(), probe_state->next.data(),
+                                       table_items.first.size(), probe_row_count);
             probe_state->null_array = nullptr;
         }
         return;
     }
 
-    for (size_t i = 0; i < probe_row_count; i++) {
-        probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-    }
+    SCOPED_TIMER(probe_state->gather_ht_timer);
+    // next[i] = first[buckets[i]]
+    SIMDGather::aligned_gather(table_items.first.data(), probe_state->buckets.data(), probe_state->next.data(),
+                               table_items.first.size(), probe_row_count);
     probe_state->null_array = nullptr;
 }
 
@@ -315,9 +316,8 @@ void FixedSizeJoinProbeFunc<PT>::_probe_column(const JoinHashTableItems& table_i
     const auto& data = get_key_data(*probe_state);
     JoinHashMapHelper::calc_bucket_nums<CppType>(data, table_items.bucket_size, &probe_state->buckets, 0, row_count);
 
-    for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->next[i] = table_items.first[probe_state->buckets[i]];
-    }
+    SIMDGather::aligned_gather(table_items.first.data(), probe_state->buckets.data(), probe_state->next.data(),
+                               table_items.first.size(), row_count);
 }
 
 template <PrimitiveType PT>

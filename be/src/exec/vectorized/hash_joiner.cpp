@@ -272,7 +272,7 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
 
 void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _ht = src_join_builder->_ht.clone_readable_table();
-    _ht.set_probe_profile(_search_ht_timer, _output_probe_column_timer, _output_tuple_column_timer);
+    _ht.set_probe_profile(_search_ht_timer, _gather_ht_timer, _output_probe_column_timer, _output_tuple_column_timer);
 
     _probe_column_count = src_join_builder->_probe_column_count;
     _build_column_count = src_join_builder->_build_column_count;
