@@ -37,11 +37,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
-import com.starrocks.external.hive.HiveColumnStats;
-import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.HivePartitionStats;
-import com.starrocks.external.hive.HiveTableStats;
-import com.starrocks.external.hive.Utils;
+import com.starrocks.external.hive.*;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -49,6 +45,7 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,6 +59,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 import static com.starrocks.common.util.Util.validateMetastoreUris;
 
 /**
@@ -189,9 +187,52 @@ public class HiveTable extends Table {
     }
 
     public void refreshTableCache() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                        new ArrayList<>(nameToColumn.keySet()));
+        org.apache.hadoop.hive.metastore.api.Table table = Catalog.getCurrentCatalog().getHiveRepository()
+                .getTable(resourceName, this.hiveDb, this.hiveTable);
+        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+        boolean needRefreshColumn = allHiveColumns.size() == this.fullSchema.size();
+        if (needRefreshColumn) {
+            for (Column column : fullSchema) {
+                FieldSchema fieldSchema = allHiveColumns.get(column.getName());
+                if (fieldSchema == null) {
+                    needRefreshColumn = false;
+                    break;
+                }
+            }
+        }
+        if (needRefreshColumn) {
+            Catalog.getCurrentCatalog().getHiveRepository()
+                    .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
+                            new ArrayList<>(nameToColumn.keySet()));
+        } else {
+            updateFullSchema(allHiveColumns);
+            Catalog.getCurrentCatalog().getHiveRepository()
+                    .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
+                            new ArrayList<>(allHiveColumns.keySet()));
+        }
+    }
+
+    private void updateFullSchema(Map<String, FieldSchema> allHiveColumns) throws DdlException {
+        if (!Catalog.getCurrentCatalog().isMaster()) {
+            return;
+        }
+        fullSchema.clear();
+        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
+            FieldSchema fieldSchema = entry.getValue();
+            PrimitiveType type = toPrimitiveType(fieldSchema.getType());
+            if (type == null) {
+                throw new DdlException("hive table column type cast failed:" + fieldSchema.getType());
+            }
+            Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, false,
+                    NULL_DEFAULT_VALUE, fieldSchema.getComment());
+            fullSchema.add(column);
+        }
     }
 
     public void refreshPartCache(List<String> partNames) throws DdlException {
@@ -385,6 +426,43 @@ public class HiveTable extends Table {
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
+        }
+    }
+
+    private PrimitiveType toPrimitiveType(String hiveType) {
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        switch (typeUpperCase) {
+            case "TINYINT":
+                return PrimitiveType.TINYINT;
+            case "SMALLINT":
+                return PrimitiveType.SMALLINT;
+            case "INT":
+            case "INTEGER":
+                return PrimitiveType.INT;
+            case "BIGINT":
+                return PrimitiveType.BIGINT;
+            case "FLOAT":
+                return PrimitiveType.FLOAT;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                return PrimitiveType.DOUBLE;
+            case "DECIMAL":
+            case "NUMERIC":
+                return PrimitiveType.DECIMAL32;
+            case "TIMESTAMP":
+                return PrimitiveType.DATETIME;
+            case "DATE":
+                return PrimitiveType.DATE;
+            case "STRING":
+            case "VARCHAR":
+            case "BINARY":
+                return PrimitiveType.VARCHAR;
+            case "CHAR":
+                return PrimitiveType.CHAR;
+            case "BOOLEAN":
+                return PrimitiveType.BOOLEAN;
+            default:
+                return null;
         }
     }
 
