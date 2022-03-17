@@ -1134,7 +1134,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
-        _reload(*index_meta);
+        RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_dump_snapshot) {
         std::string file_name = _get_l0_index_file_name(_path, _version);
         // be maybe crash after create index file during last commit
@@ -1179,7 +1179,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
 Status PersistentIndex::on_commited() {
     if (_flushed) {
         RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
-        _l1_version = _version;
     } else if (_dump_snapshot) {
         std::string expired_l0_file_path = _index_block->path();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);
