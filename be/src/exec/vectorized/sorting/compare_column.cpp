@@ -16,7 +16,7 @@ namespace starrocks::vectorized {
 // For column-wise compare, only consider rows that are equal at previous columns
 // @return number of rows that are equal
 template <class DataComparator>
-inline int compare_row_helper(CompareVector& cmp_vector, DataComparator cmp) {
+static inline int compare_column_helper(CompareVector& cmp_vector, DataComparator cmp) {
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 0 || x == -1 || x == 1; }));
 
     // TODO(mofei) optimize the compare with SIMD
@@ -81,7 +81,7 @@ public:
             DCHECK(null_data[lhs_row] == 1);
             return _rhs_value.is_null() ? 0 : _null_first;
         };
-        int null_equal_count = compare_row_helper(null_vector, null_cmp);
+        int null_equal_count = compare_column_helper(null_vector, null_cmp);
 
         int notnull_equal_count = 0;
         if (_rhs_value.is_null()) {
@@ -132,7 +132,7 @@ public:
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
-        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
         return Status::OK();
     }
 
@@ -147,7 +147,7 @@ public:
                 return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
             }
         };
-        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
 
         return Status::OK();
     }
@@ -164,7 +164,7 @@ public:
             }
         };
 
-        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
         return Status::OK();
     }
 
@@ -186,7 +186,7 @@ public:
             }
         };
 
-        _equal_count = compare_row_helper(_cmp_vector, cmp);
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
         return Status::OK();
     }
 
