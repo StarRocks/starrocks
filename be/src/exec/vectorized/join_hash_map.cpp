@@ -226,11 +226,9 @@ JoinHashTable JoinHashTable::clone_readable_table() {
 }
 
 void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
-                                      RuntimeProfile::Counter* gather_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
                                       RuntimeProfile::Counter* output_tuple_column_timer) {
     _probe_state->search_ht_timer = search_ht_timer;
-    _probe_state->gather_ht_timer = gather_ht_timer;
     _probe_state->output_probe_column_timer = output_probe_column_timer;
     _probe_state->output_tuple_column_timer = output_tuple_column_timer;
 }
@@ -266,7 +264,6 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->join_keys = param.join_keys;
 
     _probe_state->search_ht_timer = param.search_ht_timer;
-    _probe_state->gather_ht_timer = param.gather_ht_timer;
     _probe_state->output_probe_column_timer = param.output_probe_column_timer;
     _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
 

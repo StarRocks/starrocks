@@ -109,7 +109,6 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
     _build_timer = ADD_TIMER(_runtime_profile, "BuildTime");
-    _probe_gather_timer = ADD_TIMER(_runtime_profile, "ProbeGatherTime");
 
     _copy_right_table_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-CopyRightTableChunkTime", "BuildTime");
     _build_ht_timer = ADD_CHILD_TIMER(_runtime_profile, "2-BuildHashTableTime", "BuildTime");
@@ -157,7 +156,6 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
     param->search_ht_timer = _search_ht_timer;
-    param->gather_ht_timer = _probe_gather_timer;
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
     param->output_tuple_column_timer = _output_tuple_column_timer;

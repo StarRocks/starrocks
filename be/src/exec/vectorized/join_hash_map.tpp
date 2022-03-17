@@ -254,7 +254,6 @@ void JoinProbeFunc<PT>::lookup_init(const JoinHashTableItems& table_items, HashT
         return;
     }
 
-    SCOPED_TIMER(probe_state->gather_ht_timer);
     // next[i] = first[buckets[i]]
     SIMDGather::aligned_gather(table_items.first.data(), probe_state->buckets.data(), probe_state->next.data(),
                                table_items.first.size(), probe_row_count);
