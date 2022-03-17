@@ -29,15 +29,9 @@ import java.util.Map;
 
 @Deprecated
 public class CreateClusterStmt extends DdlStmt {
-    public static String CLUSTER_INSTANCE_NUM = "instance_num";
     public static String CLUSTER_SUPERMAN_PASSWORD = "password";
-    public static String CLUSTER_SUPERUSER_NAME = "superuser";
 
     private String clusterName;
-    private boolean ifNotExists;
-    private int instanceNum;
-    private Map<String, String> properties;
-    private byte[] scramblePassword;
     private String passwd;
 
     public CreateClusterStmt() {
@@ -46,7 +40,6 @@ public class CreateClusterStmt extends DdlStmt {
 
     public CreateClusterStmt(String clusterName, Map<String, String> properties, String passwd) {
         this.clusterName = clusterName;
-        this.properties = properties;
         this.passwd = passwd;
     }
 
@@ -65,22 +58,12 @@ public class CreateClusterStmt extends DdlStmt {
 
     @Override
     public String toSql() {
-        final String sql = "CREATE CLUSTER " + clusterName + " PROPERTIES(\"instance_num\"=" + "\"" + instanceNum
-                + "\")" + "IDENTIFIED BY '" + passwd + "'";
-        return sql;
+        return "";
     }
 
     @Override
     public String toString() {
         return toSql();
-    }
-
-    public int getInstanceNum() {
-        return instanceNum;
-    }
-
-    public byte[] getPassword() {
-        return scramblePassword;
     }
 
 }
