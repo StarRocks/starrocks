@@ -43,11 +43,12 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
+Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
-    _process_by_partition_if_necessary();
+    RETURN_IF_ERROR(_process_by_partition_if_necessary());
     _analytor->sink_complete();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {

@@ -43,7 +43,10 @@ public:
 
     bool is_finished() const override { return _is_finished && _dst_chunk == nullptr; }
 
-    void set_finishing(RuntimeState* state) override { _is_finished = true; }
+    Status set_finishing(RuntimeState* state) override {
+        _is_finished = true;
+        return Status::OK();
+    }
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) override;
 

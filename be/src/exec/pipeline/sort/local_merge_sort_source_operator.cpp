@@ -22,12 +22,13 @@ StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeS
     return _sort_context->pull_chunk();
 }
 
-void LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
+Status LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
-void LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
-    _sort_context->set_finished();
+Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    return _sort_context->set_finished();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
