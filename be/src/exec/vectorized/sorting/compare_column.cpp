@@ -143,14 +143,13 @@ public:
         const BinaryColumn::Container& lhs_datas = column.get_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
-        auto cmp = [&](int lhs_row) {
-            if (_sort_order == 1) {
-                return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
-            } else {
-                return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data);
-            }
-        };
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        if (_sort_order == 1) {
+            auto cmp = [&](int lhs_row) { return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+        } else {
+            auto cmp = [&](int lhs_row) { return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+        }
 
         return Status::OK();
     }
@@ -159,15 +158,15 @@ public:
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         T rhs_data = _rhs_value.get<T>();
         auto& lhs_data = column.get_data();
-        auto cmp = [&](int lhs_row) {
-            if (_sort_order == 1) {
-                return SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data);
-            } else {
-                return -1 * SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data);
-            }
-        };
 
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        if (_sort_order == 1) {
+            auto cmp = [&](int lhs_row) { return SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+        } else {
+            auto cmp = [&](int lhs_row) { return -1 * SorterComparator<T>::compare(lhs_data[lhs_row], rhs_data); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+        }
+
         return Status::OK();
     }
 
@@ -181,15 +180,15 @@ public:
     Status do_visit(const vectorized::JsonColumn& column) {
         auto& lhs_data = column.get_data();
         const JsonValue& rhs_json = *_rhs_value.get_json();
-        auto cmp = [&](int lhs_row) {
-            if (_sort_order == 1) {
-                return lhs_data[lhs_row]->compare(rhs_json);
-            } else {
-                return -1 * lhs_data[lhs_row]->compare(rhs_json);
-            }
-        };
 
-        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        if (_sort_order == 1) {
+            auto cmp = [&](int lhs_row) { return lhs_data[lhs_row]->compare(rhs_json); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+
+        } else {
+            auto cmp = [&](int lhs_row) { return -1 * lhs_data[lhs_row]->compare(rhs_json); };
+            _equal_count = compare_column_helper(_cmp_vector, cmp);
+        }
         return Status::OK();
     }
 
