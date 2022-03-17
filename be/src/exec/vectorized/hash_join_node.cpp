@@ -88,9 +88,7 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                     break;
                 }
             }
-            if (!match_exactly_once) {
-                return Status::InternalError("Invalid partition expr for bucket shuffle join");
-            }
+            DCHECK(match_exactly_once);
         }
     }
 
