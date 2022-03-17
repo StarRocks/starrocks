@@ -27,10 +27,8 @@ public:
 
         _runtime_state = _create_runtime_state();
     }
-    
-    void TearDown() {
-        _runtime_state.reset();
-    }
+
+    void TearDown() { _runtime_state.reset(); }
 
     static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index,
                                                                         bool low_card) {
@@ -197,7 +195,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     state.counters["data_size"] += data_size;
     state.counters["mem_usage"] = mem_usage;
     state.SetItemsProcessed(item_processed);
-    
+
     suite.TearDown();
 }
 

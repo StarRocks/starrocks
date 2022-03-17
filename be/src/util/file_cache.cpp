@@ -30,7 +30,7 @@ namespace starrocks {
 
 template <class FileType>
 FileCache<FileType>::FileCache(std::string cache_name, int max_open_files)
-        : _cache_name(std::move(cache_name)), _cache(new_lru_cache(max_open_files)), _is_cache_own(true) {}
+        : _cache_name(std::move(cache_name)), _cache(new_lru_cache(max_open_files)) {}
 
 template <class FileType>
 FileCache<FileType>::FileCache(std::string cache_name, std::shared_ptr<Cache> cache)

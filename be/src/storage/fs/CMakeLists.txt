@@ -27,7 +27,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage/fs")
   
 add_library(OlapFs STATIC
     block_id.cpp
-    block_manager_metrics.cpp
     block_manager.cpp
     fs_util.cpp
     file_block_manager.cpp

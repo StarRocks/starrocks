@@ -106,14 +106,6 @@ private:
     // The options that the FileBlockManager was created with.
     const BlockManagerOptions _opts;
 
-    // Tracks the block directories which are dirty from block creation. This
-    // lets us perform some simple coalescing when synchronizing metadata.
-    std::unordered_set<std::string> _dirty_dirs;
-
-    // Metric container for the block manager.
-    // May be null if instantiated without metrics.
-    std::unique_ptr<internal::BlockManagerMetrics> _metrics;
-
     // Underlying cache instance. Caches opened files.
     std::unique_ptr<FileCache<RandomAccessFile>> _file_cache;
 };
