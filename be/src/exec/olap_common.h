@@ -311,11 +311,7 @@ public:
         return _begin_scan_keys.size();
     }
 
-    void set_begin_include(bool begin_include) { _begin_include = begin_include; }
-
     bool begin_include() const { return _begin_include; }
-
-    void set_end_include(bool end_include) { _end_include = end_include; }
 
     bool end_include() const { return _end_include; }
 
