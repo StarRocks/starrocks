@@ -51,9 +51,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -1150,7 +1150,8 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
+        Assert.assertTrue(
+                plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
     @Test
@@ -1806,53 +1807,55 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:SELECT\n" +
-                "  |  predicates: length(order_no) > 10\n" +
-                "  |  limit: 10\n" +
-                "  |  \n" +
-                "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                        "  |  predicates: length(order_no) > 10\n" +
+                        "  |  limit: 10\n" +
+                        "  |  \n" +
+                        "  0:SCAN MYSQL\n" +
+                        "     TABLE: `ods_order`\n" +
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
 
         sql = "select * from ods_order where order_dt = '2025-08-08' or length(order_no) > 10 limit 10;";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:SELECT\n" +
-                "  |  predicates: (order_dt = '2025-08-08') OR (length(order_no) > 10)\n" +
-                "  |  limit: 10\n" +
-                "  |  \n" +
-                "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+                        "  |  predicates: (order_dt = '2025-08-08') OR (length(order_no) > 10)\n" +
+                        "  |  limit: 10\n" +
+                        "  |  \n" +
+                        "  0:SCAN MYSQL\n" +
+                        "     TABLE: `ods_order`\n" +
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
 
         sql = "select * from ods_order where order_dt = '2025-08-07' and (length(order_no) > 10 or order_no = 'p');";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:SELECT\n" +
-                "  |  predicates: (length(order_no) > 10) OR (order_no = 'p')\n" +
-                "  |  \n" +
-                "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                        "  |  predicates: (length(order_no) > 10) OR (order_no = 'p')\n" +
+                        "  |  \n" +
+                        "  0:SCAN MYSQL\n" +
+                        "     TABLE: `ods_order`\n" +
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
 
         sql = "select * from ods_order where not (order_dt = '2025-08-07' and length(order_no) > 10)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:SELECT\n" +
-                "  |  predicates: (order_dt != '2025-08-07') OR (length(order_no) <= 10)\n" +
-                "  |  \n" +
-                "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "    " +
+                        "  |  predicates: (order_dt != '2025-08-07') OR (length(order_no) <= 10)\n" +
+                        "  |  \n" +
+                        "  0:SCAN MYSQL\n" +
+                        "     TABLE: `ods_order`\n" +
+                        "    " +
                         " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
 
-        sql = "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') or order_dt between '2025-08-01' and '2025-09-05';";
+        sql =
+                "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') or order_dt between '2025-08-01' and '2025-09-05';";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
+                        "     TABLE: `ods_order`\n" +
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
 
-        sql = "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
+        sql =
+                "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  1:SELECT\n" +
                 "  |  predicates: length(order_no) > 10\n" +
@@ -1920,12 +1923,12 @@ public class PlanFragmentTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:SELECT\n" +
-                "  |  predicates: length(b) < 20\n" +
-                "  |  limit: 10\n" +
-                "  |  \n" +
-                "  0:SCAN JDBC\n" +
-                "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10)"));
+                        "  |  predicates: length(b) < 20\n" +
+                        "  |  limit: 10\n" +
+                        "  |  \n" +
+                        "  0:SCAN JDBC\n" +
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10)"));
 
     }
 
@@ -1935,12 +1938,12 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(a)\n" +
-                "  |  group by: b\n" +
-                "  |  \n" +
-                "  0:SCAN JDBC\n" +
-                "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT a, b FROM `test_table`"));
+                        "  |  output: sum(a)\n" +
+                        "  |  group by: b\n" +
+                        "  |  \n" +
+                        "  0:SCAN JDBC\n" +
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT a, b FROM `test_table`"));
     }
 
     @Test
@@ -3664,61 +3667,63 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testConstPredicateInRightJoin() throws Exception {
+        Config.enable_decimal_v3 = true;
         String sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 right semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 right anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 left join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 left semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 left anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 inner join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
 
         sql = "select * from test.join1 where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2.0, 0) > 3.0"));
+                "     PREDICATES: round(2, 0) > 3"));
+        Config.enable_decimal_v3 = false;
     }
 
     @Test
@@ -4639,7 +4644,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE"));
 
-        sql = "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
@@ -4675,7 +4681,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n"));
 
-        sql = "select * from (select * from (select * from t0 limit 0) t except select * from t1 except select * from t2) as xx";
+        sql =
+                "select * from (select * from (select * from t0 limit 0) t except select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
@@ -6037,9 +6044,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    EXCHANGE ID: 05\n" +
                 "    HASH_PARTITIONED: 9: v9, 7: v7, 8: v8"));
 
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v1 = b.v7";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v1 = b.v7";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("12:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -6061,9 +6069,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 2: v2, 1: v1"));
 
         // check can not adjust column orders
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v4 = b.v8";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v4 = b.v8";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -6085,9 +6094,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 10: v1, 11: v2"));
 
         // check can not adjust column orders
-        sql = "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
-                "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
-                "on a.v2 = b.v8 and a.v4 = b.v1";
+        sql =
+                "select a.v1, a.v4, b.v7, b.v1 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                        "(select v7, v8, v1, v2 from t2 join[shuffle] t3 on t2.v7 = t3.v1 and t2.v8 = t3.v2) b " +
+                        "on a.v2 = b.v8 and a.v4 = b.v1";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
