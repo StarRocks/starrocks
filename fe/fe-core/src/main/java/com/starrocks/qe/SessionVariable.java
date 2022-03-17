@@ -169,6 +169,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
+    public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -334,6 +335,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
     private double cboCTERuseRatio = 1.2;
+
+    @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
+    private boolean enableSQLDigest = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -872,6 +876,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboCTERuseRatio = cboCTERuseRatio;
     }
 
+    public boolean isEnableSQLDigest() {
+        return enableSQLDigest;
+    }
+    
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
