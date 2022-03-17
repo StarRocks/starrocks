@@ -91,7 +91,12 @@ public:
 
     inline const_pointer adress(const_reference r) const { return &r; }
 
-    inline pointer allocate(size_type n) { return (pointer)std::aligned_alloc(N, n * sizeof(value_type)); }
+    inline pointer allocate(size_type n) {
+        if (n * sizeof(value_type) < N) {
+            return (pointer)std::aligned_alloc(N, N);
+        }
+        return (pointer)std::aligned_alloc(N, n * sizeof(value_type));
+    }
 
     inline void deallocate(pointer p, size_type) { free(p); }
 

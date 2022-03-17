@@ -722,7 +722,7 @@ TEST_F(JoinHashMapTest, CalcBucketNum) {
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNums) {
     Buffer<int32_t> data{1, 2, 3, 4};
-    Buffer<uint32_t> buckets{0, 0, 0, 0};
+    raw::Aligned32Vector<uint32_t> buckets{0, 0, 0, 0};
     Buffer<uint32_t> check_buckets{2, 2, 3, 1};
 
     JoinHashMapHelper::calc_bucket_nums<int32_t>(data, 4, &buckets, 0, 4);
