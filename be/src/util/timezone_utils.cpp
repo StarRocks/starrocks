@@ -42,7 +42,9 @@ static phmap::flat_hash_map<std::pair<std::string_view, std::string_view>, int64
 void TimezoneUtils::init_time_zones() {
     // timezone cache list
     // We cannot add a time zone to the cache that contains both daylight saving time and winter time
-    static std::vector<std::string> timezones = {"UTC", "Asia/Shanghai", "Asia/Hong_Kong"};
+    static std::vector<std::string> timezones = {
+#include "timezone.dat"
+    };
     for (const auto& timezone : timezones) {
         cctz::time_zone ctz;
         CHECK(cctz::load_time_zone(timezone, &ctz));
@@ -60,7 +62,9 @@ void TimezoneUtils::init_time_zones() {
 
     // other cached timezone
     // only cache CCTZ, won't caculate offsets
-    static std::vector<std::string> other_timezones = {"America/Chicago", "Asia/Yangon"};
+    static std::vector<std::string> other_timezones = {
+#include "othertimezone.dat"
+    };
     for (const auto& timezone : other_timezones) {
         cctz::time_zone ctz;
         CHECK(cctz::load_time_zone(timezone, &ctz));
