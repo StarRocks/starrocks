@@ -170,4 +170,3 @@ int64_t TimezoneUtils::to_utc_offset(const cctz::time_zone& ctz) {
 }
 
 } // namespace starrocks
-
