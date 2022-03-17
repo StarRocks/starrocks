@@ -4497,24 +4497,22 @@ public class Catalog {
         // 1.1 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
-            sb.append("CREATE VIEW `").append(table.getName()).append("`\n(\n");
-            int idx = 0;
-            int maxIdx = table.getBaseSchema().size();
+            sb.append("CREATE VIEW `").append(table.getName()).append("` (");
+            List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
-                sb.append(column.getName());
+                StringBuilder colSb = new StringBuilder();
+                colSb.append(column.getName());
                 if (!Strings.isNullOrEmpty(column.getComment())) {
-                    sb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                    colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
                 }
-                if (++idx != maxIdx) {
-                    sb.append(",");
-                }
-                sb.append("\n");
+                colDef.add(colSb.toString());
             }
-            sb.append(")\n");
+            sb.append(Joiner.on(", ").join(colDef));
+            sb.append(")");
             if (!Strings.isNullOrEmpty(view.getComment())) {
-                sb.append("COMMENT \"").append(view.getComment()).append("\"\n");
+                sb.append(" COMMENT \"").append(view.getComment()).append("\"");
             }
-            sb.append("AS\n").append(view.getInlineViewDef()).append(";");
+            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
