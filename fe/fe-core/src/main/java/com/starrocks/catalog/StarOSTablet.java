@@ -9,6 +9,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Set;
 
 /**
  * This class represents the cloud olap tablet related metadata.
@@ -45,7 +46,7 @@ public class StarOSTablet extends Tablet {
         this.dataSize = dataSize;
     }
 
-    // Version is not used
+    // version is not used
     @Override
     public long getRowCount(long version) {
         return rowCount;
@@ -53,6 +54,15 @@ public class StarOSTablet extends Tablet {
 
     public void setRowCount(long rowCount) {
         this.rowCount = rowCount;
+    }
+
+    public long getPrimaryBackendId() {
+        return Catalog.getCurrentCatalog().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+    }
+
+    @Override
+    public Set<Long> getBackendIds() {
+        return Catalog.getCurrentCatalog().getStarOSAgent().getBackendIdsByShard(shardId);
     }
 
     @Override

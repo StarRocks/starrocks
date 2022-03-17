@@ -54,7 +54,6 @@ public class FunctionSet {
     public static final String MIN = "min";
     public static final String SUM = "sum";
     public static final String AVG = "avg";
-    public static final String TRUNCATE_DECIMAL = "truncate_decimal";
     public static final String MONEY_FORMAT = "money_format";
     public static final String STR_TO_DATE = "str_to_date";
     public static final String HLL_UNION = "hll_union";
@@ -176,10 +175,12 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
+
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions = ImmutableSet.of("if",
-            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "bitmap_hash", "percentile_hash", "hll_hash");
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce", "bitmap_hash", "percentile_hash", "hll_hash",
+            "json_array", "json_object");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -224,6 +225,13 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .build();
+
+    public static final Set<String> decimalRoundFunctions =
+            ImmutableSet.<String>builder()
+                    .add("truncate")
+                    .add("round")
+                    .add("round_up_to")
                     .build();
 
     public FunctionSet() {
@@ -558,8 +566,6 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
-
-
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",

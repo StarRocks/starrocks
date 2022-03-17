@@ -328,7 +328,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -341,7 +341,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -505,7 +505,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -513,9 +513,13 @@ public class ExpressionAnalyzer {
                     throw new SemanticException("Time Type can not used in %s function",
                             fnName);
                 }
-            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3) ||
-                    // truncate have only decimal version
-                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
+                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+                // Since the priority of decimal version is higher than double version (according functionId),
+                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
+                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
+                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
+                // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
             } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
@@ -620,8 +624,7 @@ public class ExpressionAnalyzer {
                         .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
             } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
                     DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equalsIgnoreCase(fnName) ||
-                    FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
+                    FunctionSet.IF.equalsIgnoreCase(fnName)) {
                 // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
                 // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
                 List<Type> argTypes;
@@ -635,12 +638,7 @@ public class ExpressionAnalyzer {
                 Type returnType = fn.getReturnType();
                 // Decimal v3 function return type maybe need change
                 if (returnType.isDecimalV3() && commonType.isValid()) {
-                    if (FunctionSet.TRUNCATE_DECIMAL.equalsIgnoreCase(fnName)) {
-                        // Function truncate_decimal may change the scale, we need to calculate the scale of the return type
-                        returnType = DecimalV3FunctionAnalyzer.getReturnTypeOfTruncate(node, argTypes);
-                    } else {
-                        returnType = commonType;
-                    }
+                    returnType = commonType;
                 }
                 ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
                         fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
@@ -654,6 +652,12 @@ public class ExpressionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
 
                 fn = newFn;
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
+                // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
+                // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
+                List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
+                        .collect(Collectors.toList());
+                fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
             }
             return fn;
         }

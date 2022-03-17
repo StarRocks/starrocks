@@ -301,7 +301,7 @@ column statistics:
 PLAN FRAGMENT 6(F01)
 
 Input Partition: RANDOM
-OutPut Partition: BUCKET_SHFFULE_HASH_PARTITIONED: 26: O_ORDERKEY
+OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 26: O_ORDERKEY
 OutPut Exchange Id: 06
 
 5:Project

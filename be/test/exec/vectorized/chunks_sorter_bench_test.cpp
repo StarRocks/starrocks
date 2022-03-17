@@ -28,21 +28,31 @@ public:
         _runtime_state = _create_runtime_state();
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index) {
+    void TearDown() { _runtime_state.reset(); }
+
+    static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index,
+                                                                        bool low_card) {
+        using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
+        using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, false);
         auto expr = std::make_unique<SlotRef>(type_desc, 0, slot_index);
 
         std::random_device dev;
         std::mt19937 rng(dev());
-        std::uniform_int_distribution<std::mt19937::result_type> uniform_int(1, 1'000'000 * std::pow(2, slot_index));
-        std::poisson_distribution<std::mt19937::result_type> poisson_int(1000000);
+        UniformInt uniform_int;
+        if (low_card) {
+            uniform_int.param(UniformInt::param_type(1, 100 * std::pow(2, slot_index)));
+        } else {
+            uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
+        }
+        PoissonInt poisson_int(100'000);
         static std::string alphanum =
                 "0123456789"
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                 "abcdefghijklmnopqrstuvwxyz";
 
         auto gen_rand_str = [&]() {
-            int str_len = uniform_int(rng) % 10;
+            int str_len = uniform_int(rng) % 20;
             int str_start = std::min(poisson_int(rng) % alphanum.size(), alphanum.size() - str_len);
             Slice rand_str(alphanum.c_str() + str_start, str_len);
             return rand_str;
@@ -80,14 +90,21 @@ enum SortAlgorithm : int {
     MergeSort = 3, // ChunksSorterTopN
 };
 
-static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy, int num_chunks,
-                     int num_columns, int limit = -1) {
+static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy,
+                     PrimitiveType data_type, int num_chunks, int num_columns, int limit = -1, bool low_card = false) {
+    // state.PauseTiming();
     ChunkSorterBase suite;
     suite.SetUp();
 
-    // TODO more data type
-    const auto& int_type_desc = TypeDescriptor(TYPE_INT);
-    // const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TypeDescriptor type_desc;
+    if (data_type == TYPE_INT) {
+        type_desc = TypeDescriptor(TYPE_INT);
+    } else if (data_type == TYPE_VARCHAR) {
+        type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    } else {
+        ASSERT_TRUE(false) << "not support type: " << data_type;
+    }
+
     Columns columns;
     std::vector<std::unique_ptr<SlotRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
@@ -96,7 +113,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     Chunk::SlotHashMap map;
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_column(int_type_desc, i);
+        auto [column, expr] = suite.build_column(type_desc, i, low_card);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -111,8 +128,6 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     int64_t data_size = 0;
     int64_t mem_usage = 0;
     for (auto _ : state) {
-        state.PauseTiming();
-
         std::unique_ptr<ChunksSorter> sorter;
         size_t expected_rows = 0;
         size_t total_rows = chunk->num_rows() * num_chunks;
@@ -174,33 +189,53 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
+        sorter->finish(suite._runtime_state.get());
     }
     state.counters["rows_sorted"] += item_processed;
     state.counters["data_size"] += data_size;
     state.counters["mem_usage"] = mem_usage;
     state.SetItemsProcessed(item_processed);
+
+    suite.TearDown();
 }
 
 // Sort full data: ORDER BY
 static void BM_fullsort_row_wise(benchmark::State& state) {
-    do_bench(state, FullSort, RowWise, state.range(0), state.range(1));
+    do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1));
 }
 static void BM_fullsort_column_wise(benchmark::State& state) {
-    do_bench(state, FullSort, ColumnWise, state.range(0), state.range(1));
+    do_bench(state, FullSort, ColumnWise, TYPE_INT, state.range(0), state.range(1));
 }
+static void BM_fullsort_column_incr(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1));
+}
+static void BM_fullsort_varchar_column_wise(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnWise, TYPE_VARCHAR, state.range(0), state.range(1));
+}
+static void BM_fullsort_varchar_column_incr(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_VARCHAR, state.range(0), state.range(1));
+}
+// Low cardinality
+static void BM_fullsort_low_card_column_wise(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), -1, true);
+}
+static void BM_fullsort_low_card_column_incr(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), -1, true);
+}
+
 static void BM_heapsort_row_wise(benchmark::State& state) {
-    do_bench(state, HeapSort, RowWise, state.range(0), state.range(1));
+    do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1));
 }
 static void BM_mergesort_row_wise(benchmark::State& state) {
-    do_bench(state, MergeSort, RowWise, state.range(0), state.range(1));
+    do_bench(state, MergeSort, RowWise, TYPE_INT, state.range(0), state.range(1));
 }
 
 // Sort partial data: ORDER BY xxx LIMIT
 static void BM_topn_limit_heapsort(benchmark::State& state) {
-    do_bench(state, HeapSort, RowWise, state.range(0), state.range(1), state.range(2));
+    do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
 }
 static void BM_topn_limit_mergesort(benchmark::State& state) {
-    do_bench(state, MergeSort, RowWise, state.range(0), state.range(1), state.range(2));
+    do_bench(state, MergeSort, RowWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -227,11 +262,69 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 
 BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_column_incr)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_varchar_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_column_wise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_column_incr)->Apply(CustomArgsFull);
 BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort)->Apply(CustomArgsLimit);
+
+static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
+    for (size_t i = 0; i < bytes.size(); i++) {
+        if (bytes[i] == 0) {
+            return i;
+        }
+    }
+    return bytes.size();
+}
+
+static void BM_find_zero_plain(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(plain_find_zero(bytes));
+    }
+}
+BENCHMARK(BM_find_zero_plain)->Range(8, 8 << 12);
+
+static void BM_find_zero_simd(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(SIMD::find_zero(bytes, 0));
+    }
+}
+BENCHMARK(BM_find_zero_simd)->Range(8, 8 << 12);
+
+static void BM_find_zero_stdfind(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(std::find(bytes.begin(), bytes.end(), 0));
+    }
+}
+BENCHMARK(BM_find_zero_stdfind)->Range(8, 8 << 12);
+
+static void BM_find_zero_memchr(benchmark::State& state) {
+    int len = state.range(0);
+    std::vector<uint8_t> bytes(len, 1);
+    bytes[len - 3] = 0;
+
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(memchr(bytes.data(), 0, bytes.size()));
+    }
+}
+BENCHMARK(BM_find_zero_memchr)->Range(8, 8 << 12);
 
 } // namespace starrocks::vectorized
 

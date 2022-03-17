@@ -96,18 +96,20 @@ public:
         return Status::OK();
     }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         if (_is_finishing) {
             ++lifecycle_error_num;
         }
         _is_finishing = true;
+        return Status::OK();
     }
 
-    void set_finished(RuntimeState* state) override {
+    Status set_finished(RuntimeState* state) override {
         if (_is_finished) {
             ++lifecycle_error_num;
         }
         _is_finished = true;
+        return Status::OK();
     }
 
     void close(RuntimeState* state) override {
@@ -115,7 +117,7 @@ public:
             ++lifecycle_error_num;
         }
         _is_closed = true;
-        Operator::close(state);
+        return Operator::close(state);
     }
 
 private:
@@ -160,18 +162,20 @@ public:
         return Status::OK();
     }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         if (_is_finishing) {
             ++lifecycle_error_num;
         }
         _is_finishing = true;
+        return Status::OK();
     }
 
-    void set_finished(RuntimeState* state) override {
+    Status set_finished(RuntimeState* state) override {
         if (_is_finished) {
             ++lifecycle_error_num;
         }
         _is_finished = true;
+        return Status::OK();
     }
 
     void close(RuntimeState* state) override {
@@ -182,7 +186,7 @@ public:
             ++lifecycle_error_num;
         }
         _is_closed = true;
-        SourceOperator::close(state);
+        return SourceOperator::close(state);
     }
 
     bool has_output() const override { return _index < _chunks.size(); }
@@ -248,9 +252,10 @@ public:
     bool need_input() const override { return true; }
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished && !has_output(); }
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
         _is_finished = true;
+        return Status::OK();
     }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
@@ -299,9 +304,10 @@ public:
     bool need_input() const override { return true; }
     bool has_output() const override { return false; }
     bool is_finished() const override { return _is_finished; }
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
         _is_finished = true;
+        return Status::OK();
     }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;

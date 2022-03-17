@@ -17,7 +17,6 @@ void JsonColumn::append_datum(const Datum& datum) {
         CHECK(false) << "invalid datum type";
     }
 }
-
 int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::vectorized::Column& rhs,
                            int nan_direction_hint) const {
     JsonValue* x = get_object(left_idx);

@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -261,13 +262,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
-    private synchronized void eraseTable(long currentTimeMs) {
+    @VisibleForTesting
+    public synchronized void eraseTable(long currentTimeMs) {
+        List<RecycleTableInfo> tableToRemove = Lists.newArrayList();
+        int currentEraseOpCnt = 0;
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = tableEntry.entrySet().iterator();
-            List<Long> tableIdList = Lists.newArrayList();
-            int currentEraseOpCnt = 0;
-            while (tableIter.hasNext()) {
-                Map.Entry<Long, RecycleTableInfo> entry = tableIter.next();
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
                 RecycleTableInfo tableInfo = entry.getValue();
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
@@ -276,24 +276,28 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     if (table.getType() == TableType.OLAP) {
                         Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
                     }
-
-                    // erase table
-                    tableIter.remove();
-                    idToRecycleTime.remove(tableId);
-                    nameToTableInfo.row(tableInfo.dbId).remove(table.getName());
-                    tableIdList.add(tableId);
-                    // log
-                    LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
+                    tableToRemove.add(tableInfo);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                         break;
                     }
                 }
             } // end for tables
-            if (!tableIdList.isEmpty()) {
-                Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
-                LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
+        }
+
+        List<Long> tableIdList = Lists.newArrayList();
+        if (!tableToRemove.isEmpty()) {
+            for (RecycleTableInfo tableInfo : tableToRemove) {
+                Table table = tableInfo.getTable();
+                long tableId = table.getId();
+                idToRecycleTime.remove(tableId);
+                nameToTableInfo.remove(tableInfo.dbId, table.getName());
+                idToTableInfo.remove(tableInfo.dbId, tableId);
+                LOG.info("erase table[{}-{}] in memory finished.", tableId, table.getName());
+                tableIdList.add(tableId);
             }
+            Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
+            LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
         }
     }
 
@@ -596,6 +600,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -603,8 +608,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            invertedIndex.addReplica(tabletId, replica);
+                        if (!useStarOS) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
                         }
                     }
                 } // end for indices
@@ -617,6 +624,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             long tableId = partitionInfo.getTableId();
             Partition partition = partitionInfo.getPartition();
             long partitionId = partition.getId();
+            boolean useStarOS = partition.isUseStarOS();
 
             // we need to get olap table to get schema hash info
             // first find it in catalog. if not found, it should be in recycle bin
@@ -655,8 +663,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                        invertedIndex.addReplica(tabletId, replica);
+                    if (!useStarOS) {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            invertedIndex.addReplica(tabletId, replica);
+                        }
                     }
                 }
             } // end for indices

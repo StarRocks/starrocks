@@ -28,7 +28,6 @@ Status IntersectProbeSinkOperatorFactory::prepare(RuntimeState* state) {
 
 void IntersectProbeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_dst_exprs, state);
-
     OperatorFactory::close(state);
 }
 

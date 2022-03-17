@@ -567,7 +567,7 @@ public:
         return Status::OK();
     }
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) override {
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
         DIR* d = opendir(dir.c_str());
         if (d == nullptr) {
             return io_error(dir, errno);

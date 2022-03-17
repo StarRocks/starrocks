@@ -42,9 +42,10 @@ public:
 
     bool is_finished() const override { return _is_finished || _intersect_ctx->is_finished(); }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _intersect_ctx->finish_build_ht();
+        return Status::OK();
     }
 
     Status prepare(RuntimeState* state) override;

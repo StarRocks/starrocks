@@ -191,7 +191,7 @@ column statistics:
 PLAN FRAGMENT 2(F05)
 
 Input Partition: RANDOM
-OutPut Partition: BUCKET_SHFFULE_HASH_PARTITIONED: 20: PS_SUPPKEY
+OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 20: PS_SUPPKEY
 OutPut Exchange Id: 34
 
 33:Project
@@ -243,7 +243,7 @@ column statistics:
 PLAN FRAGMENT 3(F06)
 
 Input Partition: RANDOM
-OutPut Partition: BUCKET_SHFFULE_HASH_PARTITIONED: 1: P_PARTKEY
+OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 1: P_PARTKEY
 OutPut Exchange Id: 31
 
 30:Project
@@ -324,7 +324,7 @@ column statistics:
 PLAN FRAGMENT 4(F13)
 
 Input Partition: RANDOM
-OutPut Partition: BUCKET_SHFFULE_HASH_PARTITIONED: 1: P_PARTKEY
+OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 1: P_PARTKEY
 OutPut Exchange Id: 28
 
 27:Project

@@ -3,7 +3,8 @@
 #include "chunks_sorter_full_sort.h"
 
 #include "column/type_traits.h"
-#include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/sort_column.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
@@ -20,6 +21,10 @@ public:
     template <PrimitiveType PT, bool stable>
     static Status sort_on_not_null_column(RuntimeState* state, Column* column, bool is_asc_order, Permutation& perm) {
         return sort_on_not_null_column_within_range<PT, stable>(state, column, is_asc_order, perm, 0, perm.size());
+    }
+
+    static Status sort_and_tie_helper(Column* column, bool is_asc, bool is_null_first, Permutation& perm) {
+        return Status::OK();
     }
 
     // Sort on type-known column, and the column may have NULL values in the sorting range.
@@ -346,16 +351,20 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     if (_compare_strategy != Default) {
         strategy = _compare_strategy;
     } else {
+        // TODO: turn on the ColumnInc strategy
         if (_get_number_of_order_by_columns() <= 3) {
             strategy = ColumnWise;
         } else {
             strategy = RowWise;
         }
+        // strategy = ColumnInc;
     }
-    if (strategy == ColumnWise) {
-        RETURN_IF_ERROR(_sort_by_columns(state));
+    if (strategy == ColumnInc) {
+        return _sort_by_column_inc(state);
+    } else if (strategy == ColumnWise) {
+        return _sort_by_columns(state);
     } else {
-        RETURN_IF_ERROR(_sort_by_row_cmp(state));
+        return _sort_by_row_cmp(state);
     }
     return Status::OK();
 }
@@ -439,6 +448,14 @@ Status ChunksSorterFullSort::_sort_by_row_cmp(RuntimeState* state) {
         break;                                                                                                         \
     }
 
+// Sort in column-wise and incremental style
+Status ChunksSorterFullSort::_sort_by_column_inc(RuntimeState* state) {
+    SCOPED_TIMER(_sort_timer);
+
+    return sort_and_tie_columns(state->cancelled_ref(), _sorted_segment->order_by_columns, _sort_order_flag,
+                                _null_first_flag, &_sorted_permutation);
+}
+
 // Sort in column style to avoid calling virtual methods of Column.
 Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
     SCOPED_TIMER(_sort_timer);
@@ -455,13 +472,9 @@ Status ChunksSorterFullSort::_sort_by_columns(RuntimeState* state) {
         }
 
         bool is_asc_order = (_sort_order_flag[col_index] == 1);
-        bool is_null_first;
-        if (is_asc_order) {
-            is_null_first = (_null_first_flag[col_index] == -1);
-        } else {
-            is_null_first = (_null_first_flag[col_index] == 1);
-        }
+        bool is_null_first = is_asc_order ? (_null_first_flag[col_index] == -1) : (_null_first_flag[col_index] == 1);
         ExprContext* expr_ctx = (*_sort_exprs)[col_index];
+
         if (column->is_nullable()) {
             switch (expr_ctx->root()->type().type) {
                 APPLY_FOR_ALL_SCALAR_TYPE(CASE_FOR_NULLABLE_COLUMN_SORT)

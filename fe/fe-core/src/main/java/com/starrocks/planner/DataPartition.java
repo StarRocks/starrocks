@@ -59,7 +59,7 @@ public class DataPartition {
             Preconditions.checkState(!exprs.isEmpty());
             Preconditions.checkState(
                     type == TPartitionType.HASH_PARTITIONED || type == TPartitionType.RANGE_PARTITIONED
-                            || type == TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED);
+                            || type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED);
             this.type = type;
             this.partitionExprs = ImmutableList.copyOf(exprs);
         } else {
@@ -89,7 +89,7 @@ public class DataPartition {
     }
 
     public boolean isBucketShuffle() {
-        return type == TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED;
+        return type == TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED;
     }
 
     public TPartitionType getType() {

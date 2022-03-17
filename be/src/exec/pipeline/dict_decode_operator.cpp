@@ -8,7 +8,7 @@
 namespace starrocks::pipeline {
 
 Status DictDecodeOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
     return Status::OK();
 }
 

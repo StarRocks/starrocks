@@ -38,9 +38,10 @@ bool ExchangeMergeSortSourceOperator::is_finished() const {
     }
 }
 
-void ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
+Status ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-    return _stream_recvr->close();
+    _stream_recvr->close();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {

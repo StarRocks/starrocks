@@ -186,9 +186,6 @@ struct CreateBlockOptions {
 struct BlockManagerOptions {
     BlockManagerOptions() = default;
 
-    // If false, metrics will not be produced.
-    bool enable_metric = false;
-
     // Whether the block manager should only allow reading. Defaults to false.
     bool read_only = false;
 };

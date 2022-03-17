@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -47,6 +48,8 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     @SerializedName(value = "isAlive")
     public boolean isAlive;
 
+    private int heartbeatRetryTimes = 0;
+
     public FsBroker() {
     }
 
@@ -71,12 +74,17 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
             }
             lastUpdateTime = hbResponse.getHbTime();
             heartbeatErrMsg = "";
+            this.heartbeatRetryTimes = 0;
         } else {
-            if (isAlive) {
-                isAlive = false;
-                isChanged = true;
+            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
+                this.heartbeatRetryTimes++;
+            } else {
+                if (isAlive) {
+                    isAlive = false;
+                    isChanged = true;
+                }
+                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
             }
-            heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
         }
 
         return isChanged;
