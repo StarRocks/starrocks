@@ -54,7 +54,6 @@ public class FunctionSet {
     public static final String MIN = "min";
     public static final String SUM = "sum";
     public static final String AVG = "avg";
-    public static final String TRUNCATE = "truncate";
     public static final String MONEY_FORMAT = "money_format";
     public static final String STR_TO_DATE = "str_to_date";
     public static final String HLL_UNION = "hll_union";
@@ -226,6 +225,13 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .build();
+
+    public static final Set<String> decimalRoundFunctions =
+            ImmutableSet.<String>builder()
+                    .add("truncate")
+                    .add("round")
+                    .add("round_up_to")
                     .build();
 
     public FunctionSet() {
@@ -560,7 +566,6 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
-
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",
