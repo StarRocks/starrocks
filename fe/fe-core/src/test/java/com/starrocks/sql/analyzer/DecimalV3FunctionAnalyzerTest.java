@@ -36,7 +36,7 @@ public class DecimalV3FunctionAnalyzerTest {
         Function function = Expr.getBuiltinFunction("truncate", paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assert.assertNotNull(function);
-        Function newFn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, function, paramTypes);
+        Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
         Assert.assertTrue(returnType.isDouble());
     }
@@ -55,7 +55,7 @@ public class DecimalV3FunctionAnalyzerTest {
         Function function = Expr.getBuiltinFunction("truncate", paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assert.assertNotNull(function);
-        Function newFn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, function, paramTypes);
+        Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
         Assert.assertTrue(returnType.isDecimalV3());
         Assert.assertEquals(Integer.valueOf(38), returnType.getPrecision());
@@ -77,7 +77,7 @@ public class DecimalV3FunctionAnalyzerTest {
         Function function = Expr.getBuiltinFunction("truncate", paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assert.assertNotNull(function);
-        Function newFn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, function, paramTypes);
+        Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
         Assert.assertTrue(returnType.isDecimalV3());
         Assert.assertEquals(Integer.valueOf(38), returnType.getPrecision());
@@ -97,7 +97,7 @@ public class DecimalV3FunctionAnalyzerTest {
         Function function = Expr.getBuiltinFunction("truncate", paramTypes.toArray(new Type[0]),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assert.assertNotNull(function);
-        Function newFn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, function, paramTypes);
+        Function newFn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, function, paramTypes);
         Type returnType = newFn.getReturnType();
         Assert.assertTrue(returnType.isDouble());
     }
