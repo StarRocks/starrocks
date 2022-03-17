@@ -219,6 +219,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
             }
         }
+        if (context.EXPLAIN() != null) {
+            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+        }
 
         return new InsertStmt(
                 new InsertTarget(targetTableName, null),

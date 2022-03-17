@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -547,5 +548,13 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
+    }
+
+    @Test
+    public void testExplainInsert() throws Exception {
+        String sql = "explain insert into t0 select * from t0";
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        Assert.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 }
