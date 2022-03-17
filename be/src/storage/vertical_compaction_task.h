@@ -35,7 +35,7 @@ private:
                                  std::vector<vectorized::RowSourceMask>* source_masks, Statistics* statistics);
 
     StatusOr<size_t> _compact_data(bool is_key, int32_t chunk_size, const std::vector<uint32_t>& column_group,
-                                   vectorized::TabletReader& reader, const vectorized::Schema& schema,
+                                   const vectorized::TabletReader& reader, const vectorized::Schema& schema,
                                    RowsetWriter* output_rs_writer, vectorized::RowSourceMaskBuffer* mask_buffer,
                                    std::vector<vectorized::RowSourceMask>* source_masks);
 

@@ -175,7 +175,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
                                                        const std::vector<uint32_t>& column_group,
-                                                       vectorized::TabletReader& reader,
+                                                       const vectorized::TabletReader& reader,
                                                        const vectorized::Schema& schema, RowsetWriter* output_rs_writer,
                                                        vectorized::RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<vectorized::RowSourceMask>* source_masks) {
