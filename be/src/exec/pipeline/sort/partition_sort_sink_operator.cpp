@@ -41,13 +41,14 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectoriz
     return Status::OK();
 }
 
-void PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
-    _chunks_sorter->finish(state);
+Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    RETURN_IF_ERROR(_chunks_sorter->finish(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.
     _sort_context->finish_partition(_chunks_sorter->get_partition_rows());
     _is_finished = true;
+    return Status::OK();
 }
 
 Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
