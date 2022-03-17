@@ -9,10 +9,17 @@
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
 #include "storage/fs/block_manager.h"
+#include "storage/rowset/rowset.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
 namespace starrocks {
+
+class Tablet;
+namespace vectorized {
+class Schema;
+class Column;
+} // namespace vectorized
 
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
@@ -103,6 +110,8 @@ public:
 
     // [not thread-safe]
     virtual size_t capacity() = 0;
+
+    virtual void reserve(size_t size) = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
@@ -217,6 +226,9 @@ public:
     // load required states from underlying file
     Status load(const PersistentIndexMetaPB& index_meta);
 
+    // build PersistentIndex from pre-existing tablet data
+    Status build(Tablet* tablet);
+
     // start modification with intended version
     Status prepare(const EditVersion& version);
 
@@ -290,6 +302,13 @@ private:
 
     Status _load(const PersistentIndexMetaPB& index_meta);
     Status _reload(const PersistentIndexMetaPB& index_meta);
+
+    // commit index meta
+    Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
+
+    // insert rowset data into persistent index
+    Status _upsert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const vectorized::Schema& pkey_schema,
+                           int64_t apply_version, std::unique_ptr<vectorized::Column> pk_column);
 
     // index storage directory
     std::string _path;

@@ -688,7 +688,7 @@ void TabletUpdates::_stop_and_wait_apply_done() {
     }
 }
 
-void TabletUpdates::_get_latest_applied_version(EditVersion* latest_applied_version) {
+void TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
     std::lock_guard l(_lock);
     *latest_applied_version = _edit_version_infos[_apply_version_idx]->version;
 }
@@ -738,7 +738,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
-    _get_latest_applied_version(&latest_applied_version);
+    get_latest_applied_version(&latest_applied_version);
     st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
