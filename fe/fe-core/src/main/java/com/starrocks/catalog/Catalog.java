@@ -7253,7 +7253,7 @@ public class Catalog {
                     errMsg.append(";");
                 }
             } catch (Exception e) {
-                LOG.warn("set remote fe[%s] config failed", fe.getHost(), e);
+                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
                 errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
             }
         }
