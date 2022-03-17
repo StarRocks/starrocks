@@ -174,7 +174,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
             // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
             // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
@@ -185,7 +185,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
                 if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     need_local_shuffle = false;
                 }
             }
