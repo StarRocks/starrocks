@@ -229,7 +229,7 @@ public class HiveTable extends Table {
             if (type == null) {
                 throw new DdlException("hive table column type cast failed:" + fieldSchema.getType());
             }
-            Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, false,
+            Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, true,
                     NULL_DEFAULT_VALUE, fieldSchema.getComment());
             fullSchema.add(column);
         }
