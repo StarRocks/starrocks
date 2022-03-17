@@ -357,7 +357,7 @@ Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
         } else {
             strategy = RowWise;
         }
-        strategy = ColumnInc;
+        // strategy = ColumnInc;
     }
     if (strategy == ColumnInc) {
         return _sort_by_column_inc(state);
