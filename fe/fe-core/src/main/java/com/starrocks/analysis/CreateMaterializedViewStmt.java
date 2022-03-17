@@ -186,6 +186,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 throw new AnalysisException("The materialized view currently does not support * in select statement.");
             }
             Expr selectListItemExpr = selectListItem.getExpr();
+            if (selectListItemExpr == null) {
+                throw new AnalysisException("Unexpect selectListItemExpr is null.");
+            }
             if (!(selectListItemExpr instanceof SlotRef) && !(selectListItemExpr instanceof FunctionCallExpr)) {
                 throw new AnalysisException("The materialized view only support the single column or function expr. "
                         + "Error column: " + selectListItemExpr.toSql());
