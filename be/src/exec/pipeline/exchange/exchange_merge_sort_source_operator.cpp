@@ -22,8 +22,8 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 bool ExchangeMergeSortSourceOperator::has_output() const {
@@ -134,9 +134,9 @@ Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
+void ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
     _sort_exec_exprs->close(state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

@@ -42,7 +42,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ScanOperator::close(RuntimeState* state) {
+void ScanOperator::close(RuntimeState* state) {
     DCHECK(_num_running_io_tasks == 0);
 
     if (_workgroup == nullptr) {
@@ -56,7 +56,7 @@ Status ScanOperator::close(RuntimeState* state) {
     }
 
     do_close(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 bool ScanOperator::has_output() const {
@@ -268,11 +268,11 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
     return do_create(degree_of_parallelism, driver_sequence);
 }
 
-Status ScanOperatorFactory::close(RuntimeState* state) {
+void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     Expr::close(conjunct_ctxs, state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 // ====================

@@ -30,7 +30,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -83,7 +83,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     int32_t _num_sender;

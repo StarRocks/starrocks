@@ -23,9 +23,9 @@ public:
 
     ~CrossJoinRightSinkOperator() override = default;
 
-    Status close(RuntimeState* state) override {
+    void close(RuntimeState* state) override {
         _cross_join_context->unref(state);
-        return Operator::close(state);
+        Operator::close(state);
     }
 
     bool has_output() const override { return false; }

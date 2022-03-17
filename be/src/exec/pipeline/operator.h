@@ -72,7 +72,7 @@ public:
     // close is used to do the cleanup work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
@@ -192,7 +192,7 @@ public:
     virtual bool is_source() const { return false; }
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
     std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
 
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core

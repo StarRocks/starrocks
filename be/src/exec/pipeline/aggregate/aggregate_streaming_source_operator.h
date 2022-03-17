@@ -24,7 +24,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

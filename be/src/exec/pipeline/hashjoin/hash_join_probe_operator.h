@@ -21,7 +21,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
     bool need_input() const override;
@@ -54,7 +54,7 @@ public:
     ~HashJoinProbeOperatorFactory() override = default;
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

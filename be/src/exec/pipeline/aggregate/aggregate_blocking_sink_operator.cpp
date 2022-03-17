@@ -12,9 +12,9 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     return _aggregator->open(state);
 }
 
-Status AggregateBlockingSinkOperator::close(RuntimeState* state) {
+void AggregateBlockingSinkOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {

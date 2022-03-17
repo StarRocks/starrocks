@@ -18,9 +18,9 @@ Status AggregateDistinctBlockingSourceOperator::set_finished(RuntimeState* state
     return _aggregator->set_finished();
 }
 
-Status AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
+void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
-    return SourceOperator::close(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {

@@ -30,7 +30,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ResultSinkOperator::close(RuntimeState* state) {
+void ResultSinkOperator::close(RuntimeState* state) {
     Status st;
     // Close the writer
     if (_writer != nullptr) {
@@ -56,7 +56,7 @@ Status ResultSinkOperator::close(RuntimeState* state) {
                                                         state->fragment_instance_id());
     }
 
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
@@ -107,8 +107,8 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ResultSinkOperatorFactory::close(RuntimeState* state) {
+void ResultSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_output_expr_ctxs, state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 } // namespace starrocks::pipeline

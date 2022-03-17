@@ -13,9 +13,9 @@
 
 namespace starrocks::pipeline {
 
-Status LocalMergeSortSourceOperator::close(RuntimeState* state) {
+void LocalMergeSortSourceOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {

@@ -18,9 +18,9 @@ Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     return _except_ctx->prepare(state, _dst_exprs);
 }
 
-Status ExceptBuildSinkOperator::close(RuntimeState* state) {
+void ExceptBuildSinkOperator::close(RuntimeState* state) {
     _except_ctx->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -32,10 +32,10 @@ Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExceptBuildSinkOperatorFactory::close(RuntimeState* state) {
+void ExceptBuildSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_dst_exprs, state);
 
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

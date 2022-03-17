@@ -8,13 +8,13 @@ StatusOr<vectorized::ChunkPtr> ExceptOutputSourceOperator::pull_chunk(RuntimeSta
     return _except_ctx->pull_chunk(state);
 }
 
-Status ExceptOutputSourceOperator::close(RuntimeState* state) {
+void ExceptOutputSourceOperator::close(RuntimeState* state) {
     _except_ctx->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
-Status ExceptOutputSourceOperatorFactory::close(RuntimeState* state) {
-    return SourceOperatorFactory::close(state);
+void ExceptOutputSourceOperatorFactory::close(RuntimeState* state) {
+    SourceOperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

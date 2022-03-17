@@ -44,7 +44,7 @@ public:
         return Status::OK();
     }
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -77,7 +77,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;

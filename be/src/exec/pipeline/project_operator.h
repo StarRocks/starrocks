@@ -25,7 +25,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override { return _cur_chunk != nullptr; }
 
@@ -75,7 +75,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::vector<int32_t> _column_ids;

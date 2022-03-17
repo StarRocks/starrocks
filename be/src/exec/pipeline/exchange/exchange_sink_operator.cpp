@@ -543,8 +543,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void ExchangeSinkOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
@@ -646,9 +646,9 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_partition_expr_ctxs, state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

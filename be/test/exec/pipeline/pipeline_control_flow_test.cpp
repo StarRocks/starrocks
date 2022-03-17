@@ -112,7 +112,7 @@ public:
         return Status::OK();
     }
 
-    Status close(RuntimeState* state) override {
+    void close(RuntimeState* state) override {
         if (_is_closed) {
             ++lifecycle_error_num;
         }
@@ -178,7 +178,7 @@ public:
         return Status::OK();
     }
 
-    Status close(RuntimeState* state) override {
+    void close(RuntimeState* state) override {
         if (_pending_finish_cnt >= 0) {
             ++lifecycle_error_num;
         }

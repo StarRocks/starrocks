@@ -18,9 +18,9 @@ Status IntersectBuildSinkOperator::prepare(RuntimeState* state) {
     return _intersect_ctx->prepare(state, _dst_exprs);
 }
 
-Status IntersectBuildSinkOperator::close(RuntimeState* state) {
+void IntersectBuildSinkOperator::close(RuntimeState* state) {
     _intersect_ctx->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 Status IntersectBuildSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -32,10 +32,10 @@ Status IntersectBuildSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status IntersectBuildSinkOperatorFactory::close(RuntimeState* state) {
+void IntersectBuildSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_dst_exprs, state);
 
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

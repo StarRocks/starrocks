@@ -12,13 +12,13 @@ HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t i
           _join_prober(std::move(join_prober)),
           _join_builder(std::move(join_builder)) {}
 
-Status HashJoinProbeOperator::close(RuntimeState* state) {
+void HashJoinProbeOperator::close(RuntimeState* state) {
     _join_prober->unref(state);
     if (_join_builder != _join_prober) {
         _join_builder->unref(state);
     }
 
-    return OperatorWithDependency::close(state);
+    OperatorWithDependency::close(state);
 }
 
 Status HashJoinProbeOperator::prepare(RuntimeState* state) {
@@ -78,8 +78,8 @@ HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t p
 Status HashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     return OperatorFactory::prepare(state);
 }
-Status HashJoinProbeOperatorFactory::close(RuntimeState* state) {
-    return OperatorFactory::close(state);
+void HashJoinProbeOperatorFactory::close(RuntimeState* state) {
+    OperatorFactory::close(state);
 }
 
 OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

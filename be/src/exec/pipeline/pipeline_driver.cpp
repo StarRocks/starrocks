@@ -453,7 +453,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
-        RETURN_IF_ERROR(op->close(state));
+        op->close(state);
     }
     COUNTER_UPDATE(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
                                              op->_finishing_timer->value() + op->_finished_timer->value() +

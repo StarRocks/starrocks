@@ -68,7 +68,7 @@ public:
     }
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     const std::vector<SlotDescriptor*>& _dst_slots;

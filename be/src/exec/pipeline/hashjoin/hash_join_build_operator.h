@@ -27,7 +27,7 @@ public:
     ~HashJoinBuildOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";
@@ -64,7 +64,7 @@ public:
                                  TJoinDistributionMode::type distribution_mode);
     ~HashJoinBuildOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:

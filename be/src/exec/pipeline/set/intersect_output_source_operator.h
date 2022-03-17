@@ -36,7 +36,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<IntersectContext> _intersect_ctx;
@@ -58,7 +58,7 @@ public:
                 _dependency_index);
     }
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     IntersectPartitionContextFactoryPtr _intersect_partition_ctx_factory;

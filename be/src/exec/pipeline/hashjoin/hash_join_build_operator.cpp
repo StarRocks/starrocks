@@ -35,13 +35,13 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
 
     return Status::OK();
 }
-Status HashJoinBuildOperator::close(RuntimeState* state) {
+void HashJoinBuildOperator::close(RuntimeState* state) {
     for (auto& read_only_join_prober : _read_only_join_probers) {
         read_only_join_prober->unref(state);
     }
     _join_builder->unref(state);
 
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
@@ -106,9 +106,9 @@ Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     return _hash_joiner_factory->prepare(state);
 }
 
-Status HashJoinBuildOperatorFactory::close(RuntimeState* state) {
+void HashJoinBuildOperatorFactory::close(RuntimeState* state) {
     _hash_joiner_factory->close(state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

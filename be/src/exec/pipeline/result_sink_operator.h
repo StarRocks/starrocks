@@ -33,7 +33,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     // Result sink will send result chunk to BufferControlBlock directly,
     // Then FE will pull result from BufferControlBlock
@@ -96,7 +96,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     void _increment_num_result_sinkers_no_barrier() { _num_result_sinkers.fetch_add(1, std::memory_order_relaxed); }

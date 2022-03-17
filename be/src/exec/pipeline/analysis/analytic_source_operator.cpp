@@ -16,9 +16,9 @@ Status AnalyticSourceOperator::set_finished(RuntimeState* state) {
     return _analytor->set_finished();
 }
 
-Status AnalyticSourceOperator::close(RuntimeState* state) {
+void AnalyticSourceOperator::close(RuntimeState* state) {
     _analytor->unref(state);
-    return SourceOperator::close(state);
+    SourceOperator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSourceOperator::pull_chunk(RuntimeState* state) {

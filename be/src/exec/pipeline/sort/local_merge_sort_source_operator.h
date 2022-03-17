@@ -25,7 +25,7 @@ public:
 
     ~LocalMergeSortSourceOperator() override = default;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 

@@ -4,9 +4,9 @@
 
 namespace starrocks::pipeline {
 
-Status ExceptProbeSinkOperator::close(RuntimeState* state) {
+void ExceptProbeSinkOperator::close(RuntimeState* state) {
     _except_ctx->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> ExceptProbeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -26,10 +26,10 @@ Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExceptProbeSinkOperatorFactory::close(RuntimeState* state) {
+void ExceptProbeSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_dst_exprs, state);
 
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

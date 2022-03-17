@@ -25,9 +25,9 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status PartitionSortSinkOperator::close(RuntimeState* state) {
+void PartitionSortSinkOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
-    return Operator::close(state);
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
@@ -89,10 +89,10 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
     return ope;
 }
 
-Status PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
+void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_analytic_partition_exprs, state);
     _sort_exec_exprs.close(state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

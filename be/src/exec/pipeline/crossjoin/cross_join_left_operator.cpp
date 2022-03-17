@@ -336,10 +336,10 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status CrossJoinLeftOperatorFactory::close(RuntimeState* state) {
+void CrossJoinLeftOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
 
-    return OperatorWithDependencyFactory::close(state);
+    OperatorWithDependencyFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

@@ -12,8 +12,8 @@ Status SelectOperator::prepare(RuntimeState* state) {
     return Operator::prepare(state);
 }
 
-Status SelectOperator::close(RuntimeState* state) {
-    return Operator::close(state);
+void SelectOperator::close(RuntimeState* state) {
+    Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
@@ -84,9 +84,9 @@ Status SelectOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status SelectOperatorFactory::close(RuntimeState* state) {
+void SelectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
-    return OperatorFactory::close(state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline
