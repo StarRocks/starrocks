@@ -778,10 +778,8 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     if (shard_info.size == 0) {
         return Status::OK();
     }
-    //std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
     RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)(*shard)->pages.data(), shard_info.bytes)));
-    //size_t shard_mask = kvs_by_shard.size() - 1;
     for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
         auto& header = (*shard)->header(pageid);
         for (uint32_t bucketid = 0; bucketid < bucket_per_page; bucketid++) {
@@ -899,7 +897,6 @@ Status ImmutableIndex::check_not_exist(size_t n, const void* keys) {
     size_t nshard = _shards.size();
     uint32_t pow = log2(nshard);
     std::vector<KeysInfo> keys_info_by_shard(nshard);
-    //uint64_t shard_mask = nshard - 1;
     for (size_t i = 0; i < n; i++) {
         const uint8_t* key = (const uint8_t*)keys + _fixed_key_size * i;
         IndexHash h(key_index_hash(key, _fixed_key_size));
@@ -1282,7 +1279,7 @@ Status PersistentIndex::_rebuild() {
 // if _l0 should be flush, there are two conditions:
 //   1. _l1 is not exist, _flush_l0 and build _l1
 //   2. _l1 is exist, merge _l0 and _l1
-// clear _l0
+// rebuild _l0 and _l1
 // In addition, there may be io waste because we write wal(dump snapshot) first and
 // do _flush_l0 or merge compaction.
 Status PersistentIndex::_check_and_flush_l0() {
