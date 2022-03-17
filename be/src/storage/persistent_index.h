@@ -282,7 +282,8 @@ private:
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
-    Status _rebuild();
+    Status _load(const PersistentIndexMetaPB& index_meta);
+    Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // index storage directory
     std::string _path;
@@ -300,6 +301,7 @@ private:
     std::unique_ptr<fs::WritableBlock> _index_block;
 
     bool _dump_snapshot = false;
+    bool _flushed = false;
 };
 
 } // namespace starrocks
