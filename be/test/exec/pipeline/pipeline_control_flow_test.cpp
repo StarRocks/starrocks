@@ -101,6 +101,7 @@ public:
             ++lifecycle_error_num;
         }
         _is_finishing = true;
+        return Status::OK();
     }
 
     Status set_finished(RuntimeState* state) override {
@@ -108,9 +109,10 @@ public:
             ++lifecycle_error_num;
         }
         _is_finished = true;
+        return Status::OK();
     }
 
-    void close(RuntimeState* state) override {
+    Status close(RuntimeState* state) override {
         if (_is_closed) {
             ++lifecycle_error_num;
         }
@@ -165,6 +167,7 @@ public:
             ++lifecycle_error_num;
         }
         _is_finishing = true;
+        return Status::OK();
     }
 
     Status set_finished(RuntimeState* state) override {
@@ -172,9 +175,10 @@ public:
             ++lifecycle_error_num;
         }
         _is_finished = true;
+        return Status::OK();
     }
 
-    void close(RuntimeState* state) override {
+    Status close(RuntimeState* state) override {
         if (_pending_finish_cnt >= 0) {
             ++lifecycle_error_num;
         }
@@ -251,6 +255,7 @@ public:
     Status set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
         _is_finished = true;
+        return Status::OK();
     }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
@@ -302,6 +307,7 @@ public:
     Status set_finishing(RuntimeState* state) override {
         TestOperator::set_finishing(state);
         _is_finished = true;
+        return Status::OK();
     }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
