@@ -2,7 +2,7 @@
 
 #include "storage/compaction_utils.h"
 
-#include "storage/level_compaction_policy.h"
+#include "storage/original_compaction_policy.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -116,8 +116,8 @@ CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_colu
 }
 
 std::unique_ptr<CompactionPolicy> CompactionUtils::create_compaction_policy(CompactionContext* context) {
-    // now only support LevelCompactionPolicy
-    return std::make_unique<LevelCompactionPolicy>(context);
+    // now only support OriginalCompactionPolicy
+    return std::make_unique<OriginalCompactionPolicy>(context);
 }
 
 } // namespace starrocks
