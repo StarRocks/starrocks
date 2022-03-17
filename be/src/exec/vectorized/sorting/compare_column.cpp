@@ -45,7 +45,7 @@ static inline int compare_column_helper(CompareVector& cmp_vector, DataComparato
     return SIMD::count_zero(cmp_vector);
 }
 
-// ColumnCompare compare a chunk with a rowj
+// ColumnCompare compare a chunk with a row
 // A plain implementation is iterate all rows in chunk, and compare the left row with right row.
 // The problem of this way is the compare overhead, since it must implement as virtual function call.
 // So here we introduce the column-wise compare algorithm:
@@ -64,7 +64,10 @@ public:
               _cmp_vector(cmp_vector),
               _rhs_value(rhs_value),
               _sort_order(sort_order),
-              _null_first(null_first) {}
+              _null_first(null_first) {
+        DCHECK(sort_order == 1 || sort_order == -1);
+        DCHECK(null_first == 1 || null_first == -1);
+    }
 
     Status do_visit(const vectorized::NullableColumn& column) {
         // Two step compare:
@@ -214,7 +217,10 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     if (columns.empty()) {
         return;
     }
-    DCHECK_EQ(rhs_values.size(), columns.size());
+    DCHECK_EQ(columns.size(), rhs_values.size());
+    DCHECK_EQ(columns.size(), sort_orders.size());
+    DCHECK_EQ(columns.size(), null_firsts.size());
+    DCHECK_EQ(columns[0]->size(), cmp_vector.size());
 
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         int sort_order = sort_orders[col_idx];

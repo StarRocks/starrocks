@@ -130,7 +130,7 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
-        if (cancel) {
+        if (UNLIKELY(cancel)) {
             return Status::Cancelled("Sort cancelled");
         }
         int range_first = iterator.range_first;
