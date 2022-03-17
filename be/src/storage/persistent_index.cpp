@@ -1131,7 +1131,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(0);
-        _offset += 0;
+        _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
         _reload(*index_meta);
