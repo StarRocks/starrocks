@@ -136,11 +136,6 @@ public:
         return l_null ? 0 : _type_info->cmp(lhs.cell_ptr(), rhs.cell_ptr());
     }
 
-    // Used to compare short key index. Because short key will truncate
-    // a varchar column, this function will handle in this condition.
-    template <typename LhsCellType, typename RhsCellType>
-    inline int index_cmp(const LhsCellType& lhs, const RhsCellType& rhs) const;
-
     // Copy source cell's content to destination cell directly.
     // For string type, this function assume that destination has
     // enough space and copy source content into destination without
@@ -316,53 +311,6 @@ protected:
     bool _is_nullable;
     std::vector<std::unique_ptr<Field>> _sub_fields;
 };
-
-template <typename LhsCellType, typename RhsCellType>
-int Field::index_cmp(const LhsCellType& lhs, const RhsCellType& rhs) const {
-    bool l_null = lhs.is_null();
-    bool r_null = rhs.is_null();
-    if (l_null != r_null) {
-        return l_null ? -1 : 1;
-    } else if (l_null) {
-        return 0;
-    }
-
-    int32_t res = 0;
-    if (type() == OLAP_FIELD_TYPE_VARCHAR) {
-        const Slice* l_slice = reinterpret_cast<const Slice*>(lhs.cell_ptr());
-        const Slice* r_slice = reinterpret_cast<const Slice*>(rhs.cell_ptr());
-
-        if (r_slice->size + OLAP_STRING_MAX_BYTES > _index_size ||
-            l_slice->size + OLAP_STRING_MAX_BYTES > _index_size) {
-            // if field length is larger than short key, only compare prefix to make sure that
-            // the same short key block will be scanned.
-            int compare_size = _index_size - OLAP_STRING_MAX_BYTES;
-            // l_slice size and r_slice size may be less than compare_size
-            // so calculate the min of the three size as new compare_size
-            compare_size = std::min(std::min(compare_size, (int)l_slice->size), (int)r_slice->size);
-
-            // This functionn is used to compare prefix index.
-            // Only the fixed length of prefix index should be compared.
-            // If r_slice->size > l_slice->size, igonre the extra parts directly.
-            res = strncmp(l_slice->data, r_slice->data, compare_size);
-            if (res == 0 && compare_size != (_index_size - OLAP_STRING_MAX_BYTES)) {
-                if (l_slice->size < r_slice->size) {
-                    res = -1;
-                } else if (l_slice->size > r_slice->size) {
-                    res = 1;
-                } else {
-                    res = 0;
-                }
-            }
-        } else {
-            res = l_slice->compare(*r_slice);
-        }
-    } else {
-        res = _type_info->cmp(lhs.cell_ptr(), rhs.cell_ptr());
-    }
-
-    return res;
-}
 
 template <typename DstCellType, typename SrcCellType>
 void Field::to_index(DstCellType* dst, const SrcCellType& src) const {
