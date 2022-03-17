@@ -82,7 +82,7 @@ public class DecimalV3FunctionAnalyzer {
             return ScalarType.createDecimalV3Type(widerPrimitiveType, precision, scale);
         }
 
-        if (FunctionSet.TRUNCATE.equalsIgnoreCase(fnName)) {
+        if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
             return argTypes[0].isDecimalV3() ?
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, argTypes[0].getPrecision(),
                             ((ScalarType) argTypes[0]).getScalarScale()) : Type.DEFAULT_DECIMAL128;
@@ -112,9 +112,15 @@ public class DecimalV3FunctionAnalyzer {
         return Type.INVALID;
     }
 
-    public static Function getFnOfTruncate(FunctionCallExpr node, Function fn, List<Type> argumentTypes) {
-        Type firstArgType = argumentTypes.get(0);
-        Expr secondArg = node.getParams().exprs().get(1);
+    public static Function getFunctionOfRound(FunctionCallExpr node, Function fn, List<Type> argumentTypes) {
+        final Type firstArgType = argumentTypes.get(0);
+        final Expr secondArg;
+        // For unary round, round(x) <==> round(x, 0)
+        if (argumentTypes.size() == 1) {
+            secondArg = new IntLiteral(0);
+        } else {
+            secondArg = node.getParams().exprs().get(1);
+        }
 
         // Double version of truncate
         if (!firstArgType.isDecimalV3()) {
@@ -152,7 +158,7 @@ public class DecimalV3FunctionAnalyzer {
             returnScale = originalScale;
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return Expr.getBuiltinFunction(FunctionSet.TRUNCATE, new Type[] {Type.DOUBLE, Type.INT},
+            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 

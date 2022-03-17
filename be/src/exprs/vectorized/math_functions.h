@@ -155,10 +155,22 @@ public:
     DEFINE_VECTORIZED_FN(round);
 
     /**
+    * @param columns: [DecimalV3Column<int128_t>]
+    * @return BigIntColumn
+    */
+    DEFINE_VECTORIZED_FN(round_decimal128);
+
+    /**
     * @param: [DoubleColumn, IntColumn]
     * @return: DoubleColumn
     */
     DEFINE_VECTORIZED_FN(round_up_to);
+
+    /**
+    * @param: [DoubleColumn, IntColumn]
+    * @return: DoubleColumn
+    */
+    DEFINE_VECTORIZED_FN(round_up_to_decimal128);
 
     /**
      * @param: [DoubleColumn, IntColumn]
@@ -451,6 +463,9 @@ public:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
+    template <DecimalRoundRule rule>
+    static ColumnPtr decimal_round(FunctionContext* context, const Columns& columns);
+
     // Specifically, keep_scale means whether to keep the original scale of lv
     // Given an example
     //      col1 - decimal(38,4)      col2 - (int)
@@ -464,9 +479,9 @@ public:
     //      with_compensate = without_compensate * 10^(4 - col)
     //      1.2340          = 0.1234             * 10
     //      1.2000          = 0.0012             * 1000
-    template <bool keep_scale>
-    static void decimal_truncate(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
-                                 bool* is_over_flow);
+    template <DecimalRoundRule rule, bool keep_scale>
+    static void decimal_round(const int128_t& lv, const int32_t& l_scale, const int32_t& rv, int128_t* res,
+                              bool* is_over_flow);
     static double double_round(double value, int64_t dec, bool dec_unsigned, bool truncate);
     static bool decimal_in_base_to_decimal(int64_t src_num, int8_t src_base, int64_t* result);
     static bool handle_parse_result(int8_t dest_base, int64_t* num, StringParser::ParseResult parse_res);
