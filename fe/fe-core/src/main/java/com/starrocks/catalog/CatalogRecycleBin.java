@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -261,13 +262,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
-    private synchronized void eraseTable(long currentTimeMs) {
+    @VisibleForTesting
+    public synchronized void eraseTable(long currentTimeMs) {
+        List<RecycleTableInfo> tableToRemove = Lists.newArrayList();
+        int currentEraseOpCnt = 0;
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = tableEntry.entrySet().iterator();
-            List<Long> tableIdList = Lists.newArrayList();
-            int currentEraseOpCnt = 0;
-            while (tableIter.hasNext()) {
-                Map.Entry<Long, RecycleTableInfo> entry = tableIter.next();
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
                 RecycleTableInfo tableInfo = entry.getValue();
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
@@ -276,24 +276,28 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     if (table.getType() == TableType.OLAP) {
                         Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
                     }
-
-                    // erase table
-                    tableIter.remove();
-                    idToRecycleTime.remove(tableId);
-                    nameToTableInfo.row(tableInfo.dbId).remove(table.getName());
-                    tableIdList.add(tableId);
+                    tableToRemove.add(tableInfo);
                     // log
-                    LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
+                    LOG.info("prepare erase table[{}-{}].", tableId, table.getName());
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                         break;
                     }
                 }
             } // end for tables
-            if (!tableIdList.isEmpty()) {
-                Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
-                LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
+        }
+
+        List<Long> tableIdList = Lists.newArrayList();
+        if (!tableToRemove.isEmpty()) {
+            for (RecycleTableInfo tableInfo : tableToRemove) {
+                long tableId = tableInfo.getTable().getId();
+                idToRecycleTime.remove(tableId);
+                nameToTableInfo.remove(tableInfo.dbId, tableInfo.getTable().getName());
+                idToTableInfo.remove(tableInfo.dbId, tableId);
+                tableIdList.add(tableId);
             }
+            Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
+            LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
         }
     }
 
