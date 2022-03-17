@@ -72,7 +72,7 @@ public class ShowCreateViewStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "as select * from tbl1";
-        CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseAndAnalyzeStmt(createViewSql, ctx);
+        CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
         Catalog.getCurrentCatalog().createView(createViewStmt);
 
         List<Table> views = Catalog.getCurrentCatalog().getDb(createViewStmt.getDbName()).getViews();
