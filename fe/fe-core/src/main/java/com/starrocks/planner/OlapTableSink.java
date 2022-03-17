@@ -43,6 +43,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -301,21 +302,30 @@ public class OlapTableSink extends DataSink {
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
+            boolean useStarOS = partition.isUseStarOS();
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId());
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                // we should ensure the replica backend is alive
-                // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                 for (Tablet tablet : index.getTablets()) {
-                    LocalTablet localTablet = (LocalTablet) tablet;
-                    Multimap<Long, Long> bePathsMap = localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
-                    if (bePathsMap.keySet().size() < quorum) {
-                        throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                + tablet.getId() + ", backends: " + Joiner.on(",").join(localTablet.getBackends()));
+                    if (useStarOS) {
+                        locationParam.addToTablets(new TTabletLocation(
+                                tablet.getId(), Lists.newArrayList(((StarOSTablet) tablet).getPrimaryBackendId())));
+                    } else {
+                        // we should ensure the replica backend is alive
+                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                        LocalTablet localTablet = (LocalTablet) tablet;
+                        Multimap<Long, Long> bePathsMap =
+                                localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
+                        if (bePathsMap.keySet().size() < quorum) {
+                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                            + tablet.getId() + ", backends: " +
+                                            Joiner.on(",").join(localTablet.getBackends()));
+                        }
+                        locationParam
+                                .addToTablets(
+                                        new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));
+                        allBePathsMap.putAll(bePathsMap);
                     }
-                    locationParam
-                            .addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));
-                    allBePathsMap.putAll(bePathsMap);
                 }
             }
         }
