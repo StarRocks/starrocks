@@ -7,6 +7,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.SparkLoadAppHandle;
 import com.starrocks.thrift.TStorageMedium;
@@ -104,6 +106,35 @@ public class CatalogRecycleBinTest {
         bin.replayEraseTable(1);
         tables = bin.getTables(11);
         Assert.assertEquals(0, tables.size());
+    }
+
+    @Test
+    public void testReplayEraseTableEx(@Mocked Catalog catalog) {
+
+        new Expectations() {
+            {
+                Catalog.getCurrentCatalog();
+                result = catalog;
+
+                catalog.getEditLog().logEraseMultiTables((List<Long>) any);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
+        bin.recycleTable(11, table);
+        Table table2 = new Table(2L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
+        bin.recycleTable(12, table2);
+        Table table3 = new Table(3L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
+        bin.recycleTable(13, table3);
+
+        bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+
+        Assert.assertEquals(0, bin.getTables(11L).size());
+        Assert.assertEquals(0, bin.getTables(12L).size());
+        Assert.assertEquals(0, bin.getTables(13L).size());
     }
 
     @Test
