@@ -216,14 +216,9 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
 Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = *_scan_range;
-    std::string scan_range_path = scan_range.full_path;
-    if (_lake_table != nullptr && _lake_table->has_partition()) {
-        scan_range_path = scan_range.relative_path;
-    }
-
     COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
-    if (_lake_table != nullptr) {
+    if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         SCOPED_TIMER(_profile.open_file_timer);
