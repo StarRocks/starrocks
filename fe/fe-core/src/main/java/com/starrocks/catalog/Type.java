@@ -683,8 +683,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String OnlyMetricTypeErrorMsg =
-            "StarRocks hll and bitmap column must use with specific function, and don't support filter, group by and order by, " +
-                    "please run 'help hll' or 'help bitmap' in your mysql client.";
+            "Type hll, bitmap, json not support aggregation/group by/order by/union";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
