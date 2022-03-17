@@ -574,7 +574,6 @@ public class AggregateTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
                 "  |  group by: "));
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
