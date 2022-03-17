@@ -571,23 +571,6 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-struct TypeMemoryUsed {
-    template <FieldType type>
-    size_t operator()() {
-        switch (type) {
-        case OLAP_FIELD_TYPE_VARCHAR:
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_JSON:
-            return 100;
-#define M(TYPE) return 100;
-            APPLY_FOR_COMPLEX_OLAP_FIELD_TYPE(M)
-#undef M
-        default:
-            return 0;
-        }
-    }
-};
-
 size_t OlapScanNode::_scanner_concurrency() {
     int64_t query_limit = _runtime_state->query_mem_tracker_ptr()->limit();
 
@@ -597,7 +580,14 @@ size_t OlapScanNode::_scanner_concurrency() {
     // we could use statistics
     for (const auto& field : fields) {
         row_mem_usage += field->type()->size();
-        row_mem_usage += field_type_dispatch_column(field->type()->type(), TypeMemoryUsed());
+        switch (field->type()->type()) {
+        case OLAP_FIELD_TYPE_VARCHAR:
+        case OLAP_FIELD_TYPE_CHAR:
+            row_mem_usage += 100;
+            break;
+        default:
+            break;
+        }
     }
     // We temporarily assume that the memory tried in the storage layer
     // is the same size as the chunk
