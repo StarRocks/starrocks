@@ -135,9 +135,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
 
-    int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                 ? std::thread::hardware_concurrency()
-                                 : config::pipeline_scan_thread_pool_thread_num;
+    int num_io_threads = config::pipeline_scan_thread_pool_thread_num;
 
     _pipeline_scan_io_thread_pool =
             new PriorityThreadPool("pip_scan_io", // pipeline scan io
