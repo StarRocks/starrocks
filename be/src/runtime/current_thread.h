@@ -192,7 +192,6 @@ public:
 private:
     bool _prev_check;
 };
-
 #define TRY_CATCH_BAD_ALLOC(stmt)                                                           \
     do {                                                                                    \
         try {                                                                               \

@@ -35,7 +35,7 @@ public:
     }
     bool need_input() const override { return !is_finished(); }
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override { return _is_finished || _join_builder->is_finished(); }
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;

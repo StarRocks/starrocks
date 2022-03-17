@@ -27,8 +27,8 @@ public:
     bool need_input() const override;
 
     bool is_finished() const override;
-    void set_finishing(RuntimeState* state) override;
-    void set_finished(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
 
     bool is_ready() const override;
     std::string get_name() const override {

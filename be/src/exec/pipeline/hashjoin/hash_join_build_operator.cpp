@@ -50,15 +50,15 @@ StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* s
     return Status::NotSupported(msg);
 }
 
-void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
+Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-    _join_builder->build_ht(state);
+    RETURN_IF_ERROR(_join_builder->build_ht(state));
 
     size_t merger_index = _driver_sequence;
     // Broadcast Join only has one build operator.
     DCHECK(_distribution_mode != TJoinDistributionMode::BROADCAST || _driver_sequence == 0);
 
-    _join_builder->create_runtime_filters(state);
+    RETURN_IF_ERROR(_join_builder->create_runtime_filters(state));
 
     auto ht_row_count = _join_builder->get_ht_row_count();
     auto& partial_in_filters = _join_builder->get_runtime_in_filters();
@@ -69,7 +69,9 @@ void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto status = _partial_rf_merger->add_partial_filters(merger_index, ht_row_count, std::move(partial_in_filters),
                                                           std::move(partial_bloom_filter_build_params),
                                                           std::move(partial_bloom_filters));
-    if (status.ok() && status.value()) {
+    if (!status.ok()) {
+        return status.status();
+    } else if (status.value()) {
         auto&& in_filters = _partial_rf_merger->get_total_in_filters();
         auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
@@ -87,6 +89,7 @@ void HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     for (auto& read_only_join_prober : _read_only_join_probers) {
         read_only_join_prober->enter_probe_phase();
     }
+    return Status::OK();
 }
 
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(

@@ -182,11 +182,12 @@ Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
+Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_source_operator(_mcast_consumer_index);
     }
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
@@ -215,11 +216,12 @@ bool MultiCastLocalExchangeSinkOperator::need_input() const {
     return _exchanger->can_push_chunk();
 }
 
-void MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
+Status MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_sink_operator();
     }
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
