@@ -486,7 +486,6 @@ public class DatabaseTransactionMgr {
                 int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getId());
                 for (MaterializedIndex index : allIndices) {
                     for (Tablet tablet : index.getTablets()) {
-                        int successReplicaNum = 0;
                         long tabletId = tablet.getId();
                         Set<Long> commitBackends = tabletToBackends.get(tabletId);
 
@@ -505,6 +504,7 @@ public class DatabaseTransactionMgr {
                             // save the error replica ids for current tablet
                             // this param is used for log
                             Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
+                            int successReplicaNum = 0;
                             for (long tabletBackend : tabletBackends) {
                                 Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                                 if (replica == null) {

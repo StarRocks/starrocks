@@ -80,7 +80,7 @@ public class StarOSAgent {
                 idToWorker.put(entry.getKey(), new Worker(entry.getKey(), entry.getValue().getHost()));
             }
             List<Long> workerIds = idToWorker.keySet().stream().sorted().collect(Collectors.toList());
-            return Lists.newArrayList(workerIds.get((int) shardId % workerIds.size()));
+            return Lists.newArrayList(workerIds.get((int) (shardId % workerIds.size())));
         }
 
         public synchronized Worker getWorker(long id) {
