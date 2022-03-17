@@ -95,6 +95,8 @@ public:
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
     void remove(const TUniqueId& query_id);
+    // used for graceful exit
+    void clear();
 
 private:
     std::vector<std::shared_mutex> _mutexes;
