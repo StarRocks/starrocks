@@ -55,14 +55,16 @@ StatusOr<vectorized::ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* s
     return _join_prober->pull_chunk(state);
 }
 
-void HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _join_prober->enter_post_probe_phase();
+    return Status::OK();
 }
 
-void HashJoinProbeOperator::set_finished(RuntimeState* state) {
+Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
     _join_prober->enter_eos_phase();
     _join_builder->set_prober_finished();
+    return Status::OK();
 }
 
 bool HashJoinProbeOperator::is_ready() const {

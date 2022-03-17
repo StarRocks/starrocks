@@ -32,7 +32,7 @@ public:
     // In either case,  LocalExchangeSinkOperator is finished.
     bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

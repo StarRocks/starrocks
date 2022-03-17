@@ -120,8 +120,9 @@ bool ScanOperator::is_finished() const {
     return true;
 }
 
-void ScanOperator::set_finishing(RuntimeState* state) {
+Status ScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {

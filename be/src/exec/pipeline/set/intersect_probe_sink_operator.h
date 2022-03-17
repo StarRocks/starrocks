@@ -38,9 +38,10 @@ public:
                (_is_finished || _intersect_ctx->is_ht_empty());
     }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         _intersect_ctx->finish_probe_ht();
+        return Status::OK();
     }
 
     void close(RuntimeState* state) override;

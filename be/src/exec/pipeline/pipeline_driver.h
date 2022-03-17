@@ -219,10 +219,10 @@ public:
     Operators& operators() { return _operators; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
-
     // drivers that waits for runtime filters' readiness must be marked PRECONDITION_NOT_READY and put into
     // PipelineDriverPoller.
     void mark_precondition_not_ready();
+
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
@@ -355,10 +355,10 @@ private:
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
-    void _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
-    void _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
-    void _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    void _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
     // Update metrics when the driver yields.
