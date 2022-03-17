@@ -87,20 +87,6 @@ public class Cluster implements Writable {
         return name;
     }
 
-    public void addLinkDb(BaseParam param) {
-        lock();
-        try {
-            if (Strings.isNullOrEmpty(param.getStringParam(1)) || param.getLongParam(1) <= 0) {
-                return;
-            }
-            final LinkDbInfo info = new LinkDbInfo(param.getStringParam(1), param.getLongParam(1));
-            linkDbNames.put(param.getStringParam(), info);
-            linkDbIds.put(param.getLongParam(), info);
-        } finally {
-            unlock();
-        }
-    }
-
     public void removeLinkDb(BaseParam param) {
         lock();
         try {
@@ -110,14 +96,6 @@ public class Cluster implements Writable {
             unlock();
         }
 
-    }
-
-    public boolean containLink(String dest, String src) {
-        final LinkDbInfo info = linkDbNames.get(dest);
-        if (info != null && info.getName().equals(src)) {
-            return true;
-        }
-        return false;
     }
 
     public void addDb(String name, long id) {
@@ -156,10 +134,6 @@ public class Cluster implements Writable {
         }
     }
 
-    public boolean containDb(String name) {
-        return dbNames.contains(name);
-    }
-
     public List<Long> getBackendIdList() {
         return Lists.newArrayList(backendIdSet);
     }
@@ -174,10 +148,6 @@ public class Cluster implements Writable {
 
     public void addBackend(long backendId) {
         backendIdSet.add(backendId);
-    }
-
-    public void addBackends(List<Long> backendIds) {
-        backendIdSet.addAll(backendIds);
     }
 
     public void removeBackend(long removedBackendId) {

@@ -55,10 +55,6 @@ public class AlterClusterClause extends AlterClause {
         throw new NotImplementedException();
     }
 
-    public int getInstanceNum() {
-        return instanceNum;
-    }
-
     public String getPassword() {
         return password;
     }
