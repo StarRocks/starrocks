@@ -163,4 +163,9 @@ public class HudiScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(hudiTable.getName());
         }
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }
