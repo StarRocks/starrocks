@@ -319,7 +319,7 @@ ColumnPtr EncryptionFunctions::sha512(FunctionContext* ctx, const Columns& colum
 }
 
 ColumnPtr EncryptionFunctions::sha2(FunctionContext* ctx, const Columns& columns) {
-    if (!ctx->is_constant_column(1)) {
+    if (!ctx->is_notnull_constant_column(1)) {
         auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
         auto length_viewer = ColumnViewer<TYPE_INT>(columns[1]);
 
