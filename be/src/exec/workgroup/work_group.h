@@ -9,6 +9,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/workgroup/scan_task_queue.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
@@ -24,6 +25,8 @@ using seconds = std::chrono::seconds;
 using milliseconds = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
+using pipeline::QueryContext;
 
 class WorkGroup;
 class WorkGroupManager;
@@ -117,8 +120,13 @@ public:
         return now > _vacuum_ttl;
     }
 
-    // return the cost of Actual owned allocated overhead
-    double get_cost();
+    int64_t total_cpu_cost() const { return _total_cpu_cost; }
+    void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost += _total_cpu_cost; }
+
+    int64_t total_io_cost() const { return _total_io_cost; }
+    void incr_total_io_cost(int64_t io_cost) { _total_io_cost += io_cost; }
+
+    bool is_big_query(const QueryContext& query_context);
 
     // return true if current workgroup is removable:
     // 1. is already marked del
@@ -164,12 +172,9 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
-<<<<<<< HEAD
-=======
-    std::atomic<double> _available_cpu_cost = 0;
-    std::atomic<double> _available_io_cost = 0;
 
->>>>>>> bcc0ab06 (save file)
+    std::atomic<int64_t> _total_cpu_cost = 0;
+    std::atomic<int64_t> _total_io_cost = 0;
     double _cpu_actual_use_ratio = 0;
 };
 
