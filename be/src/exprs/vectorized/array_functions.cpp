@@ -343,7 +343,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     return ArrayRemoveImpl::evaluate(*arg0, *arg1);
 }
 
-// If PositionEnabled=true and ReturnType=UInt32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
+// If PositionEnabled=true and ReturnType=Int32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
 // If PositionEnabled=false and ReturnType=UInt8, it is function array_contains and it will return 1 if contain or 0 if not contain.
 template <bool PositionEnabled, typename ReturnType>
 class ArrayContainsImpl {
@@ -529,7 +529,7 @@ private:
     static ColumnPtr _array_contains_generic(const Column& array, const Column& target) {
         // array_contains(NULL, xxx) -> NULL
         if (array.only_null()) {
-            auto result = NullableColumn::create(Int8Column::create(), NullColumn::create());
+            auto result = NullableColumn::create(ReturnType::create(), NullColumn::create());
             result->append_nulls(array.size());
             return result;
         }
@@ -557,7 +557,7 @@ ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* conte
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayContainsImpl<true, UInt32Column>::evaluate(*arg0, *arg1);
+    return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
 class ArrayArithmeticImpl {
