@@ -7,6 +7,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "storage/fs/fs_util.h"
+#include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/debug_util.h"
@@ -52,7 +53,7 @@ T pad(T v, P p) {
 struct IndexHash {
     IndexHash() {}
     IndexHash(uint64_t hash) : hash(hash) {}
-    uint64_t shard() const { return hash >> 48; }
+    uint64_t shard(uint32_t n) const { return (hash >> (63 - n)) >> 1; }
     uint64_t page() const { return (hash >> 16) & 0xffffffff; }
     uint64_t bucket() const { return (hash >> 8) & (bucket_per_page - 1); }
     uint64_t tag() const { return hash & 0xff; }
@@ -113,7 +114,6 @@ static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size
 //   |BucketInfo0|BucketInfo1|...|BucketInfo14|BucketInfo15|
 // Bucket data layout
 //   | tags (16byte aligned) | kv0,kv1..,kvn (16 byte aligned) |
-
 struct alignas(4) BucketInfo {
     uint16_t pageid;
     // bucket position as pack id
@@ -655,24 +655,23 @@ public:
 
     bool load_snapshot(phmap::BinaryInputArchive& ar_in) { return _map.load(ar_in); }
 
-    size_t size() { return _map.size(); }
     size_t capacity() { return _map.capacity(); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool without_null) const override {
         std::vector<std::vector<KVRef>> ret(nshard);
+        uint32_t shard_bits = log2(nshard);
         for (size_t i = 0; i < nshard; i++) {
             ret[i].reserve(num_entry / nshard * 100 / 85);
         }
         auto hasher = FixedKeyHash<KeySize>();
-        size_t shard_mask = nshard - 1;
         for (const auto& e : _map) {
             if (without_null && e.second == NullIndexValue) {
                 continue;
             }
             const auto& k = e.first;
             IndexHash h(hasher(k));
-            auto shard = h.shard() & shard_mask;
+            auto shard = h.shard(shard_bits);
             ret[shard].emplace_back((uint8_t*)&(e.first), h.hash);
         }
         return ret;
@@ -766,25 +765,25 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
 
 #endif
 
-Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx) const {
+Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                          uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     if (shard_info.size == 0) {
         return Status::OK();
     }
-    std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
-    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)shard->pages.data(), shard_info.bytes)));
-    size_t shard_mask = kvs_by_shard.size() - 1;
+    *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
+    RETURN_IF_ERROR(_rb->read(shard_info.offset, Slice((uint8_t*)(*shard)->pages.data(), shard_info.bytes)));
     for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
-        auto& header = shard->header(pageid);
+        auto& header = (*shard)->header(pageid);
         for (uint32_t bucketid = 0; bucketid < bucket_per_page; bucketid++) {
             auto& info = header.buckets[bucketid];
-            const uint8_t* bucket_pos = shard->pages[info.pageid].pack(info.packid);
+            const uint8_t* bucket_pos = (*shard)->pages[info.pageid].pack(info.packid);
             size_t nele = info.size;
             const uint8_t* kvs = bucket_pos + pad(nele, pack_size);
             for (size_t i = 0; i < nele; i++) {
                 const uint8_t* kv = kvs + (_fixed_key_size + _fixed_value_size) * i;
                 IndexHash hash = IndexHash(key_index_hash(kv, _fixed_key_size));
-                kvs_by_shard[hash.shard() & shard_mask].emplace_back(kv, hash.hash);
+                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash);
             }
         }
     }
@@ -861,11 +860,11 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
 }
 
 static void split_keys_info_by_shard(const KeysInfo& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
-    size_t shard_mask = keys_info_by_shards.size() - 1;
+    uint32_t shard_bits = log2(keys_info_by_shards.size());
     for (size_t i = 0; i < keys_info.key_idxes.size(); i++) {
         auto& key_idx = keys_info.key_idxes[i];
         auto& hash = keys_info.hashes[i];
-        size_t shard = IndexHash(hash).shard() & shard_mask;
+        size_t shard = IndexHash(hash).shard(shard_bits);
         keys_info_by_shards[shard].key_idxes.emplace_back(key_idx);
         keys_info_by_shards[shard].hashes.emplace_back(hash);
     }
@@ -889,12 +888,12 @@ Status ImmutableIndex::get(size_t n, const void* keys, const KeysInfo& keys_info
 
 Status ImmutableIndex::check_not_exist(size_t n, const void* keys) {
     size_t nshard = _shards.size();
+    uint32_t shard_bits = log2(nshard);
     std::vector<KeysInfo> keys_info_by_shard(nshard);
-    uint64_t shard_mask = nshard - 1;
     for (size_t i = 0; i < n; i++) {
         const uint8_t* key = (const uint8_t*)keys + _fixed_key_size * i;
         IndexHash h(key_index_hash(key, _fixed_key_size));
-        auto shard = h.shard() & shard_mask;
+        auto shard = h.shard(shard_bits);
         keys_info_by_shard[shard].key_idxes.emplace_back(i);
         keys_info_by_shard[shard].hashes.emplace_back(h.hash);
     }
@@ -962,6 +961,9 @@ PersistentIndex::~PersistentIndex() {
     if (_index_block) {
         _index_block->close();
     }
+    if (_l1) {
+        _l1->clear();
+    }
 }
 
 std::string PersistentIndex::_get_l0_index_file_name(std::string& dir, const EditVersion& version) {
@@ -987,10 +989,21 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
+    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
     return Status::OK();
 }
 
 Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
+    RETURN_IF_ERROR(_load(index_meta));
+    // delete expired _l0 file and _l1 file
+    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+    IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
+    EditVersion l0_version = snapshot_meta.version();
+    RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version));
+    return Status::OK();
+}
+
+Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     size_t key_size = index_meta.key_size();
     _size = index_meta.size();
     DCHECK_EQ(key_size, _key_size);
@@ -1004,13 +1017,9 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     size_t snapshot_off = page_pb.offset();
     size_t snapshot_size = page_pb.size();
     std::unique_ptr<fs::ReadableBlock> rblock;
-    DeferOp close_block([&rblock] {
-        if (rblock) {
-            rblock->close();
-        }
-    });
+    std::unique_ptr<fs::ReadableBlock> l1_rblock;
+
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(l0_index_file_name));
     RETURN_IF_ERROR(_block_mgr->open_block(l0_index_file_name, &rblock));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
@@ -1059,7 +1068,17 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     fs::CreateBlockOptions wblock_opts({l0_index_file_name});
     wblock_opts.mode = Env::MUST_EXIST;
     RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
-    RETURN_IF_ERROR(_delete_expired_index_file(start_version));
+
+    if (index_meta.has_l1_version()) {
+        _l1_version = index_meta.l1_version();
+        auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+        RETURN_IF_ERROR(_block_mgr->open_block(l1_block_path, &l1_rblock));
+        auto l1_st = ImmutableIndex::load(std::move(l1_rblock));
+        if (!l1_st.ok()) {
+            return l1_st.status();
+        }
+        _l1 = std::move(l1_st).value();
+    }
     return Status::OK();
 }
 
@@ -1074,10 +1093,46 @@ Status PersistentIndex::abort() {
     return Status::NotSupported("TODO");
 }
 
+// there are four cases as below in commit
+//   1. _flush_l0
+//   2. _merge_compaction
+//   3. _dump_snapshot
+//   4. _append_wal
+// both case1 and case2 will create a new l1 file and a new empty l0 file
+// case3 will write a new snapshot l0
+// case4 will append wals into l0 file
 Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
-    // TODO: l0 may be need to flush
-    if (_dump_snapshot) {
-        // if _map size is small enough to dump directly, rewrite snapshot
+    RETURN_IF_ERROR(_check_and_flush_l0());
+    // for case1 and case2
+    if (_flushed) {
+        // create a new empty _l0 file because all data in _l0 has write into _l1 files
+        std::string file_name = _get_l0_index_file_name(_path, _version);
+        //ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(file_name));
+        std::unique_ptr<fs::WritableBlock> wblock;
+        fs::CreateBlockOptions wblock_opts({file_name});
+        wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
+        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
+        DeferOp close_block([&wblock] {
+            if (wblock) {
+                wblock->close();
+            }
+        });
+        // update PersistentIndexMetaPB
+        VLOG(1) << "new l0 file path(flush) is " << file_name;
+        index_meta->set_size(_size);
+        _version.to_pb(index_meta->mutable_l1_version());
+        MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+        l0_meta->clear_wals();
+        IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+        _version.to_pb(snapshot->mutable_version());
+        PagePointerPB* data = snapshot->mutable_data();
+        data->set_offset(0);
+        data->set_size(0);
+        _offset = 0;
+        _page_size = 0;
+        // clear _l0 and reload _l1
+        RETURN_IF_ERROR(_reload(*index_meta));
+    } else if (_dump_snapshot) {
         std::string file_name = _get_l0_index_file_name(_path, _version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
@@ -1090,6 +1145,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
             return Status::InternalError(err_msg);
         }
         // update PersistentIndexMetaPB
+        index_meta->set_size(_size);
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         l0_meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
@@ -1118,23 +1174,32 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
 }
 
 Status PersistentIndex::on_commited() {
-    if (_dump_snapshot) {
-        std::string expired_file_path = _index_block->path();
+    if (_flushed) {
+        RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
+    } else if (_dump_snapshot) {
+        std::string expired_l0_file_path = _index_block->path();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);
         if (_block_mgr == nullptr) {
             ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(index_file_path));
         }
         std::unique_ptr<fs::WritableBlock> wblock;
+        DeferOp close_block([&wblock] {
+            if (wblock) {
+                wblock->close();
+            }
+        });
+
         fs::CreateBlockOptions wblock_opts({index_file_path});
         // new index file should be created in commit() phase
         wblock_opts.mode = Env::MUST_EXIST;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
         _index_block = std::move(wblock);
-        VLOG(1) << "delete expired l0 index file: " << expired_file_path;
-        Env::Default()->delete_file(expired_file_path);
+        VLOG(1) << "delete expired l0 index file: " << expired_l0_file_path;
+        Env::Default()->delete_file(expired_l0_file_path);
     }
-    _dump_snapshot = false;
 
+    _dump_snapshot = false;
+    _flushed = false;
     return Status::OK();
 }
 
@@ -1219,6 +1284,50 @@ Status PersistentIndex::_flush_l0() {
     return writer.finish();
 }
 
+Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
+    _offset = 0;
+    _page_size = 0;
+    auto l0_st = MutableIndex::create(_key_size);
+    if (!l0_st.ok()) {
+        return l0_st.status();
+    }
+    _l0 = std::move(l0_st).value();
+
+    Status st = _load(index_meta);
+    if (!st.ok()) {
+        LOG(WARNING) << "reload persistent index failed, status: " << st.to_string();
+    }
+    return st;
+}
+
+// check _l0 should be flush or not, if not, return
+// if _l0 should be flush, there are two conditions:
+//   1. _l1 is not exist, _flush_l0 and build _l1
+//   2. _l1 is exist, merge _l0 and _l1
+// rebuild _l0 and _l1
+// In addition, there may be io waste because we append wals first and
+// do _flush_l0 or merge compaction.
+Status PersistentIndex::_check_and_flush_l0() {
+    size_t kv_size = _key_size + sizeof(IndexValue);
+    size_t l0_mem_size = kv_size * _l0->size();
+    uint64_t l1_file_size = 0;
+    if (_l1 != nullptr) {
+        _l1->file_size(&l1_file_size);
+    }
+    if (l0_mem_size <= l0_flush_size_min &&
+        ((l0_mem_size <= l0_snapshot_size_max) || (l1_file_size / l0_mem_size > l0_l1_merge_ratio))) {
+        return Status::OK();
+    }
+    _flushed = true;
+    // flush _l0
+    if (_l1 == nullptr) {
+        RETURN_IF_ERROR(_flush_l0());
+    } else {
+        RETURN_IF_ERROR(_merge_compaction());
+    }
+    return Status::OK();
+}
+
 size_t PersistentIndex::mutable_index_size() {
     return (_l0 == nullptr) ? 0 : _l0->size();
 }
@@ -1245,13 +1354,16 @@ bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {
     return (_l0 == nullptr) ? false : _l0->load_snapshot(ar);
 }
 
-Status PersistentIndex::_delete_expired_index_file(const EditVersion& version) {
-    std::string file_name = strings::Substitute("index.l0.$0.$1", version.major(), version.minor());
-    std::string prefix("index.l0");
+Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version) {
+    std::string l0_file_name = strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+    std::string l1_file_name = strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+    std::string l0_prefix("index.l0");
+    std::string l1_prefix("index.l1");
     std::string dir = _path;
     auto cb = [&](std::string_view name) -> bool {
         std::string full(name);
-        if (full.compare(0, prefix.length(), prefix) == 0 && full.compare(file_name) != 0) {
+        if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
+            (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
             Status st = Env::Default()->delete_file(path);
@@ -1378,8 +1490,12 @@ Status PersistentIndex::_merge_compaction() {
     //         l1_shard_idex: 0  1  2  3  4  5  6  7
     //    num_shard_finished: 0  1  1  2  2  3  3  4
     //         cur_shard_idx:    0     1     2     3
+    std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards((nshard_l1 / nshard) + 1);
+    size_t index_shards_idx = 0;
+    uint32_t shard_bits = log2(nshard);
     for (size_t l1_shard_idx = 0; l1_shard_idx < nshard_l1; l1_shard_idx++) {
-        RETURN_IF_ERROR(_l1->_get_kvs_for_shard(l1_kvs_by_shard, l1_shard_idx));
+        RETURN_IF_ERROR(
+                _l1->_get_kvs_for_shard(l1_kvs_by_shard, l1_shard_idx, shard_bits, &index_shards[index_shards_idx++]));
         size_t num_shard_finished = (l1_shard_idx + 1) * nshard / nshard_l1;
         std::vector<KVRef> kvs;
         while (cur_shard_idx < num_shard_finished) {
@@ -1393,6 +1509,7 @@ Status PersistentIndex::_merge_compaction() {
             l1_kvs_by_shard[cur_shard_idx].clear();
             l1_kvs_by_shard[cur_shard_idx].shrink_to_fit();
             cur_shard_idx++;
+            index_shards_idx = 0;
         }
     }
     return writer.finish();
