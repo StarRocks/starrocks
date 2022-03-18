@@ -214,6 +214,7 @@ Status StorageEngine::_init_store_map() {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
     }
+    release_guard.cancel();
     return Status::OK();
 }
 
