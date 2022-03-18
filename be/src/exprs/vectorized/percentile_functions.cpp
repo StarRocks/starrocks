@@ -42,8 +42,12 @@ ColumnPtr PercentileFunctions::percentile_approx_raw(FunctionContext* context, c
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> builder(size);
     for (int row = 0; row < size; ++row) {
-        double result = viewer1.value(row)->quantile(viewer2.value(row));
-        builder.append(result);
+        if (viewer1.is_null(row) || viewer2.is_null(row)) {
+            builder.append_null();
+        } else {
+            double result = viewer1.value(row)->quantile(viewer2.value(row));
+            builder.append(result);
+        }
     }
     return builder.build(columns[0]->is_constant());
 }
