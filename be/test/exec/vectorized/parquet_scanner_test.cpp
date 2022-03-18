@@ -26,7 +26,36 @@ class ParquetScannerTest : public ::testing::Test {
             range.__set_num_of_columns_from_file(num_columns_from_file);
             range.__set_columns_from_path(columns_from_path);
             range.__set_path(file_names[i]);
+            range.start_offset = 0;
+            range.size = LONG_MAX;
             range.file_type = TFileType::FILE_LOCAL;
+        }
+        return ranges;
+    }
+
+    std::vector<TBrokerRangeDesc> generate_split_ranges(const std::vector<std::string>& file_names,
+                                                        const std::vector<int>& file_sizes,
+                                                        int32_t num_columns_from_file,
+                                                        const std::vector<std::string>& columns_from_path) {
+        std::vector<TBrokerRangeDesc> ranges;
+        int total_size = 0;
+        for (auto s : file_sizes) {
+            total_size += s;
+        }
+        int split_size = 128 * 1024;
+
+        for (auto i = 0; i < file_names.size(); ++i) {
+            TBrokerRangeDesc range;
+            range.__set_num_of_columns_from_file(num_columns_from_file);
+            range.__set_columns_from_path(columns_from_path);
+            range.__set_path(file_names[i]);
+            range.file_type = TFileType::FILE_LOCAL;
+
+            for (auto offset = 0; offset < file_sizes[i]; offset += split_size) {
+                range.start_offset = offset;
+                range.size = split_size < file_sizes[i] - offset ? split_size : file_sizes[i] - offset;
+                ranges.push_back(range);
+            }
         }
         return ranges;
     }
@@ -301,6 +330,14 @@ class ParquetScannerTest : public ::testing::Test {
                                                test_exec_dir + "/test_data/parquet_data/data_8191.parquet",
                                                test_exec_dir + "/test_data/parquet_data/data_8192.parquet",
                                                test_exec_dir + "/test_data/parquet_data/data_8193.parquet"};
+        _file_sizes = std::vector<int>{404,    /*"/test_data/parquet_data/data_0.parquet",   */
+                                       2012,   /*"/test_data/parquet_data/data_1.parquet",*/
+                                       386707, /*"/test_data/parquet_data/data_4095.parquet",*/
+                                       388341, /*"/test_data/parquet_data/data_4096.parquet",*/
+                                       388199, /*"/test_data/parquet_data/data_4097.parquet",*/
+                                       773729, /*"/test_data/parquet_data/data_8191.parquet",*/
+                                       772472, /*"/test_data/parquet_data/data_8192.parquet",*/
+                                       775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
     }
 
 private:
@@ -308,6 +345,7 @@ private:
     ObjectPool _obj_pool;
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
+    std::vector<int> _file_sizes;
 };
 
 TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
@@ -477,9 +515,26 @@ TEST_F(ParquetScannerTest, test_to_json) {
             expect.erase(std::remove(expect.begin(), expect.end(), ' '), expect.end());
             result.erase(std::remove(result.begin(), result.end(), ' '), result.end());
             EXPECT_EQ(expect, result);
-            std::cerr << "JsonColumn result: " << result << std::endl;
         }
     }
+}
+
+TEST_F(ParquetScannerTest, test_selected_parquet_data) {
+    auto column_names = std::vector<std::string>{
+            "col_date",     "col_datetime", "col_char",   "col_varchar",      "col_boolean",       "col_tinyint",
+            "col_smallint", "col_int",      "col_bigint", "col_decimal_p6s2", "col_decimal_p14s5", "col_decimal_p27s9",
+    };
+    auto slot_infos = select_columns(column_names, false);
+    auto ranges = generate_split_ranges(_file_names, _file_sizes, slot_infos.size(), {});
+    auto* desc_tbl = generate_desc_tbl(slot_infos, {});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {
+        auto& columns = chunk->columns();
+        for (auto& col : columns) {
+            ASSERT_TRUE(!col->is_nullable() && !col->is_constant());
+        }
+    };
+    validate(scanner, 36865, check);
 }
 
 } // namespace starrocks::vectorized
