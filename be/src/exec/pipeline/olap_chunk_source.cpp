@@ -10,7 +10,6 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
-#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
@@ -326,21 +325,19 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
     }
     using namespace vectorized;
 
-    TRY_CATCH_BAD_ALLOC({
-        for (size_t i = 0; i < batch_size && !can_finish; ++i) {
-            ChunkUniquePtr chunk(
-                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
-            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-            if (!_status.ok()) {
-                // end of file is normal case, need process chunk
-                if (_status.is_end_of_file()) {
-                    _chunk_buffer.put(std::move(chunk));
-                }
-                break;
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        if (!_status.ok()) {
+            // end of file is normal case, need process chunk
+            if (_status.is_end_of_file()) {
+                _chunk_buffer.put(std::move(chunk));
             }
-            _chunk_buffer.put(std::move(chunk));
+            break;
         }
-    });
+        _chunk_buffer.put(std::move(chunk));
+    }
     return _status;
 }
 
@@ -353,37 +350,35 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
 
     using namespace vectorized;
     int64_t time_spent = 0;
-    TRY_CATCH_BAD_ALLOC({
-        for (size_t i = 0; i < batch_size && !can_finish; ++i) {
-            {
-                SCOPED_RAW_TIMER(&time_spent);
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        {
+            SCOPED_RAW_TIMER(&time_spent);
 
-                ChunkUniquePtr chunk(
-                        ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
-                _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-                if (!_status.ok()) {
-                    // end of file is normal case, need process chunk
-                    if (_status.is_end_of_file()) {
-                        ++(*num_read_chunks);
-                        _chunk_buffer.put(std::move(chunk));
-                    }
-                    break;
+            ChunkUniquePtr chunk(
+                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+            if (!_status.ok()) {
+                // end of file is normal case, need process chunk
+                if (_status.is_end_of_file()) {
+                    ++(*num_read_chunks);
+                    _chunk_buffer.put(std::move(chunk));
                 }
-
-                ++(*num_read_chunks);
-                _chunk_buffer.put(std::move(chunk));
-            }
-
-            if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 break;
             }
 
-            if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-                workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
-                break;
-            }
+            ++(*num_read_chunks);
+            _chunk_buffer.put(std::move(chunk));
         }
-    });
+
+        if (time_spent >= YIELD_MAX_TIME_SPENT) {
+            break;
+        }
+
+        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            break;
+        }
+    }
 
     return _status;
 }
