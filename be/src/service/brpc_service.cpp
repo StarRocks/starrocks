@@ -63,6 +63,7 @@ Status BRpcService::start(int port) {
 }
 
 void BRpcService::join() {
+    _server->Stop(0);
     _server->Join();
 }
 

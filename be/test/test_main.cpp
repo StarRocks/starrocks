@@ -4,6 +4,7 @@
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
+#include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -80,6 +81,7 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
+    starrocks::pipeline::QueryContextManager::instance()->clear();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

@@ -201,6 +201,7 @@ Status StorageEngine::_init_store_map() {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
     }
+    release_guard.cancel();
     return Status::OK();
 }
 
@@ -443,12 +444,11 @@ void StorageEngine::stop() {
     {
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& store_pair : _store_map) {
+            // store_pair.second will be delete later
             store_pair.second->stop_bg_worker();
-            delete store_pair.second;
-            store_pair.second = nullptr;
         }
-        _store_map.clear();
     }
+
     _bg_worker_stopped.store(true, std::memory_order_release);
 
     if (_update_cache_expire_thread.joinable()) {
@@ -497,6 +497,15 @@ void StorageEngine::stop() {
                 thread.join();
             }
         }
+    }
+
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            delete store_pair.second;
+            store_pair.second = nullptr;
+        }
+        _store_map.clear();
     }
 
     SAFE_DELETE(_index_stream_lru_cache);
