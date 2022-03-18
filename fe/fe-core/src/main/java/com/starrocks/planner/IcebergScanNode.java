@@ -272,4 +272,9 @@ public class IcebergScanNode extends ScanNode {
     public void setMinMaxTuple(TupleDescriptor tuple) {
         minMaxTuple = tuple;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }
