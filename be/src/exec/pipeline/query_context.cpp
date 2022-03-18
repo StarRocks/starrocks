@@ -152,7 +152,6 @@ void QueryContextManager::clear() {
     }
     _second_chance_maps.clear();
     _context_maps.clear();
-    // std::unique_lock<std::shared_mutex> write_lock(mutex);
 }
 
 } // namespace starrocks::pipeline
