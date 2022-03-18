@@ -1166,8 +1166,9 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     auto chunk_changer = sc_params.chunk_changer.get();
     if (sc_params.sc_sorting) {
         LOG(INFO) << "doing schema change with sorting for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = std::make_unique<SchemaChangeWithSorting>(
-                chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
+        size_t memory_limitation =
+                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+        sc_procedure = std::make_unique<SchemaChangeWithSorting>(chunk_changer, memory_limitation);
     } else if (sc_params.sc_directly) {
         LOG(INFO) << "doing directly schema change for base_tablet " << sc_params.base_tablet->full_name();
         sc_procedure = std::make_unique<SchemaChangeDirectly>(chunk_changer);
