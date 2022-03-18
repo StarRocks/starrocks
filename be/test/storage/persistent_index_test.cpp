@@ -8,6 +8,7 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/storage_engine.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/faststring.h"
@@ -99,9 +100,10 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     Env* env = Env::Default();
     const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
     const std::string kIndexFile = "./ut_dir/persistent_index_test/index.l0.0.0";
-    ASSERT_TRUE(env->create_dir(kPersistentIndexDir).ok());
+    bool created;
+    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
 
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
     std::unique_ptr<fs::WritableBlock> wblock;
     fs::CreateBlockOptions wblock_opts({kIndexFile});
     ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
@@ -169,7 +171,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
             put_fixed64_le(&fixed_buf, invalid_values[i]);
         }
 
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+        ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions wblock_opts({"./ut_dir/persistent_index_test/index.l0.1.0"});
         wblock_opts.mode = Env::MUST_EXIST;
@@ -241,7 +243,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
 
     std::unique_ptr<fs::ReadableBlock> rb;
-    auto block_mgr = fs::fs_util::block_manager();
+    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
     ASSERT_TRUE(block_mgr->open_block("./index.l1.1.1", &rb).ok());
     auto st_load = ImmutableIndex::load(std::move(rb));
     if (!st_load.ok()) {

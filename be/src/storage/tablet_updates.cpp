@@ -2505,6 +2505,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             }
         }
     }
+    std::shared_ptr<fs::BlockManager> block_mgr;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         --iter;
@@ -2518,10 +2519,14 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             _set_error(msg);
             return Status::InternalError(msg);
         }
+        // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same block_mgr
+        if (block_mgr == nullptr) {
+            ASSIGN_OR_RETURN(block_mgr, fs::fs_util::block_manager(rowset->rowset_path()));
+        }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(),
-                                     seg_path, rssid - iter->first, &rowset->schema());
+        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path,
+                                     rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -2533,7 +2538,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(fs::fs_util::block_manager()->open_block((*segment)->file_name(), &rblock));
+        RETURN_IF_ERROR(block_mgr->open_block((*segment)->file_name(), &rblock));
         iter_opts.rblock = rblock.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             ColumnIterator* col_iter_raw_ptr = nullptr;

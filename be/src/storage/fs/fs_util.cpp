@@ -21,27 +21,13 @@
 
 #include "storage/fs/fs_util.h"
 
-#include "common/status.h"
-#include "env/env.h"
-#include "runtime/exec_env.h"
 #include "storage/fs/file_block_manager.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks::fs::fs_util {
 
-BlockManager* block_manager() {
-#ifdef BE_TEST
-    return block_mgr_for_ut();
-#else
-    return ExecEnv::GetInstance()->storage_engine()->block_manager();
-#endif
-}
-
-BlockManager* block_mgr_for_ut() {
-    fs::BlockManagerOptions bm_opts;
-    bm_opts.read_only = false;
-    static FileBlockManager block_mgr(Env::Default(), std::move(bm_opts));
-    return &block_mgr;
+StatusOr<std::shared_ptr<BlockManager>> block_manager(std::string_view uri) {
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromStringOrDefault(uri));
+    return std::make_shared<FileBlockManager>(std::move(env), fs::BlockManagerOptions());
 }
 
 } // namespace starrocks::fs::fs_util

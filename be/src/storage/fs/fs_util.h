@@ -21,19 +21,17 @@
 
 #pragma once
 
-#include "common/status.h"
+#include <memory>
+#include <string_view>
+
+#include "common/statusor.h"
 #include "storage/fs/block_manager.h"
 
 namespace starrocks {
 namespace fs {
 namespace fs_util {
 
-// Each BlockManager type may have different params, so we provide a separate
-// method for each type(instead of a factory method which require same params)
-BlockManager* block_manager();
-
-// For UnitTest.
-BlockManager* block_mgr_for_ut();
+StatusOr<std::shared_ptr<BlockManager>> block_manager(std::string_view uri);
 
 } // namespace fs_util
 } // namespace fs

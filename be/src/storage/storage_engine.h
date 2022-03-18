@@ -165,8 +165,6 @@ public:
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
-    fs::BlockManager* block_manager() { return _block_manager.get(); }
-
     UpdateManager* update_manager() { return _update_manager.get(); }
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
@@ -334,8 +332,6 @@ private:
     std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
-
-    std::unique_ptr<fs::BlockManager> _block_manager;
 
     std::unique_ptr<UpdateManager> _update_manager;
 

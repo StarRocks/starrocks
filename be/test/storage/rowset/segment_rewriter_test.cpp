@@ -38,9 +38,10 @@ using std::vector;
 class SegmentRewriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _env = Env::Default();
-        _block_mgr = fs::fs_util::block_manager();
-        ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
+        _env = Env::CreateSharedFromString("posix://").value();
+        ASSIGN_OR_ABORT(_block_mgr, fs::fs_util::block_manager("posix://"));
+        bool created;
+        ASSERT_OK(_env->create_dir_if_missing(kSegmentDir, &created));
 
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
@@ -68,10 +69,10 @@ protected:
 
     const std::string kSegmentDir = "./ut_dir/segment_rewriter_test";
 
-    Env* _env = nullptr;
-    fs::BlockManager* _block_mgr = nullptr;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
+    std::shared_ptr<Env> _env;
+    std::shared_ptr<fs::BlockManager> _block_mgr;
+    std::unique_ptr<MemTracker> _page_cache_mem_tracker;
+    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
 };
 
 TEST_F(SegmentRewriterTest, rewrite_test) {
