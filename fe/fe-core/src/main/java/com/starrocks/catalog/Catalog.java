@@ -259,7 +259,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -6346,10 +6345,17 @@ public class Catalog {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
+    public void replayCreateCluster(Cluster cluster) {
+        tryLock(true);
+        try {
+            unprotectCreateCluster(cluster);
+        } finally {
+            unlock();
+        }
+    }
+
     private void unprotectCreateCluster(Cluster cluster) {
-        final Iterator<Long> iterator = cluster.getBackendIdList().iterator();
-        while (iterator.hasNext()) {
-            final Long id = iterator.next();
+        for (Long id : cluster.getBackendIdList()) {
             final Backend backend = systemInfo.getBackend(id);
             backend.setOwnerClusterName(cluster.getName());
             backend.setBackendState(BackendState.using);
