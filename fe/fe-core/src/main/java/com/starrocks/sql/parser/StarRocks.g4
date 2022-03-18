@@ -28,7 +28,7 @@ statement
     | SHOW (DATABASES | SCHEMAS) ((LIKE pattern=string) | (WHERE expression))?          #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
             ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-            viewComment=string? AS queryStatement                                       #createView
+            comment? AS queryStatement                               #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
@@ -82,7 +82,7 @@ comment
     ;
 
 columnNameWithComment
-    : identifier string?
+    : identifier comment?
     ;
 
 outfile
