@@ -203,6 +203,7 @@ public class LocalTablet extends Tablet {
     }
 
     // for query
+    @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (Replica replica : replicas) {
