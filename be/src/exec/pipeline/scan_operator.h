@@ -28,7 +28,7 @@ public:
 
     bool is_finished() const override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

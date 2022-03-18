@@ -34,10 +34,11 @@ public:
 
     bool is_finished() const override { return _is_finished || _cross_join_context->is_finished(); }
 
-    void set_finishing(RuntimeState* state) override {
+    Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
         // Used to notify cross_join_left_operator.
         _cross_join_context->finish_one_right_sinker();
+        return Status::OK();
     }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;

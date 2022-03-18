@@ -98,7 +98,7 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
             int notnull_end = is_null_first ? range_last : pivot_start;
 
             if (notnull_start < notnull_end) {
-                tie[pivot_start] = 0;
+                tie[notnull_start] = 0;
                 RETURN_IF_ERROR(sort_and_tie_column(cancel, column->data_column(), is_asc_order, is_null_first,
                                                     permutation, tie, {notnull_start, notnull_end}, build_tie));
             }

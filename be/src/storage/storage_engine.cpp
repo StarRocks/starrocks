@@ -44,7 +44,6 @@
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
 #include "storage/data_dir.h"
-#include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
@@ -52,14 +51,10 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
-#include "storage/utils.h"
 #include "storage/vectorized/base_compaction.h"
 #include "storage/vectorized/cumulative_compaction.h"
-#include "util/defer_op.h"
 #include "util/file_utils.h"
-#include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
@@ -98,7 +93,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
-          _block_manager(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()) {
     if (_s_instance == nullptr) {
@@ -150,13 +144,6 @@ Status StorageEngine::_open() {
 
     _file_cache.reset(new_lru_cache(config::file_descriptor_cache_capacity));
 
-    fs::BlockManagerOptions bm_opts;
-    bm_opts.read_only = false;
-    // |_block_manager| depend on |_file_cache|.
-    _block_manager = std::make_unique<fs::FileBlockManager>(Env::Default(), std::move(bm_opts));
-
-    // |_update_manager| depend on |_block_manager|.
-    // |fs::fs_util::block_manager| depends on ExecEnv's storage engine
     starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
@@ -214,6 +201,7 @@ Status StorageEngine::_init_store_map() {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
     }
+    release_guard.cancel();
     return Status::OK();
 }
 
@@ -456,12 +444,11 @@ void StorageEngine::stop() {
     {
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& store_pair : _store_map) {
+            // store_pair.second will be delete later
             store_pair.second->stop_bg_worker();
-            delete store_pair.second;
-            store_pair.second = nullptr;
         }
-        _store_map.clear();
     }
+
     _bg_worker_stopped.store(true, std::memory_order_release);
 
     if (_update_cache_expire_thread.joinable()) {
@@ -510,6 +497,15 @@ void StorageEngine::stop() {
                 thread.join();
             }
         }
+    }
+
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            delete store_pair.second;
+            store_pair.second = nullptr;
+        }
+        _store_map.clear();
     }
 
     SAFE_DELETE(_index_stream_lru_cache);

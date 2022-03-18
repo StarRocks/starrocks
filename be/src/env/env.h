@@ -38,8 +38,6 @@ struct SpaceInfo {
 
 class Env {
 public:
-    using FactoryFunc = std::function<StatusOr<std::unique_ptr<Env>>(std::string_view uri)>;
-
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -52,8 +50,6 @@ public:
 
     Env() = default;
     virtual ~Env() = default;
-
-    static void Register(std::string_view pattern, FactoryFunc func);
 
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
 

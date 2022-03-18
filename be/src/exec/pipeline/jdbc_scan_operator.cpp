@@ -111,8 +111,9 @@ void JDBCScanOperator::_start_scanner(RuntimeState* state) {
     _set_scanner_state(true, Status::OK());
 }
 
-void JDBCScanOperator::set_finishing(RuntimeState* state) {
+Status JDBCScanOperator::set_finishing(RuntimeState* state) {
     _is_finished.store(true);
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> JDBCScanOperator::pull_chunk(RuntimeState* state) {

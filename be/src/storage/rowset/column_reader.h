@@ -70,16 +70,6 @@ class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 
-struct ColumnReaderOptions {
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    // version in SegmentFooterPB
-    uint32_t storage_format_version = 1;
-    // whether verify checksum when read page
-    bool verify_checksum = true;
-    // for in memory olap table, use DURABLE CachePriority in page cache
-    bool kept_in_memory = false;
-};
-
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
 // same information, such as OrdinalPageIndex and Page data.
@@ -93,11 +83,13 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
-                                                          ColumnMetaPB* meta, const std::string& file_name);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker,
+                                                          std::shared_ptr<fs::BlockManager> block_mgr,
+                                                          ColumnMetaPB* meta, const std::string& file_name,
+                                                          uint32_t storage_format_version, bool kept_in_memory);
 
-    ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
-                 const std::string& file_name);
+    ColumnReader(const private_type&, MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> block_mgr,
+                 const std::string& file_name, uint32_t storage_format_version, bool kept_in_memory);
 
     ~ColumnReader();
 
@@ -158,7 +150,7 @@ public:
     Status bloom_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                         vectorized::SparseRange* ranges);
 
-    uint32_t version() const { return _opts.storage_format_version; }
+    uint32_t version() const { return _storage_format_version; }
 
     Status load_ordinal_index_once();
 
@@ -222,7 +214,7 @@ private:
     int32_t _column_length = 0;
     FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
-    ColumnReaderOptions _opts;
+    std::shared_ptr<fs::BlockManager> _block_mgr;
     uint64_t _num_rows = 0;
     uint64_t _total_mem_footprint = 0;
     const std::string& _file_name;
@@ -251,6 +243,9 @@ private:
     StarRocksCallOnce<Status> _bloomfilter_index_once;
 
     std::bitset<16> _flags;
+
+    uint32_t _storage_format_version;
+    bool _kept_in_memory;
 };
 
 } // namespace starrocks

@@ -260,14 +260,14 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
 
         vectorized::SegmentReadOptions seg_options;
-        seg_options.block_mgr = fs::fs_util::block_manager();
+        ASSIGN_OR_ABORT(seg_options.block_mgr, fs::fs_util::block_manager("posix://"));
         seg_options.stats = &_stats;
 
         std::string segment_file =
                 BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-        auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), fs::fs_util::block_manager(), segment_file, 0,
-                                      &tablet_schema);
+        auto segment =
+                *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.block_mgr, segment_file, 0, &tablet_schema);
         ASSERT_NE(segment->num_rows(), 0);
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);

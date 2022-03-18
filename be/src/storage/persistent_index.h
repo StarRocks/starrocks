@@ -298,6 +298,7 @@ private:
     // |_page_size|: the size of last wal in index file
     uint64_t _offset = 0;
     uint32_t _page_size = 0;
+    std::shared_ptr<fs::BlockManager> _block_mgr;
     std::unique_ptr<fs::WritableBlock> _index_block;
 
     bool _dump_snapshot = false;

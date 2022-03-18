@@ -76,8 +76,8 @@ protected:
         int num_rows = src.size();
         ColumnMetaPB meta;
 
-        auto env = std::make_unique<EnvMemory>();
-        auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
+        auto env = std::make_shared<EnvMemory>();
+        auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
 
         const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
@@ -134,10 +134,7 @@ protected:
             std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
             StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
-            ColumnReaderOptions reader_opts;
-            reader_opts.storage_format_version = version;
-            reader_opts.block_mgr = block_mgr.get();
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
+            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -312,8 +309,8 @@ protected:
     template <uint32_t version>
     void test_int_array(std::string null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
-        auto env = std::make_unique<EnvMemory>();
-        auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
+        auto env = std::make_shared<EnvMemory>();
+        auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
 
         TabletColumn array_column = create_array(0, true, sizeof(Collection));
@@ -386,10 +383,7 @@ protected:
 
         // read and check
         {
-            ColumnReaderOptions reader_opts;
-            reader_opts.block_mgr = block_mgr.get();
-            reader_opts.storage_format_version = 2;
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
+            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -667,8 +661,8 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     }
 
     ColumnMetaPB meta;
-    auto env = std::make_unique<EnvMemory>();
-    auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
+    auto env = std::make_shared<EnvMemory>();
+    auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
     ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
 
@@ -712,10 +706,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        ColumnReaderOptions reader_opts;
-        reader_opts.storage_format_version = 2;
-        reader_opts.block_mgr = block_mgr.get();
-        auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), reader_opts, &meta, fname);
+        auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, 1, false);
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, reader->num_rows());

@@ -34,13 +34,10 @@
 #include "env/env_util.h"
 #include "gutil/strings/substitute.h"
 #include "storage/fs/block_id.h"
-#include "storage/fs/block_manager_metrics.h"
 #include "storage/storage_engine.h"
 #include "util/file_cache.h"
-#include "util/metrics.h"
 #include "util/path_util.h"
 #include "util/slice.h"
-#include "util/starrocks_metrics.h"
 
 using std::accumulate;
 using std::shared_ptr;
@@ -126,12 +123,7 @@ FileWritableBlock::FileWritableBlock(FileBlockManager* block_manager, string pat
           _path(std::move(path)),
           _writer(std::move(writer)),
           _state(CLEAN),
-          _bytes_appended(0) {
-    if (_block_manager->_metrics) {
-        _block_manager->_metrics->blocks_open_writing->increment(1);
-        _block_manager->_metrics->total_writable_blocks->increment(1);
-    }
-}
+          _bytes_appended(0) {}
 
 FileWritableBlock::~FileWritableBlock() {
     if (_state != CLOSED) {
@@ -215,9 +207,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
     if (mode == SYNC && (_state == CLEAN || _state == DIRTY || _state == FINALIZED)) {
         // Safer to synchronize data first, then metadata.
         VLOG(3) << "Syncing block " << _path;
-        if (_block_manager->_metrics) {
-            _block_manager->_metrics->total_disk_sync->increment(1);
-        }
         sync = _writer->sync();
         WARN_IF_ERROR(sync, strings::Substitute("Failed to sync when closing block $0", _path));
     }
@@ -225,12 +214,6 @@ Status FileWritableBlock::_close(SyncMode mode) {
 
     _state = CLOSED;
     _writer.reset();
-    if (_block_manager->_metrics) {
-        _block_manager->_metrics->blocks_open_writing->increment(-1);
-        _block_manager->_metrics->total_bytes_written->increment(_bytes_appended);
-        _block_manager->_metrics->total_blocks_created->increment(1);
-    }
-
     // Either Close() or Sync() could have run into an error.
     RETURN_IF_ERROR(close);
     RETURN_IF_ERROR(sync);
@@ -294,10 +277,6 @@ private:
 FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, string path,
                                      std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle)
         : _block_manager(block_manager), _path(std::move(path)), _file_handle(std::move(file_handle)), _closed(false) {
-    if (_block_manager->_metrics) {
-        _block_manager->_metrics->blocks_open_reading->increment(1);
-        _block_manager->_metrics->total_readable_blocks->increment(1);
-    }
     _file = _file_handle->file();
 }
 
@@ -309,9 +288,6 @@ Status FileReadableBlock::close() {
     bool expected = false;
     if (_closed.compare_exchange_strong(expected, true)) {
         _file_handle.reset();
-        if (_block_manager->_metrics) {
-            _block_manager->_metrics->blocks_open_reading->increment(-1);
-        }
     }
 
     return Status::OK();
@@ -343,17 +319,7 @@ Status FileReadableBlock::read(uint64_t offset, Slice result) const {
 
 Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t res_cnt) const {
     DCHECK(!_closed.load());
-
-    RETURN_IF_ERROR(_file->readv_at(offset, results, res_cnt));
-
-    if (_block_manager->_metrics) {
-        // Calculate the read amount of data
-        size_t bytes_read = accumulate(results, results + res_cnt, static_cast<size_t>(0),
-                                       [&](int sum, const Slice& curr) { return sum + curr.size; });
-        _block_manager->_metrics->total_bytes_read->increment(bytes_read);
-    }
-
-    return Status::OK();
+    return _file->readv_at(offset, results, res_cnt);
 }
 
 } // namespace internal
@@ -362,14 +328,11 @@ Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t re
 // FileBlockManager
 ////////////////////////////////////////////////////////////
 
-FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
-        : _env(DCHECK_NOTNULL(env)), _opts(std::move(opts)) {
-    if (_opts.enable_metric) {
-        _metrics = std::make_unique<internal::BlockManagerMetrics>();
-    }
-
+FileBlockManager::FileBlockManager(std::shared_ptr<Env> env, BlockManagerOptions opts)
+        : _env(std::move(env)), _opts(std::move(opts)) {
 #ifdef BE_TEST
-    _file_cache.reset(new FileCache<RandomAccessFile>("Readable file cache", config::file_descriptor_cache_capacity));
+    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                config::file_descriptor_cache_capacity);
 #else
     _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
                                                                 StorageEngine::instance()->file_cache());
@@ -389,7 +352,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     shared_ptr<WritableFile> writer;
     WritableFileOptions wr_opts;
     wr_opts.mode = opts.mode;
-    RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
+    RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env.get(), opts.path, &writer));
 
     VLOG(1) << "Creating new block at " << opts.path;
     *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
@@ -436,9 +399,6 @@ Status FileBlockManager::_delete_block(const string& path) {
 // TODO(lingbin): only one level is enough?
 Status FileBlockManager::_sync_metadata(const string& path) {
     string dir = path_util::dir_name(path);
-    if (_metrics) {
-        _metrics->total_disk_sync->increment(1);
-    }
     RETURN_IF_ERROR(_env->sync_dir(dir));
     return Status::OK();
 }

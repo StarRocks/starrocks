@@ -20,7 +20,7 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

@@ -42,15 +42,11 @@ protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
-        _env = new EnvMemory();
-        _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
+        _env = std::make_shared<EnvMemory>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kTestDir).ok());
     }
-    void TearDown() override {
-        StoragePageCache::release_global_cache();
-        delete _block_mgr;
-        delete _env;
-    }
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 
     template <FieldType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
@@ -93,7 +89,7 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        auto st = (*reader)->load(_block_mgr, fname, &meta.bloom_filter_index(), true, false);
+        auto st = (*reader)->load(_block_mgr.get(), fname, &meta.bloom_filter_index(), true, false);
         ASSERT_TRUE(st.ok());
 
         st = (*reader)->new_iterator(iter);
@@ -159,8 +155,8 @@ protected:
     }
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    EnvMemory* _env = nullptr;
-    fs::FileBlockManager* _block_mgr = nullptr;
+    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
 };
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {

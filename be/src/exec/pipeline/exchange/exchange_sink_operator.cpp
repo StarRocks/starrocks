@@ -342,7 +342,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
     }
 
@@ -390,8 +390,9 @@ bool ExchangeSinkOperator::pending_finish() const {
     return !_buffer->is_finished();
 }
 
-void ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
+Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
     _buffer->cancel_one_sinker();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -452,7 +453,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
         const auto num_channels = _channels.size();
         {
@@ -522,7 +523,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     return Status::OK();
 }
 
-void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
+Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_chunk_request != nullptr) {
@@ -539,6 +540,7 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+    return Status::OK();
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
@@ -637,7 +639,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
         RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     }

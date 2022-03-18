@@ -42,16 +42,12 @@ protected:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
-        _env = new EnvMemory();
-        _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
+        _env = std::make_shared<EnvMemory>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kTestDir).ok());
     }
 
-    void TearDown() override {
-        StoragePageCache::release_global_cache();
-        delete _block_mgr;
-        delete _env;
-    }
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 
     void test_string(const std::string& testname, Field* field) {
         std::string filename = kTestDir + "/" + testname;
@@ -86,7 +82,7 @@ protected:
         }
 
         ZoneMapIndexReader column_zone_map;
-        ASSERT_OK(column_zone_map.load(_block_mgr, filename, &index_meta.zone_map_index(), true, false));
+        ASSERT_OK(column_zone_map.load(_block_mgr.get(), filename, &index_meta.zone_map_index(), true, false));
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
         ASSERT_EQ(3, zone_maps.size());
@@ -104,8 +100,8 @@ protected:
         ASSERT_EQ(false, zone_maps[2].has_not_null());
     }
 
-    EnvMemory* _env = nullptr;
-    fs::FileBlockManager* _block_mgr = nullptr;
+    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
@@ -142,7 +138,7 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     }
 
     ZoneMapIndexReader column_zone_map;
-    ASSERT_OK(column_zone_map.load(_block_mgr, filename, &index_meta.zone_map_index(), true, false));
+    ASSERT_OK(column_zone_map.load(_block_mgr.get(), filename, &index_meta.zone_map_index(), true, false));
     ASSERT_EQ(3, column_zone_map.num_pages());
     const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
     ASSERT_EQ(3, zone_maps.size());

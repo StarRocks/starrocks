@@ -313,7 +313,7 @@ Status HashJoiner::_build(RuntimeState* state) {
         if (_ht.get_build_chunk()->reach_capacity_limit()) {
             return Status::InternalError("Total size of single column exceed the limit of hash join");
         }
-        _prepare_build_key_columns();
+        TRY_CATCH_BAD_ALLOC(_prepare_build_key_columns());
     }
 
     {

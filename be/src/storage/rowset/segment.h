@@ -75,7 +75,7 @@ class Segment : public std::enable_shared_from_this<Segment> {
     struct private_type;
 
 public:
-    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> blk_mgr,
                                                    const std::string& filename, uint32_t segment_id,
                                                    const TabletSchema* tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
@@ -84,7 +84,7 @@ public:
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
 
-    Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
+    Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
             const TabletSchema* tablet_schema);
 
     ~Segment() = default;
@@ -166,7 +166,7 @@ private:
     friend class SegmentIterator;
     friend class vectorized::SegmentIterator;
 
-    fs::BlockManager* _block_mgr;
+    std::shared_ptr<fs::BlockManager> _block_mgr;
     std::string _fname;
     const TabletSchema* _tablet_schema;
     uint32_t _segment_id = 0;

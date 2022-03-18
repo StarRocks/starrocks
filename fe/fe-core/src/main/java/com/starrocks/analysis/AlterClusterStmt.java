@@ -29,7 +29,6 @@ import java.util.Map;
 
 @Deprecated
 public class AlterClusterStmt extends DdlStmt {
-
     private Map<String, String> properties;
     private String alterClusterName;
     private String clusterName;
@@ -50,10 +49,6 @@ public class AlterClusterStmt extends DdlStmt {
         return "ALTER CLUSTER " + alterClusterName + " PROPERTIES(\"instance_num\"=" + "\"" + instanceNum + "\")";
     }
 
-    public int getInstanceNum() {
-        return instanceNum;
-    }
-
     public String getAlterClusterName() {
         return alterClusterName;
     }
@@ -64,9 +59,5 @@ public class AlterClusterStmt extends DdlStmt {
 
     public String getClusterName() {
         return this.clusterName;
-    }
-
-    public void setInstanceNum(int instanceNum) {
-        this.instanceNum = instanceNum;
     }
 }

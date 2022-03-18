@@ -241,7 +241,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     DCHECK_EQ(_params->fields.size(), _params->cids.size());
     DCHECK_EQ(_params->fields.size(), _params->read_page.size());
 
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_segment->file_name()));
     RETURN_IF_ERROR(block_mgr->open_block(_segment->file_name(), &_rblock));
 
     _column_iterators.resize(_params->max_cid + 1, nullptr);

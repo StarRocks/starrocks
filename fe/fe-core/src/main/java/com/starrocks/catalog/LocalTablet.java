@@ -148,6 +148,7 @@ public class LocalTablet extends Tablet {
         return this.replicas;
     }
 
+    @Override
     public Set<Long> getBackendIds() {
         Set<Long> beIds = Sets.newHashSet();
         for (Replica replica : replicas) {

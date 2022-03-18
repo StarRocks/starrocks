@@ -63,7 +63,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;

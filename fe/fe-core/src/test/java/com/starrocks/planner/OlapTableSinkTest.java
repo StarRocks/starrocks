@@ -18,30 +18,57 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.StarOSAgent;
+import com.starrocks.catalog.StarOSTablet;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TOlapTableLocationParam;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class OlapTableSinkTest {
     private static final Logger LOG = LogManager.getLogger(OlapTableSinkTest.class);
@@ -164,5 +191,161 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testCreateLocationWithStarOSTablet(@Mocked Catalog catalog, @Mocked StarOSAgent agent,
+                                                   @Mocked SystemInfoService systemInfoService) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long backendId = 5L;
+        long tablet1Id = 10L;
+        long tablet2Id = 11L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        // Tablet
+        Tablet tablet1 = new StarOSTablet(tablet1Id, 0L);
+        Tablet tablet2 = new StarOSTablet(tablet2Id, 1L);
+
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.S3));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        index.setUseStarOS(partitionInfo.isUseStarOS(partitionId));
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.S3);
+        index.addTablet(tablet1, tabletMeta);
+        index.addTablet(tablet2, tabletMeta);
+
+        // Partition
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        partition.setPartitionInfo(partitionInfo);
+
+        // Table
+        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        new Expectations() {
+            {
+                Catalog.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                result = Status.OK;
+                Catalog.getCurrentCatalog();
+                result = catalog;
+                catalog.getStarOSAgent();
+                result = agent;
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = backendId;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId));
+        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        System.out.println(param);
+
+        // Check
+        List<TTabletLocation> locations = param.getTablets();
+        Assert.assertEquals(2, locations.size());
+        TTabletLocation location = locations.get(0);
+        List<Long> nodes = location.getNode_ids();
+        Assert.assertEquals(1, nodes.size());
+        Assert.assertEquals(backendId, nodes.get(0).longValue());
+    }
+
+    @Test
+    public void testCreateLocationWithLocalTablet(@Mocked Catalog catalog,
+                                                  @Mocked SystemInfoService systemInfoService) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long replicaId = 10L;
+        long backendId = 20L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        // Replica
+        Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
+        Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+
+        // Tablet
+        LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(replica1);
+        tablet.addReplica(replica2);
+        tablet.addReplica(replica3);
+
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+
+        // Partition
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        partition.setPartitionInfo(partitionInfo);
+
+        // Table
+        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        new Expectations() {
+            {
+                Catalog.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                result = Status.OK;
+                Catalog.getCurrentCatalog();
+                result = catalog;
+                catalog.getOrCreateSystemInfo(anyInt);
+                result = systemInfoService;
+                systemInfoService.checkBackendAlive(anyLong);
+                result = true;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId));
+        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        System.out.println(param);
+
+        // Check
+        List<TTabletLocation> locations = param.getTablets();
+        Assert.assertEquals(1, locations.size());
+        TTabletLocation location = locations.get(0);
+        List<Long> nodes = location.getNode_ids();
+        Assert.assertEquals(3, nodes.size());
+        Collections.sort(nodes);
+        Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
     }
 }
