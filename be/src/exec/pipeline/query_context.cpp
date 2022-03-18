@@ -144,4 +144,14 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     }
 }
 
+void QueryContextManager::clear() {
+    std::vector<std::unique_lock<std::shared_mutex>> locks;
+    locks.reserve(_mutexes.size());
+    for (int i = 0; i < _mutexes.size(); ++i) {
+        locks.emplace_back(_mutexes[i]);
+    }
+    _second_chance_maps.clear();
+    _context_maps.clear();
+}
+
 } // namespace starrocks::pipeline
