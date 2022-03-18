@@ -40,6 +40,7 @@
 #include "common/daemon.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"
@@ -288,6 +289,7 @@ int main(int argc, char** argv) {
     delete heartbeat_thrift_server;
 
     http_service.reset();
+    brpc_service->join();
     brpc_service.reset();
 
     be_server->stop();
@@ -297,7 +299,7 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-
+    starrocks::pipeline::QueryContextManager::instance()->clear();
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;
