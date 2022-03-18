@@ -440,9 +440,9 @@ public:
         _version = version;
         _idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
         _idx_file_path_tmp = _idx_file_path + ".tmp";
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+        ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_idx_file_path_tmp));
         fs::CreateBlockOptions wblock_opts({_idx_file_path_tmp, Env::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE});
-        return block_mgr->create_block(wblock_opts, &_wb);
+        return _block_mgr->create_block(wblock_opts, &_wb);
     }
 
     Status write_shard(size_t key_size, size_t value_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
@@ -505,6 +505,7 @@ private:
     EditVersion _version;
     string _idx_file_path_tmp;
     string _idx_file_path;
+    std::shared_ptr<fs::BlockManager> _block_mgr;
     std::unique_ptr<fs::WritableBlock> _wb;
     size_t _nshard = 0;
     size_t _fixed_key_size = 0;
@@ -999,7 +1000,6 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     MutableIndexMetaPB l0_meta = index_meta.l0_meta();
     IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
     EditVersion start_version = snapshot_meta.version();
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     PagePointerPB page_pb = snapshot_meta.data();
     size_t snapshot_off = page_pb.offset();
     size_t snapshot_size = page_pb.size();
@@ -1010,7 +1010,8 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
         }
     });
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    RETURN_IF_ERROR(block_mgr->open_block(l0_index_file_name, &rblock));
+    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(l0_index_file_name));
+    RETURN_IF_ERROR(_block_mgr->open_block(l0_index_file_name, &rblock));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
     // reads the contents of the file from the beginning
@@ -1057,7 +1058,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
     fs::CreateBlockOptions wblock_opts({l0_index_file_name});
     wblock_opts.mode = Env::MUST_EXIST;
-    RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &_index_block));
+    RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
     RETURN_IF_ERROR(_delete_expired_index_file(start_version));
     return Status::OK();
 }
@@ -1120,12 +1121,14 @@ Status PersistentIndex::on_commited() {
     if (_dump_snapshot) {
         std::string expired_file_path = _index_block->path();
         std::string index_file_path = _get_l0_index_file_name(_path, _version);
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+        if (_block_mgr == nullptr) {
+            ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(index_file_path));
+        }
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions wblock_opts({index_file_path});
         // new index file should be created in commit() phase
         wblock_opts.mode = Env::MUST_EXIST;
-        RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
+        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
         _index_block = std::move(wblock);
         VLOG(1) << "delete expired l0 index file: " << expired_file_path;
         Env::Default()->delete_file(expired_file_path);

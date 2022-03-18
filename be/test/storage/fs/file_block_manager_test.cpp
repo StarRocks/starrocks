@@ -54,7 +54,7 @@ protected:
 TEST_F(FileBlockManagerTest, NormalTest) {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
-    Env* env = Env::Default();
+    auto env = Env::CreateSharedFromString("posix://").value();
     std::unique_ptr<fs::FileBlockManager> fbm(new fs::FileBlockManager(env, std::move(bm_opts)));
 
     std::unique_ptr<fs::WritableBlock> wblock;

@@ -42,21 +42,17 @@ public:
     void SetUp() override {
         _mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
-        _env = new EnvMemory();
-        _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
+        _env = std::make_shared<EnvMemory>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kTestDir).ok());
     }
 
-    void TearDown() override {
-        delete _block_mgr;
-        delete _env;
-        StoragePageCache::release_global_cache();
-    }
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 
 protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    EnvMemory* _env = nullptr;
-    fs::FileBlockManager* _block_mgr = nullptr;
+    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
 };
 
 TEST_F(OrdinalPageIndexTest, normal) {
@@ -83,7 +79,8 @@ TEST_F(OrdinalPageIndexTest, normal) {
     }
 
     OrdinalIndexReader index;
-    ASSERT_TRUE(index.load(_block_mgr, filename, &index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false).ok());
+    ASSERT_TRUE(index.load(_block_mgr.get(), filename, &index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false)
+                        .ok());
     ASSERT_EQ(16 * 1024, index.num_data_pages());
     ASSERT_EQ(1, index.get_first_ordinal(0));
     ASSERT_EQ(4096, index.get_last_ordinal(0));
@@ -137,7 +134,7 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     }
 
     OrdinalIndexReader index;
-    ASSERT_TRUE(index.load(_block_mgr, "", &index_meta.ordinal_index(), num_values, true, false).ok());
+    ASSERT_TRUE(index.load(_block_mgr.get(), "", &index_meta.ordinal_index(), num_values, true, false).ok());
     ASSERT_EQ(1, index.num_data_pages());
     ASSERT_EQ(0, index.get_first_ordinal(0));
     ASSERT_EQ(num_values - 1, index.get_last_ordinal(0));
