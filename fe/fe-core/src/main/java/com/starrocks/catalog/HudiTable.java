@@ -19,7 +19,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -141,11 +140,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public HiveTableStats getTableStats() throws DdlException {
         return HiveMetaStoreTableUtils.getTableStats(resourceName, db, table);
-    }
-
-    @Override
-    public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitionsStats(resourceName, db, table, partitionKeys);
     }
 
     @Override
@@ -311,6 +305,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             case LONG:
                 if (logicalType instanceof LogicalTypes.TimeMicros) {
                     return primitiveType == PrimitiveType.TIME;
+                } else if (logicalType instanceof LogicalTypes.TimestampMillis
+                        || logicalType instanceof LogicalTypes.TimestampMicros) {
+                    return primitiveType == PrimitiveType.DATETIME;
                 } else {
                     return primitiveType == PrimitiveType.BIGINT;
                 }
@@ -329,7 +326,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
                             primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
                 } else {
-                    return false;
+                    return primitiveType == PrimitiveType.VARCHAR;
                 }
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()

@@ -39,7 +39,7 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
     }
 
     private LogicalHudiScanOperator(LogicalHudiScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_HIVE_SCAN,
+        super(OperatorType.LOGICAL_HUDI_SCAN,
                 builder.table,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
