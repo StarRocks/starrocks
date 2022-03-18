@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -138,7 +138,7 @@ public class SimpleScheduler {
         }
         lock.lock();
         try {
-            int tryTime = FeConstants.heartbeat_interval_second + 1;
+            int tryTime = Config.heartbeat_timeout_second + 1;
             blacklistBackends.put(backendID, tryTime);
             LOG.warn("add black list " + backendID);
         } finally {

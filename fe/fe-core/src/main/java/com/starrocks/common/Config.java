@@ -1378,8 +1378,23 @@ public class Config extends ConfigBase {
     public static long min_routine_load_lag_for_metrics = 10000;
 
     /**
+<<<<<<< HEAD
      * after wait quorom_publish_wait_time_ms, will do quorum publish
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+=======
+     * The heartbeat timeout of be/broker/fe.
+     * the default is 5 seconds
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_timeout_second = 5;
+
+    /**
+     * The heartbeat retry times of be/broker/fe.
+     * the default is 3
+     */
+    @ConfField(mutable = true)
+    public static int heartbeat_retry_times = 3;
+>>>>>>> 0881cb2d (Support heartbeat timeout & retry_times configuration (#4175))
 }

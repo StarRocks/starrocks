@@ -29,7 +29,7 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
 public class ClientPool {
     static GenericKeyedObjectPoolConfig heartbeatConfig = new GenericKeyedObjectPoolConfig();
-    static int heartbeatTimeoutMs = FeConstants.heartbeat_interval_second * 1000;
+    static int heartbeatTimeoutMs = Config.heartbeat_timeout_second * 1000;
 
     static GenericKeyedObjectPoolConfig backendConfig = new GenericKeyedObjectPoolConfig();
     static int backendTimeoutMs = 60000; // 1min

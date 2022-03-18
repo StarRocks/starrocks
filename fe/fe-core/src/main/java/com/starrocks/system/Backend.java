@@ -29,6 +29,7 @@ import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -96,6 +97,8 @@ public class Backend implements Writable {
     // the max tablet compaction score of this backend.
     // this field is set by tablet report, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
+
+    private int heartbeatRetryTimes = 0;
 
     // additional backendStatus information for BE, display in JSON format
     private BackendStatus backendStatus = new BackendStatus();
@@ -677,14 +680,19 @@ public class Backend implements Writable {
             }
 
             heartbeatErrMsg = "";
+            this.heartbeatRetryTimes = 0;
         } else {
-            if (isAlive.compareAndSet(true, false)) {
-                isChanged = true;
-                LOG.info("{} is dead,", this.toString());
-            }
+            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
+                this.heartbeatRetryTimes++;
+            } else {
+                if (isAlive.compareAndSet(true, false)) {
+                    isChanged = true;
+                    LOG.info("{} is dead,", this.toString());
+                }
 
-            heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
-            lastMissingHeartbeatTime = System.currentTimeMillis();
+                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
+                lastMissingHeartbeatTime = System.currentTimeMillis();
+            }
         }
 
         return isChanged;
