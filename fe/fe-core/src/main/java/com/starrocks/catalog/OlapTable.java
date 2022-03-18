@@ -1223,7 +1223,6 @@ public class OlapTable extends Table {
                     partition.deleteRollupIndex(deleteIndex.getId());
                 }
                 partition.setState(PartitionState.NORMAL);
-                copied.getPartitionInfo().setDataProperty(partition.getId(), new DataProperty(TStorageMedium.HDD));
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
                     for (Tablet tablet : idx.getTablets()) {
