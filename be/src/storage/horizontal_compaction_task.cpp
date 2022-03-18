@@ -141,7 +141,8 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, vec
     TRACE("[Compaction] data compacted");
 
     if (should_stop()) {
-        LOG(INFO) << "horizontal compaction task_id:" << _task_info.task_id << " is stopped.";
+        LOG(INFO) << "horizontal compaction task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
+                  << " is stopped.";
         return Status::Cancelled("horizontal compaction task is stopped.");
     }
     return output_rows;

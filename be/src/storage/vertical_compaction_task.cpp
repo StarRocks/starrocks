@@ -229,7 +229,8 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
         }
     }
     if (should_stop()) {
-        LOG(INFO) << "vertical compaction task_id:" << _task_info.task_id << " is stopped.";
+        LOG(INFO) << "vertical compaction task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
+                  << " is stopped.";
         return Status::Cancelled("vertical compaction task is stopped.");
     }
     return output_rows;
