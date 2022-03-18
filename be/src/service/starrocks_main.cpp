@@ -294,6 +294,7 @@ int main(int argc, char** argv) {
     delete heartbeat_thrift_server;
 
     http_service.reset();
+    brpc_service->join();
     brpc_service.reset();
 
     be_server->stop();
