@@ -76,6 +76,9 @@ public:
     size_t size() const override { return _total_task_num.load(std::memory_order_acquire); }
 
 private:
+    // Calculate the actual cpu used by all wg
+    void cal_wg_cpu_real_use_ratio();
+
     // _maybe_adjust_weight and _select_next_wg are guarded by the ourside _global_mutex.
     void _maybe_adjust_weight();
     WorkGroupPtr _select_next_wg(int worker_id);
