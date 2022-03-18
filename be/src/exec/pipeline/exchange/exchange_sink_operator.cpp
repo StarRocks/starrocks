@@ -349,12 +349,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-    _ignore_rows = ADD_COUNTER(_unique_metrics, "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTimer");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
-    _send_request_timer = ADD_TIMER(_unique_metrics, "SendRequestTime");
-    _wait_response_timer = ADD_TIMER(_unique_metrics, "WaitResponseTime");
     _overall_throughput = _unique_metrics->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
             [capture0 = _bytes_sent_counter, capture1 = _total_timer] {

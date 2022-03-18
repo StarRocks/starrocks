@@ -66,6 +66,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
         runtime_profile->add_info_string("Predicates", _hash_join_node.sql_predicates);
     }
 
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinOp", to_string(_hash_join_node.join_op));
     _copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     _build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     _build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
@@ -92,6 +94,8 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
         _runtime_state = state;
     }
 
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinOp", to_string(_hash_join_node.join_op));
     _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
     _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
     _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
