@@ -14,7 +14,7 @@ singleStatement
 statement
     : queryStatement                                                                    #statementDefault
     | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
-    | INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
+    | EXPLAIN? INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
     (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
