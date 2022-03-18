@@ -73,6 +73,11 @@ private:
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);
 
+    Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                  DataSegments& segments, const size_t chunk_size, size_t number_of_rows_to_sort);
+    Status _partial_sort_row_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                  DataSegments& segments, const size_t chunk_size, size_t number_of_rows_to_sort);
+
     // buffer
 
     struct RawChunks {
