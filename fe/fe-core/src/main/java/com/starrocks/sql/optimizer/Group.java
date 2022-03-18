@@ -189,7 +189,13 @@ public class Group {
         physicalExpressions.addAll(other.getPhysicalExpressions());
         for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : other.lowestCostExpressions
                 .entrySet()) {
-            setBestExpressionWithStatistics(entry.getValue().second, entry.getValue().first, entry.getKey(),
+            GroupExpression bestGroupExpression = entry.getValue().second;
+            // change the enforcer itself group and child group to dst group if enforcer's group is other.
+            if (bestGroupExpression.getGroup() == other) {
+                bestGroupExpression.setGroup(this);
+                bestGroupExpression.getInputs().set(0, this);
+            }
+            setBestExpressionWithStatistics(bestGroupExpression, entry.getValue().first, entry.getKey(),
                     other.hasConfidenceStatistic(entry.getKey()) ? other.getConfidenceStatistic(entry.getKey()) :
                             other.statistics);
         }
