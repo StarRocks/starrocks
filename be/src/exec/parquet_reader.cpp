@@ -41,27 +41,53 @@ namespace starrocks {
 
 // Broker
 
-ParquetReaderWrap::ParquetReaderWrap(FileReader* file_reader, int32_t num_of_columns_from_file)
+ParquetReaderWrap::ParquetReaderWrap(FileReader* file_reader, int32_t num_of_columns_from_file, int64_t read_offset,
+                                     int64_t read_size)
         : ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>(new ParquetFile(file_reader)),
-                            num_of_columns_from_file) {}
+                            num_of_columns_from_file, read_offset, read_size) {}
+
+ParquetReaderWrap::~ParquetReaderWrap() {
+    close();
+}
 
 ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file,
-                                     int32_t num_of_columns_from_file)
+                                     int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size)
+
         : _num_of_columns_from_file(num_of_columns_from_file),
           _total_groups(0),
           _current_group(0),
           _rows_of_group(0),
           _current_line_of_group(0),
-          _current_line_of_batch(0) {
+          _current_line_of_batch(0),
+          _read_offset(read_offset),
+          _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
     _properties.set_buffer_size(8 * 1024 * 1024);
 }
 
-ParquetReaderWrap::~ParquetReaderWrap() {
-    close();
+Status ParquetReaderWrap::next_selected_row_group() {
+    while (_current_group < _total_groups) {
+        int64_t row_group_start = _file_metadata->RowGroup(_current_group)->file_offset();
+
+        if (_read_size == 0) {
+            return Status::EndOfFile("End of row group");
+        }
+
+        int64_t scan_start = _read_offset;
+        int64_t scan_end = _read_size + scan_start;
+
+        if (row_group_start >= scan_start && row_group_start < scan_end) {
+            return Status::OK();
+        }
+
+        _current_group++;
+    }
+
+    return Status::EndOfFile("End of row group");
 }
+
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
                                               const std::string& timezone) {
     try {
@@ -87,7 +113,9 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         if (_total_groups == 0) {
             return Status::EndOfFile("Empty Parquet File");
         }
-        _rows_of_group = _file_metadata->RowGroup(0)->num_rows();
+        RETURN_IF_ERROR(next_selected_row_group());
+
+        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
 
         {
             // Initialize _map_column, map column name to it's index
@@ -184,7 +212,8 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
                 << " current line of group:" << _current_line_of_group
                 << " is larger than rows group size:" << _rows_of_group << ". start to read next row group";
         _current_group++;
-        if (_current_group >= _total_groups) { // read completed.
+        auto st = next_selected_row_group();
+        if (!st.ok()) { // read completed.
             _parquet_column_ids.clear();
             *eof = true;
             return Status::OK();
