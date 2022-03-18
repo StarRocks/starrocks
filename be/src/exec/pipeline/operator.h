@@ -138,6 +138,10 @@ public:
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 
+    // 1. The different operators have their own independent logic for calculating Cost
+    // 2. Cost rappresenta un overhead dell'operatore in un ciclo di esecuzione
+    virtual double get_cpu_cost() { return 0; }
+    virtual double get_io_cost() { return 0; }
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

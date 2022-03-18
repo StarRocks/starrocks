@@ -116,6 +116,10 @@ public:
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _vacuum_ttl;
     }
+
+    // return the cost of Actual owned allocated overhead
+    double get_cost();
+
     // return true if current workgroup is removable:
     // 1. is already marked del
     // 2. no pending drivers exists
@@ -160,6 +164,12 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
+<<<<<<< HEAD
+=======
+    std::atomic<double> _available_cpu_cost = 0;
+    std::atomic<double> _available_io_cost = 0;
+
+>>>>>>> bcc0ab06 (save file)
     double _cpu_actual_use_ratio = 0;
 };
 
@@ -207,10 +217,21 @@ public:
     // destruct workgroups
     void destroy();
 
+    void cal_wg_cpu_real_use_ratio();
+
+    // just for debug
+    void log_cpu_use_ratio() {
+        std::shared_lock read_lock(_mutex);
+        LOG(WARNING) << "**********************************";
+        for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
+            const auto& wg = it->second; 
+            LOG(WARNING) << "[" << wg->name() << "] " << " ratio " << wg->get_cpu_actual_use_ratio();
+        }
+    }
+
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
-
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
@@ -244,6 +265,8 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
+
+    int64_t _last_cal_wg_cpu_real_use_ratio_time = 0;
 };
 
 class DefaultWorkGroupInitialization {

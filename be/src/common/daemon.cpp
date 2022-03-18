@@ -49,6 +49,7 @@
 #include "util/thrift_util.h"
 #include "util/time.h"
 #include "util/timezone_utils.h"
+#include "exec/workgroup/work_group.h"
 
 namespace starrocks {
 
@@ -181,6 +182,16 @@ void calculate_metrics(void* arg_this) {
     }
 }
 
+// just for debug
+void calculate_wg(void* arg_this) {
+    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    while (!daemon->stopped()) {
+        workgroup::WorkGroupManager::instance()->log_cpu_use_ratio();
+        sleep(1);
+    }
+}
+
+
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
     std::set<std::string> disk_devices;
@@ -278,6 +289,9 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
+
+    std::thread log_cpu_ratio_thread(calculate_wg, this);
+     _daemon_threads.emplace_back(std::move(log_cpu_ratio_thread));
 
     init_signals();
     init_minidump();

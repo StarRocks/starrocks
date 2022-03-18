@@ -82,6 +82,7 @@ private:
     // _maybe_adjust_weight and _select_next_wg are guarded by the ourside _global_mutex.
     void _maybe_adjust_weight();
     WorkGroupPtr _select_next_wg(int worker_id);
+    void cal_wg_cpu_real_use_ratio();
 
     static constexpr int MAX_SCHEDULE_NUM_PERIOD = 512;
 

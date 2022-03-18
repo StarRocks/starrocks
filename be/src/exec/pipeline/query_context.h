@@ -71,6 +71,27 @@ public:
         return _desc_tbl;
     }
 
+    void set_g_cost(int64_t cpu_cost, int64_t io_cost) {
+        _init_g_cpu_cost = cpu_cost;
+        _init_g_io_cost = io_cost;
+    }
+
+    int64_t get_g_cpu_cost() const {
+        return _init_g_cpu_cost;
+    }
+
+    int64_t get_g_io_cost() const {
+        return _init_g_io_cost;
+    }
+
+    void incr_cpu_cost(int64_t cost) {
+        _cpu_cost += cost;
+    }
+
+    void incr_io_cost(int64_t cost) {
+        _io_cost += cost;
+    }
+
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
@@ -83,6 +104,12 @@ private:
     bool _is_runtime_filter_coordinator = false;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
+
+    int64_t _init_g_cpu_cost = 0;
+    int64_t _init_g_io_cost = 0;
+
+    std::atomic<int64_t> _cpu_cost = 0;
+    std::atomic<int64_t> _io_cost = 0;
 };
 
 class QueryContextManager {

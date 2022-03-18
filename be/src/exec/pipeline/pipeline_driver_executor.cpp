@@ -88,6 +88,7 @@ void GlobalDriverExecutor::_worker_thread() {
             auto status = driver->process(runtime_state, worker_id);
             this->_driver_queue->update_statistics(driver);
 
+            // check If large query, if true, cancel it
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
