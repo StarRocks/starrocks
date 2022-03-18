@@ -25,6 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -86,6 +87,8 @@ public class DeleteStmt extends DdlStmt {
         }
 
         tbl.analyze(analyzer);
+
+        CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
 
         if (partitionNames != null) {
             partitionNames.analyze(analyzer);

@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -257,6 +258,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         TableName tableName = tableRefList.get(0).getName();
         baseIndexName = tableName.getTbl();
         dbName = tableName.getDb();
+
+        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, baseIndexName);
     }
 
     private void analyzeOrderByClause() throws AnalysisException {

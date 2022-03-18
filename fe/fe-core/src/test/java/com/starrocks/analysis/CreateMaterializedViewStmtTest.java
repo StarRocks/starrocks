@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -63,6 +64,8 @@ public class CreateMaterializedViewStmtTest {
     private ConnectContext connectContext;
     @Mocked
     private Config config;
+    @Mocked
+    private CatalogUtils catalogUtils;
 
     private static String runningDir = "fe/mocked/CreateMaterializedViewStmtTest/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext connectContext2;
