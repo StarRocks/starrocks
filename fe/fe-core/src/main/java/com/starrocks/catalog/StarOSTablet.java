@@ -68,11 +68,11 @@ public class StarOSTablet extends Tablet {
 
     // visibleVersion and schemaHash is not used
     @Override
-    public void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (long backendId : getBackendIds()) {
             Replica replica = new Replica(-1, backendId, -1, null);
-            allQuerableReplica.add(replica);
+            allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
                 localReplicas.add(replica);
             }

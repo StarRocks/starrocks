@@ -50,7 +50,7 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract Set<Long> getBackendIds();
 
-    public abstract void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
+    public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                               long visibleVersion, long localBeId, int schemaHash);
 
     @Override

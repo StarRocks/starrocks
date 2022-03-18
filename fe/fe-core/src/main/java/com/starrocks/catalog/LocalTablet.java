@@ -204,7 +204,7 @@ public class LocalTablet extends Tablet {
 
     // for query
     @Override
-    public void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -221,7 +221,7 @@ public class LocalTablet extends Tablet {
                 // replica.getSchemaHash() == -1 is for compatibility
                 if (replica.checkVersionCatchUp(visibleVersion, false)
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
-                    allQuerableReplica.add(replica);
+                    allQuerableReplicas.add(replica);
                     if (localBeId != -1 && replica.getBackendId() == localBeId) {
                         localReplicas.add(replica);
                     }
