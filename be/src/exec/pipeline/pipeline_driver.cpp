@@ -174,6 +174,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // Check curr_op finished again
                 if (curr_op->is_finished()) {
+                    // TODO: need add control flag
+                    _query_ctx->incr_cpu_cost(curr_op->get_cpu_cost());
+                    _query_ctx->incr_io_cost(curr_op->get_io_cost());
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));

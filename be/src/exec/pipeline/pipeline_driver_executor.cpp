@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -89,11 +90,23 @@ void GlobalDriverExecutor::_worker_thread() {
             this->_driver_queue->update_statistics(driver);
 
             // check If large query, if true, cancel it
-            if (!status.ok()) {
-                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", error=" << status.status().to_string();
-                query_ctx->cancel(status.status());
+            auto wg = driver->workgroup();
+            bool is_big_query = false;
+            if (wg) {
+                is_big_query = wg->is_big_query(*query_ctx);
+            }
+           
+            if (!status.ok() && is_big_query) {
+                if (is_big_query) {
+                    LOG(WARNING) << "[Driver] Process exceed limit, query_id=" << print_id(driver->query_ctx()->query_id())
+                                << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());          
+                    query_ctx->cancel(Status::Corruption("exceed limit, is big query"));
+                } else {
+                    LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                                << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                                << ", error=" << status.status().to_string();
+                    query_ctx->cancel(status.status());
+                }
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

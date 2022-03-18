@@ -184,6 +184,29 @@ void WorkGroup::estimate_trend_factor_period() {
     _period_ask_chunk_num = 1;
 }
 
+bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    int64_t time_now = MonotonicNanos();
+    if (time_now - query_context.query_begin_time() >= config::min_execute_time * NANOS_PER_SEC) {
+        return false;
+    }
+
+    // check cpu
+    int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.get_init_wg_cpu_cost();
+    double cpu_use_ratio = (double)(query_context.get_cpu_cost() / wg_growth_cpu_use_cost);
+    if (cpu_use_ratio > 0.5 /* temp vaue */) {
+        return true;
+    }
+    // check io
+    int64_t wg_growth_cpu_io_cost = total_io_cost() - query_context.get_init_wg_io_cost();
+    double io_use_ratio = (double)(query_context.get_io_cost() / wg_growth_cpu_io_cost);
+    if (io_use_ratio > 0.5) {
+        return true;
+    } 
+    
+    return false;
+}
+
+
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
 

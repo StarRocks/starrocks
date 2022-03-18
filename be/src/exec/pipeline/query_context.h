@@ -13,6 +13,7 @@
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+#include "util/time.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -71,26 +72,18 @@ public:
         return _desc_tbl;
     }
 
-    void set_g_cost(int64_t cpu_cost, int64_t io_cost) {
-        _init_g_cpu_cost = cpu_cost;
-        _init_g_io_cost = io_cost;
-    }
+    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
+    int64_t get_cpu_cost() const { return _cur_cpu_cost; }
+    void incr_io_cost(int64_t cost) { _cur_io_cost += cost; }
+    int64_t get_io_cost() const { return _cur_io_cost; }
 
-    int64_t get_g_cpu_cost() const {
-        return _init_g_cpu_cost;
-    }
+    int64_t get_init_wg_cpu_cost() const { return _init_wg_cpu_cost; }
+    int64_t get_init_wg_io_cost() const { return _init_wg_io_cost; }
+    void set_init_wg_cpu_cost(int64_t wg_cpu_cost) { _init_wg_cpu_cost = wg_cpu_cost; }
+    void set_init_wg_io_cost(int64_t wg_io_cost) { _init_wg_io_cost = wg_io_cost; }
 
-    int64_t get_g_io_cost() const {
-        return _init_g_io_cost;
-    }
-
-    void incr_cpu_cost(int64_t cost) {
-        _cpu_cost += cost;
-    }
-
-    void incr_io_cost(int64_t cost) {
-        _io_cost += cost;
-    }
+    int64_t query_begin_time() const { return _query_begin_time; }
+    void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
 
 private:
     ExecEnv* _exec_env = nullptr;
@@ -105,11 +98,13 @@ private:
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 
-    int64_t _init_g_cpu_cost = 0;
-    int64_t _init_g_io_cost = 0;
 
-    std::atomic<int64_t> _cpu_cost = 0;
-    std::atomic<int64_t> _io_cost = 0;
+    int64_t _query_begin_time = 0;
+    std::atomic<int64_t> _cur_cpu_cost = 0;
+    std::atomic<int64_t> _cur_io_cost = 0;
+
+    int64_t _init_wg_cpu_cost = 0;
+    int64_t _init_wg_io_cost = 0;
 };
 
 class QueryContextManager {

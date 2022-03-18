@@ -127,6 +127,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
+
+        // init query context
+        _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
+        _query_ctx->set_init_wg_io_cost(wg->total_io_cost());
+        _query_ctx->init_query_begin_time();
     }
 
     int32_t degree_of_parallelism = 1;
