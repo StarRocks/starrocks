@@ -961,6 +961,9 @@ PersistentIndex::~PersistentIndex() {
     if (_index_block) {
         _index_block->close();
     }
+    if (_l1) {
+        _l1->clear();
+    }
 }
 
 std::string PersistentIndex::_get_l0_index_file_name(std::string& dir, const EditVersion& version) {
@@ -986,6 +989,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
+    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(_path));
     return Status::OK();
 }
 
@@ -1014,16 +1018,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     size_t snapshot_size = page_pb.size();
     std::unique_ptr<fs::ReadableBlock> rblock;
     std::unique_ptr<fs::ReadableBlock> l1_rblock;
-    DeferOp close_block([&rblock, &l1_rblock] {
-        if (rblock) {
-            rblock->close();
-        }
-        if (l1_rblock) {
-            l1_rblock->close();
-        }
-    });
+
     std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(l0_index_file_name));
     RETURN_IF_ERROR(_block_mgr->open_block(l0_index_file_name, &rblock));
     // Assuming that the snapshot is always at the beginning of index file,
     // if not, we can't call phmap.load() directly because phmap.load() alaways
@@ -1076,7 +1072,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        RETURN_IF_ERROR(block_mgr->open_block(l1_block_path, &l1_rblock));
+        RETURN_IF_ERROR(_block_mgr->open_block(l1_block_path, &l1_rblock));
         auto l1_st = ImmutableIndex::load(std::move(l1_rblock));
         if (!l1_st.ok()) {
             return l1_st.status();
@@ -1111,11 +1107,11 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_flushed) {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
         std::string file_name = _get_l0_index_file_name(_path, _version);
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+        //ASSIGN_OR_RETURN(_block_mgr, fs::fs_util::block_manager(file_name));
         std::unique_ptr<fs::WritableBlock> wblock;
         fs::CreateBlockOptions wblock_opts({file_name});
         wblock_opts.mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
-        RETURN_IF_ERROR(block_mgr->create_block(wblock_opts, &wblock));
+        RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &wblock));
         DeferOp close_block([&wblock] {
             if (wblock) {
                 wblock->close();

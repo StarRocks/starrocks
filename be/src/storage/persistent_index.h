@@ -141,6 +141,12 @@ public:
         }
     }
 
+    void clear() {
+        if (_rb != nullptr) {
+            _rb.reset();
+        }
+    }
+
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<fs::ReadableBlock>&& rb);
 
 private:
