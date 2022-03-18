@@ -7,6 +7,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
+#include "column/nullable_column.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
@@ -28,8 +29,17 @@ public:
               _build_tie(build_tie) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
-        return sort_and_tie_helper_nullable(_cancel, &column, _is_asc_order, _is_null_first, _permutation, _tie, _range,
-                                            _build_tie);
+        const NullData& null_data = column.immutable_null_column_data();
+        auto null_pred = [&](const SmallPermuteItem& item) -> bool {
+            if (_is_null_first) {
+                return null_data[item.index_in_chunk] == 1;
+            } else {
+                return null_data[item.index_in_chunk] != 1;
+            }
+        };
+
+        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _is_asc_order,
+                                            _is_null_first, _permutation, _tie, _range, _build_tie);
     }
 
     Status do_visit(const vectorized::ConstColumn& column) {
@@ -115,13 +125,32 @@ public:
               _range(range),
               _build_tie(build_tie) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) { return Status::NotSupported("TOOD"); }
-    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("TOOD"); }
-    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("TOOD"); }
+    Status do_visit(const vectorized::NullableColumn& column) {
+        // TODO: optimize it
+        std::vector<NullData> null_datas;
+        std::vector<ColumnPtr> data_columns;
+        for (auto& col : _vertical_columns) {
+            auto real = down_cast<const NullableColumn*>(col.get());
+            null_datas.push_back(real->immutable_null_column_data());
+            data_columns.push_back(real->data_column());
+        }
+
+        auto null_pred = [&](const PermutationItem& item) -> bool {
+            if (_is_null_first) {
+                return null_datas[item.chunk_index][item.index_in_chunk] == 1;
+            } else {
+                return null_datas[item.chunk_index][item.index_in_chunk] != 1;
+            }
+        };
+
+        return sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order, _is_null_first,
+                                                     _permutation, _tie, _range, _build_tie);
+    }
 
     Status do_visit(const vectorized::BinaryColumn& column) {
         using ItemType = InlineChunkItem<Slice>;
         using Container = std::vector<Slice>;
+
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
             return lhs.inline_value.compare(rhs.inline_value);
         };
@@ -161,11 +190,36 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::ConstColumn& column) {
+        // noop
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::ArrayColumn& column) {
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _is_null_first ? -1 : 1);
+        };
+
+        return sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range, _build_tie);
+    }
+
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
+        DCHECK(false) << "not supported";
         return Status::NotSupported("TOOD");
     }
-    Status do_visit(const vectorized::JsonColumn& column) { return Status::NotSupported("TOOD"); }
+
+    Status do_visit(const vectorized::JsonColumn& column) {
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _is_null_first ? -1 : 1);
+        };
+
+        return sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range, _build_tie);
+    }
 
 private:
     template <class T>
@@ -273,9 +327,9 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
     return Status::OK();
 }
 
-static Status sort_and_tie_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns,
-                                            bool is_asc_order, bool is_null_first, Permutation& permutation, Tie& tie,
-                                            std::pair<int, int> range, bool build_tie) {
+Status sort_and_tie_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+                                     bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
+                                     bool build_tie) {
     DCHECK_GT(columns.size(), 0);
     VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie);
     return columns[0]->accept(&sorter);

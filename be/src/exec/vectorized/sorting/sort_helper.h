@@ -62,6 +62,9 @@ struct SorterComparator<TimestampValue> {
 
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
+    if (column == nullptr) {
+        return "null";
+    }
     std::string res;
     for (auto p : permutation) {
         res += fmt::format("{:>5}, ", column->debug_item(p.index_in_chunk));
@@ -69,20 +72,68 @@ static std::string dubug_column(const Column* column, const PermutationType& per
     return res;
 }
 
+// TODO: reduce duplicate code
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
+                                                           const std::vector<ColumnPtr>& data_columns,
+                                                           NullPred null_pred, bool is_asc_order, bool is_null_first,
+                                                           Permutation& permutation, Tie& tie,
+                                                           std::pair<int, int> range, bool build_tie) {
+    VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
+
+    TieIterator iterator(tie, range.first, range.second);
+    while (iterator.next()) {
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+
+        if (range_last - range_first > 1) {
+            auto pivot_iter =
+                    std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
+            int pivot_start = pivot_iter - permutation.begin();
+            int notnull_start, notnull_end;
+            int null_start, null_end;
+            if (is_null_first) {
+                null_start = range_first;
+                null_end = pivot_start;
+                notnull_start = pivot_start;
+                notnull_end = range_last;
+            } else {
+                notnull_start = range_first;
+                notnull_end = pivot_start;
+                null_start = pivot_start;
+                null_end = range_last;
+            }
+
+            if (notnull_start < notnull_end) {
+                tie[notnull_start] = 0;
+                RETURN_IF_ERROR(sort_and_tie_vertical_columns(cancel, data_columns, is_asc_order, is_null_first,
+                                                              permutation, tie, {notnull_start, notnull_end},
+                                                              build_tie));
+            }
+            if (range_first <= null_start && null_start < range_last) {
+                // Mark all null as 0, they don
+                std::fill(tie.begin() + null_start, tie.begin() + null_end, 1);
+
+                // Cut off null and non-null
+                tie[null_start] = 0;
+            }
+        }
+
+        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
+    }
+
+    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
+
+    return Status::OK();
+}
+
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column, bool is_asc_order,
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column,
+                                                  const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
-    const NullData& null_data = column->immutable_null_column_data();
-    auto null_pred = [&](const SmallPermuteItem& item) -> bool {
-        if (is_null_first) {
-            return null_data[item.index_in_chunk] == 1;
-        } else {
-            return null_data[item.index_in_chunk] != 1;
-        }
-    };
-
     VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
     VLOG(2) << fmt::format("nullable column before sort: {}\n", dubug_column(column, permutation));
 
@@ -111,8 +162,8 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 
             if (notnull_start < notnull_end) {
                 tie[notnull_start] = 0;
-                RETURN_IF_ERROR(sort_and_tie_column(cancel, column->data_column(), is_asc_order, is_null_first,
-                                                    permutation, tie, {notnull_start, notnull_end}, build_tie));
+                RETURN_IF_ERROR(sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie,
+                                                    {notnull_start, notnull_end}, build_tie));
             }
             if (range_first <= null_start && null_start < range_last) {
                 // Mark all null as 0, they don
