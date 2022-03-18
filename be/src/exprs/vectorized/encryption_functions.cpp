@@ -327,7 +327,7 @@ ColumnPtr EncryptionFunctions::sha2(FunctionContext* ctx, const Columns& columns
         ColumnBuilder<TYPE_VARCHAR> result(size);
 
         for (int row = 0; row < size; row++) {
-            if (src_viewer.is_null(row)) {
+            if (src_viewer.is_null(row) || length_viewer.is_null(row)) {
                 result.append_null();
                 continue;
             }
