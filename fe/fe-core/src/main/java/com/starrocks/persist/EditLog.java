@@ -527,7 +527,11 @@ public class EditLog {
                     catalog.replayGlobalVariable(variable);
                     break;
                 }
-                case OperationType.OP_CREATE_CLUSTER:
+                case OperationType.OP_CREATE_CLUSTER: {
+                    final Cluster value = (Cluster) journal.getData();
+                    catalog.replayCreateCluster(value);
+                    break;
+                }
                 case OperationType.OP_DROP_CLUSTER:
                 case OperationType.OP_EXPAND_CLUSTER: {
                     break;
