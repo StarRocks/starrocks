@@ -248,8 +248,9 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+                "  |  group by: [4: expr, DECIMAL128(28,0), true]"));
     }
 
     @Test
