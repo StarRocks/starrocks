@@ -61,6 +61,18 @@ TEST_F(EnvS3Test, test_directory) {
 
     bool created = false;
     bool is_dir = false;
+
+    ASSERT_TRUE(env->create_dir(S3Path("/")).is_already_exist());
+    ASSERT_OK(env->create_dir_if_missing(S3Path("/"), &created));
+    ASSERT_FALSE(created);
+    ASSERT_OK(env->is_directory(S3Path("/"), &is_dir));
+    ASSERT_TRUE(is_dir);
+    ASSERT_OK(env->iterate_dir(S3Path("/"), [&](std::string_view /*name*/) -> bool {
+        CHECK(false) << "root directory should be empty";
+        return true;
+    }));
+    ASSERT_ERROR(env->delete_dir(S3Path(("/"))));
+
     //
     //  /dirname0/
     //
@@ -186,6 +198,47 @@ TEST_F(EnvS3Test, test_directory) {
     EXPECT_OK(env->delete_dir(S3Path("/dirname2/subdir0")));
     EXPECT_ERROR(env->delete_dir(S3Path("/dirname2"))); // "/dirname2/" is a non-exist object
     EXPECT_OK(env->delete_file(S3Path("/file0")));
+}
+
+TEST_F(EnvS3Test, test_delete_dir_recursive) {
+    ASSIGN_OR_ABORT(auto env, Env::CreateUniqueFromString("s3://"));
+
+    std::vector<std::string> entries;
+    auto cb = [&](std::string_view name) -> bool {
+        entries.emplace_back(name);
+        return true;
+    };
+
+    bool created;
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0"), &created));
+    ASSERT_OK(env->delete_dir_recursive(S3Path("/dirname0")));
+    EXPECT_OK(env->iterate_dir(S3Path("/"), cb));
+    ASSERT_EQ(0, entries.size());
+
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0"), &created));
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0/a"), &created));
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0/b"), &created));
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0/a/a"), &created));
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0/a/b"), &created));
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0/a/c"), &created));
+    {
+        ASSIGN_OR_ABORT(auto of, env->new_writable_file(S3Path("/dirname0/1.dat")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+    }
+    {
+        ASSIGN_OR_ABORT(auto of, env->new_writable_file(S3Path("/dirname0/a/1.dat")));
+        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->close());
+    }
+
+    EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0x"), &created));
+    ASSERT_OK(env->delete_dir_recursive(S3Path("/dirname0")));
+    EXPECT_OK(env->iterate_dir(S3Path("/"), cb));
+    ASSERT_EQ(1, entries.size());
+    ASSERT_EQ("dirname0x", entries[0]);
+    ASSERT_OK(env->delete_dir(S3Path("/dirname0x")));
+    ASSERT_ERROR(env->delete_dir_recursive(S3Path("/")));
 }
 
 } // namespace starrocks

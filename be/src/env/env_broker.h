@@ -51,6 +51,10 @@ public:
 
     Status delete_dir(const std::string& dirname) override;
 
+    Status delete_dir_recursive(const std::string& dirname) override {
+        return Status::NotSupported("EnvBroker::delete_dir_recursive");
+    }
+
     Status sync_dir(const std::string& dirname) override;
 
     Status is_directory(const std::string& path, bool* is_dir) override;
