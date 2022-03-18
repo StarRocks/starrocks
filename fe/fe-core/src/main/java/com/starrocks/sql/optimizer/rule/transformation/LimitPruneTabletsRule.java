@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -33,7 +34,8 @@ public class LimitPruneTabletsRule extends TransformationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
-        return olapScanOperator.getPredicate() == null && olapScanOperator.hasLimit() &&
+        return olapTable.getKeysType() == KeysType.DUP_KEYS && olapScanOperator.getPredicate() == null &&
+                olapScanOperator.hasLimit() &&
                 olapScanOperator.getHintsTabletIds().isEmpty() && !olapTable.hasDelete();
     }
 
