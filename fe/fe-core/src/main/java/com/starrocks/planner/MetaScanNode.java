@@ -2,7 +2,7 @@
 
 package com.starrocks.planner;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.MaterializedIndex;
@@ -10,6 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -54,6 +55,7 @@ public class MetaScanNode extends ScanNode {
 
             long visibleVersion = partition.getVisibleVersion();
             String visibleVersionStr = String.valueOf(visibleVersion);
+            boolean useStarOS = partition.isUseStarOS();
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
@@ -67,16 +69,20 @@ public class MetaScanNode extends ScanNode {
                 internalRange.setTablet_id(tabletId);
 
                 // random shuffle List && only collect one copy
-                LocalTablet localTablet = (LocalTablet) tablet;
-                List<Replica> allQueryableReplicas = com.google.common.collect.Lists.newArrayList();
-                localTablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                List<Replica> allQueryableReplicas = Lists.newArrayList();
+                tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                         visibleVersion, -1, schemaHash);
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        for (Replica replica : localTablet.getReplicas()) {
-                            LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
+                        if (useStarOS) {
+                            LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((StarOSTablet) tablet).getShardId(),
+                                    tablet.getBackendIds());
+                        } else {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
+                            }
                         }
                     }
                     throw new StarRocksPlannerException("Failed to get scan range, no queryable replica found " +

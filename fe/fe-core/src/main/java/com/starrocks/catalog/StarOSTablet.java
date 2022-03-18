@@ -9,6 +9,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -63,6 +64,19 @@ public class StarOSTablet extends Tablet {
     @Override
     public Set<Long> getBackendIds() {
         return Catalog.getCurrentCatalog().getStarOSAgent().getBackendIdsByShard(shardId);
+    }
+
+    // visibleVersion and schemaHash is not used
+    @Override
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash) {
+        for (long backendId : getBackendIds()) {
+            Replica replica = new Replica(-1, backendId, -1, null);
+            allQuerableReplicas.add(replica);
+            if (localBeId != -1 && backendId == localBeId) {
+                localReplicas.add(replica);
+            }
+        }
     }
 
     @Override
