@@ -45,12 +45,15 @@ void TimezoneUtils::init_time_zones() {
     static std::vector<std::string> timezones = {"UTC", "Asia/Shanghai", "Asia/Hong_Kong"};
     for (const auto& timezone : timezones) {
         cctz::time_zone ctz;
-        CHECK(cctz::load_time_zone(timezone, &ctz));
-        _s_cached_timezone.emplace(timezone, std::move(ctz));
+        if (cctz::load_time_zone(timezone, &ctz)) {
+            _s_cached_timezone.emplace(timezone, std::move(ctz));
+        } else {
+            LOG(WARNING) << "not found timezone:" << timezone;
+        }
     }
     auto civil = cctz::civil_second(2021, 12, 1, 8, 30, 1);
-    for (const auto& timezone1 : timezones) {
-        for (const auto& timezone2 : timezones) {
+    for (const auto& [timezone1, _] : _s_cached_timezone) {
+        for (const auto& [timezone2, _] : _s_cached_timezone) {
             const auto tp1 = cctz::convert(civil, _s_cached_timezone[timezone1]);
             const auto tp2 = cctz::convert(civil, _s_cached_timezone[timezone2]);
             std::pair<std::string_view, std::string_view> key = {timezone1, timezone2};
@@ -63,8 +66,11 @@ void TimezoneUtils::init_time_zones() {
     static std::vector<std::string> other_timezones = {"America/Chicago", "Asia/Yangon"};
     for (const auto& timezone : other_timezones) {
         cctz::time_zone ctz;
-        CHECK(cctz::load_time_zone(timezone, &ctz));
-        _s_cached_timezone.emplace(timezone, std::move(ctz));
+        if (cctz::load_time_zone(timezone, &ctz)) {
+            _s_cached_timezone.emplace(timezone, std::move(ctz));
+        } else {
+            LOG(WARNING) << "not found timezone:" << timezone;
+        }
     }
 }
 
