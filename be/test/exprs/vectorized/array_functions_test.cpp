@@ -1037,6 +1037,52 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
     }
 }
 
+TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_return_column_type) {
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, "abc"], NULL): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), "abc"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
+        EXPECT_EQ(2, result->size());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+    }
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, [1,2]], NULL): 1
+    // array_position([NULL, [1,2]], [1,2]): 2
+    // array_position([[1,2], NULL], [1,2]): 1
+    // array_position([[1,2], NULL], NULL): 2
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(Datum());
+
+        auto result = ColumnHelper::cast_to<TYPE_INT>(ArrayFunctions::array_position(nullptr, {array, target}));
+        EXPECT_EQ(5, result->size());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ(2, result->get(2).get_int32());
+        EXPECT_EQ(1, result->get(3).get_int32());
+        EXPECT_EQ(2, result->get(4).get_int32());
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     // array_position(["a", "b"], "c"): 0
