@@ -77,7 +77,7 @@ public:
 
 private:
     // Calculate the actual cpu used by all wg
-    void cal_wg_cpu_real_use_ratio();
+    void _cal_wg_cpu_real_use_ratio();
 
     // _maybe_adjust_weight and _select_next_wg are guarded by the ourside _global_mutex.
     void _maybe_adjust_weight();

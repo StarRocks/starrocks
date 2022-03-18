@@ -60,8 +60,8 @@ public:
     int64_t vruntime_ns() const { return _vruntime_ns; }
     int64_t real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
 
-    int64_t growth_vruntime_ns() const { return _vruntime_ns * _cpu_limit - _last_vruntime_ns; }
-    void update_last_vruntime_ns(int64_t last_vruntime_ns) { _last_vruntime_ns = last_vruntime_ns; }
+    int64_t growth_real_runtime_ns() const { return _vruntime_ns * _cpu_limit - _last_vruntime_ns; }
+    void update_last_real_runtime_ns(int64_t last_vruntime_ns) { _last_vruntime_ns = last_vruntime_ns; }
 
     // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
     // the more cpu time can be consumed proportionally.
