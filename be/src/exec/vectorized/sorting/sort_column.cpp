@@ -366,7 +366,9 @@ Status sort_chunks_columnwise(const bool& cancel, const std::vector<Columns>& ve
                                                       range, build_tie));
     }
 
-    perm.resize(limit);
+    if (limit < perm.size()) {
+        perm.resize(limit);
+    }
 
     return Status::OK();
 }

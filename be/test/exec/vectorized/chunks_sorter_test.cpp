@@ -478,7 +478,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
             // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
             std::vector<int32_t> permutation{52, 2, 12, 24, 58, 6, 69, 70, 71};
             std::vector<int32_t> result;
-            for (size_t i = 0; i < limit; ++i) {
+            for (size_t i = 0; i < page_1->num_rows(); ++i) {
                 result.push_back(page_1->get(i).get(0).get_int32());
             }
             permutation.resize(limit);

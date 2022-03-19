@@ -330,16 +330,17 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
                                       limit);
     };
 
-    RETURN_IF_CANCELLED(state);
     size_t first_size = std::min(permutations.first.size(), rows_to_sort);
-    size_t second_size = rows_to_sort - first_size;
 
     // Sort the first, then the second
-    RETURN_IF_ERROR(do_sort(permutations.first, first_size));
+    if (first_size > 0) {
+        RETURN_IF_CANCELLED(state);
+        RETURN_IF_ERROR(do_sort(permutations.first, first_size));
+    }
 
-    RETURN_IF_CANCELLED(state);
-    if (second_size > 0) {
-        RETURN_IF_ERROR(do_sort(permutations.second, second_size));
+    if (rows_to_sort > first_size) {
+        RETURN_IF_CANCELLED(state);
+        RETURN_IF_ERROR(do_sort(permutations.second, rows_to_sort - first_size));
     }
 
     return Status::OK();
