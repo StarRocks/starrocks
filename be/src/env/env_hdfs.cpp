@@ -156,6 +156,10 @@ public:
 
     Status delete_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::delete_dir"); }
 
+    Status delete_dir_recursive(const std::string& dirname) override {
+        return Status::NotSupported("EnvHdfs::delete_dir_recursive");
+    }
+
     Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::sync_dir"); }
 
     Status is_directory(const std::string& path, bool* is_dir) override {

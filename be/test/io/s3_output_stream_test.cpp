@@ -63,15 +63,10 @@ void init_s3client() {
 }
 
 void init_bucket() {
-    Aws::Client::ClientConfiguration config;
     Aws::S3::Model::CreateBucketRequest request;
     request.SetBucket(kBucketName);
     Aws::S3::Model::CreateBucketOutcome outcome = g_s3client->CreateBucket(request);
-    if (outcome.IsSuccess()) {
-        std::cout << "Created bucket " << kBucketName << '\n';
-    } else {
-        std::cerr << "Fail to create bucket " << kBucketName << ": " << outcome.GetError().GetMessage() << '\n';
-    }
+    LOG_IF(ERROR, !outcome.IsSuccess()) << outcome.GetError().GetMessage();
 }
 
 void destroy_bucket() {
