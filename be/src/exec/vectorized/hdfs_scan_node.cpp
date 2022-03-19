@@ -382,11 +382,6 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
 
     Status status = scanner->open(_runtime_state);
     scanner->set_keep_priority(false);
-    // if global status was not ok, we need fast failure and no need to read file
-    if (!_get_status().ok()) {
-        _release_scanner(scanner);
-        return;
-    }
 
     bool resubmit = false;
     int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
@@ -394,6 +389,12 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     ChunkPtr chunk = nullptr;
 
     while (status.ok()) {
+        // if global status was not ok, we need fast failure and no need to read file
+        if (!_get_status().ok()) {
+            _release_scanner(scanner);
+            return;
+        }
+
         {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
