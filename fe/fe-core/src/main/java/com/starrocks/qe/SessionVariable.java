@@ -190,6 +190,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
+<<<<<<< HEAD
+=======
+    public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
+
+    public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
+
+>>>>>>> 8a860c4a (Add session variable enable_hive_column_stats (#4253))
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
@@ -486,6 +493,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
+    private boolean enableHiveColumnStats = true;
+
+    public boolean enableHiveColumnStats() {
+        return enableHiveColumnStats;
+    }
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;
