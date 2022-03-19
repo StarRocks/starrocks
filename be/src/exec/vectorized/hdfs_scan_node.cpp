@@ -481,6 +481,7 @@ HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
     HdfsScanner* scanner = _pending_scanners.pop();
     uint64_t time = scanner->exit_pending_queue();
     COUNTER_UPDATE(_profile.scanner_queue_timer, time);
+    COUNTER_UPDATE(_profile.scanner_queue_counter, 1);
     return scanner;
 }
 
@@ -700,6 +701,7 @@ void HdfsScanNode::_init_counter() {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 

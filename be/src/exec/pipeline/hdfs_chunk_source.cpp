@@ -187,6 +187,8 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
+
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
