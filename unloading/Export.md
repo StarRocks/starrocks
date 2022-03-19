@@ -74,7 +74,7 @@ PROPERTIES
 WITH BROKER "hdfs"
 (
  "username" = "user",
- "password" = "passwd",
+ "password" = "passwd"
 );
 ~~~
 
