@@ -490,10 +490,14 @@ public class SparkLoadJob extends BulkLoadJob {
                                         // update filePath fileSize
                                         TBrokerRangeDesc tBrokerRangeDesc = tBrokerScanRange.getRanges().get(0);
                                         tBrokerRangeDesc.setPath("");
+                                        tBrokerRangeDesc.setStart_offset(0);
+                                        tBrokerRangeDesc.setSize(0);
                                         tBrokerRangeDesc.setFile_size(-1);
                                         if (tabletMetaToFileInfo.containsKey(tabletMetaStr)) {
                                             Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
                                             tBrokerRangeDesc.setPath(fileInfo.first);
+                                            tBrokerRangeDesc.setStart_offset(0);
+                                            tBrokerRangeDesc.setSize(fileInfo.second);
                                             tBrokerRangeDesc.setFile_size(fileInfo.second);
                                         }
 
