@@ -548,7 +548,15 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // 3. read data and write rowset
         // init Reader
-        st = reader->init(_request.broker_scan_range, _request.desc_tbl);
+        // star_offset and size are not set in FE plan before,
+        // here we set if start_offset or size <= 0 for smooth upgrade.
+        TBrokerScanRange t_scan_range = _request.broker_scan_range;
+        DCHECK_EQ(1, t_scan_range.ranges.size());
+        if (t_scan_range.ranges[0].start_offset <= 0 || t_scan_range.ranges[0].size <= 0) {
+            t_scan_range.ranges[0].__set_start_offset(0);
+            t_scan_range.ranges[0].__set_size(_request.broker_scan_range.ranges[0].file_size);
+        }
+        st = reader->init(t_scan_range, _request.desc_tbl);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init reader. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name();
             return st;
