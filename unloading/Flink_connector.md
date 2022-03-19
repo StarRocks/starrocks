@@ -20,20 +20,10 @@ Flink 可以通过 flink-connector-starrocks 的 source 功能读取 StarRocks �
 
 ### 步骤一：准备flink-connector-starrocks
 
-1. 下载源码 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/tree/dev)。
-2. 根据 Flink 的版本，选择对应的分支。
-3. 运行如下脚本，生成与 BE 节点 Thrift 接口交互的 Java class 文件，用于 flink-connector-starrocks 直接调用 BE 节点 Thrift 接口。
-
-   ```bash
-    # 如使用 Linux 操作系统，则需要执行如下命令。
-   ./build-thrift.sh   
-    # 如使用 Windows 操作系统，则需要执行如下命令。
-   ./build-thrift.bat
-   ```
-
-4. 将源码编译成 JAR 包，并将 JAR 包放在 Flink 的 lib 目录中。
-
-5. 重启 Flink。
+1. 根据 Flink 的版本，选择对应版本。下载 JAR 包 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases)。
+2. 如需调试代码，可选择对应分支代码自行编译
+3. 将下载或者编译的 JAR 包放在 Flink 的 lib 目录中。
+4. 重启 Flink。
 
 ### 步骤二：调用 flink-connector-starrocks ，读取 StarRocks 数据
 
@@ -71,7 +61,7 @@ Flink 可以通过 flink-connector-starrocks 的 source 功能读取 StarRocks �
    ```
 
    > - 仅支持使用部分 SQL 语句读取 StarRocks 数据，如`select ... from table_name where ...`。暂不支持除 COUNT 外的聚合函数。
-   > - 支持谓词下推。使用 SQL 语句时，支持自动进行谓词下推，比如上述例子中的过滤条件 `char_1 <> 'A' and int_1 = -126`，会直接发送到 BE 节点的存储层进行过滤，不需要额外配置。
+   > - 支持谓词下推。使用 SQL 语句时，支持自动进行谓词下推，比如上述例子中的过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 connector 中转换成适用于 StarRocks 的语句进行查询，不需要额外配置。
 
 - 如您使用 Flink DataStream ，则需要先添加依赖，然后调用 flink-connector-starrocks，读取 StarRocks 的数据。
 
@@ -83,15 +73,18 @@ Flink 可以通过 flink-connector-starrocks 的 source 功能读取 StarRocks �
    <dependency>    
        <groupId>com.starrocks</groupId>
        <artifactId>flink-connector-starrocks</artifactId>
-       <!-- for flink-1.11 -->
-       <version>x.x.x_flink-1.11_2.11</version>
-       <version>x.x.x_flink-1.11_2.12</version>
-       <!-- for flink-1.12 -->
-       <version>x.x.x_flink-1.12_2.11</version>
-       <version>x.x.x_flink-1.12_2.12</version>
+       <!-- for flink-1.14 -->
+       <version>x.x.x_flink-1.14_2.11</version>
+       <version>x.x.x_flink-1.14_2.12</version>
        <!-- for flink-1.13 -->
        <version>x.x.x_flink-1.13_2.11</version>
        <version>x.x.x_flink-1.13_2.12</version>
+       <!-- for flink-1.12 -->
+       <version>x.x.x_flink-1.12_2.11</version>
+       <version>x.x.x_flink-1.12_2.12</version>
+       <!-- for flink-1.11 -->
+       <version>x.x.x_flink-1.11_2.11</version>
+       <version>x.x.x_flink-1.11_2.12</version>
    </dependency>
    ```
 

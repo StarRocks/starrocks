@@ -14,10 +14,18 @@ flink的用户想要将数据sink到StarRocks当中，但是flink官方只提供
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
-    <!-- for flink-1.11, flink-1.12 -->
-    <version>x.x.x_flink-1.11</version>
+    <!-- for flink-1.14 -->
+    <version>x.x.x_flink-1.14_2.11</version>
+    <version>x.x.x_flink-1.14_2.12</version>
     <!-- for flink-1.13 -->
-    <version>x.x.x_flink-1.13</version>
+    <version>x.x.x_flink-1.13_2.11</version>
+    <version>x.x.x_flink-1.13_2.12</version>
+    <!-- for flink-1.12 -->
+    <version>x.x.x_flink-1.12_2.11</version>
+    <version>x.x.x_flink-1.12_2.12</version>
+    <!-- for flink-1.11 -->
+    <version>x.x.x_flink-1.11_2.11</version>
+    <version>x.x.x_flink-1.11_2.12</version>
 </dependency>
 ```
 
