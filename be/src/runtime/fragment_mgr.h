@@ -60,7 +60,6 @@ public:
     ~FragmentMgr() override;
 
     // execute one plan fragment
-    // 执行Plan
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
