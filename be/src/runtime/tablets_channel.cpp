@@ -105,11 +105,11 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     }
 
     {
-        std::lock_guard<bthread::Mutex> lock(_senders[request.sender_id()].lock);
+        std::lock_guard lock(_senders[request.sender_id()].lock);
 
         // receive exists packet
-        if (_senders[request.sender_id()]._receive_sliding_window.count(request.packet_seq()) != 0) {
-            if (_senders[request.sender_id()]._success_sliding_window.count(request.packet_seq()) == 0 ||
+        if (_senders[request.sender_id()].receive_sliding_window.count(request.packet_seq()) != 0) {
+            if (_senders[request.sender_id()].success_sliding_window.count(request.packet_seq()) == 0 ||
                 request.eos()) {
                 // still in process
                 response->mutable_status()->set_status_code(TStatusCode::DUPLICATE_RPC_INVOCATION);
@@ -125,21 +125,21 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
             }
         } else {
             // receive packet before sliding window
-            if (request.packet_seq() <= _senders[request.sender_id()]._last_sliding_packet_seq) {
+            if (request.packet_seq() <= _senders[request.sender_id()].last_sliding_packet_seq) {
                 LOG(INFO) << "packet_seq " << request.packet_seq()
                           << " in PTabletWriterAddChunkRequest less than last success packet_seq "
-                          << _senders[request.sender_id()]._last_sliding_packet_seq;
+                          << _senders[request.sender_id()].last_sliding_packet_seq;
                 response->mutable_status()->set_status_code(TStatusCode::OK);
                 return;
             } else if (request.packet_seq() >
-                       _senders[request.sender_id()]._last_sliding_packet_seq + _max_sliding_window_size) {
+                       _senders[request.sender_id()].last_sliding_packet_seq + _max_sliding_window_size) {
                 response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
                 response->mutable_status()->add_error_msgs(fmt::format(
                         "packet_seq {} in PTabletWriterAddChunkRequest forward last success packet_seq {} too much",
-                        request.packet_seq(), _senders[request.sender_id()]._last_sliding_packet_seq));
+                        request.packet_seq(), _senders[request.sender_id()].last_sliding_packet_seq));
                 return;
             } else {
-                _senders[request.sender_id()]._receive_sliding_window.insert(request.packet_seq());
+                _senders[request.sender_id()].receive_sliding_window.insert(request.packet_seq());
             }
         }
     }
@@ -219,17 +219,17 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
     count_down_latch.wait();
 
     {
-        std::lock_guard<bthread::Mutex> lock(_senders[request.sender_id()].lock);
+        std::lock_guard lock(_senders[request.sender_id()].lock);
 
-        _senders[request.sender_id()]._success_sliding_window.insert(request.packet_seq());
-        while (_senders[request.sender_id()]._success_sliding_window.size() > _max_sliding_window_size / 2) {
-            auto last_success_iter = _senders[request.sender_id()]._success_sliding_window.cbegin();
-            auto last_receive_iter = _senders[request.sender_id()]._receive_sliding_window.cbegin();
-            if (_senders[request.sender_id()]._last_sliding_packet_seq + 1 == *last_success_iter &&
+        _senders[request.sender_id()].success_sliding_window.insert(request.packet_seq());
+        while (_senders[request.sender_id()].success_sliding_window.size() > _max_sliding_window_size / 2) {
+            auto last_success_iter = _senders[request.sender_id()].success_sliding_window.cbegin();
+            auto last_receive_iter = _senders[request.sender_id()].receive_sliding_window.cbegin();
+            if (_senders[request.sender_id()].last_sliding_packet_seq + 1 == *last_success_iter &&
                 *last_success_iter == *last_receive_iter) {
-                _senders[request.sender_id()]._receive_sliding_window.erase(last_receive_iter);
-                _senders[request.sender_id()]._success_sliding_window.erase(last_success_iter);
-                _senders[request.sender_id()]._last_sliding_packet_seq++;
+                _senders[request.sender_id()].receive_sliding_window.erase(last_receive_iter);
+                _senders[request.sender_id()].success_sliding_window.erase(last_success_iter);
+                _senders[request.sender_id()].last_sliding_packet_seq++;
             }
         }
     }

@@ -108,10 +108,10 @@ private:
     struct Sender {
         bthread::Mutex lock;
 
-        std::set<int64_t> _receive_sliding_window;
-        std::set<int64_t> _success_sliding_window;
+        std::set<int64_t> receive_sliding_window;
+        std::set<int64_t> success_sliding_window;
 
-        int64_t _last_sliding_packet_seq = -1;
+        int64_t last_sliding_packet_seq = -1;
     };
 
     class WriteContext : public RefCountedThreadSafe<WriteContext> {
