@@ -97,15 +97,15 @@ private:
 
     std::mutex _lock;
 
-    // Make sure that remove this before no data reference FragmentExecState
+    // Make sure that remove this before no data reference FragmentExecState.
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
-    // Check if a fragment exec is existed in '_fragment_map' by given 'fragment_instance_id'.
+    // Check if a fragment exec is exists in '_fragment_map' by given 'fragment_instance_id'.
     bool IsFragmentExecExist(const TUniqueId& fragment_instance_id);
 
     // Cancel thread
     bool _stop;
     std::thread _cancel_thread;
-    // every job is a pool
+    // Every job is a pool.
     std::unique_ptr<ThreadPool> _thread_pool;
 };
 
