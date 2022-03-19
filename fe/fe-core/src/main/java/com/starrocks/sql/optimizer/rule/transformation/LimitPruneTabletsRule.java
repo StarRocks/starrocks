@@ -34,9 +34,8 @@ public class LimitPruneTabletsRule extends TransformationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
-        // For other key models, the cost of scanning a single tablet can be
-        // high due to the need for storage layer sorting. So we only apply this rules in
-        // duplicate keys.
+        // For other key models, Other key models where the number of tablet rows does not
+        // represent the true number of rows of data (need sorted aggregation)
         return olapTable.getKeysType() == KeysType.DUP_KEYS && olapScanOperator.getPredicate() == null &&
                 olapScanOperator.hasLimit() &&
                 olapScanOperator.getHintsTabletIds().isEmpty() && !olapTable.hasDelete();
