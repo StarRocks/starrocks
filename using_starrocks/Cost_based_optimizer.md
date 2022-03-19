@@ -147,14 +147,14 @@ DROP ANALYZE <ID>;
 
 ```Plain%20Text
 # 是否采集统计信息。
-enable_statistic_collect = true;
+enable_statistic_collect = true
 
 # 自动定期任务中，检测数据更新的间隔时间，默认为7200（两小时），单位为秒。
-statistic_collect_interval_sec = 7200;
+statistic_collect_interval_sec = 7200
 
 # 自动定期任务的采集间隔时间，默认为86400（一天），单位为秒。
-statistic_update_interval_sec = 86400;
+statistic_update_interval_sec = 86400
 
 # 采样统计信息Job的默认采样行数，默认为200000行。
-statistic_sample_collect_rows = 200000;
+statistic_sample_collect_rows = 200000
 ```
