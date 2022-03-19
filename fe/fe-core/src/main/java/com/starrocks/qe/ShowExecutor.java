@@ -1094,6 +1094,10 @@ public class ShowExecutor {
                     }
                     indexName = olapTable.getIndexNameById(indexId);
 
+                    if (partition.isUseStarOS()) {
+                        break;
+                    }
+
                     LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                     if (tablet == null) {
                         isSync = false;
@@ -1181,7 +1185,7 @@ public class ShowExecutor {
                         if (indexId > -1 && index.getId() != indexId) {
                             continue;
                         }
-                        TabletsProcDir procDir = new TabletsProcDir(db, index);
+                        TabletsProcDir procDir = new TabletsProcDir(db, partition, index);
                         tabletInfos.addAll(procDir.fetchComparableResult(
                                 showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
                         if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {

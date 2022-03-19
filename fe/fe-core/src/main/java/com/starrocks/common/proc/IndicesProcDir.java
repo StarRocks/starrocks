@@ -43,7 +43,7 @@ import java.util.List;
  */
 public class IndicesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime")
+            .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime").add("UseStarOS")
             .build();
 
     private Database db;
@@ -73,6 +73,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
+                indexInfo.add(materializedIndex.isUseStarOS());
 
                 indexInfos.add(indexInfo);
             }
@@ -122,7 +123,7 @@ public class IndicesProcDir implements ProcDirInterface {
             if (materializedIndex == null) {
                 throw new AnalysisException("Index[" + indexId + "] does not exist.");
             }
-            return new TabletsProcDir(db, materializedIndex);
+            return new TabletsProcDir(db, partition, materializedIndex);
         } finally {
             db.readUnlock();
         }

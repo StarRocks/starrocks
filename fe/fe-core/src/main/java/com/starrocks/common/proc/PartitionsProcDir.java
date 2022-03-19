@@ -70,9 +70,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             .add("VisibleVersion").add("VisibleVersionTime").add("VisibleVersionHash")
             .add("State").add("PartitionKey").add("Range").add("DistributionKey")
             .add("Buckets").add("ReplicationNum").add("StorageMedium").add("CooldownTime")
-            .add("LastConsistencyCheckTime")
-            .add("DataSize")
-            .add("IsInMemory")
+            .add("LastConsistencyCheckTime").add("DataSize").add("IsInMemory").add("UseStarOS")
             .build();
 
     private Database db;
@@ -289,6 +287,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                         + sizePair.second;
                 partitionInfo.add(readableSize);
                 partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
+                partitionInfo.add(partition.isUseStarOS());
 
                 partitionInfos.add(partitionInfo);
             }
