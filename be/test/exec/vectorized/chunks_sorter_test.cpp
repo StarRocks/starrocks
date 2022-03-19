@@ -411,9 +411,9 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
         sorter.set_compare_strategy(strategy);
 
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
         sorter.done(_runtime_state.get());
 
         bool eos = false;
@@ -453,45 +453,48 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
     for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 7, 7, 2);
-        sorter.set_compare_strategy(strategy);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
-        sorter.done(_runtime_state.get());
+        int offset = 7;
+        for (int limit = 1; limit + offset < 16; limit++) {
+            std::cerr << "sort with strategy: " << strategy << " limit:" << limit << std::endl;
+            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, offset, limit, 2);
+            sorter.set_compare_strategy(strategy);
+            size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+            sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
+            bool eos = false;
+            ChunkPtr page_1, page_2;
+            sorter.get_next(&page_1, &eos);
+            ASSERT_FALSE(eos);
+            ASSERT_TRUE(page_1 != nullptr);
+            sorter.get_next(&page_2, &eos);
+            ASSERT_TRUE(eos);
+            ASSERT_TRUE(page_2 == nullptr);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(7, page_1->num_rows());
-        // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
-        const size_t Size = 7;
-        int32_t permutation[Size] = {52, 2, 12, 24, 58, 6, 69};
-        for (size_t i = 0; i < Size; ++i) {
-            ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
+            ASSERT_EQ(16, total_rows);
+            ASSERT_EQ(7, page_1->num_rows());
+            // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
+            const size_t Size = 7;
+            int32_t permutation[Size] = {52, 2, 12, 24, 58, 6, 69};
+            for (size_t i = 0; i < Size; ++i) {
+                ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
+            }
+
+            // part sort with large offset
+            ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 100, limit, 2);
+            sorter2.set_compare_strategy(strategy);
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+            sorter2.done(_runtime_state.get());
+            eos = false;
+            page_1->reset();
+            sorter2.get_next(&page_1, &eos);
+            ASSERT_TRUE(eos);
+            ASSERT_TRUE(page_1 == nullptr);
         }
-
-        // part sort with large offset
-        ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 100, 2, 2);
-        sorter2.set_compare_strategy(strategy);
-        sorter2.update(_runtime_state.get(), _chunk_1);
-        sorter2.update(_runtime_state.get(), _chunk_2);
-        sorter2.update(_runtime_state.get(), _chunk_3);
-        sorter2.done(_runtime_state.get());
-        eos = false;
-        page_1->reset();
-        sorter2.get_next(&page_1, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_1 == nullptr);
     }
 
     clear_sort_exprs(sort_exprs);
