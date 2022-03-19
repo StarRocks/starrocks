@@ -2,24 +2,18 @@
 
 #include "exec/vectorized/json_scanner.h"
 
-#include <fmt/compile.h>
 #include <fmt/format.h>
 #include <ryu/ryu.h>
 
 #include <algorithm>
 #include <sstream>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "env/env.h"
-#include "exec/broker_reader.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/json_functions.h"
-#include "exprs/vectorized/unary_function.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

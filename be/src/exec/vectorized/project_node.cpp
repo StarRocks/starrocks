@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/project_node.h"
 
-#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <set>
@@ -11,7 +10,6 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -22,8 +20,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "fmt/compile.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"

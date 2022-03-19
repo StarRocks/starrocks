@@ -8,7 +8,6 @@
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "exprs/slot_ref.h"

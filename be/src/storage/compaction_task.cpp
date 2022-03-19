@@ -2,7 +2,6 @@
 #include "storage/compaction_task.h"
 
 #include "runtime/current_thread.h"
-#include "storage/compaction_manager.h"
 #include "storage/compaction_scheduler.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"

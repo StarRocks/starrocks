@@ -7,20 +7,16 @@
 
 #include "column/column_pool.h"
 #include "column/type_traits.h"
-#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "glog/logging.h"
-#include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/primitive_type.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
@@ -29,6 +25,7 @@
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
+
 namespace starrocks::vectorized {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

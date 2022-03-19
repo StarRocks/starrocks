@@ -49,7 +49,6 @@ namespace starrocks {
 class DataDir;
 class Tablet;
 class TabletMeta;
-class TabletUpdateState;
 class TabletUpdates;
 class CompactionTask;
 class CompactionContext;

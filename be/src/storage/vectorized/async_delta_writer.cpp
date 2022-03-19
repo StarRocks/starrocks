@@ -7,7 +7,6 @@
 #include "runtime/current_thread.h"
 #include "storage/async_delta_writer_executor.h"
 #include "storage/storage_engine.h"
-#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 

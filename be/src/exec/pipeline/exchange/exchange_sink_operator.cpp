@@ -3,9 +3,7 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
 #include <arpa/inet.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
@@ -15,10 +13,8 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/raw_value.h"
@@ -28,9 +24,7 @@
 #include "util/block_compression.h"
 #include "util/compression_utils.h"
 #include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/thrift_client.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::pipeline {
 

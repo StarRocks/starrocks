@@ -21,8 +21,6 @@
 
 #include "exec/scan_node.h"
 
-#include <functional>
-
 namespace starrocks {
 
 const std::string ScanNode::_s_bytes_read_counter = "BytesRead";
