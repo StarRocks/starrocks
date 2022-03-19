@@ -3,7 +3,11 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.LocalTablet;
+=======
+import com.starrocks.catalog.KeysType;
+>>>>>>> 64e96246 (Only apply limit prune tablet rule in duplicate keys (#4237))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -35,7 +39,10 @@ public class LimitPruneTabletsRule extends TransformationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
-        return olapScanOperator.getPredicate() == null && olapScanOperator.hasLimit() &&
+        // For other key models, Other key models where the number of tablet rows does not
+        // represent the true number of rows of data (need sorted aggregation)
+        return olapTable.getKeysType() == KeysType.DUP_KEYS && olapScanOperator.getPredicate() == null &&
+                olapScanOperator.hasLimit() &&
                 olapScanOperator.getHintsTabletIds().isEmpty() && !olapTable.hasDelete();
     }
 
