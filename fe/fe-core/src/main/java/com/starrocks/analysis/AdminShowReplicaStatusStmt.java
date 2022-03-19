@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
@@ -79,6 +80,8 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         }
 
         tblRef.getName().setDb(dbName);
+
+        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblRef.getName().getTbl());
 
         PartitionNames partitionNames = tblRef.getPartitionNames();
         if (partitionNames != null) {
