@@ -474,13 +474,15 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
             ASSERT_TRUE(page_2 == nullptr);
 
             ASSERT_EQ(16, total_rows);
-            ASSERT_EQ(7, page_1->num_rows());
+            ASSERT_EQ(limit, page_1->num_rows());
             // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
-            const size_t Size = 7;
-            int32_t permutation[Size] = {52, 2, 12, 24, 58, 6, 69};
-            for (size_t i = 0; i < Size; ++i) {
-                ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
+            std::vector<int32_t> permutation{52, 2, 12, 24, 58, 6, 69, 70, 71};
+            std::vector<int32_t> result;
+            for (size_t i = 0; i < limit; ++i) {
+                result.push_back(page_1->get(i).get(0).get_int32());
             }
+            permutation.resize(limit);
+            EXPECT_EQ(permutation, result);
 
             // part sort with large offset
             ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 100, limit, 2);
