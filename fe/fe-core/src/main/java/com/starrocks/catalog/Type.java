@@ -622,6 +622,10 @@ public abstract class Type implements Cloneable {
         return !isOnlyMetricType() && !isJsonType();
     }
 
+    public boolean canJoinOn() {
+        return !isOnlyMetricType() && !isJsonType();
+    }
+
     public boolean canGroupBy() {
         // TODO(mofei) support group by for JSON
         return !isOnlyMetricType() && !isJsonType();
@@ -658,7 +662,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String OnlyMetricTypeErrorMsg =
-            "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union";
+            "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
