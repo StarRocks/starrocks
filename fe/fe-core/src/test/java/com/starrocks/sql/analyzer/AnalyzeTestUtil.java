@@ -141,6 +141,19 @@ public class AnalyzeTestUtil {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     public static ConnectContext getConnectContext() {
@@ -153,7 +166,8 @@ public class AnalyzeTestUtil {
 
     public static StatementBase analyzeSuccess(String originStmt) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             return statementBase;
         } catch (Exception ex) {
@@ -169,7 +183,8 @@ public class AnalyzeTestUtil {
 
     public static void analyzeFail(String originStmt, String exceptMessage) {
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
