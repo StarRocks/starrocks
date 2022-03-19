@@ -5,7 +5,6 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "runtime/mem_pool.h"
 #include "util/string_parser.hpp"
 

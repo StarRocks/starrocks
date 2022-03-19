@@ -4,6 +4,7 @@
 
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+
 namespace starrocks::pipeline {
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {

@@ -13,7 +13,6 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/hdfs_util.h"
 

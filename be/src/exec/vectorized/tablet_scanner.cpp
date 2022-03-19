@@ -7,7 +7,6 @@
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
-#include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"

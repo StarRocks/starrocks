@@ -22,7 +22,6 @@
 #include "storage/tablet_meta_manager.h"
 
 #include <boost/algorithm/string/trim.hpp>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>

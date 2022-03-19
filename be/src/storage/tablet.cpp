@@ -25,8 +25,6 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
 
-#include <algorithm>
-#include <cstdio>
 #include <map>
 #include <memory>
 #include <utility>
@@ -35,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
-#include "storage/compaction_manager.h"
 #include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
@@ -47,7 +44,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
-#include "util/path_util.h"
 #include "util/time.h"
 
 namespace starrocks {

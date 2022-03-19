@@ -28,7 +28,6 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "env/env.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/fs/file_block_manager.h"

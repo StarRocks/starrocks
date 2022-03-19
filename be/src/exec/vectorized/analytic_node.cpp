@@ -7,20 +7,17 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/agg/count.h"
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "udf/udf.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {

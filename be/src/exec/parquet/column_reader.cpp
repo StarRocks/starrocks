@@ -19,7 +19,6 @@
 #include "runtime/primitive_type.h"
 #include "storage/types.h"
 #include "util/bit_util.h"
-#include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

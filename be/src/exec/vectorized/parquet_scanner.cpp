@@ -2,7 +2,6 @@
 #include "exec/vectorized/parquet_scanner.h"
 
 #include <env/env_broker.h>
-#include <exec/broker_reader.h>
 #include <exprs/vectorized/cast_expr.h>
 #include <exprs/vectorized/column_ref.h>
 

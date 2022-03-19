@@ -28,14 +28,10 @@
 
 #include "common/logging.h"
 #include "exec/file_writer.h"
-#include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_pool.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

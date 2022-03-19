@@ -2,13 +2,10 @@
 
 #include "exec/vectorized/schema_scanner/schema_tables_scanner.h"
 
-#include "column/chunk.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
-//#include "runtime/datetime_value.h"
 
 namespace starrocks::vectorized {
 

@@ -30,7 +30,6 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "util/monotime.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

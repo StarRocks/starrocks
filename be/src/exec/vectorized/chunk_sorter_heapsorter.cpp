@@ -8,12 +8,10 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
-#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
