@@ -340,10 +340,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     // if global status was not ok
     // we need fast failure
     if (!_get_status().ok()) {
-        scanner->release_pending_token(&_pending_token);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        _release_scanner(scanner);
         return;
     }
 
@@ -385,6 +382,11 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
 
     Status status = scanner->open(_runtime_state);
     scanner->set_keep_priority(false);
+    // if global status was not ok, we need fast failure and no need to read file
+    if (!_get_status().ok()) {
+        _release_scanner(scanner);
+        return;
+    }
 
     bool resubmit = false;
     int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
@@ -447,20 +449,21 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             }
         } else {
             _update_status(status);
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     } else {
         // sometimes state == ok but global_status was not ok
         if (scanner != nullptr) {
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     }
+}
+
+void HdfsScanNode::_release_scanner(HdfsScanner* scanner) {
+    scanner->release_pending_token(&_pending_token);
+    scanner->close(_runtime_state);
+    _closed_scanners.fetch_add(1, std::memory_order_release);
+    _close_pending_scanners();
 }
 
 void HdfsScanNode::_close_pending_scanners() {
