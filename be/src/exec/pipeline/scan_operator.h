@@ -40,6 +40,12 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
+    virtual int64_t get_cpu_cost() const override { return _total_cost_cpu_time_ns; }
+    virtual int64_t get_io_cost() const override { return _total_scan_bytes; }
+
+protected:
+    ScanNode* _scan_node = nullptr;
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -69,6 +75,9 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+
+    int64_t _total_cost_cpu_time_ns = 0;
+    int64_t _total_scan_bytes = 0;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };

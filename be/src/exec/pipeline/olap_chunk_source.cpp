@@ -465,6 +465,7 @@ void OlapChunkSource::close(RuntimeState* state) {
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
+    _last_acquired_bytes += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);

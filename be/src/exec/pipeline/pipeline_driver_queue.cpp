@@ -251,6 +251,7 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     wg->driver_queue()->update_statistics(driver);
     wg->increment_real_runtime_ns(runtime_ns);
+    wg->incr_total_cpu_cost(runtime_ns);
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 
@@ -288,6 +289,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
 
                 int64_t diff_real_runtime_ns = wg->real_runtime_ns() - origin_real_runtime_ns;
                 workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
+                wg->incr_total_cpu_cost(diff_real_runtime_ns);
             }
         }
         _ready_wgs.emplace(wg);

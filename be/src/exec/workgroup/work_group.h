@@ -127,6 +127,9 @@ public:
     void incr_total_io_cost(int64_t io_cost) { _total_io_cost += io_cost; }
 
     bool is_big_query(const QueryContext& query_context);
+    void incr_cur_query_num() { _cur_query_num++; }
+    void decr_cur_query_num() { _cur_query_num--; }
+    int64_t get_cur_query_num() const { return _cur_query_num; }
 
     // return true if current workgroup is removable:
     // 1. is already marked del
@@ -176,6 +179,8 @@ private:
     std::atomic<int64_t> _total_cpu_cost = 0;
     std::atomic<int64_t> _total_io_cost = 0;
     double _cpu_actual_use_ratio = 0;
+
+    std::atomic<int64_t> _cur_query_num = 0;
 };
 
 class WorkerOwnerManager {

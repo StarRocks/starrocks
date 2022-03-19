@@ -132,6 +132,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
         _query_ctx->set_init_wg_io_cost(wg->total_io_cost());
         _query_ctx->init_query_begin_time();
+        wg->incr_cur_query_num();
     }
 
     int32_t degree_of_parallelism = 1;

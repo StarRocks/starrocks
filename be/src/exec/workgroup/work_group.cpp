@@ -185,6 +185,9 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    // If there is only one query, do not check the big query
+    if (_cur_query_num <= 1) { return false; }
+
     int64_t time_now = MonotonicNanos();
     if (time_now - query_context.query_begin_time() >= config::min_execute_time * NANOS_PER_SEC) {
         return false;
