@@ -8,6 +8,7 @@
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -47,7 +48,7 @@ void ChunksSorter::setup_runtime(RuntimeProfile* profile, const std::string& par
 }
 
 Status ChunksSorter::finish(RuntimeState* state) {
-    RETURN_IF_ERROR(done(state));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(done(state)));
     _is_sink_complete = true;
     return Status::OK();
 }
