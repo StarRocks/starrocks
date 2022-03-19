@@ -39,11 +39,11 @@ public class JsonTypeTest extends PlanTestBase {
         );
     }
 
-<<<<<<< HEAD
     @AfterClass
     public static void afterClass() {
         PlanTestBase.tearDown();
-=======
+    }
+
     @Test
     public void testJoin() {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
@@ -59,7 +59,6 @@ public class JsonTypeTest extends PlanTestBase {
 
         ExceptionChecker.expectThrowsNoException(
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_id = t2.v_id"));
->>>>>>> b58b0f7d (Disable join on json type (#4255))
     }
 
     /**
