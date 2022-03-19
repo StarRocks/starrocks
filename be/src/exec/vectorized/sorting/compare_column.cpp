@@ -220,6 +220,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     DCHECK_EQ(columns.size(), sort_orders.size());
     DCHECK_EQ(columns.size(), null_firsts.size());
     DCHECK_EQ(columns[0]->size(), cmp_vector.size());
+    DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 1 || x == -1 || x == 0; }));
 
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         int sort_order = sort_orders[col_idx];

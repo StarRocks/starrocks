@@ -405,10 +405,11 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
     ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 2, 7, 2);
+
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(_runtime_state.get(), _chunk_1);
-    sorter.update(_runtime_state.get(), _chunk_2);
-    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
     sorter.done(_runtime_state.get());
 
     bool eos = false;

@@ -28,7 +28,12 @@ struct SorterComparator {
 
 template <>
 struct SorterComparator<Slice> {
-    static int compare(const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs); }
+    static int compare(const Slice& lhs, const Slice& rhs) {
+        int x = lhs.compare(rhs);
+        if (x > 0) return 1;
+        if (x < 0) return -1;
+        return x;
+    }
 };
 
 template <>
