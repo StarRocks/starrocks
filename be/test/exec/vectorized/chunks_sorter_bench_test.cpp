@@ -237,8 +237,11 @@ static void BM_mergesort_row_wise(benchmark::State& state) {
 static void BM_topn_limit_heapsort(benchmark::State& state) {
     do_bench(state, HeapSort, RowWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
 }
-static void BM_topn_limit_mergesort(benchmark::State& state) {
+static void BM_topn_limit_mergesort_rowwise(benchmark::State& state) {
     do_bench(state, MergeSort, RowWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
+}
+static void BM_topn_limit_mergesort_colwise(benchmark::State& state) {
+    do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -279,7 +282,8 @@ BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
-BENCHMARK(BM_topn_limit_mergesort)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort_rowwise)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort_colwise)->Apply(CustomArgsLimit);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {
