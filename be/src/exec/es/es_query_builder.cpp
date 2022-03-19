@@ -21,12 +21,10 @@
 
 #include "exec/es/es_query_builder.h"
 
-#include <boost/algorithm/string/replace.hpp>
 #include <utility>
 
 #include "common/logging.h"
 #include "rapidjson/rapidjson.h"
-#include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
 namespace starrocks {

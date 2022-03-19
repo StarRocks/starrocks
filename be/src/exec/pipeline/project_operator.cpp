@@ -6,7 +6,6 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

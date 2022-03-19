@@ -3,7 +3,6 @@
 #include "exec/pipeline/select_operator.h"
 
 #include "column/chunk.h"
-#include "exec/exec_node.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 

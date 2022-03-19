@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "column/column.h"
 #include "env/env.h"
 #include "exec/parquet/encoding.h"
 #include "exec/parquet/encoding_dict.h"

@@ -5,6 +5,7 @@
 #include "storage/compaction_scheduler.h"
 #include "storage/data_dir.h"
 #include "util/thread.h"
+
 namespace starrocks {
 
 CompactionManager::CompactionManager() : _next_task_id(0) {

@@ -24,11 +24,9 @@
 #include <malloc.h>
 
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

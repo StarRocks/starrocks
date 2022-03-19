@@ -6,7 +6,6 @@
 
 #include "exec/exchange_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"

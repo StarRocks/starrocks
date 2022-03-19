@@ -23,8 +23,6 @@
 
 #include <gutil/strings/substitute.h>
 
-#include <boost/algorithm/string.hpp>
-#include <cstdint>
 #include <map>
 #include <sstream>
 
@@ -36,16 +34,11 @@
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/client_cache.h"
-#include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "service/backend_options.h"
-#include "storage/olap_common.h"
-#include "storage/utils.h"
-#include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

@@ -6,7 +6,6 @@
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
 #include "gutil/casts.h"
 #include "storage/vectorized/chunk_aggregator.h"
 #include "storage/vectorized/chunk_helper.h"

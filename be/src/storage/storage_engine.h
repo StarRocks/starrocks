@@ -58,7 +58,6 @@ namespace starrocks {
 class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
-class BlockManager;
 class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;

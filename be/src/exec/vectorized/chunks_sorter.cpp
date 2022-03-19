@@ -2,8 +2,6 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 
-#include <type_traits>
-
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/expr.h"

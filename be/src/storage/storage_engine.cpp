@@ -21,15 +21,8 @@
 
 #include "storage/storage_engine.h"
 
-#include <rapidjson/document.h>
-#include <thrift/protocol/TDebugProtocol.h>
-
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
 #include <csignal>
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -39,7 +32,6 @@
 #include <set>
 
 #include "common/status.h"
-#include "env/env.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
