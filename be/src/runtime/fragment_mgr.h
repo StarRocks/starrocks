@@ -60,6 +60,7 @@ public:
     ~FragmentMgr() override;
 
     // execute one plan fragment
+    // 执行Plan
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
@@ -99,6 +100,8 @@ private:
 
     // Make sure that remove this before no data reference FragmentExecState
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
+    // Check if a fragment exec is existed in '_fragment_map' by given 'fragment_instance_id'.
+    bool IsFragmentExecExist(const TUniqueId& fragment_instance_id);
 
     // Cancel thread
     bool _stop;

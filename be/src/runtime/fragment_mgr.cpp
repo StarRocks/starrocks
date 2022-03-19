@@ -368,6 +368,15 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
+bool FragmentMgr::IsFragmentExecExist(const TUniqueId& fragment_instance_id) {
+    std::lock_guard<std::mutex> lock(_lock);
+    auto iter = _fragment_map.find(fragment_instance_id);
+    if (iter != _fragment_map.end()) {
+        return true;
+    }
+    return false;
+}
+
 void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb) {
     // This writing is to ensure that MemTracker will not be destructed before the thread ends.
     // This writing method is a bit tricky, and when there is a better way, replace it
@@ -411,35 +420,24 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     RETURN_IF_ERROR(_exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
-    std::shared_ptr<FragmentExecState> exec_state;
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        auto iter = _fragment_map.find(fragment_instance_id);
-        if (iter != _fragment_map.end()) {
-            // Duplicated
-            return Status::OK();
-        }
+    if (IsFragmentExecExist(fragment_instance_id)) {
+        return Status::OK();
     }
-    exec_state.reset(new FragmentExecState(params.params.query_id, fragment_instance_id, params.backend_num, _exec_env,
-                                           params.coord));
+    std::shared_ptr<FragmentExecState> exec_state = std::make_shared<FragmentExecState>(
+            params.params.query_id, fragment_instance_id, params.backend_num, _exec_env, params.coord);
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
-
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        auto iter = _fragment_map.find(fragment_instance_id);
-        if (iter != _fragment_map.end()) {
-            // Duplicated
-            return Status::InternalError("Double execute");
-        }
-        // register exec_state before starting exec thread
-        _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
+    // Check fragment exec whether exist again.
+    if (IsFragmentExecExist(fragment_instance_id)) {
+        return Status::InternalError("Double execute");
     }
+    // Register exec_state before starting exec thread.
+    _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
 
-    auto st = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
-    if (!st.ok()) {
+    const Status status = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
+    if (!status.ok()) {
         exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
-                                                    print_id(fragment_instance_id), st.get_error_msg());
+                                                    print_id(fragment_instance_id), status.get_error_msg());
         LOG(WARNING) << error_msg;
         {
             // Remove the exec state added
@@ -449,7 +447,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         return Status::InternalError(error_msg);
     } else {
         // It is necessary to ensure that ExecState is not destructed,
-        // so do not reset ExecState before calling start_cb, otherwise "heap use after free" may appear
+        // so do not reset ExecState before calling start_cb, otherwise "heap use after free" may appear.
         start_cb(exec_state->executor());
     }
 
