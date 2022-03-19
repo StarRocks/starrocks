@@ -29,6 +29,7 @@ import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -298,7 +299,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
 
         List<ColumnStatistic> columnStatisticList;
+
         try {
+            if (!optimizerContext.getSessionVariable().enableHiveColumnStats()) {
+                throw new Exception("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
+            }
             Map<String, HiveColumnStats> hiveColumnStatisticMap =
                     tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
