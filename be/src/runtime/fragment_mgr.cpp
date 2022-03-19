@@ -431,7 +431,10 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         return Status::InternalError("Double execute");
     }
     // Register exec_state before starting exec thread.
-    _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
+    {
+        std::lock_guard<std::mutex> lock(_lock);
+        _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
+    }
 
     const Status status = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
     if (!status.ok()) {
