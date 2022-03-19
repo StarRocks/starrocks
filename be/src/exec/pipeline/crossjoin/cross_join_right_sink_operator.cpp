@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "runtime/current_thread.h"
 
 using namespace starrocks::vectorized;
 
@@ -22,9 +23,9 @@ Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectori
             // merge chunks from right table.
             size_t col_number = chunk->num_columns();
             for (size_t col = 0; col < col_number; ++col) {
-                _cross_join_context->get_build_chunk(_driver_sequence)
-                        ->get_column_by_index(col)
-                        ->append(*(chunk->get_column_by_index(col).get()), 0, row_number);
+                TRY_CATCH_BAD_ALLOC(_cross_join_context->get_build_chunk(_driver_sequence)
+                                            ->get_column_by_index(col)
+                                            ->append(*(chunk->get_column_by_index(col).get()), 0, row_number));
             }
         }
     }
