@@ -233,6 +233,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         dopEstimated = true;
     }
 
+    public static void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
+        root.fillLocalRfWaitingSet();
+        if (clearGlobalRuntimeFilter) {
+            root.clearProbeRuntimeFilters();
+            if (root instanceof HashJoinNode) {
+                ((HashJoinNode) root).clearBuildRuntimeFilters();
+            }
+        }
+        for (PlanNode child : root.getChildren()) {
+            computeLocalRfWaitingSet(child, clearGlobalRuntimeFilter);
+        }
+    }
+
     public boolean isDopEstimated() {
         return dopEstimated;
     }
