@@ -29,6 +29,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "env/env.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/kv_store.h"
@@ -136,6 +137,7 @@ private:
 
     bool _stop_bg_worker = false;
 
+    std::shared_ptr<Env> _env;
     std::string _path;
     int64_t _path_hash;
     // the actual available capacity of the disk of this data dir
