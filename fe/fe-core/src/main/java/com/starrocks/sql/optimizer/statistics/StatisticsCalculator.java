@@ -298,27 +298,32 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
 
-        List<ColumnStatistic> columnStatisticList;
+        List<ColumnStatistic> columnStatisticList = null;
 
         try {
-            if (!optimizerContext.getSessionVariable().enableHiveColumnStats()) {
-                throw new Exception("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
+            if (optimizerContext.getSessionVariable().enableHiveColumnStats()) {
+                Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                        tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
+                                map(ColumnRefOperator::getName).collect(Collectors.toList()));
+                List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
+                                computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                        .collect(Collectors.toList());
+                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
+                                new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                        hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                        hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                        .collect(Collectors.toList());
+            } else {
+                LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
             }
-            Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                    tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
-                            map(ColumnRefOperator::getName).collect(Collectors.toList()));
-            List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
-                    .collect(Collectors.toList());
-            columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
-                    .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("Failed to {} get table column. error : {}", table.getName(), e);
-            columnStatisticList = Collections.nCopies(requiredColumns.size(), ColumnStatistic.unknown());
+        } finally {
+            if (columnStatisticList == null || columnStatisticList.isEmpty()) {
+                columnStatisticList = Collections.nCopies(requiredColumns.size(), ColumnStatistic.unknown());
+            }
         }
+
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
             builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));

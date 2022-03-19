@@ -494,7 +494,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS, flag = VariableMgr.SESSION)
+    @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
     public boolean enableHiveColumnStats() {
