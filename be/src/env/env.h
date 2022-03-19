@@ -148,6 +148,10 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
+    // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
+    virtual Status delete_dir_recursive(const std::string& dirname) = 0;
+
     // Synchronize the entry for a specific directory.
     virtual Status sync_dir(const std::string& dirname) = 0;
 

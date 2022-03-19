@@ -168,6 +168,21 @@ TEST_F(EnvMemoryTest, test_delete_dir) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(EnvMemoryTest, test_delete_dir_recursive) {
+    EXPECT_STATUS(Status::OK(), _env->create_dir("/usr"));
+    EXPECT_STATUS(Status::OK(), _env->create_dir("/usr/a"));
+    EXPECT_STATUS(Status::OK(), _env->create_dir("/usr/b"));
+    EXPECT_STATUS(Status::OK(), _env->create_dir("/usr/b/a"));
+    EXPECT_STATUS(Status::OK(), _env->create_dir("/usr/b/a/a"));
+
+    EXPECT_STATUS(Status::OK(), _env->delete_dir_recursive("/usr"));
+
+    std::vector<std::string> children;
+    EXPECT_STATUS(Status::OK(), _env->get_children("/", &children));
+    EXPECT_EQ(0, children.size());
+}
+
+// NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_new_writable_file) {
     std::unique_ptr<WritableFile> file;
     EXPECT_STATUS(Status::IOError(""), _env->new_writable_file("/").status());

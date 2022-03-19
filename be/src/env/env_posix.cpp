@@ -624,6 +624,15 @@ public:
         return Status::OK();
     }
 
+    Status delete_dir_recursive(const std::string& dirname) override {
+        std::error_code ec;
+        auto r = std::filesystem::remove_all(dirname, ec);
+        if (r == static_cast<std::uintmax_t>(-1)) {
+            return io_error(fmt::format("remove {} recursive", dirname), ec.value());
+        }
+        return Status::OK();
+    }
+
     Status sync_dir(const string& dirname) override {
         int dir_fd;
         RETRY_ON_EINTR(dir_fd, open(dirname.c_str(), O_DIRECTORY | O_RDONLY));
