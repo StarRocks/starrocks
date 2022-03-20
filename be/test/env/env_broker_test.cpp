@@ -168,12 +168,12 @@ public:
 
 private:
     bool _is_dir(const std::string& path) {
-        bool is_dir = false;
-        return _env->is_directory(path).ok() && is_dir;
+        const auto status_or = _env->is_directory(path);
+        return status_or.ok() && status_or.value();
     }
     bool _is_file(const std::string& path) {
-        bool is_dir = false;
-        return _env->is_directory(path).ok() && !is_dir;
+        const auto status_or = _env->is_directory(path);
+        return status_or.ok() && !status_or.value();
     }
     bool _exists(const std::string& path) { return _is_dir(path) || _is_file(path); }
     bool _rm_file(const std::string& path) { return _env->delete_file(path).ok(); }

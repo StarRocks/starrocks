@@ -193,8 +193,7 @@ TEST_F(EnvMemoryTest, test_new_writable_file) {
     EXPECT_STATUS(Status::OK(), _env->get_children("/", &children));
     ASSERT_EQ(1, children.size()) << JoinStrings(children, ",");
     EXPECT_EQ("1.csv", children[0]);
-    uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), _env->get_file_size("/1.csv").status());
+    ASSIGN_OR_ABORT(const uint64_t size, _env->get_file_size("/1.csv"));
     EXPECT_EQ(3, size);
 }
 
