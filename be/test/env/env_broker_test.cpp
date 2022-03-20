@@ -31,17 +31,15 @@ public:
         std::string path = url_path(request.path);
         TBrokerFileStatus status;
         StatusOr<bool> status_or = _env->is_directory(path);
-        Status st = status_or.status();
-        if (st.is_not_found()) {
+        if (status_or.status().is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
             return;
-        } else if (!st.ok()) {
+        } else if (!status_or.ok()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::TARGET_STORAGE_SERVICE_ERROR);
             return;
         }
-        ASSERT_TRUE(st.ok());
-        const bool is_dir = status_or.value();
-        ASSIGN_OR_ABORT(const uint64_t size, _env->get_file_size(path));
+        bool is_dir = status_or.value();
+        uint64_t size = _env->get_file_size(path).value();
         status.__set_isSplitable(false);
         if (request.__isset.fileNameOnly && request.fileNameOnly) {
             status.__set_path(path.substr(path.rfind('/') + 1));
