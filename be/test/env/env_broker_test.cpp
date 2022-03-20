@@ -30,8 +30,8 @@ public:
     void listPath(TBrokerListResponse& response, const TBrokerListPathRequest& request) {
         std::string path = url_path(request.path);
         TBrokerFileStatus status;
-        bool is_dir = false;
-        Status st = _env->is_directory(path).status();
+        StatusOr<bool> status_or = _env->is_directory(path);
+        Status st = status_or.status();
         if (st.is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
             return;
@@ -39,7 +39,9 @@ public:
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::TARGET_STORAGE_SERVICE_ERROR);
             return;
         }
-        uint64_t size = _env->get_file_size(path).value();
+        ASSERT_TRUE(st.ok());
+        const bool is_dir = status_or.value();
+        ASSIGN_OR_ABORT(const uint64_t size, _env->get_file_size(path));
         status.__set_isSplitable(false);
         if (request.__isset.fileNameOnly && request.fileNameOnly) {
             status.__set_path(path.substr(path.rfind('/') + 1));
@@ -422,13 +424,15 @@ TEST_F(EnvBrokerTest, test_check_path_exist) {
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_is_directory) {
     ASSERT_OK(_env_mem->create_file("/tmp/1.txt"));
-
-    bool is_dir = false;
     ASSERT_TRUE(_env.is_directory("/xy").status().is_not_found());
-    ASSIGN_OR_ABORT(is_dir, _env.is_directory("/tmp"));
-    ASSERT_TRUE(is_dir);
-    ASSIGN_OR_ABORT(is_dir, _env.is_directory("/tmp/1.txt"));
-    ASSERT_FALSE(is_dir);
+
+    auto status_or = _env.is_directory("/tmp");
+    ASSERT_OK(status_or.status());
+    ASSERT_TRUE(status_or.value());
+
+    status_or = _env.is_directory("/tmp/1.txt");
+    ASSERT_OK(status_or.status());
+    ASSERT_FALSE(status_or.value());
 }
 
 // NOLINTNEXTLINE

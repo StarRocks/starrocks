@@ -156,7 +156,7 @@ public:
     virtual Status sync_dir(const std::string& dirname) = 0;
 
     // Checks if the file is a directory. Returns an error if it doesn't
-    // exist, otherwise writes true or false into 'is_dir' appropriately.
+    // exist, otherwise return true or false.
     virtual StatusOr<bool> is_directory(const std::string& path) = 0;
 
     // Canonicalize 'path' by applying the following conversions:
@@ -169,7 +169,7 @@ public:
 
     virtual StatusOr<uint64_t> get_file_size(const std::string& fname) = 0;
 
-    // Store the last modification time of fname in *file_mtime.
+    // Get the last modification time by given 'fname'.
     virtual StatusOr<uint64_t> get_file_modified_time(const std::string& fname) = 0;
     // Rename file src to target.
     virtual Status rename_file(const std::string& src, const std::string& target) = 0;
@@ -265,7 +265,7 @@ public:
     // Safe for concurrent use by multiple threads.
     virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
 
-    // Return the size of this file
+    // Return the size of this file.
     virtual StatusOr<uint64_t> get_size() const = 0;
 
     // Return name of this file

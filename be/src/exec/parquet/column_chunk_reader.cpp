@@ -51,7 +51,7 @@ public:
         return st;
     }
 
-    // Return the size of this file
+    // Return the size of this file.
     StatusOr<uint64_t> get_size() const override { return _file->get_size(); }
 
     // Return name of this file

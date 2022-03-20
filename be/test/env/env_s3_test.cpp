@@ -127,7 +127,7 @@ TEST_F(EnvS3Test, test_directory) {
         CheckIsDirectory(env.get(), S3Path("/dirname2/0"), false);
         CheckIsDirectory(env.get(), S3Path("/dirname2/0.da"), false);
     }
-    CheckIsDirectory(env.get(), S3Path("/dirname2"), true, false);
+    CheckIsDirectory(env.get(), S3Path("/dirname2"), true, true);
 
     //
     //  /dirname0/
