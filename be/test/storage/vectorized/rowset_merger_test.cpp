@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "gutil/strings/substitute.h"
-#include "storage/kv_store.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
@@ -13,8 +12,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet.h"
-#include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/empty_iterator.h"

@@ -24,15 +24,8 @@
 #include <mntent.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/statfs.h>
 #include <utime.h>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
-#include <cctype>
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>

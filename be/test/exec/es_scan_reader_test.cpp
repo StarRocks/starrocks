@@ -23,11 +23,9 @@
 
 #include <gtest/gtest.h>
 
-#include <map>
 #include <string>
 #include <vector>
 
-#include "common/logging.h"
 #include "exec/es/es_scroll_query.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"

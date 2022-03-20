@@ -24,7 +24,6 @@
 #include <arrow/pretty_print.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
-#include <arrow/type_fwd.h>
 
 #include "gutil/strings/substitute.h"
 

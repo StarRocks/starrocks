@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -20,7 +19,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
-#include "util/defer_op.h"
 #include "util/value_generator.h"
 
 namespace starrocks::vectorized {

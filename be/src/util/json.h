@@ -19,8 +19,6 @@ namespace starrocks {
 
 namespace vpack = arangodb::velocypack;
 
-class JsonPath;
-
 enum JsonType {
     JSON_BOOL = 0,
     JSON_NUMBER = 1,

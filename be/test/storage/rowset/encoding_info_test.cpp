@@ -25,7 +25,6 @@
 
 #include <iostream>
 
-#include "common/logging.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 

@@ -9,26 +9,19 @@
 
 #include "column/datum_tuple.h"
 #include "env/env_memory.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/column_iterator.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment.h"
-#include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
-#include "storage/tablet_schema_helper.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/union_iterator.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 

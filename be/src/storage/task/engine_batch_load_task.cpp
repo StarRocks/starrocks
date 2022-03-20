@@ -21,19 +21,13 @@
 
 #include "storage/task/engine_batch_load_task.h"
 
-#include <pthread.h>
-
-#include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/push_handler.h"

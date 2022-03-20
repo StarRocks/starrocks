@@ -31,7 +31,6 @@
 #include "storage/page_cache.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
