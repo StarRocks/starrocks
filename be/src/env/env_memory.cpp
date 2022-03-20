@@ -183,10 +183,7 @@ public:
         return Status::OK();
     }
 
-    Status size(uint64_t* size) const override {
-        *size = _inode->data.size();
-        return Status::OK();
-    }
+    StatusOr<uint64_t> get_size() const override { return _inode->data.size(); }
 
     const std::string& filename() const override { return _path; }
 

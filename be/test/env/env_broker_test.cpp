@@ -425,9 +425,9 @@ TEST_F(EnvBrokerTest, test_is_directory) {
 
     bool is_dir = false;
     ASSERT_TRUE(_env.is_directory("/xy").status().is_not_found());
-    ASSERT_OK(_env.is_directory("/tmp").status());
+    ASSIGN_OR_ABORT(is_dir, _env.is_directory("/tmp"));
     ASSERT_TRUE(is_dir);
-    ASSERT_TRUE(_env.is_directory("/tmp/1.txt").ok());
+    ASSIGN_OR_ABORT(is_dir, _env.is_directory("/tmp/1.txt"));
     ASSERT_FALSE(is_dir);
 }
 
