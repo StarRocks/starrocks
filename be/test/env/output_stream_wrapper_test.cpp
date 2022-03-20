@@ -58,12 +58,13 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     auto rf = *Env::Default()->new_random_access_file(_file->filename());
     std::string buff(21, 0);
     Slice slice(buff);
-    uint64_t size = 0;
-    auto st = rf->size(&size);
-    ASSERT_TRUE(st.ok()) << st;
+
+    const auto status_or = rf->get_size();
+    ASSERT_TRUE(status_or.ok()) << status_or.status();
+    uint64_t size = status_or.value();
     ASSERT_EQ(21, size);
 
-    st = rf->read_at_fully(0, slice.data, slice.size);
+    const auto st = rf->read_at_fully(0, slice.data, slice.size);
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_EQ("10 hello world! apple", buff);
 }
