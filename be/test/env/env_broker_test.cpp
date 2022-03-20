@@ -31,7 +31,7 @@ public:
         std::string path = url_path(request.path);
         TBrokerFileStatus status;
         bool is_dir = false;
-        Status st = _env->is_directory(path, &is_dir);
+        Status st = _env->is_directory(path).status();
         if (st.is_not_found()) {
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::FILE_NOT_FOUND);
             return;
@@ -39,8 +39,7 @@ public:
             response.opStatus.__set_statusCode(TBrokerOperationStatusCode::TARGET_STORAGE_SERVICE_ERROR);
             return;
         }
-        uint64_t size = 0;
-        (void)_env->get_file_size(path, &size);
+        uint64_t size = _env->get_file_size(path).value();
         status.__set_isSplitable(false);
         if (request.__isset.fileNameOnly && request.fileNameOnly) {
             status.__set_path(path.substr(path.rfind('/') + 1));
@@ -144,8 +143,7 @@ public:
             return;
         }
         auto& f = iter->second;
-        uint64_t size = 0;
-        CHECK(f->size(&size).ok());
+        ASSIGN_OR_ABORT(const uint64_t size, f->get_size());
         if (size != request.offset) {
             response.__set_statusCode(TBrokerOperationStatusCode::INVALID_INPUT_OFFSET);
             return;
@@ -171,11 +169,11 @@ public:
 private:
     bool _is_dir(const std::string& path) {
         bool is_dir = false;
-        return _env->is_directory(path, &is_dir).ok() && is_dir;
+        return _env->is_directory(path).ok() && is_dir;
     }
     bool _is_file(const std::string& path) {
         bool is_dir = false;
-        return _env->is_directory(path, &is_dir).ok() && !is_dir;
+        return _env->is_directory(path).ok() && !is_dir;
     }
     bool _exists(const std::string& path) { return _is_dir(path) || _is_file(path); }
     bool _rm_file(const std::string& path) { return _env->delete_file(path).ok(); }
@@ -307,8 +305,7 @@ std::string read_full(std::unique_ptr<RandomAccessFile>& f, size_t off, size_t l
 }
 
 uint64_t filesize(std::unique_ptr<RandomAccessFile>& f) {
-    uint64_t len = 0;
-    CHECK(f->size(&len).ok());
+    ASSIGN_OR_ABORT(uint64_t len, f->get_size());
     return len;
 }
 
@@ -427,10 +424,10 @@ TEST_F(EnvBrokerTest, test_is_directory) {
     ASSERT_OK(_env_mem->create_file("/tmp/1.txt"));
 
     bool is_dir = false;
-    ASSERT_TRUE(_env.is_directory("/xy", &is_dir).is_not_found());
-    ASSERT_OK(_env.is_directory("/tmp", &is_dir));
+    ASSERT_TRUE(_env.is_directory("/xy").status().is_not_found());
+    ASSERT_OK(_env.is_directory("/tmp").status());
     ASSERT_TRUE(is_dir);
-    ASSERT_TRUE(_env.is_directory("/tmp/1.txt", &is_dir).ok());
+    ASSERT_TRUE(_env.is_directory("/tmp/1.txt").ok());
     ASSERT_FALSE(is_dir);
 }
 
@@ -451,8 +448,7 @@ TEST_F(EnvBrokerTest, test_rename) {
 // NOLINTNEXTLINE
 TEST_F(EnvBrokerTest, test_get_modified_time) {
     const std::string path = "/tmp";
-    uint64_t ts;
-    ASSERT_TRUE(_env.get_file_modified_time(path, &ts).is_not_supported());
+    ASSERT_TRUE(_env.get_file_modified_time(path).status().is_not_supported());
 }
 
 // NOLINTNEXTLINE

@@ -174,7 +174,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    ASSERT_OK(_env->get_file_size(fname, &file_size));
+    file_size = _env->get_file_size(fname).value();
     LOG(INFO) << "segment file size=" << file_size;
 
     ASSERT_NE(segment_size, 0);

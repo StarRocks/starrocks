@@ -11,7 +11,6 @@
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -27,6 +26,14 @@ public:
 
     std::string S3Path(std::string_view path) {
         return fmt::format("s3://{}.{}{}", kBucketName, config::object_storage_endpoint, path);
+    }
+
+    void CheckIsDirectory(Env* env, const std::string& dir_name, bool expected_success, bool expected_is_dir = true) {
+        const StatusOr<bool> status_or = env->is_directory(dir_name);
+        EXPECT_EQ(expected_success, status_or.ok());
+        if (status_or.ok()) {
+            EXPECT_EQ(expected_is_dir, status_or.value());
+        }
     }
 
 private:
@@ -58,15 +65,12 @@ TEST_F(EnvS3Test, test_write_and_read) {
 
 TEST_F(EnvS3Test, test_directory) {
     ASSIGN_OR_ABORT(auto env, Env::CreateUniqueFromString("s3://"));
-
     bool created = false;
-    bool is_dir = false;
 
     ASSERT_TRUE(env->create_dir(S3Path("/")).is_already_exist());
     ASSERT_OK(env->create_dir_if_missing(S3Path("/"), &created));
     ASSERT_FALSE(created);
-    ASSERT_OK(env->is_directory(S3Path("/"), &is_dir));
-    ASSERT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/"), true, true);
     ASSERT_OK(env->iterate_dir(S3Path("/"), [&](std::string_view /*name*/) -> bool {
         CHECK(false) << "root directory should be empty";
         return true;
@@ -77,15 +81,13 @@ TEST_F(EnvS3Test, test_directory) {
     //  /dirname0/
     //
     EXPECT_OK(env->create_dir(S3Path("/dirname0")));
-    EXPECT_ERROR(env->is_directory(S3Path("/dirname"), &is_dir));
-    EXPECT_OK(env->is_directory(S3Path("/dirname0"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname"), false);
+    CheckIsDirectory(env.get(), S3Path("/dirname0"), true, true);
     EXPECT_TRUE(env->create_dir(S3Path("/dirname0")).is_already_exist());
 
     EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname0"), &created));
     EXPECT_FALSE(created);
-    EXPECT_OK(env->is_directory(S3Path("/dirname0"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname0"), true, true);
 
     //
     //  /dirname0/
@@ -93,10 +95,9 @@ TEST_F(EnvS3Test, test_directory) {
     //
     EXPECT_OK(env->create_dir_if_missing(S3Path("/dirname1"), &created));
     EXPECT_TRUE(created);
-    EXPECT_OK(env->is_directory(S3Path("/dirname1"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname1"), true, true);
 
-    EXPECT_ERROR(env->is_directory(S3Path("/noexistdir"), &is_dir));
+    CheckIsDirectory(env.get(), S3Path("/noexistdir"), false);
     EXPECT_ERROR(env->new_writable_file(S3Path("/filename/")));
 
     //
@@ -109,8 +110,7 @@ TEST_F(EnvS3Test, test_directory) {
         EXPECT_OK(of->append("hello"));
         EXPECT_OK(of->close());
     }
-    EXPECT_OK(env->is_directory(S3Path("/file0"), &is_dir));
-    EXPECT_FALSE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/file0"), true, false);
 
     //
     //  /dirname0/
@@ -123,13 +123,11 @@ TEST_F(EnvS3Test, test_directory) {
         ASSIGN_OR_ABORT(auto of, env->new_writable_file(S3Path("/dirname2/0.dat")));
         EXPECT_OK(of->append("hello"));
         EXPECT_OK(of->close());
-        EXPECT_OK(env->is_directory(S3Path("/dirname2/0.dat"), &is_dir));
-        EXPECT_FALSE(is_dir);
-        EXPECT_ERROR(env->is_directory(S3Path("/dirname2/0"), &is_dir));
-        EXPECT_ERROR(env->is_directory(S3Path("/dirname2/0.da"), &is_dir));
+        CheckIsDirectory(env.get(), S3Path("/dirname2/0.dat"), true, false);
+        CheckIsDirectory(env.get(), S3Path("/dirname2/0"), false);
+        CheckIsDirectory(env.get(), S3Path("/dirname2/0.da"), false);
     }
-    EXPECT_OK(env->is_directory(S3Path("/dirname2"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname2"), true, false);
 
     //
     //  /dirname0/
@@ -142,11 +140,9 @@ TEST_F(EnvS3Test, test_directory) {
         ASSIGN_OR_ABORT(auto of, env->new_writable_file(S3Path("/dirname2/1.dat")));
         EXPECT_OK(of->append("hello"));
         EXPECT_OK(of->close());
-        EXPECT_OK(env->is_directory(S3Path("/dirname2/1.dat"), &is_dir));
-        EXPECT_FALSE(is_dir);
+        CheckIsDirectory(env.get(), S3Path("/dirname2/1.dat"), true, false);
     }
-    EXPECT_OK(env->is_directory(S3Path("/dirname2"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname2"), true, true);
 
     //
     //  /dirname0/
@@ -157,8 +153,7 @@ TEST_F(EnvS3Test, test_directory) {
     //  /file0
     //
     EXPECT_OK(env->create_dir(S3Path("/dirname2/subdir0")));
-    EXPECT_OK(env->is_directory(S3Path("/dirname2/subdir0"), &is_dir));
-    EXPECT_TRUE(is_dir);
+    CheckIsDirectory(env.get(), S3Path("/dirname2/subdir0"), true, true);
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {

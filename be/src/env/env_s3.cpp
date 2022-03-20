@@ -60,7 +60,7 @@ public:
     StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    Status size(uint64_t* size) const override;
+    StatusOr<uint64_t> get_size() const override;
     const std::string& filename() const override { return _object_path; }
 
 private:
@@ -85,12 +85,11 @@ Status RandomAccessFileAdapter::readv_at(uint64_t offset, const Slice* res, size
     return Status::OK();
 }
 
-Status RandomAccessFileAdapter::size(uint64_t* size) const {
+StatusOr<uint64_t> RandomAccessFileAdapter::get_size() const {
     if (_object_size == 0) {
         ASSIGN_OR_RETURN(_object_size, _input->get_size());
     }
-    *size = _object_size;
-    return Status::OK();
+    return _object_size;
 }
 
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
@@ -282,17 +281,17 @@ public:
 
     Status sync_dir(const std::string& dirname) override;
 
-    Status is_directory(const std::string& path, bool* is_dir) override;
+    StatusOr<bool> is_directory(const std::string& path) override;
 
     Status canonicalize(const std::string& path, std::string* file) override {
         return Status::NotSupported("EnvS3::canonicalize");
     }
 
-    Status get_file_size(const std::string& path, uint64_t* size) override {
+    StatusOr<uint64_t> get_file_size(const std::string& path) override {
         return Status::NotSupported("EnvS3::get_file_size");
     }
 
-    Status get_file_modified_time(const std::string& path, uint64_t* file_mtime) override {
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
         return Status::NotSupported("EnvS3::get_file_modified_time");
     }
 
@@ -351,7 +350,10 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
 
 StatusOr<SpaceInfo> EnvS3::space(const std::string& path) {
     // call `is_directory()` to check if 'path' is an valid path
-    RETURN_IF_ERROR(EnvS3::is_directory(path, nullptr));
+    const Status status = EnvS3::is_directory(path).status();
+    if (!status.ok()) {
+        return status;
+    }
     return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
                      .free = std::numeric_limits<int64_t>::max(),
                      .available = std::numeric_limits<int64_t>::max()};
@@ -413,7 +415,7 @@ Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::
 
 // Creating directory is actually creating an object of key "dirname/"
 Status EnvS3::create_dir(const std::string& dirname) {
-    auto st = EnvS3::is_directory(dirname, nullptr);
+    auto st = EnvS3::is_directory(dirname).status();
     if (st.ok()) {
         return Status::AlreadyExist(dirname);
     }
@@ -452,14 +454,13 @@ Status EnvS3::create_dir_if_missing(const std::string& dirname, bool* created) {
     return st;
 }
 
-Status EnvS3::is_directory(const std::string& path, bool* is_dir) {
+StatusOr<bool> EnvS3::is_directory(const std::string& path) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
     }
     if (uri.key().empty()) { // root directory '/'
-        if (is_dir != nullptr) *is_dir = true;
-        return Status::OK();
+        return true;
     }
     auto client = new_s3client(uri);
     Aws::S3::Model::ListObjectsV2Request request;
@@ -474,12 +475,10 @@ Status EnvS3::is_directory(const std::string& path, bool* is_dir) {
     std::string dirname = uri.key() + "/";
     for (auto&& obj : result.GetContents()) {
         if (HasPrefixString(obj.GetKey(), dirname)) {
-            if (is_dir != nullptr) *is_dir = true;
-            return Status::OK();
+            return true;
         }
         if (obj.GetKey() == uri.key()) {
-            if (is_dir != nullptr) *is_dir = false;
-            return Status::OK();
+            return false;
         }
     }
     return Status::NotFound(path);
@@ -550,8 +549,7 @@ Status EnvS3::delete_dir(const std::string& dirname) {
 
 Status EnvS3::sync_dir(const std::string& dirname) {
     // The only thing we need to do is check whether the directory exist or not.
-    bool is_dir = false;
-    RETURN_IF_ERROR(is_directory(dirname, &is_dir));
+    ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
     if (is_dir) return Status::OK();
     return Status::NotFound(fmt::format("{} not directory", dirname));
 }

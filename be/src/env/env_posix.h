@@ -2,6 +2,10 @@
 
 #pragma once
 
+#include <memory>
+
+#include "env.h"
+
 namespace starrocks {
 
 std::unique_ptr<Env> new_env_posix();

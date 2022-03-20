@@ -59,9 +59,9 @@ void HdfsScannerTest::_create_runtime_state() {
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
     auto* scan_range = _pool.add(new THdfsScanRange());
-    uint64_t file_size = 0;
-    Status status = Env::Default()->get_file_size(file, &file_size);
-    DCHECK(status.ok()) << status.get_error_msg();
+    StatusOr<uint64_t> status_or = Env::Default()->get_file_size(file);
+    DCHECK(status_or.ok()) << status_or.status().get_error_msg();
+    uint64_t file_size = status_or.value();
     scan_range->relative_path = file;
     scan_range->offset = offset;
     scan_range->length = length == 0 ? file_size : length;

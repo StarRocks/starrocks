@@ -157,7 +157,7 @@ public:
 
     // Checks if the file is a directory. Returns an error if it doesn't
     // exist, otherwise writes true or false into 'is_dir' appropriately.
-    virtual Status is_directory(const std::string& path, bool* is_dir) = 0;
+    virtual StatusOr<bool> is_directory(const std::string& path) = 0;
 
     // Canonicalize 'path' by applying the following conversions:
     // - Converts a relative path into an absolute one using the cwd.
@@ -167,10 +167,10 @@ public:
     // All directory entries in 'path' must exist on the filesystem.
     virtual Status canonicalize(const std::string& path, std::string* result) = 0;
 
-    virtual Status get_file_size(const std::string& fname, uint64_t* size) = 0;
+    virtual StatusOr<uint64_t> get_file_size(const std::string& fname) = 0;
 
     // Store the last modification time of fname in *file_mtime.
-    virtual Status get_file_modified_time(const std::string& fname, uint64_t* file_mtime) = 0;
+    virtual StatusOr<uint64_t> get_file_modified_time(const std::string& fname) = 0;
     // Rename file src to target.
     virtual Status rename_file(const std::string& src, const std::string& target) = 0;
 
@@ -266,7 +266,7 @@ public:
     virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
 
     // Return the size of this file
-    virtual Status size(uint64_t* size) const = 0;
+    virtual StatusOr<uint64_t> get_size() const = 0;
 
     // Return name of this file
     virtual const std::string& filename() const = 0;
@@ -353,7 +353,7 @@ public:
 
     virtual Status close() = 0;
 
-    virtual Status size(uint64_t* size) const = 0;
+    virtual StatusOr<uint64_t> get_size() const = 0;
     virtual const std::string& filename() const = 0;
 };
 
