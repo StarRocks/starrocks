@@ -362,8 +362,7 @@ void batch_delete_meta(const std::string& tablet_file) {
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     const std::string& file_name = input_file->filename();
-    uint64_t file_size;
-    RETURN_IF_ERROR(input_file->size(&file_size));
+    ASSIGN_OR_RETURN(const uint64_t file_size, input_file->get_size());
 
     if (file_size < 12) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", file_name, file_size));

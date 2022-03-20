@@ -86,8 +86,7 @@ Status SnapshotMeta::serialize_to_file(WritableFile* file) {
 }
 
 Status SnapshotMeta::parse_from_file(RandomAccessFile* file) {
-    uint64_t file_length = 0;
-    RETURN_IF_ERROR(file->size(&file_length));
+    ASSIGN_OR_RETURN(const uint64_t file_length, file->get_size());
     if (file_length < 16) {
         return Status::InvalidArgument("snapshot meta file too short");
     }

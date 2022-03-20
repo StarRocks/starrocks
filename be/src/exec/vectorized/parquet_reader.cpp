@@ -111,9 +111,10 @@ arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
-    int64_t size = 0;
-    _file->size((uint64_t*)&size);
-    return size;
+    const StatusOr<uint64_t> status_or = _file->get_size();
+    return status_or.ok() ? status_or.value()
+                          : arrow::Result<int64_t>(
+                                    arrow::Status(arrow::StatusCode::IOError, status_or.status().get_error_msg()));
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {
