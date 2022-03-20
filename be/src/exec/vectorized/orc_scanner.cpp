@@ -29,8 +29,8 @@ public:
      * Get the total length of the file in bytes.
      */
     uint64_t getLength() const override {
-        uint64_t len = 0;
-        return _file->size(&len).ok() ? len : 0;
+        const auto status_or = _file->get_size();
+        return status_or.ok() ? status_or.value() : 0;
     }
 
     /**

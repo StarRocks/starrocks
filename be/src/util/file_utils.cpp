@@ -75,9 +75,7 @@ Status FileUtils::remove_all(const std::string& file_path) {
 }
 
 Status FileUtils::remove(const std::string& path, starrocks::Env* env) {
-    bool is_dir;
-    RETURN_IF_ERROR(env->is_directory(path, &is_dir));
-
+    ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(path));
     if (is_dir) {
         return env->delete_dir(path);
     } else {
