@@ -28,7 +28,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <algorithm>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
@@ -112,11 +111,10 @@ Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>
         }
 
         std::string temp_path = fmt::format("{}/{}", path, name);
-        bool is_dir;
 
-        auto st = env->is_directory(temp_path, &is_dir);
-        if (st.ok()) {
-            if (is_dir) {
+        auto status_or = env->is_directory(temp_path);
+        if (status_or.ok()) {
+            if (status_or.value()) {
                 if (dirs != nullptr) {
                     dirs->emplace(name);
                 }
@@ -124,7 +122,7 @@ Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>
                 files->emplace(name);
             }
         } else {
-            LOG(WARNING) << "check path " << path << "is directory error: " << st.to_string();
+            LOG(WARNING) << "check path " << path << "is directory error: " << status_or.status().to_string();
         }
 
         return true;
@@ -144,12 +142,8 @@ Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* 
 }
 
 bool FileUtils::is_dir(const std::string& file_path, Env* env) {
-    bool ret;
-    if (env->is_directory(file_path, &ret).ok()) {
-        return ret;
-    }
-
-    return false;
+    const auto status_or = env->is_directory(file_path);
+    return status_or.ok() ? status_or.value() : false;
 }
 
 bool FileUtils::is_dir(const std::string& path) {
