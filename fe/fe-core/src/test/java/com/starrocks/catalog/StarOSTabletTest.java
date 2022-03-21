@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
@@ -18,6 +19,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.List;
 import java.util.Map;
 
 public class StarOSTabletTest {
@@ -86,5 +88,12 @@ public class StarOSTabletTest {
         StarOSTablet tablet = new StarOSTablet(1L, 2L);
         Assert.assertEquals(Sets.newHashSet(backendId), tablet.getBackendIds());
         Assert.assertEquals(backendId, tablet.getPrimaryBackendId());
+        List<Replica> allQuerableReplicas = Lists.newArrayList();
+        List<Replica> localReplicas = Lists.newArrayList();
+        tablet.getQueryableReplicas(allQuerableReplicas, localReplicas, 0, backendId, 0);
+        Assert.assertEquals(1, allQuerableReplicas.size());
+        Assert.assertEquals(backendId, allQuerableReplicas.get(0).getBackendId());
+        Assert.assertEquals(1, localReplicas.size());
+        Assert.assertEquals(backendId, localReplicas.get(0).getBackendId());
     }
 }

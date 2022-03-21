@@ -21,14 +21,11 @@
 
 #include "storage/snapshot_manager.h"
 
-#include <algorithm>
-#include <cstdio>
 #include <iterator>
 #include <map>
 #include <set>
 
 #include "env/env.h"
-#include "env/output_stream_wrapper.h"
 #include "gen_cpp/Types_constants.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

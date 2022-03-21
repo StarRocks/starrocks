@@ -4,10 +4,8 @@
 
 #include <sstream>
 
-#include "column/chunk.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 

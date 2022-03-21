@@ -27,19 +27,15 @@ namespace starrocks {
 class SegmentIteratorTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _env = new EnvMemory();
-        _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
+        _env = std::make_shared<EnvMemory>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
-    void TearDown() override {
-        delete _block_mgr;
-        delete _env;
-        StoragePageCache::release_global_cache();
-    }
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 
     TabletSchema create_schema(const std::vector<TabletColumn>& columns, int num_short_key_columns = -1) {
         TabletSchema res;
@@ -56,8 +52,8 @@ public:
     }
 
     const std::string kSegmentDir = "/segment_test";
-    EnvMemory* _env = nullptr;
-    fs::FileBlockManager* _block_mgr = nullptr;
+    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
 };

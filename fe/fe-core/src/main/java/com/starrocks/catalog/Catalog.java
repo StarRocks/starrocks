@@ -40,7 +40,6 @@ import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
@@ -51,7 +50,6 @@ import com.starrocks.analysis.AdminCheckTabletsStmt.CheckType;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterClusterStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.analysis.AlterDatabaseRename;
@@ -63,17 +61,13 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropClusterStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -101,8 +95,6 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.analysis.UserDesc;
-import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database.DbState;
@@ -183,7 +175,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
-import com.starrocks.persist.ClusterInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
@@ -231,7 +222,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.MasterTaskExecutor;
-import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -251,7 +241,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.BufferedInputStream;
@@ -270,7 +259,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1527,10 +1515,6 @@ public class Catalog {
         }
     }
 
-    public boolean hasReplayer() {
-        return replayer != null;
-    }
-
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         clusterId = storage.getClusterID();
@@ -2373,7 +2357,7 @@ public class Catalog {
         }
 
         long currentTimeMs = System.currentTimeMillis();
-        if (currentTimeMs - synchronizedTimeMs > Config.meta_delay_toleration_second * 1000) {
+        if (currentTimeMs - synchronizedTimeMs > Config.meta_delay_toleration_second * 1000L) {
             // we still need this log to observe this situation
             // but service may be continued when there is no log being replayed.
             LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
@@ -2492,13 +2476,8 @@ public class Catalog {
                             break;
                         }
                         case OBSERVER: {
-                            switch (newType) {
-                                case UNKNOWN: {
-                                    transferToNonMaster(newType);
-                                    break;
-                                }
-                                default:
-                                    break;
+                            if (newType == FrontendNodeType.UNKNOWN) {
+                                transferToNonMaster(newType);
                             }
                             break;
                         }
@@ -2946,7 +2925,7 @@ public class Catalog {
         }
     }
 
-    public void replayEraseDatabase(long dbId) throws DdlException {
+    public void replayEraseDatabase(long dbId) {
         Catalog.getCurrentRecycleBin().replayEraseDatabase(dbId);
     }
 
@@ -4497,8 +4476,22 @@ public class Catalog {
         // 1.1 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
-            sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
-            sb.append(";");
+            sb.append("CREATE VIEW `").append(table.getName()).append("` (");
+            List<String> colDef = Lists.newArrayList();
+            for (Column column : table.getBaseSchema()) {
+                StringBuilder colSb = new StringBuilder();
+                colSb.append(column.getName());
+                if (!Strings.isNullOrEmpty(column.getComment())) {
+                    colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                }
+                colDef.add(colSb.toString());
+            }
+            sb.append(Joiner.on(", ").join(colDef));
+            sb.append(")");
+            if (!Strings.isNullOrEmpty(view.getComment())) {
+                sb.append(" COMMENT \"").append(view.getComment()).append("\"");
+            }
+            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -5271,8 +5264,7 @@ public class Catalog {
 
     // Get the next available, need't lock because of nextId is atomic.
     public long getNextId() {
-        long id = idGenerator.getNextId();
-        return id;
+        return idGenerator.getNextId();
     }
 
     public List<String> getDbNames() {
@@ -5666,7 +5658,7 @@ public class Catalog {
      * used for handling AlterTableStmt (for client is the ALTER TABLE command).
      * including SchemaChangeHandler and RollupHandler
      */
-    public void alterTable(AlterTableStmt stmt) throws DdlException, UserException {
+    public void alterTable(AlterTableStmt stmt) throws UserException {
         this.alter.processAlterTable(stmt);
     }
 
@@ -6036,7 +6028,7 @@ public class Catalog {
             throw new DdlException("Partition does not exist. name: " + partitionName);
         }
 
-        short replicationNum = Short.valueOf(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
+        short replicationNum = Short.parseShort(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
         boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
         DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
         partitionInfo.setReplicationNum(partition.getId(), replicationNum);
@@ -6166,7 +6158,7 @@ public class Catalog {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {
-                    if (enAble == PropertyAnalyzer.DISABLE_LOW_CARD_DICT) {
+                    if (enAble.equals(PropertyAnalyzer.DISABLE_LOW_CARD_DICT)) {
                         olapTable.setHasForbitGlobalDict(true);
                     } else {
                         olapTable.setHasForbitGlobalDict(false);
@@ -6175,7 +6167,8 @@ public class Catalog {
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 if (tableProperty == null) {
-                    olapTable.setTableProperty(new TableProperty(properties).buildProperty(opCode));
+                    tableProperty = new TableProperty(properties);
+                    olapTable.setTableProperty(tableProperty.buildProperty(opCode));
                 } else {
                     tableProperty.modifyTableProperties(properties);
                     tableProperty.buildProperty(opCode);
@@ -6207,7 +6200,7 @@ public class Catalog {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public void alterCluster(AlterSystemStmt stmt) throws DdlException, UserException {
+    public void alterCluster(AlterSystemStmt stmt) throws UserException {
         this.alter.processAlterCluster(stmt);
     }
 
@@ -6352,60 +6345,17 @@ public class Catalog {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
-    /**
-     * create cluster
-     *
-     * @param stmt
-     * @throws DdlException
-     */
-    public void createCluster(CreateClusterStmt stmt) throws DdlException {
-        final String clusterName = stmt.getClusterName();
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
+    public void replayCreateCluster(Cluster cluster) {
+        tryLock(true);
         try {
-            if (nameToCluster.containsKey(clusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_HAS_EXIST, clusterName);
-            } else {
-                List<Long> backendList = systemInfo.createCluster(clusterName, stmt.getInstanceNum());
-                // 1: BE returned is less than requested, throws DdlException.
-                // 2: BE returned is more than or equal to 0, succeeds.
-                if (backendList != null || stmt.getInstanceNum() == 0) {
-                    final long id = getNextId();
-                    final Cluster cluster = new Cluster(clusterName, id);
-                    cluster.setBackendIdList(backendList);
-                    unprotectCreateCluster(cluster);
-                    if (clusterName.equals(SystemInfoService.DEFAULT_CLUSTER)) {
-                        for (Database db : idToDb.values()) {
-                            if (db.getClusterName().equals(SystemInfoService.DEFAULT_CLUSTER)) {
-                                cluster.addDb(db.getFullName(), db.getId());
-                            }
-                        }
-                    }
-                    editLog.logCreateCluster(cluster);
-                    LOG.info("finish to create cluster: {}", clusterName);
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_BE_NOT_ENOUGH);
-                }
-            }
+            unprotectCreateCluster(cluster);
         } finally {
             unlock();
         }
-
-        // create super user for this cluster
-        UserIdentity adminUser = new UserIdentity(Auth.ADMIN_USER, "%");
-        try {
-            adminUser.analyze(stmt.getClusterName());
-        } catch (AnalysisException e) {
-            LOG.error("should not happen", e);
-        }
-        auth.createUser(new CreateUserStmt(new UserDesc(adminUser, "", true)));
     }
 
     private void unprotectCreateCluster(Cluster cluster) {
-        final Iterator<Long> iterator = cluster.getBackendIdList().iterator();
-        while (iterator.hasNext()) {
-            final Long id = iterator.next();
+        for (Long id : cluster.getBackendIdList()) {
             final Backend backend = systemInfo.getBackend(id);
             backend.setOwnerClusterName(cluster.getName());
             backend.setBackendState(BackendState.using);
@@ -6422,175 +6372,6 @@ public class Catalog {
         // only need to create default cluster once.
         if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
             isDefaultClusterCreated = true;
-        }
-    }
-
-    /**
-     * replay create cluster
-     *
-     * @param cluster
-     */
-    public void replayCreateCluster(Cluster cluster) {
-        tryLock(true);
-        try {
-            unprotectCreateCluster(cluster);
-        } finally {
-            unlock();
-        }
-    }
-
-    /**
-     * drop cluster and cluster's db must be have deleted
-     *
-     * @param stmt
-     * @throws DdlException
-     */
-    public void dropCluster(DropClusterStmt stmt) throws DdlException {
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            final String clusterName = stmt.getClusterName();
-            final Cluster cluster = nameToCluster.get(clusterName);
-            if (cluster == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, clusterName);
-            }
-            final List<Backend> backends = systemInfo.getClusterBackends(clusterName);
-            for (Backend backend : backends) {
-                if (backend.isDecommissioned()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_ALTER_BE_IN_DECOMMISSION, clusterName);
-                }
-            }
-
-            // check if there still have databases undropped, except for information_schema db
-            if (cluster.getDbNames().size() > 1) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DELETE_DB_EXIST, clusterName);
-            }
-
-            systemInfo.releaseBackends(clusterName, false /* is not replay */);
-            final ClusterInfo info = new ClusterInfo(clusterName, cluster.getId());
-            unprotectDropCluster(info, false /* is not replay */);
-            editLog.logDropCluster(info);
-        } finally {
-            unlock();
-        }
-
-        // drop user of this cluster
-        // set is replay to true, not write log
-        auth.dropUserOfCluster(stmt.getClusterName(), true /* is replay */);
-    }
-
-    private void unprotectDropCluster(ClusterInfo info, boolean isReplay) {
-        systemInfo.releaseBackends(info.getClusterName(), isReplay);
-        idToCluster.remove(info.getClusterId());
-        nameToCluster.remove(info.getClusterName());
-        final Database infoSchemaDb = fullNameToDb.get(InfoSchemaDb.getFullInfoSchemaDbName(info.getClusterName()));
-        fullNameToDb.remove(infoSchemaDb.getFullName());
-        idToDb.remove(infoSchemaDb.getId());
-    }
-
-    public void replayDropCluster(ClusterInfo info) {
-        tryLock(true);
-        try {
-            unprotectDropCluster(info, true/* is replay */);
-        } finally {
-            unlock();
-        }
-
-        auth.dropUserOfCluster(info.getClusterName(), true /* is replay */);
-    }
-
-    public void replayExpandCluster(ClusterInfo info) {
-        tryLock(true);
-        try {
-            final Cluster cluster = nameToCluster.get(info.getClusterName());
-            cluster.addBackends(info.getBackendIdList());
-
-            for (Long beId : info.getBackendIdList()) {
-                Backend be = Catalog.getCurrentSystemInfo().getBackend(beId);
-                if (be == null) {
-                    continue;
-                }
-                be.setOwnerClusterName(info.getClusterName());
-                be.setBackendState(BackendState.using);
-            }
-        } finally {
-            unlock();
-        }
-    }
-
-    /**
-     * modify cluster: Expansion or shrink
-     *
-     * @param stmt
-     * @throws DdlException
-     */
-    public void processModifyCluster(AlterClusterStmt stmt) throws UserException {
-        final String clusterName = stmt.getAlterClusterName();
-        final int newInstanceNum = stmt.getInstanceNum();
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            Cluster cluster = nameToCluster.get(clusterName);
-            if (cluster == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, clusterName);
-            }
-
-            // check if this cluster has backend in decommission
-            final List<Long> backendIdsInCluster = cluster.getBackendIdList();
-            for (Long beId : backendIdsInCluster) {
-                Backend be = systemInfo.getBackend(beId);
-                if (be.isDecommissioned()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_ALTER_BE_IN_DECOMMISSION, clusterName);
-                }
-            }
-
-            final int oldInstanceNum = backendIdsInCluster.size();
-            if (newInstanceNum > oldInstanceNum) {
-                // expansion
-                final List<Long> expandBackendIds = systemInfo.calculateExpansionBackends(clusterName,
-                        newInstanceNum - oldInstanceNum);
-                if (expandBackendIds == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_BE_NOT_ENOUGH);
-                }
-                cluster.addBackends(expandBackendIds);
-                final ClusterInfo info = new ClusterInfo(clusterName, cluster.getId(), expandBackendIds);
-                editLog.logExpandCluster(info);
-            } else if (newInstanceNum < oldInstanceNum) {
-                // shrink
-                final List<Long> decomBackendIds = systemInfo.calculateDecommissionBackends(clusterName,
-                        oldInstanceNum - newInstanceNum);
-                if (decomBackendIds == null || decomBackendIds.size() == 0) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_BACKEND_ERROR);
-                }
-
-                List<String> hostPortList = Lists.newArrayList();
-                for (Long id : decomBackendIds) {
-                    final Backend backend = systemInfo.getBackend(id);
-                    hostPortList.add(new StringBuilder().append(backend.getHost()).append(":")
-                            .append(backend.getHeartbeatPort()).toString());
-                }
-
-                // here we reuse the process of decommission backends. but set backend's decommission type to
-                // ClusterDecommission, which means this backend will not be removed from the system
-                // after decommission is done.
-                final DecommissionBackendClause clause = new DecommissionBackendClause(hostPortList);
-                try {
-                    clause.analyze(null);
-                    clause.setType(DecommissionType.ClusterDecommission);
-                    AlterSystemStmt alterStmt = new AlterSystemStmt(clause);
-                    alterStmt.setClusterName(clusterName);
-                    this.alter.processAlterCluster(alterStmt);
-                } catch (AnalysisException e) {
-                    Preconditions.checkState(false, "should not happend: " + e.getMessage());
-                }
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_ALTER_BE_NO_CHANGE, newInstanceNum);
-            }
-
-        } finally {
-            unlock();
         }
     }
 
@@ -6776,12 +6557,7 @@ public class Catalog {
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
-                        new FrontendServiceProxy.MethodCallable<TRefreshTableResponse>() {
-                            @Override
-                            public TRefreshTableResponse invoke(FrontendService.Client client) throws TException {
-                                return client.refreshTable(request);
-                            }
-                        });
+                        client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
@@ -7237,12 +7013,7 @@ public class Catalog {
                         .call(new TNetworkAddress(fe.getHost(),
                                         fe.getRpcPort()),
                                 timeout,
-                                new FrontendServiceProxy.MethodCallable<TSetConfigResponse>() {
-                                    @Override
-                                    public TSetConfigResponse invoke(FrontendService.Client client) throws TException {
-                                        return client.setConfig(request);
-                                    }
-                                }
+                                client -> client.setConfig(request)
                         );
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
@@ -7415,7 +7186,7 @@ public class Catalog {
                     replaceTempPartitionLog.isStrictRange(),
                     replaceTempPartitionLog.useTempPartitionName());
         } catch (DdlException e) {
-            LOG.warn("should not happen. {}", e);
+            LOG.warn("should not happen.", e);
         } finally {
             db.writeUnlock();
         }
@@ -7480,12 +7251,8 @@ public class Catalog {
     // entry of checking tablets operation
     public void checkTablets(AdminCheckTabletsStmt stmt) {
         CheckType type = stmt.getType();
-        switch (type) {
-            case CONSISTENCY:
-                consistencyChecker.addTabletsToCheck(stmt.getTabletIds());
-                break;
-            default:
-                break;
+        if (type == CheckType.CONSISTENCY) {
+            consistencyChecker.addTabletsToCheck(stmt.getTabletIds());
         }
     }
 

@@ -33,7 +33,6 @@ namespace starrocks {
 
 typedef google::protobuf::RepeatedPtrField<DeletePredicatePB> DelPredicateArray;
 class Conditions;
-class RowCursor;
 
 class DeleteConditionHandler {
 public:

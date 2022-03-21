@@ -12,6 +12,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+
 namespace starrocks::pipeline {
 
 // ==================== OlapScanOperatorFactory ====================

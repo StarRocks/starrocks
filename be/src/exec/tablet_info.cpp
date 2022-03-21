@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "runtime/mem_pool.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 

@@ -23,16 +23,13 @@
 
 #include <gtest/gtest.h>
 
-#include <fstream>
 #include <iostream>
 
 #include "common/logging.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/binary_plain_page.h"
-#include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "storage/types.h"

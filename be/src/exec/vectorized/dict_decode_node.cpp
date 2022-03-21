@@ -2,8 +2,6 @@
 
 #include "exec/vectorized/dict_decode_node.h"
 
-#include <fmt/ranges.h>
-
 #include <utility>
 
 #include "column/chunk.h"

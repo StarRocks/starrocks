@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -182,6 +183,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
          */
         for (int i = 0; i < selectList.getItems().size(); i++) {
             SelectListItem selectListItem = selectList.getItems().get(i);
+            if (selectListItem.isStar()) {
+                throw new AnalysisException("The materialized view currently does not support * in select statement.");
+            }
             Expr selectListItemExpr = selectListItem.getExpr();
             if (!(selectListItemExpr instanceof SlotRef) && !(selectListItemExpr instanceof FunctionCallExpr)) {
                 throw new AnalysisException("The materialized view only support the single column or function expr. "
@@ -254,6 +258,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         TableName tableName = tableRefList.get(0).getName();
         baseIndexName = tableName.getTbl();
         dbName = tableName.getDb();
+
+        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, baseIndexName);
     }
 
     private void analyzeOrderByClause() throws AnalysisException {

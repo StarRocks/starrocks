@@ -286,9 +286,6 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     case TFileType::FILE_BROKER: {
         EnvBroker env_broker(address, params.properties);
         ASSIGN_OR_RETURN(auto broker_file, env_broker.new_random_access_file(range_desc.path));
-        if (range_desc.start_offset != 0) {
-            return Status::NotSupported("non-zero start offset");
-        }
         src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
         break;
     }

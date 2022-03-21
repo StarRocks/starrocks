@@ -532,14 +532,8 @@ public class EditLog {
                     catalog.replayCreateCluster(value);
                     break;
                 }
-                case OperationType.OP_DROP_CLUSTER: {
-                    final ClusterInfo value = (ClusterInfo) journal.getData();
-                    catalog.replayDropCluster(value);
-                    break;
-                }
+                case OperationType.OP_DROP_CLUSTER:
                 case OperationType.OP_EXPAND_CLUSTER: {
-                    final ClusterInfo info = (ClusterInfo) journal.getData();
-                    catalog.replayExpandCluster(info);
                     break;
                 }
                 // for compatibility

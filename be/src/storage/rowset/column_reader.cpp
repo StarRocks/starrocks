@@ -50,22 +50,27 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
-                                                             ColumnMetaPB* meta, const std::string& file_name) {
-    auto r = std::make_unique<ColumnReader>(mem_tracker, private_type(0), opts, file_name);
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(MemTracker* mem_tracker,
+                                                             std::shared_ptr<fs::BlockManager> block_mgr,
+                                                             ColumnMetaPB* meta, const std::string& file_name,
+                                                             uint32_t storage_format_version, bool kept_in_memory) {
+    auto r = std::make_unique<ColumnReader>(private_type(0), mem_tracker, std::move(block_mgr), file_name,
+                                            storage_format_version, kept_in_memory);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
-                           const std::string& file_name)
+ColumnReader::ColumnReader(const private_type&, MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> block_mgr,
+                           const std::string& file_name, uint32_t storage_format_version, bool kept_in_memory)
         : _mem_tracker(mem_tracker),
-          _opts(opts),
+          _block_mgr(std::move(block_mgr)),
           _file_name(file_name),
           _zone_map_index(),
           _ordinal_index(),
           _bitmap_index(),
-          _bloom_filter_index() {
+          _bloom_filter_index(),
+          _storage_format_version(storage_format_version),
+          _kept_in_memory(kept_in_memory) {
     _mem_tracker->consume(sizeof(ColumnReader));
 }
 
@@ -168,17 +173,20 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(3);
 
             // elements
-            auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
+            auto res = ColumnReader::create(_mem_tracker, _block_mgr, meta->mutable_children_columns(0), _file_name,
+                                            _storage_format_version, _kept_in_memory);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
+            res = ColumnReader::create(_mem_tracker, _block_mgr, meta->mutable_children_columns(1), _file_name,
+                                       _storage_format_version, _kept_in_memory);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(2), _file_name);
+            res = ColumnReader::create(_mem_tracker, _block_mgr, meta->mutable_children_columns(2), _file_name,
+                                       _storage_format_version, _kept_in_memory);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         } else {
@@ -188,12 +196,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(2);
 
             // elements
-            auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
+            auto res = ColumnReader::create(_mem_tracker, _block_mgr, meta->mutable_children_columns(0), _file_name,
+                                            _storage_format_version, _kept_in_memory);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
+            res = ColumnReader::create(_mem_tracker, _block_mgr, meta->mutable_children_columns(1), _file_name,
+                                       _storage_format_version, _kept_in_memory);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -217,10 +227,10 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.page_pointer = pp;
     opts.codec = _compress_codec;
     opts.stats = iter_opts.stats;
-    opts.verify_checksum = _opts.verify_checksum;
+    opts.verify_checksum = true;
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
-    opts.kept_in_memory = _opts.kept_in_memory;
+    opts.kept_in_memory = _kept_in_memory;
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
@@ -292,7 +302,7 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
         _mem_tracker->release(index_meta->SpaceUsedLong());
         _ordinal_index.reader = new OrdinalIndexReader();
         _flags.set(kHasOrdinalIndexReaderPos, true);
-        st = _ordinal_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), _num_rows, use_page_cache,
+        st = _ordinal_index.reader->load(_block_mgr.get(), _file_name, index_meta.get(), _num_rows, use_page_cache,
                                          kept_in_memory);
         _mem_tracker->consume(_ordinal_index.reader->mem_usage());
     }
@@ -308,7 +318,7 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
         _mem_tracker->release(index_meta->SpaceUsedLong());
         _zone_map_index.reader = new ZoneMapIndexReader();
         _flags.set(kHasZoneMapIndexReaderPos, true);
-        st = _zone_map_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
+        st = _zone_map_index.reader->load(_block_mgr.get(), _file_name, index_meta.get(), use_page_cache,
                                           kept_in_memory);
         _mem_tracker->consume(_zone_map_index.reader->mem_usage());
     }
@@ -324,7 +334,7 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
         _mem_tracker->release(index_meta->SpaceUsedLong());
         _bitmap_index.reader = new BitmapIndexReader();
         _flags.set(kHasBitmapIndexReaderPos, true);
-        st = _bitmap_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
+        st = _bitmap_index.reader->load(_block_mgr.get(), _file_name, index_meta.get(), use_page_cache, kept_in_memory);
         _mem_tracker->consume(_bitmap_index.reader->mem_usage());
     }
     return st;
@@ -339,7 +349,7 @@ Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_
         _mem_tracker->release(index_meta->SpaceUsedLong());
         _bloom_filter_index.reader = new BloomFilterIndexReader();
         _flags.set(kHasBloomFilterIndexReaderPos, true);
-        st = _bloom_filter_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
+        st = _bloom_filter_index.reader->load(_block_mgr.get(), _file_name, index_meta.get(), use_page_cache,
                                               kept_in_memory);
         _mem_tracker->consume(_bloom_filter_index.reader->mem_usage());
     }
@@ -438,19 +448,19 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
 
 Status ColumnReader::_load_zone_map_index_once() {
     Status status = _zonemap_index_once.call(
-            [this] { return _load_zone_map_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+            [this] { return _load_zone_map_index(!config::disable_storage_page_cache, _kept_in_memory); });
     return status;
 }
 
 Status ColumnReader::_load_bitmap_index_once() {
     Status status = _bitmap_index_once.call(
-            [this] { return _load_bitmap_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+            [this] { return _load_bitmap_index(!config::disable_storage_page_cache, _kept_in_memory); });
     return status;
 }
 
 Status ColumnReader::_load_bloom_filter_index_once() {
     Status status = _bloomfilter_index_once.call(
-            [this] { return _load_bloom_filter_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+            [this] { return _load_bloom_filter_index(!config::disable_storage_page_cache, _kept_in_memory); });
     return status;
 }
 
@@ -458,7 +468,7 @@ Status ColumnReader::load_ordinal_index_once() {
     // Only load ordinal index.
     // Other indexes like zone map/bitmap/bloomfilter should be load when necessary
     Status status = _ordinal_index_once.call(
-            [this] { return _load_ordinal_index(!config::disable_storage_page_cache, _opts.kept_in_memory); });
+            [this] { return _load_ordinal_index(!config::disable_storage_page_cache, _kept_in_memory); });
     return status;
 }
 

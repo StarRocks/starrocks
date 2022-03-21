@@ -297,7 +297,7 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     broker_scan_range.params = _params;
     TBrokerRangeDesc range;
     range.start_offset = 0;
-    range.size = -1;
+    range.size = LONG_MAX;
     range.format_type = TFileFormatType::FORMAT_PARQUET;
     range.splittable = false;
     range.path = "./be/test/storage/test_data/push_broker_reader.parquet";

@@ -8,6 +8,8 @@
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/DeleteObjectsResult.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
@@ -276,7 +278,9 @@ public:
 
     Status delete_dir(const std::string& dirname) override;
 
-    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvS3::sync_dir"); }
+    Status delete_dir_recursive(const std::string& dirname) override;
+
+    Status sync_dir(const std::string& dirname) override;
 
     Status is_directory(const std::string& path, bool* is_dir) override;
 
@@ -362,7 +366,8 @@ Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::
         uri.key().reserve(uri.key().size() + 1);
         uri.key().push_back('/');
     }
-    bool directory_exist = false;
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
     auto client = new_s3client(uri);
     Aws::S3::Model::ListObjectsV2Request request;
     Aws::S3::Model::ListObjectsV2Result result;
@@ -416,8 +421,8 @@ Status EnvS3::create_dir(const std::string& dirname) {
     if (!uri.parse(dirname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
     }
-    if (uri.key().empty()) {
-        return Status::InvalidArgument(fmt::format("empty object key: {}", dirname));
+    if (uri.key().empty()) { // root directory '/'
+        return Status::AlreadyExist(fmt::format("root directory {} already exists", dirname));
     }
     Aws::S3::Model::PutObjectRequest req;
     req.SetBucket(uri.bucket());
@@ -451,6 +456,10 @@ Status EnvS3::is_directory(const std::string& path, bool* is_dir) {
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+    }
+    if (uri.key().empty()) { // root directory '/'
+        if (is_dir != nullptr) *is_dir = true;
+        return Status::OK();
     }
     auto client = new_s3client(uri);
     Aws::S3::Model::ListObjectsV2Request request;
@@ -501,7 +510,7 @@ Status EnvS3::delete_dir(const std::string& dirname) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
     }
     if (uri.key().empty()) {
-        return Status::IOError(fmt::format("cannot delete the root directory: {}", dirname));
+        return Status::NotSupported("Cannot delete root directory of S3");
     }
     if (!HasSuffixString(uri.key(), "/")) {
         uri.key().push_back('/');
@@ -537,6 +546,66 @@ Status EnvS3::delete_dir(const std::string& dirname) {
     } else {
         return to_status(del_outcome.GetError().GetErrorType(), del_outcome.GetError().GetMessage());
     }
+}
+
+Status EnvS3::sync_dir(const std::string& dirname) {
+    // The only thing we need to do is check whether the directory exist or not.
+    bool is_dir = false;
+    RETURN_IF_ERROR(is_directory(dirname, &is_dir));
+    if (is_dir) return Status::OK();
+    return Status::NotFound(fmt::format("{} not directory", dirname));
+}
+
+Status EnvS3::delete_dir_recursive(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported(fmt::format("S3 URI with an empty key: {}", dirname));
+    }
+    if (uri.key().back() != '/') {
+        uri.key().push_back('/');
+    }
+    bool directory_exist = false;
+    auto client = new_s3client(uri);
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key());
+#ifdef BE_TEST
+    request.SetMaxKeys(1);
+#endif
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    do {
+        auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        directory_exist |= !result.GetContents().empty();
+        Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+        objects.reserve(result.GetContents().size());
+        for (auto&& obj : result.GetContents()) {
+            objects.emplace_back().SetKey(obj.GetKey());
+        }
+        if (!objects.empty()) {
+            Aws::S3::Model::Delete d;
+            d.WithObjects(std::move(objects)).WithQuiet(true);
+            delete_request.SetDelete(std::move(d));
+            auto delete_outcome = client->DeleteObjects(delete_request);
+            if (!delete_outcome.IsSuccess()) {
+                return Status::IOError(
+                        fmt::format("fail to batch delete {}: {}", dirname, delete_outcome.GetError().GetMessage()));
+            }
+            if (!delete_outcome.GetResult().GetErrors().empty()) {
+                auto&& e = delete_outcome.GetResult().GetErrors()[0];
+                return Status::IOError(fmt::format("fail to delete {}: {}", e.GetKey(), e.GetMessage()));
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dirname);
 }
 
 std::unique_ptr<Env> new_env_s3() {

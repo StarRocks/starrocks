@@ -32,16 +32,13 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "service/brpc.h"
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
 #include "util/defer_op.h"
-#include "util/monotime.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
 
@@ -68,7 +65,7 @@ NodeChannel::~NodeChannel() {
         _open_closure = nullptr;
     }
 
-    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+    for (size_t i = 0; i < _add_batch_closures.size(); i++) {
         if (_add_batch_closures[i] != nullptr) {
             if (_add_batch_closures[i]->unref()) {
                 delete _add_batch_closures[i];
@@ -117,6 +114,13 @@ Status NodeChannel::init(RuntimeState* state) {
             _err_st = Status::InternalError(fmt::format("load_parallel_request_size should between [1-16]"));
             return _err_st;
         }
+    }
+
+    // init add_chunk request closure
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
+        closure->ref();
+        _add_batch_closures.emplace_back(closure);
     }
 
     // for get global_dict
@@ -192,13 +196,6 @@ Status NodeChannel::open_wait() {
         _cancelled = true;
         _err_st = status;
         return _err_st;
-    }
-
-    // add batch closure
-    for (size_t i = 0; i < _max_parallel_request_size; i++) {
-        auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
-        closure->ref();
-        _add_batch_closures.emplace_back(closure);
     }
 
     return status;

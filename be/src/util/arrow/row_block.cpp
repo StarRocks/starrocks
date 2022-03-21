@@ -24,7 +24,6 @@
 #include <arrow/array/builder_primitive.h>
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
-#include <arrow/record_batch.h>
 #include <arrow/type.h>
 #include <arrow/type_fwd.h>
 #include <arrow/visitor_inline.h>
@@ -32,12 +31,10 @@
 #include <utility>
 
 #include "gutil/strings/substitute.h"
-#include "storage/column_block.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 

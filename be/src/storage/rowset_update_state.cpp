@@ -60,7 +60,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
-    auto block_manager = fs::fs_util::block_manager();
+    ASSIGN_OR_RETURN(auto block_manager, fs::fs_util::block_manager(rowset->rowset_path()));
     // always one file for now.
     for (auto i = 0; i < rowset->num_delete_files(); i++) {
         auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);

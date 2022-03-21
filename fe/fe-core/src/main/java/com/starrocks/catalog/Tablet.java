@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -48,6 +49,9 @@ public abstract class Tablet extends MetaObject implements Writable {
     public abstract long getRowCount(long version);
 
     public abstract Set<Long> getBackendIds();
+
+    public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                              long visibleVersion, long localBeId, int schemaHash);
 
     @Override
     public String toString() {

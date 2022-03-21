@@ -500,7 +500,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         (void)FileUtils::remove(header_file);
 
         std::set<std::string> clone_files;
-        res = FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files, Env::Default());
+        res = FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list directory " << clone_dir << ": " << res;
             break;
@@ -508,7 +508,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
         std::set<string> local_files;
         std::string tablet_dir = tablet->schema_hash_path();
-        res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default());
+        res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list tablet directory " << tablet_dir << ": " << res;
             break;
@@ -713,12 +713,12 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files, Env::Default()));
+    RETURN_IF_ERROR(FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files));
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
     const std::string& tablet_dir = tablet->schema_hash_path();
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default()));
+    RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files));
 
     // Files that are found in both |clone_files| and |local_files|.
     std::vector<std::string> duplicate_files;

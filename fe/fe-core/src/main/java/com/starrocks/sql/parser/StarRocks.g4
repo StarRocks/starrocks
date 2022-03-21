@@ -14,7 +14,7 @@ singleStatement
 statement
     : queryStatement                                                                    #statementDefault
     | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
-    | INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
+    | EXPLAIN? INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
     (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
@@ -28,7 +28,7 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
             ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-            viewComment=string? AS queryStatement                                       #createView
+            comment? AS queryStatement                               #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
@@ -82,7 +82,7 @@ comment
     ;
 
 columnNameWithComment
-    : identifier string?
+    : identifier comment?
     ;
 
 outfile

@@ -1,12 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/vectorized/sorting/sort_column.h"
-
 #include "column/array_column.h"
 #include "column/column.h"
-#include "column/column_visitor.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/json_column.h"
 #include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 
 namespace starrocks::vectorized {
 

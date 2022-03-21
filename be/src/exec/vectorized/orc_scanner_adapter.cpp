@@ -21,6 +21,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
+
 namespace starrocks::vectorized {
 
 const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable);

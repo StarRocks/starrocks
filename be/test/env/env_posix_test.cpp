@@ -215,20 +215,17 @@ TEST_F(EnvPosixTest, random_rw) {
 }
 
 TEST_F(EnvPosixTest, iterate_dir) {
-    std::string dir_path = "./ut_dir/env_posix/iterate_dir";
+    const std::string dir_path = "./ut_dir/env_posix/iterate_dir";
     FileUtils::remove_all(dir_path);
-    auto st = Env::Default()->create_dir_if_missing(dir_path);
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path));
 
-    st = Env::Default()->create_dir_if_missing(dir_path + "/abc");
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path + "/abc"));
 
-    st = Env::Default()->create_dir_if_missing(dir_path + "/123");
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(Env::Default()->create_dir_if_missing(dir_path + "/123"));
 
     {
         std::vector<std::string> children;
-        st = Env::Default()->get_children(dir_path, &children);
+        ASSERT_OK(Env::Default()->get_children(dir_path, &children));
         ASSERT_EQ(4, children.size());
         std::sort(children.begin(), children.end());
 
@@ -239,7 +236,7 @@ TEST_F(EnvPosixTest, iterate_dir) {
     }
     {
         std::vector<std::string> children;
-        st = FileUtils::list_files(Env::Default(), dir_path, &children);
+        ASSERT_OK(FileUtils::list_files(Env::Default(), dir_path, &children));
         ASSERT_EQ(2, children.size());
         std::sort(children.begin(), children.end());
 
@@ -247,7 +244,23 @@ TEST_F(EnvPosixTest, iterate_dir) {
         ASSERT_STREQ("abc", children[1].c_str());
     }
 
-    FileUtils::remove_all(dir_path);
+    // Delete non-empty directory, should fail.
+    ASSERT_ERROR(Env::Default()->delete_dir(dir_path));
+    {
+        std::vector<std::string> children;
+        ASSERT_OK(Env::Default()->get_children(dir_path, &children));
+        ASSERT_EQ(4, children.size());
+        std::sort(children.begin(), children.end());
+
+        ASSERT_STREQ(".", children[0].c_str());
+        ASSERT_STREQ("..", children[1].c_str());
+        ASSERT_STREQ("123", children[2].c_str());
+        ASSERT_STREQ("abc", children[3].c_str());
+    }
+
+    // Delete directory recursively, should success.
+    ASSERT_OK(Env::Default()->delete_dir_recursive(dir_path));
+    ASSERT_TRUE(Env::Default()->path_exists(dir_path).is_not_found());
 }
 
 } // namespace starrocks

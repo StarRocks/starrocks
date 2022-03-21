@@ -34,8 +34,6 @@ public:
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-
     std::vector<SeekRange> ranges;
 
     std::unordered_map<ColumnId, PredicateList> predicates;

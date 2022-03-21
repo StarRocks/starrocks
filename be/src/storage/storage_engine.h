@@ -58,7 +58,6 @@ namespace starrocks {
 class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
-class BlockManager;
 class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
@@ -164,8 +163,6 @@ public:
     AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
-
-    fs::BlockManager* block_manager() { return _block_manager.get(); }
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
@@ -334,8 +331,6 @@ private:
     std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
-
-    std::unique_ptr<fs::BlockManager> _block_manager;
 
     std::unique_ptr<UpdateManager> _update_manager;
 

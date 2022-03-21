@@ -26,12 +26,10 @@
 #include <ryu/ryu.h>
 
 #include <cstdio>
-#include <cstdlib>
 #include <type_traits>
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "gutil/strings/numbers.h"
 #include "util/mysql_global.h"
 
 namespace starrocks {

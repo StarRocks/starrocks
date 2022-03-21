@@ -17,11 +17,8 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gutil/map_util.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
@@ -481,6 +478,7 @@ HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
     HdfsScanner* scanner = _pending_scanners.pop();
     uint64_t time = scanner->exit_pending_queue();
     COUNTER_UPDATE(_profile.scanner_queue_timer, time);
+    COUNTER_UPDATE(_profile.scanner_queue_counter, 1);
     return scanner;
 }
 
@@ -665,7 +663,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
@@ -700,6 +698,7 @@ void HdfsScanNode::_init_counter() {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 

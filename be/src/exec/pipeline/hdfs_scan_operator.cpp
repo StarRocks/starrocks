@@ -7,6 +7,7 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 
 // ==================== HdfsScanOperatorFactory ====================

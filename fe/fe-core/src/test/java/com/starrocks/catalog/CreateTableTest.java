@@ -309,6 +309,14 @@ public class CreateTableTest {
         for (Partition partition : olapTable.getAllPartitions()) {
             Assert.assertTrue(partition.isUseStarOS());
         }
+
+        boolean throwException = false;
+        try {
+            CatalogUtils.checkOlapTableHasStarOSPartition(fullDbName, tableName);
+        } catch (AnalysisException e) {
+            throwException = true;
+        }
+        Assert.assertTrue(throwException);
     }
 
     private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {

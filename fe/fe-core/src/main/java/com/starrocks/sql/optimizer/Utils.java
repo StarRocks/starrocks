@@ -444,6 +444,10 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
+            if (partition.isUseStarOS()) {
+                // TODO(wyb): necessary to support?
+                return false;
+            }
             if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
                 return false;
             }

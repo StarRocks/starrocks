@@ -3,19 +3,13 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
-#include <column/array_column.h>
-#include <column/column_helper.h>
 #include <gutil/strings/substitute.h>
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "common/logging.h"
 #include "exec/file_reader.h"
-#include "exec/vectorized/arrow_to_starrocks_converter.h"
-#include "runtime/client_cache.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_pool.h"
 
 namespace starrocks::vectorized {
 

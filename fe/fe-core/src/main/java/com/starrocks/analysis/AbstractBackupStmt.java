@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -101,6 +102,8 @@ public class AbstractBackupStmt extends DdlStmt {
             } else {
                 throw new AnalysisException("Duplicated restore table: " + tblName);
             }
+
+            CatalogUtils.checkOlapTableHasStarOSPartition(labelName.getDbName(), tblName);
         }
 
         // update table ref

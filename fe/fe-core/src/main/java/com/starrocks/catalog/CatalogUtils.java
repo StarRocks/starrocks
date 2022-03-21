@@ -3,6 +3,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -59,5 +60,30 @@ public class CatalogUtils {
 
     public static boolean isUseStarOS(TStorageMedium storageMedium) {
         return storageMedium == TStorageMedium.S3;
+    }
+
+    // Used to temporarily disable some command on StarOS table and remove later.
+    public static void checkOlapTableHasStarOSPartition(String dbName, String tableName) throws AnalysisException {
+        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        if (db == null) {
+            return;
+        }
+
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null || !(table instanceof OlapTable)) {
+                return;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            for (Partition partition : olapTable.getPartitions()) {
+                if (partition.isUseStarOS()) {
+                    throw new AnalysisException("Unsupported operation because table [" + dbName + "." + tableName +
+                            "] has StarOS partitions");
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
     }
 }

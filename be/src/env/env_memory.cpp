@@ -343,6 +343,24 @@ public:
         return Status::OK();
     }
 
+    Status delete_dir_recursive(const butil::FilePath& dirname) {
+        auto inode = get_inode(dirname);
+        if (inode == nullptr || inode->type != kDir) {
+            return Status::NotFound(dirname.value());
+        }
+        DCHECK(dirname.value().back() != '/' || dirname.value() == "/");
+        std::string s = (dirname.value() == "/") ? dirname.value() : dirname.value() + "/";
+        for (auto iter = _namespace.lower_bound(s); iter != _namespace.end(); /**/) {
+            Slice child(iter->first);
+            if (!child.starts_with(s)) {
+                break;
+            }
+            iter = _namespace.erase(iter);
+        }
+        _namespace.erase(dirname.value());
+        return Status::OK();
+    }
+
     Status is_directory(const butil::FilePath& path, bool* is_dir) {
         auto inode = get_inode(path);
         if (inode == nullptr) {
@@ -535,6 +553,12 @@ Status EnvMemory::delete_dir(const std::string& dirname) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->delete_dir(butil::FilePath(new_path));
+}
+
+Status EnvMemory::delete_dir_recursive(const std::string& dirname) {
+    std::string new_path;
+    RETURN_IF_ERROR(canonicalize(dirname, &new_path));
+    return _impl->delete_dir_recursive(butil::FilePath(new_path));
 }
 
 Status EnvMemory::sync_dir(const std::string& dirname) {

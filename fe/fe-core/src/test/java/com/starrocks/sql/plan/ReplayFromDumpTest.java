@@ -387,4 +387,13 @@ public class ReplayFromDumpTest {
                 "  |  <slot 21> : 18: bitmap_union\n" +
                 "  |  <slot 29> : 29: bitmap_union"));
     }
+
+    @Test
+    public void testTPCHRandom() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpch_random"), null, TExplainLevel.NORMAL);
+        // check optimizer could extract best plan
+        Assert.assertTrue(replayPair.second.contains("11:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
+    }
 }

@@ -3,9 +3,7 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
 #include <arpa/inet.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
@@ -15,10 +13,8 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/raw_value.h"
@@ -28,9 +24,7 @@
 #include "util/block_compression.h"
 #include "util/compression_utils.h"
 #include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/thrift_client.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::pipeline {
 
@@ -116,7 +110,7 @@ private:
     // always be 1
     std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
     PTransmitChunkParamsPtr _chunk_request;
-    size_t _current_request_bytes;
+    size_t _current_request_bytes = 0;
 
     bool _is_inited = false;
     bool _use_pass_through = false;
@@ -355,12 +349,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-    _ignore_rows = ADD_COUNTER(_unique_metrics, "IgnoreRows", TUnit::UNIT);
     _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTimer");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
-    _send_request_timer = ADD_TIMER(_unique_metrics, "SendRequestTime");
-    _wait_response_timer = ADD_TIMER(_unique_metrics, "WaitResponseTime");
     _overall_throughput = _unique_metrics->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
             [capture0 = _bytes_sent_counter, capture1 = _total_timer] {

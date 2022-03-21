@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
 
-#include "column/chunk.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"

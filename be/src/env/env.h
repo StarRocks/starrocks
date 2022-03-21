@@ -38,8 +38,6 @@ struct SpaceInfo {
 
 class Env {
 public:
-    using FactoryFunc = std::function<StatusOr<std::unique_ptr<Env>>(std::string_view uri)>;
-
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -53,15 +51,9 @@ public:
     Env() = default;
     virtual ~Env() = default;
 
-    static void Register(std::string_view pattern, FactoryFunc func);
-
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
 
     static StatusOr<std::shared_ptr<Env>> CreateSharedFromString(std::string_view uri);
-
-    static StatusOr<std::unique_ptr<Env>> CreateUniqueFromStringOrDefault(std::string_view uri);
-
-    static StatusOr<std::shared_ptr<Env>> CreateSharedFromStringOrDefault(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own Env
@@ -151,6 +143,10 @@ public:
     // Delete the specified directory.
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
+
+    // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
+    // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
+    virtual Status delete_dir_recursive(const std::string& dirname) = 0;
 
     // Synchronize the entry for a specific directory.
     virtual Status sync_dir(const std::string& dirname) = 0;

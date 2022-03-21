@@ -13,7 +13,6 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/hdfs_util.h"
 
@@ -187,6 +186,8 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
+
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
@@ -215,14 +216,9 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
 Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = *_scan_range;
-    std::string scan_range_path = scan_range.full_path;
-    if (_lake_table != nullptr && _lake_table->has_partition()) {
-        scan_range_path = scan_range.relative_path;
-    }
-
     COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
-    if (_lake_table != nullptr) {
+    if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         SCOPED_TIMER(_profile.open_file_timer);
@@ -232,7 +228,7 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
