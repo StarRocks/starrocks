@@ -4,7 +4,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
-import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 
@@ -14,7 +14,7 @@ public class UpdateStmt extends DmlStmt {
     private final Expr wherePredicate;
 
     private Table table;
-    private SelectRelation updateRelation;
+    private QueryStatement updateRelation;
 
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, Expr wherePredicate) {
         this.tableName = tableName;
@@ -42,11 +42,11 @@ public class UpdateStmt extends DmlStmt {
         return table;
     }
 
-    public void setUpdateRelation(SelectRelation updateRelation) {
+    public void setUpdateRelation(QueryStatement updateRelation) {
         this.updateRelation = updateRelation;
     }
 
-    public SelectRelation getUpdateRelation() {
+    public QueryStatement getUpdateRelation() {
         return updateRelation;
     }
 

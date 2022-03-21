@@ -176,9 +176,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return queryStatement;
     }
 
-    @Override
-    public ParseNode visitExplain(StarRocksParser.ExplainContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+    private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context) {
         StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (context.LOGICAL() != null) {
             explainLevel = StatementBase.ExplainLevel.LOGICAL;
@@ -187,7 +185,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.COSTS() != null) {
             explainLevel = StatementBase.ExplainLevel.COST;
         }
-        queryStatement.setIsExplain(true, explainLevel);
+        return explainLevel;
+    }
+
+    @Override
+    public ParseNode visitExplain(StarRocksParser.ExplainContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        if (context.explainDesc() != null) {
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+        }
         return queryStatement;
     }
 
@@ -221,8 +227,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
             }
         }
-        if (context.EXPLAIN() != null) {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+        if (context.explainDesc() != null) {
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
 
         return new InsertStmt(
@@ -289,16 +295,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ColumnAssignment> assignments = visit(ctx.assignmentList().assignment(), ColumnAssignment.class);
         Expr where = ctx.where != null ? (Expr) visit(ctx.where) : null;
         UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
-        if (ctx.EXPLAIN() != null) {
-            StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
-            if (ctx.LOGICAL() != null) {
-                explainLevel = StatementBase.ExplainLevel.LOGICAL;
-            } else if (ctx.VERBOSE() != null) {
-                explainLevel = StatementBase.ExplainLevel.VERBOSE;
-            } else if (ctx.COSTS() != null) {
-                explainLevel = StatementBase.ExplainLevel.COST;
-            }
-            ret.setIsExplain(true, explainLevel);
+        if (ctx.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(ctx.explainDesc()));
         }
         return ret;
     }
@@ -1301,7 +1299,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.YEAR() != null) {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
         }
-
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
             String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
