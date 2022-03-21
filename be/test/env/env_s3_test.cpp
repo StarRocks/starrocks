@@ -241,4 +241,9 @@ TEST_F(EnvS3Test, test_delete_dir_recursive) {
     ASSERT_ERROR(env->delete_dir_recursive(S3Path("/")));
 }
 
+TEST_F(EnvS3Test, test_delete_nonexist_file) {
+    ASSIGN_OR_ABORT(auto env, Env::CreateUniqueFromString("s3://"));
+    ASSERT_OK(env->delete_file(S3Path("/nonexist.dat")));
+}
+
 } // namespace starrocks
