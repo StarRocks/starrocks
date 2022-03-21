@@ -226,7 +226,7 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;

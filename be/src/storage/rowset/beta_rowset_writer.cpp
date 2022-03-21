@@ -99,7 +99,7 @@ Status BetaRowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_env, Env::CreateSharedFromStringOrDefault(_context.rowset_path_prefix));
+    ASSIGN_OR_RETURN(_env, Env::CreateSharedFromString(_context.rowset_path_prefix));
     _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
     return Status::OK();
 }

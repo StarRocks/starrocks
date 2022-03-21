@@ -133,7 +133,7 @@ TEST_F(PluginZipTest, http_normal) {
 
     std::set<std::string> dirs;
     std::set<std::string> files;
-    ASSERT_TRUE(FileUtils::list_dirs_files(_path + "/plugin_test/target", &dirs, &files, Env::Default()).ok());
+    ASSERT_TRUE(FileUtils::list_dirs_files(_path + "/plugin_test/target", &dirs, &files).ok());
 
     ASSERT_EQ(1, dirs.size());
     ASSERT_EQ(1, files.size());

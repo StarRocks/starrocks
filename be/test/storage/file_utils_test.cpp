@@ -204,14 +204,14 @@ TEST_F(FileUtilsTest, TestListDirsFiles) {
     std::set<string> dirs;
     std::set<string> files;
 
-    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, &files, Env::Default()).ok());
+    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, &files).ok());
     ASSERT_EQ(5, dirs.size());
     ASSERT_EQ(0, files.size());
 
     dirs.clear();
     files.clear();
 
-    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, nullptr, Env::Default()).ok());
+    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, nullptr).ok());
     ASSERT_EQ(5, dirs.size());
     ASSERT_EQ(0, files.size());
 
@@ -222,14 +222,14 @@ TEST_F(FileUtilsTest, TestListDirsFiles) {
     dirs.clear();
     files.clear();
 
-    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, &files, Env::Default()).ok());
+    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", &dirs, &files).ok());
     ASSERT_EQ(5, dirs.size());
     ASSERT_EQ(3, files.size());
 
     dirs.clear();
     files.clear();
 
-    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", nullptr, &files, Env::Default()).ok());
+    ASSERT_TRUE(FileUtils::list_dirs_files("./file_test", nullptr, &files).ok());
     ASSERT_EQ(0, dirs.size());
     ASSERT_EQ(3, files.size());
 

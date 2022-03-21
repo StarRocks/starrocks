@@ -80,24 +80,4 @@ StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromString(std::string_view uri)
     return Status::NotSupported(fmt::format("No Env associated with {}", uri));
 }
 
-StatusOr<std::unique_ptr<Env>> Env::CreateUniqueFromStringOrDefault(std::string_view uri) {
-    if (is_hdfs_uri(uri)) {
-        return new_env_hdfs();
-    }
-    if (is_s3_uri(uri)) {
-        return new_env_s3();
-    }
-    return new_env_posix();
-}
-
-StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromStringOrDefault(std::string_view uri) {
-    if (is_hdfs_uri(uri)) {
-        return get_tls_env_hdfs();
-    }
-    if (is_s3_uri(uri)) {
-        return get_tls_env_s3();
-    }
-    return get_tls_env_posix();
-}
-
 } // namespace starrocks

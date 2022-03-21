@@ -662,7 +662,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
