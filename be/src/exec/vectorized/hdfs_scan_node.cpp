@@ -391,8 +391,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     while (status.ok()) {
         // if global status was not ok, we need fast failure and no need to read file
         if (!_get_status().ok()) {
-            _release_scanner(scanner);
-            return;
+            break;
         }
 
         {
