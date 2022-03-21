@@ -238,7 +238,7 @@ public class PlanFragmentBuilder {
                     !ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine();
             for (PlanFragment fragment : fragments) {
-                PlanFragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
+                fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
             }
         } catch (UserException e) {
             throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);

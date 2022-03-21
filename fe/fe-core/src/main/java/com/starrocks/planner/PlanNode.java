@@ -184,9 +184,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         probeRuntimeFilters.clear();
     }
 
-    public void fillLocalRfWaitingSet() {
+    public void fillLocalRfWaitingSet(Set<Integer> hashJoinNodeIds) {
         for (RuntimeFilterDescription filter : probeRuntimeFilters) {
-            localRfWaitingSet.add(filter.getBuildPlanNodeId());
+            if (hashJoinNodeIds.contains(filter.getBuildPlanNodeId())) {
+                localRfWaitingSet.add(filter.getBuildPlanNodeId());
+            }
         }
     }
 

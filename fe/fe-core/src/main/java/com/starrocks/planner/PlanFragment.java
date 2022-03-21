@@ -24,6 +24,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
@@ -40,10 +41,12 @@ import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jcodings.util.Hash;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -137,7 +140,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
-
+    private Set<Integer> hashJoinNodeIds = Sets.newHashSet();
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -233,8 +236,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         dopEstimated = true;
     }
 
-    public static void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
-        root.fillLocalRfWaitingSet();
+    public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
+        root.fillLocalRfWaitingSet(hashJoinNodeIds);
+        if (root instanceof HashJoinNode) {
+            hashJoinNodeIds.add(root.getId().asInt());
+        }
         if (clearGlobalRuntimeFilter) {
             root.clearProbeRuntimeFilters();
             if (root instanceof HashJoinNode) {
@@ -242,7 +248,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
         }
         for (PlanNode child : root.getChildren()) {
-            computeLocalRfWaitingSet(child, clearGlobalRuntimeFilter);
+            if (child.getFragment() == this) {
+                computeLocalRfWaitingSet(child, clearGlobalRuntimeFilter);
+            }
         }
     }
 
