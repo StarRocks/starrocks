@@ -121,7 +121,7 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
         RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(row));
         // json root filter.
         simdjson::ondemand::value val;
-        RETURN_IF_ERROR(JsonFunctions::extract_from_object2(*row, _root_paths, val));
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, val));
 
         *row = val.get_object();
         return Status::OK();
@@ -136,9 +136,7 @@ Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) {
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(row));
     simdjson::ondemand::value val;
     // json root filter.
-    if (!JsonFunctions::extract_from_object(*row, _root_paths, val)) {
-        return Status::DataQualityError("illegal json root");
-    }
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, val));
 
     try {
         *row = val.get_object();
@@ -154,7 +152,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::parse(data, len, allocated));
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object2(_curr_row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
 
     try {
         _array = val.get_array();
@@ -199,7 +197,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::advance() {
             RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object2(_curr_row, _root_paths, val));
+            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
 
             try {
                 _array = val.get_array();
@@ -221,7 +219,7 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object2(_curr_row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
 
     try {
         _array = val.get_array();
@@ -266,7 +264,7 @@ Status ExpandedJsonArrayParserWithRoot::advance() {
             RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object2(_curr_row, _root_paths, val));
+            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
 
             try {
                 _array = val.get_array();
