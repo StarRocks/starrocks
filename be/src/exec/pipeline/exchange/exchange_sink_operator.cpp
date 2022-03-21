@@ -110,7 +110,7 @@ private:
     // always be 1
     std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
     PTransmitChunkParamsPtr _chunk_request;
-    size_t _current_request_bytes;
+    size_t _current_request_bytes = 0;
 
     bool _is_inited = false;
     bool _use_pass_through = false;
