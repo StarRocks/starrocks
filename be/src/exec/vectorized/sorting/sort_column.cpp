@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_visitor_adapter.h"
@@ -151,23 +152,39 @@ public:
     Status do_visit(const vectorized::BinaryColumn& column) {
         using ItemType = InlineChunkItem<Slice>;
         using Container = std::vector<Slice>;
+        using ColumnType = BinaryColumn;
 
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-            return lhs.inline_value.compare(rhs.inline_value);
-        };
-
-        std::vector<const Container*> containers;
-        for (const auto& col : _vertical_columns) {
-            const auto real = down_cast<const BinaryColumn*>(col.get());
-            containers.push_back(&real->get_data());
-        }
-
-        // TODO: consider do not inline if limit is very small
-        auto inlined = _create_inlined_permutation<Slice>(containers);
         int limited = _limit;
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
-                                            _limit, &limited));
-        _restore_inlined_permutation(inlined);
+        if (_need_inline_value()) {
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+                return lhs.inline_value.compare(rhs.inline_value);
+            };
+
+            std::vector<const Container*> containers;
+            for (const auto& col : _vertical_columns) {
+                const auto real = down_cast<const BinaryColumn*>(col.get());
+                containers.push_back(&real->get_data());
+            }
+
+            // TODO: consider do not inline if limit is very small
+            auto inlined = _create_inlined_permutation<Slice>(containers);
+            int limited = _limit;
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
+                                                _limit, &limited));
+            _restore_inlined_permutation(inlined);
+
+        } else {
+            auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+                auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
+                auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
+                auto left_value = left_column->get_data()[lhs.index_in_chunk];
+                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                return SorterComparator<Slice>::compare(left_value, right_value);
+            };
+
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
+                                                _build_tie, _limit, &limited));
+        }
 
         if (limited < _limit) {
             _permutation.resize(limited);
@@ -182,38 +199,38 @@ public:
         using ColumnType = FixedLengthColumnBase<T>;
         using Container = typename FixedLengthColumnBase<T>::Container;
 
-        /*
-        using ItemType = InlineChunkItem<T>;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
-            return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
-        };
-        std::vector<const Container*> containers;
-        for (const auto& col : _vertical_columns) {
-            const auto real = down_cast<const ColumnType*>(col.get());
-            containers.emplace_back(&real->get_data());
-        }
-        // TODO: consider do not inline if limit is very small
-        auto inlined = _create_inlined_permutation<T>(containers);
-        */
-
-        using ItemType = PermutationItem;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
-            auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
-            auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
-            return left_column->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *right_column,
-                                           _is_null_first ? 1 : -1);
-        };
-
         int limited = _limit;
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &limited));
+        if (_need_inline_value()) {
+            using ItemType = InlineChunkItem<T>;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
+                return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
+            };
+            std::vector<const Container*> containers;
+            for (const auto& col : _vertical_columns) {
+                const auto real = down_cast<const ColumnType*>(col.get());
+                containers.emplace_back(&real->get_data());
+            }
+            auto inlined = _create_inlined_permutation<T>(containers);
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
+                                                _limit, &limited));
+            _restore_inlined_permutation(inlined);
+        } else {
+            using ItemType = PermutationItem;
+            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
+                auto left_column = down_cast<const ColumnType*>(_vertical_columns[lhs.chunk_index].get());
+                auto right_column = down_cast<const ColumnType*>(_vertical_columns[rhs.chunk_index].get());
+                auto left_value = left_column->get_data()[lhs.index_in_chunk];
+                auto right_value = right_column->get_data()[rhs.index_in_chunk];
+                return SorterComparator<T>::compare(left_value, right_value);
+            };
 
-        // _restore_inlined_permutation(inlined);
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
+                                                _build_tie, _limit, &limited));
+        }
 
         if (limited < _limit) {
             _permutation.resize(limited);
             _tie.resize(limited);
-            fmt::print("limit prune from {} to {}\n", _limit, limited);
         }
 
         return Status::OK();
@@ -261,6 +278,13 @@ private:
 
     template <class T>
     using InlinedChunkPermutation = std::vector<InlineChunkItem<T>>;
+
+    bool _need_inline_value() {
+        // TODO: figure out the inflection point
+        // If limit exceeds 1/5 rows, inline will has benefits
+        size_t total_rows = _permutation.size();
+        return _limit > (total_rows / 5);
+    }
 
     template <class T, class DataContainer>
     InlinedChunkPermutation<T> _create_inlined_permutation(const std::vector<DataContainer>& containers) {
@@ -361,6 +385,7 @@ Status sort_and_tie_vertical_columns(const bool& cancel, const std::vector<Colum
                                      bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                                      bool build_tie, int limit) {
     DCHECK_GT(columns.size(), 0);
+    DCHECK_GT(permutation.size(), 0);
     VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie,
                                 limit);
     return columns[0]->accept(&sorter);
@@ -369,24 +394,24 @@ Status sort_and_tie_vertical_columns(const bool& cancel, const std::vector<Colum
 Status sort_chunks_columnwise(const bool& cancel, const std::vector<Columns>& vertical_chunks,
                               const std::vector<int>& sort_orders, const std::vector<int>& null_firsts,
                               Permutation& perm, int limit) {
-    if (vertical_chunks.empty()) {
+    if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
-    if (perm.empty()) {
-        return Status::OK();
-    }
-    // TODO: check more
 
-    // TODO: support partial sort
     size_t num_columns = vertical_chunks[0].size();
     size_t num_rows = perm.size();
     Tie tie(num_rows, 1);
 
+    DCHECK_EQ(num_columns, sort_orders.size());
+    DCHECK_EQ(num_columns, null_firsts.size());
+
     for (int col = 0; col < num_columns; col++) {
+        // TODO: use the flag directly
         bool is_asc_order = (sort_orders[col] == 1);
         bool is_null_first = is_asc_order ? (null_firsts[col] == -1) : (null_firsts[col] == 1);
         bool build_tie = col != num_columns - 1;
         std::pair<int, int> range(0, perm.size());
+        DCHECK_GT(perm.size(), 0);
 
         std::vector<ColumnPtr> vertical_columns;
         for (const auto& columns : vertical_chunks) {
