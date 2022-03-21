@@ -18,6 +18,7 @@
 
 set -eo pipefail
 
+
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 
