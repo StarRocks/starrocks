@@ -26,7 +26,6 @@
 
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/types.pb.h"    // for PUniqueId
-// #include "util/debug_util.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {

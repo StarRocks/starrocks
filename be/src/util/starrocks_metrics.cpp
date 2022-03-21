@@ -21,7 +21,6 @@
 
 #include "util/starrocks_metrics.h"
 
-#include <sys/types.h>
 #include <unistd.h>
 
 #include "env/env.h"

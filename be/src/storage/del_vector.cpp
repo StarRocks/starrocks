@@ -6,7 +6,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

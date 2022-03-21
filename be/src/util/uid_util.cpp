@@ -21,8 +21,6 @@
 
 #include "util/uid_util.h"
 
-#include <algorithm>
-
 #include "gutil/endian.h"
 #include "util/uuid_generator.h"
 

@@ -24,7 +24,6 @@
 #include <arrow/array.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/buffer.h>
-#include <arrow/builder.h>
 #include <arrow/io/memory.h>
 #include <arrow/ipc/writer.h>
 #include <arrow/memory_pool.h>
@@ -34,8 +33,6 @@
 #include <arrow/visitor.h>
 #include <arrow/visitor_inline.h>
 
-#include <cstdlib>
-#include <ctime>
 #include <memory>
 
 #include "common/logging.h"

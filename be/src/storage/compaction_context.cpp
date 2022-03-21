@@ -5,7 +5,6 @@
 #include <sstream>
 
 #include "storage/rowset/rowset.h"
-#include "storage/tablet.h"
 
 namespace starrocks {
 

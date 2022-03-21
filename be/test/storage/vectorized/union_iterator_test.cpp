@@ -2,7 +2,6 @@
 
 #include "storage/vectorized/union_iterator.h"
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 

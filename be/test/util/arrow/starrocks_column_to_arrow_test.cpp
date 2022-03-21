@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <set>
-#include <sstream>
 
 #include "common/logging.h"
 

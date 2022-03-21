@@ -37,7 +37,6 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/walltime.h"
 #include "util/logging.h"
-//#include "util/memory/arena.h"
 
 using std::pair;
 using std::string;

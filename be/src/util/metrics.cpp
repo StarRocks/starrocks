@@ -22,7 +22,6 @@
 #include "util/metrics.h"
 
 #include <mutex>
-#include <shared_mutex>
 
 namespace starrocks {
 

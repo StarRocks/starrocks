@@ -29,7 +29,6 @@
 
 #include <boost/thread.hpp>
 
-#include "gen_cpp/Data_types.h"
 #include "gen_cpp/Types_types.h"
 #include "util/hash_util.hpp"
 #include "util/monotime.h"
