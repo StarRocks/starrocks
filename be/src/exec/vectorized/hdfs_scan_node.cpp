@@ -337,10 +337,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     // if global status was not ok
     // we need fast failure
     if (!_get_status().ok()) {
-        scanner->release_pending_token(&_pending_token);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        _release_scanner(scanner);
         return;
     }
 
@@ -389,6 +386,11 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     ChunkPtr chunk = nullptr;
 
     while (status.ok()) {
+        // if global status was not ok, we need fast failure and no need to read file
+        if (!_get_status().ok()) {
+            break;
+        }
+
         {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
@@ -444,20 +446,21 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             }
         } else {
             _update_status(status);
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     } else {
         // sometimes state == ok but global_status was not ok
         if (scanner != nullptr) {
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     }
+}
+
+void HdfsScanNode::_release_scanner(HdfsScanner* scanner) {
+    scanner->release_pending_token(&_pending_token);
+    scanner->close(_runtime_state);
+    _closed_scanners.fetch_add(1, std::memory_order_release);
+    _close_pending_scanners();
 }
 
 void HdfsScanNode::_close_pending_scanners() {

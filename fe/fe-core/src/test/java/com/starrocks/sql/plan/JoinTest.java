@@ -21,6 +21,7 @@ import org.junit.Test;
 public class JoinTest extends PlanTestBase {
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
+        FeConstants.runningUnitTest = true;
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: false"));
@@ -30,6 +31,7 @@ public class JoinTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("colocate: true"));
         Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (COLOCATE)"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -138,6 +140,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testColocateJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
         String queryStr = "select * from test.colocate1 t1, test.colocate2 t2 " +
                 "where t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         String explainString = getFragmentPlan(queryStr);
@@ -161,10 +164,12 @@ public class JoinTest extends PlanTestBase {
                 "where t1.k1 = t2.k1 and t1.k2 = t2.k2 + 1";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: false"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testColocateJoinWithOneAggChild() throws Exception {
+        FeConstants.runningUnitTest = true;
         String queryStr =
                 "select * from test.colocate1 t1 left join (select k1, k2, count(k3) from test.colocate2 group by k1,"
                         + " k2) t2 on  "
@@ -228,10 +233,12 @@ public class JoinTest extends PlanTestBase {
                         "t1.k1 = t2.k2 and t1.k2 = t2.k1";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: false"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testColocateJoinWithTwoAggChild() throws Exception {
+        FeConstants.runningUnitTest = true;
         String queryStr =
                 "select * from (select k1, k2, count(k3) from test.colocate1 group by k1, k2) t1 left join (select "
                         + "k1, k2, count(k3) from test.colocate2 group by k1, k2) t2 on  "
@@ -287,6 +294,7 @@ public class JoinTest extends PlanTestBase {
                         "t1.k1 = t2.k1";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: false"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -1301,6 +1309,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testColocateJoin2() throws Exception {
+        FeConstants.runningUnitTest = true;
         String queryStr =
                 "select * from test.colocate1 t1, test.colocate2 t2 where t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         String explainString = getFragmentPlan(queryStr);
@@ -1344,6 +1353,7 @@ public class JoinTest extends PlanTestBase {
         queryStr = "select count(*) from test.colocate1 t1 group by t1.k1";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("1:AGGREGATE (update finalize)"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -2116,4 +2126,16 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 2> : 2: v2"));
     }
 
+    @Test
+    public void testEmptyTableDisableBucketJoin() throws Exception {
+        String sql = "select colocate1.k1 from colocate1 join[bucket] test_agg on colocate1.k1 = test_agg.k1 and colocate1.k2 = test_agg.k2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
+
+        sql = "select colocate1.k1 from colocate1 join[bucket] colocate2 on colocate1.k1 = colocate2.k2 and colocate1.k2 = colocate2.k3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)");
+    }
 }

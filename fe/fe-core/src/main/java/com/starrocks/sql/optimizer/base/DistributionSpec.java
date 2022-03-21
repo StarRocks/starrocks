@@ -31,6 +31,10 @@ public class DistributionSpec {
         public boolean isSinglePartition() {
             return partitionIds.size() == 1;
         }
+
+        public boolean isEmptyPartition() {
+            return partitionIds.size() == 0;
+        }
     }
 
     public PropertyInfo getPropertyInfo() {

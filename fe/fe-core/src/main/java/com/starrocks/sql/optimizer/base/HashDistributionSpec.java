@@ -46,8 +46,10 @@ public class HashDistributionSpec extends DistributionSpec {
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
             long tableId = propertyInfo.tableId;
+            // Disable use colocate/bucket join when table with empty partition
             boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&
-                    !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)))
+                    !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
+                    !propertyInfo.isEmptyPartition())
                     || propertyInfo.isSinglePartition();
             if (!satisfyColocate) {
                 return false;
