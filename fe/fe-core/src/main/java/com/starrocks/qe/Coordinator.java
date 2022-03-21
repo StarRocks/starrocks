@@ -469,7 +469,7 @@ public class Coordinator {
             // TODO: remove this when load supports pipeline engine.
             boolean isEnablePipelineEngine = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
-                    (fragments.get(0).getSink() instanceof ResultSink);
+                    (fragments.stream().allMatch(PlanFragment::canUsePipeline));
 
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -1125,13 +1125,13 @@ public class Coordinator {
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
 
+        boolean dopAdaptionEnabled = ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
+
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
-
-            boolean dopAdaptionEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                    fragment.getPlanRoot().canUsePipeLine();
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
