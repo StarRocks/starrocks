@@ -194,6 +194,8 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
             _workgroups.erase(wg_it);
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroup_expired_versions.erase(it++);
+            auto name = wg_it->second->name();
+            auto unique_id = wg_it->second->unique_id();
         } else {
             ++it;
         }
@@ -249,7 +251,14 @@ void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
-    auto unique_id = wg->unique_id();
+    auto id = wg->id();
+    auto version_it = _workgroup_versions.find(id);
+    if (version_it == _workgroup_versions.end()) {
+        return;
+    }
+    auto version_id = version_it->second;
+    DCHECK(version_id < wg->version());
+    auto unique_id = WorkGroup::create_unique_id(id, version_id);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
