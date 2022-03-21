@@ -106,10 +106,10 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
             LOG(WARNING) << "register compaction task failed for base limit:" << config::max_base_compaction_task;
             return false;
         }
-        if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
-            _data_dir_to_base_task_num_map[data_dir] >= config::cumulative_compaction_num_threads_per_disk) {
-            LOG(WARNING) << "register compaction task failed for disk's running cumulative tasks reach limit:"
-                         << config::cumulative_compaction_num_threads_per_disk;
+        if (config::base_compaction_num_threads_per_disk >= 0 &&
+            _data_dir_to_base_task_num_map[data_dir] >= config::base_compaction_num_threads_per_disk) {
+            LOG(WARNING) << "register compaction task failed for disk's running base tasks reach limit:"
+                         << config::base_compaction_num_threads_per_disk;
             return false;
         }
     }
