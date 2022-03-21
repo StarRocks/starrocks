@@ -85,8 +85,6 @@ private:
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                           const std::vector<SlotDescriptor*>& slot_descs);
 
-    Status _filter_row_with_jsonroot(simdjson::ondemand::object* row);
-
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
 
@@ -103,10 +101,6 @@ private:
     int _next_line;
     int _total_lines;
     bool _closed;
-    bool _strip_outer_array;
-
-    std::vector<std::vector<SimpleJsonPath>> _json_paths;
-    std::vector<SimpleJsonPath> _root_paths;
 
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
     bool _is_ndjson = false;

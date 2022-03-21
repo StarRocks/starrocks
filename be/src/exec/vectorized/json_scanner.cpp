@@ -355,17 +355,17 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
     // Eliminates virtual function call.
     if (_is_ndjson) {
-        if (_root_paths.empty()) {
+        if (_scanner->_root_paths.empty()) {
             return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
-        } else if (!_strip_outer_array) {
+        } else if (!_scanner->_strip_outer_array) {
             return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
         } else {
             return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
         }
     } else {
-        if (_root_paths.empty()) {
+        if (_scanner->_root_paths.empty()) {
             return _read_chunk<JsonArrayParser>(chunk, rows_to_read, slot_descs);
-        } else if (!_strip_outer_array) {
+        } else if (!_scanner->_strip_outer_array) {
             return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
         } else {
             return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
@@ -410,8 +410,8 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::ve
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
+                LOG(WARNING) << "failed to construct row: " << st;
             }
-            continue;
         }
 
         st = parser->advance();
@@ -431,7 +431,6 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::ve
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                                   const std::vector<SlotDescriptor*>& slot_descs) {
-    RETURN_IF_ERROR(_filter_row_with_jsonroot(row));
     if (_scanner->_json_paths.empty()) {
         // No json path.
 
@@ -576,24 +575,6 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdj
     return;
 }
 
-Status JsonReader::_filter_row_with_jsonroot(simdjson::ondemand::object* row) {
-    if (!_scanner->_root_paths.empty()) {
-        // json root filter.
-        simdjson::ondemand::value val;
-        if (!JsonFunctions::extract_from_object(*row, _scanner->_root_paths, val)) {
-            return Status::DataQualityError("illegal json root");
-        }
-
-        auto err = val.get_object().get(*row);
-        if (err) {
-            std::string err_msg = strings::Substitute("Failed to filter row with jsonroot. code=$0, error=$1", err,
-                                                      simdjson::error_message(err));
-            return Status::DataQualityError(err_msg.c_str());
-        }
-    }
-    return Status::OK();
-}
-
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
     uint8_t* data{};
@@ -642,20 +623,20 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     if (_is_ndjson) {
-        if (_root_paths.empty()) {
+        if (_scanner->_root_paths.empty()) {
             _parser.reset(new JsonDocumentStreamParser);
-        } else if (!_strip_outer_array) {
-            _parser.reset(new JsonDocumentStreamParserWithRoot(_root_paths));
+        } else if (!_scanner->_strip_outer_array) {
+            _parser.reset(new JsonDocumentStreamParserWithRoot(_scanner->_root_paths));
         } else {
-            _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_root_paths));
+            _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_scanner->_root_paths));
         }
     } else {
-        if (_root_paths.empty()) {
+        if (_scanner->_root_paths.empty()) {
             _parser.reset(new JsonArrayParser);
-        } else if (!_strip_outer_array) {
-            _parser.reset(new JsonArrayParserWithRoot(_root_paths));
+        } else if (!_scanner->_strip_outer_array) {
+            _parser.reset(new JsonArrayParserWithRoot(_scanner->_root_paths));
         } else {
-            _parser.reset(new ExpandedJsonArrayParserWithRoot(_root_paths));
+            _parser.reset(new ExpandedJsonArrayParserWithRoot(_scanner->_root_paths));
         }
     }
 
