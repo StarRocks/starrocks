@@ -6,6 +6,8 @@
 
 #include <filesystem>
 
+#include "testutil/assert.h"
+
 namespace starrocks {
 
 class OutputStreamWrapperTest : public ::testing::Test {
@@ -59,9 +61,7 @@ TEST_F(OutputStreamWrapperTest, test_write) {
     std::string buff(21, 0);
     Slice slice(buff);
 
-    const auto status_or = rf->get_size();
-    ASSERT_TRUE(status_or.ok()) << status_or.status();
-    uint64_t size = status_or.value();
+    ASSIGN_OR_ABORT(uint64_t size, rf->get_size());
     ASSERT_EQ(21, size);
 
     const auto st = rf->read_at_fully(0, slice.data, slice.size);

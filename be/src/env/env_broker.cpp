@@ -472,9 +472,9 @@ Status EnvBroker::canonicalize(const std::string& path, std::string* file) {
     return Status::NotSupported("BrokerEnv::canonicalize");
 }
 
-StatusOr<bool> EnvBroker::_get_file_size(const std::string& path) {
+StatusOr<uint64_t> EnvBroker::_get_file_size(const std::string& path) {
     TBrokerFileStatus stat;
-    Status st = _list_file(path, &stat);
+    RETURN_IF_ERROR(_list_file(path, &stat));
     return stat.size;
 }
 
