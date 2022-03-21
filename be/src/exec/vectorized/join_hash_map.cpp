@@ -400,15 +400,11 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
 
-        if (columns[i]->is_nullable()) {
-            columns[i]->append(*column, 0, chunk->num_rows());
-        } else if (column->is_nullable()) {
+        if (!columns[i]->is_nullable() && column->is_nullable()) {
             // upgrade to nullable column
             columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
-            columns[i]->append(*column, 0, chunk->num_rows());
-        } else {
-            columns[i]->append(*column, 0, chunk->num_rows());
         }
+        columns[i]->append(*column);
     }
 
     if (_need_create_tuple_columns) {
