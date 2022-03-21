@@ -195,6 +195,46 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     clear_sort_exprs(sort_exprs);
 }
 
+// NOLINTNEXTLINE
+TEST_F(ChunksSorterTest, topn_sort_with_limit) {
+    std::vector<bool> is_asc{true};
+    std::vector<bool> is_null_first{true};
+    std::vector<ExprContext*> sort_exprs;
+    sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+
+    constexpr int kTotalRows = 16;
+    for (int limit = 1; limit < kTotalRows; limit++) {
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 0, limit);
+        sorter.set_compare_strategy(ColumnInc);
+        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+        sorter.done(_runtime_state.get());
+
+        bool eos = false;
+        ChunkPtr page_1, page_2;
+        sorter.get_next(&page_1, &eos);
+        ASSERT_FALSE(eos);
+        ASSERT_TRUE(page_1 != nullptr);
+        sorter.get_next(&page_2, &eos);
+        ASSERT_TRUE(eos);
+        ASSERT_TRUE(page_2 == nullptr);
+
+        ASSERT_EQ(kTotalRows, total_rows);
+        ASSERT_EQ(limit, page_1->num_rows());
+        std::vector<int32_t> permutation{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71};
+        std::vector<int> result;
+        for (size_t i = 0; i < page_1->num_rows(); ++i) {
+            result.push_back(page_1->get(i).get(0).get_int32());
+        }
+        permutation.resize(limit);
+        EXPECT_EQ(permutation, result);
+    }
+
+    clear_sort_exprs(sort_exprs);
+}
+
 static std::vector<CompareStrategy> all_compare_strategy() {
     return {RowWise, ColumnWise, ColumnInc};
 }

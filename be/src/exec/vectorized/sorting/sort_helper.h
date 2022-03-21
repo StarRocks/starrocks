@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -78,7 +80,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
                                                            NullPred null_pred, bool is_asc_order, bool is_null_first,
                                                            Permutation& permutation, Tie& tie,
-                                                           std::pair<int, int> range, bool build_tie) {
+                                                           std::pair<int, int> range, bool build_tie, int limit) {
     VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
 
     TieIterator iterator(tie, range.first, range.second);
@@ -107,8 +109,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
             if (notnull_start < notnull_end) {
                 tie[notnull_start] = 0;
                 RETURN_IF_ERROR(sort_and_tie_vertical_columns(cancel, data_columns, is_asc_order, is_null_first,
-                                                              permutation, tie, {notnull_start, notnull_end},
-                                                              build_tie));
+                                                              permutation, tie, {notnull_start, notnull_end}, build_tie,
+                                                              limit));
             }
             if (range_first <= null_start && null_start < range_last) {
                 // Mark all null as 0, they don
@@ -188,14 +190,39 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 template <class DataComparator, class PermutationType>
 static inline Status sort_and_tie_helper(const bool& cancel, const Column* column, bool is_asc_order,
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
-                                         std::pair<int, int> range, bool build_tie) {
+                                         std::pair<int, int> range, bool build_tie, int limit = 0,
+                                         int* limited = nullptr) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
-    auto do_sort = [&](auto begin, auto end) {
-        if (is_asc_order) {
-            ::pdqsort(cancel, begin, end, lesser);
+    auto do_sort = [&](int first_iter, int last_iter) {
+        auto begin = permutation.begin() + first_iter;
+        auto end = permutation.begin() + last_iter;
+
+        if (limit > 0 && limited != nullptr && range.first == first_iter && range.first == 0 && range.first <= limit &&
+            limit < range.second && first_iter <= limit && limit < last_iter) {
+            int n = limit - first_iter;
+#ifndef NDEBUG
+            fmt::print("prune sorted elements from {} to {}\n", range.second, n);
+#endif
+            if (is_asc_order) {
+                std::nth_element(begin, permutation.begin() + n, end, lesser);
+                auto nth = *(permutation.begin() + n);
+                auto pivot = std::partition(begin, end, [&](auto item) { return cmp(item, nth) <= 0; });
+                ::pdqsort(cancel, begin, pivot, lesser);
+                *limited = pivot - permutation.begin();
+            } else {
+                std::nth_element(begin, permutation.begin() + n, end, greater);
+                auto nth = *(permutation.begin() + n);
+                auto pivot = std::partition(begin, end, [&](auto item) { return cmp(item, nth) >= 0; });
+                ::pdqsort(cancel, begin, pivot, greater);
+                *limited = pivot - permutation.begin();
+            }
         } else {
-            ::pdqsort(cancel, begin, end, greater);
+            if (is_asc_order) {
+                ::pdqsort(cancel, begin, end, lesser);
+            } else {
+                ::pdqsort(cancel, begin, end, greater);
+            }
         }
     };
 
@@ -210,8 +237,12 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
+        if (limit > 0 && range_first >= limit) {
+            break;
+        }
+
         if (range_last - range_first > 1) {
-            do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
+            do_sort(range_first, range_last);
             if (build_tie) {
                 tie[range_first] = 0;
                 for (int i = range_first + 1; i < range_last; i++) {

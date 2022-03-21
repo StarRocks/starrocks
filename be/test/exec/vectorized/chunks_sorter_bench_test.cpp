@@ -128,6 +128,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     int64_t data_size = 0;
     int64_t mem_usage = 0;
     for (auto _ : state) {
+        state.PauseTiming();
         std::unique_ptr<ChunksSorter> sorter;
         size_t expected_rows = 0;
         size_t total_rows = chunk->num_rows() * num_chunks;
