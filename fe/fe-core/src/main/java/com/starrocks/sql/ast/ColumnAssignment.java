@@ -20,9 +20,4 @@ public class ColumnAssignment implements ParseNode {
     public Expr getExpr() {
         return expr;
     }
-
-    @Override
-    public String toSql() {
-        return column + " = " + expr.toSql();
-    }
 }
