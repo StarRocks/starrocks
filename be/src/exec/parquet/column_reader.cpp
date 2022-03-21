@@ -82,9 +82,13 @@ private:
             if (!src_null_data[i]) {
                 vectorized::Timestamp timestamp;
                 if (std::is_same_v<T, int96_t>) {
-                    timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
+                    int96_t data_value;
+                    memcpy(&data_value, &src_data[i], sizeof(int96_t));
+                    timestamp = (static_cast<uint64_t>(data_value.hi) << 40u) | (data_value.lo / 1000);
                 } else {
-                    timestamp = src_data[i];
+                    int64_t data_value;
+                    memcpy(&data_value, &src_data[i], sizeof(int64_t));
+                    timestamp = data_value;
                 }
 //                vectorized::Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
                 dst_data[i].set_timestamp(_utc_to_local(timestamp));
