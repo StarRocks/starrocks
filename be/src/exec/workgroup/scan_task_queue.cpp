@@ -32,7 +32,6 @@ void ScanTaskQueueWithWorkGroup::_cal_wg_cpu_real_use_ratio() {
     int64_t total_run_time = 0;
     std::vector<int64_t> growth_times;
     growth_times.reserve(_ready_wgs.size());
-
     for (auto& wg : _ready_wgs) {
         growth_times.emplace_back(wg->growth_real_runtime_ns());
         total_run_time += growth_times.back();

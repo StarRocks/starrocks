@@ -169,7 +169,7 @@ void WorkGroup::estimate_trend_factor_period() {
 
     double increase_factor = _period_scaned_chunk_num / get_cpu_actual_use_ratio();
 
-    _expect_factor = decrease_factor / increase_factor * get_cpu_expected_use_ratio();
+    _expect_factor = decrease_factor / increase_factor * get_cpu_actual_use_ratio();
 
     // diff_factor indicates the difference between the actual percentage of io resources used and the limited cpu percentage
     // If it is negative, it means that there are not enough resources and more resources are needed
