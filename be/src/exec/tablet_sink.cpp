@@ -114,8 +114,7 @@ Status NodeChannel::init(RuntimeState* state) {
     if (state->query_options().__isset.load_dop) {
         _max_parallel_request_size = state->query_options().load_dop;
         if (_max_parallel_request_size > config::max_load_dop || _max_parallel_request_size < 1) {
-            _err_st = Status::InternalError(
-                    fmt::format("load_parallel_request_size should between [1-%ld]", config::max_load_dop));
+            _err_st = Status::InternalError(fmt::format("load_dop should between [1-%ld]", config::max_load_dop));
             return _err_st;
         }
     }
