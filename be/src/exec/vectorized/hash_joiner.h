@@ -258,8 +258,6 @@ private:
         }
     }
 
-    static std::string _get_join_type_str(TJoinOp::type join_type);
-
     Status _create_runtime_in_filters(RuntimeState* state) {
         SCOPED_TIMER(_build_runtime_filter_timer);
 

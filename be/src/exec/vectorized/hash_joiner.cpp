@@ -66,13 +66,14 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
         runtime_profile->add_info_string("Predicates", _hash_join_node.sql_predicates);
     }
 
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     _build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     _build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     _build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
     _build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     _runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
-    runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
 
     HashTableParam param;
     _init_hash_table_param(&param);
@@ -92,6 +93,8 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
         _runtime_state = state;
     }
 
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
     _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
     _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
@@ -450,35 +453,6 @@ void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
 void HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(_where_conjunct_evaluate_timer);
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
-}
-
-std::string HashJoiner::_get_join_type_str(TJoinOp::type join_type) {
-    switch (join_type) {
-    case TJoinOp::INNER_JOIN:
-        return "InnerJoin";
-    case TJoinOp::LEFT_OUTER_JOIN:
-        return "LeftOuterJoin";
-    case TJoinOp::LEFT_SEMI_JOIN:
-        return "LeftSemiJoin";
-    case TJoinOp::RIGHT_OUTER_JOIN:
-        return "RightOuterJoin";
-    case TJoinOp::FULL_OUTER_JOIN:
-        return "FullOuterJoin";
-    case TJoinOp::CROSS_JOIN:
-        return "CrossJoin";
-    case TJoinOp::MERGE_JOIN:
-        return "MergeJoin";
-    case TJoinOp::RIGHT_SEMI_JOIN:
-        return "RightSemiJoin";
-    case TJoinOp::LEFT_ANTI_JOIN:
-        return "LeftAntiJoin";
-    case TJoinOp::RIGHT_ANTI_JOIN:
-        return "RightAntiJoin";
-    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-        return "NullAwareLeftAntiJoin";
-    default:
-        return "";
-    }
 }
 
 } // namespace starrocks::vectorized
