@@ -174,6 +174,9 @@ public:
     static bool extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                     simdjson::ondemand::value& value);
 
+    static Status extract_from_object2(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
+                                       simdjson::ondemand::value& value);
+
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
 
 private:

@@ -8,6 +8,7 @@
 #include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
+#include "exec/vectorized/json_parser.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
 #include "util/raw_container.h"
@@ -109,6 +110,7 @@ private:
     std::vector<SimpleJsonPath> _root_paths;
 
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
+    bool _is_ndjson = false;
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
@@ -119,47 +121,6 @@ private:
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
     raw::RawVector<char> _buf;
 #endif
-};
-
-class JsonParser {
-public:
-    JsonParser() = default;
-    virtual ~JsonParser() = default;
-    // parse initiates the parser. The inner iterator would point to the first object to be returned.
-    virtual Status parse(uint8_t* data, size_t len, size_t allocated) = 0;
-    // get returns the object pointed by the inner iterator.
-    virtual Status get_current(simdjson::ondemand::object* row) = 0;
-    // next forwards the inner iterator.
-    virtual Status advance() = 0;
-};
-
-class JsonDocumentStreamParser : public JsonParser {
-public:
-    Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get_current(simdjson::ondemand::object* row) override;
-    Status advance() override;
-
-private:
-    uint8_t* _data;
-    simdjson::ondemand::parser _parser;
-
-    simdjson::ondemand::document_stream _doc_stream;
-    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
-};
-
-class JsonArrayParser : public JsonParser {
-public:
-    Status parse(uint8_t* data, size_t len, size_t allocated) override;
-    Status get_current(simdjson::ondemand::object* row) override;
-    Status advance() override;
-
-private:
-    uint8_t* _data;
-    simdjson::ondemand::parser _parser;
-
-    simdjson::ondemand::document _doc;
-    simdjson::ondemand::array _array;
-    simdjson::ondemand::array_iterator _array_itr;
 };
 
 } // namespace starrocks::vectorized

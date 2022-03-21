@@ -162,6 +162,60 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
     return ok;
 }
 
+Status JsonFunctions::extract_from_object2(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
+                                           simdjson::ondemand::value& value) {
+    simdjson::ondemand::value tvalue;
+
+    // Skip the first $.
+    for (int i = 1; i < jsonpath.size(); i++) {
+        if (UNLIKELY(!jsonpath[i].is_valid)) {
+            return Status::InvalidArgument(fmt::format("invalid json path: {}", jsonpath[i].key));
+        }
+
+        const std::string& col = jsonpath[i].key;
+        int index = jsonpath[i].idx;
+
+        if (i == 1) {
+            auto err = obj.find_field_unordered(col).get(tvalue);
+            if (err) {
+                return Status::NotFound(
+                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
+            }
+        } else {
+            auto err = tvalue.find_field_unordered(col).get(tvalue);
+            if (err) {
+                return Status::NotFound(
+                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
+            }
+        }
+
+        if (index != -1) {
+            auto arr = tvalue.get_array();
+            if (arr.error()) {
+                return Status::InvalidArgument(fmt::format("failed to access field as array, field: {}, err: {}", col,
+                                                           simdjson::error_message(arr.error())));
+            }
+
+            int idx = 0;
+            for (auto a : arr) {
+                if (a.error()) {
+                    return Status::InvalidArgument(fmt::format("failed to access array element, field: {}, err: {}",
+                                                               col, simdjson::error_message(arr.error())));
+                }
+
+                if (idx++ == index) {
+                    a.get(tvalue);
+                    break;
+                }
+            }
+        }
+    }
+
+    std::swap(value, tvalue);
+
+    return Status::OK();
+}
+
 void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<SimpleJsonPath>* parsed_paths) {
     // split path by ".", and escape quota by "\"
     // eg:
