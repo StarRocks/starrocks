@@ -2,7 +2,6 @@
 
 #include "storage/vectorized/unique_iterator.h"
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 

@@ -21,13 +21,9 @@
 
 #include "util/os_info.h"
 
-#include <unistd.h>
-
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 namespace starrocks {
 

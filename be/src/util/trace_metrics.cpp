@@ -31,7 +31,6 @@
 #include <mutex>
 #include <ostream>
 #include <string>
-#include <utility>
 
 #include "util/debug/leakcheck_disabler.h"
 

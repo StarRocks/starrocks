@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <any>
-#include <variant>
 
 #include "exec/vectorized/aggregate/agg_hash_set.h"
 

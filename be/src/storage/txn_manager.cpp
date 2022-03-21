@@ -21,20 +21,15 @@
 
 #include "txn_manager.h"
 
-#include <thrift/protocol/TDebugProtocol.h>
-
 #include <algorithm>
-#include <cstdio>
 #include <new>
 #include <queue>
-#include <random>
 #include <set>
 
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "storage/utils.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"

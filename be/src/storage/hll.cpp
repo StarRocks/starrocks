@@ -25,7 +25,6 @@
 #include <immintrin.h>
 #endif
 
-#include <algorithm>
 #include <cmath>
 #include <map>
 

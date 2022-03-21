@@ -23,7 +23,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdlib>
 #include <string>
 
 namespace starrocks {

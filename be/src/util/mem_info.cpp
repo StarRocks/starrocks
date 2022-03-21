@@ -21,13 +21,9 @@
 
 #include "util/mem_info.h"
 
-#include <unistd.h>
-
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 #include "gutil/strings/split.h"
 #include "util/pretty_printer.h"

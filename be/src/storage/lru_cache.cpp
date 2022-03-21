@@ -12,8 +12,6 @@
 #include <string>
 
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
-#include "storage/utils.h"
 
 using std::string;
 using std::stringstream;

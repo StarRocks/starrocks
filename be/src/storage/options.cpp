@@ -28,8 +28,6 @@
 #include "common/status.h"
 #include "env/env.h"
 #include "gutil/strings/split.h"
-#include "gutil/strings/substitute.h"
-#include "storage/utils.h"
 #include "util/path_util.h"
 
 namespace starrocks {

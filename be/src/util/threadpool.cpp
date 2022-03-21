@@ -21,7 +21,6 @@
 
 #include "util/threadpool.h"
 
-#include <cstdint>
 #include <limits>
 #include <ostream>
 

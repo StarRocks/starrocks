@@ -25,7 +25,6 @@
 
 #include "exec/vectorized/tablet_info.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 

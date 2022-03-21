@@ -2,8 +2,6 @@
 
 #include "util/sm3.h"
 
-#include "common/logging.h"
-
 namespace starrocks {
 // IS LITTLE ENDIAN?
 bool Sm3::is_little_endian = (*(char*)&Sm3::ENDIAN_TEST_VALUE == 1) ? true : false;

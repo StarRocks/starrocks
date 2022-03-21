@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
 
