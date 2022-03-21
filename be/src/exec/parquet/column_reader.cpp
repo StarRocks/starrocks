@@ -35,19 +35,58 @@ public:
     virtual Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) = 0;
 };
 
-class Int96ToDateTimeConverter : public ColumnConverter {
+template <typename T>
+class IntToDateTimeConverter : public ColumnConverter {
 public:
-    Int96ToDateTimeConverter() = default;
-    ~Int96ToDateTimeConverter() override = default;
+    IntToDateTimeConverter() = default;
+    ~IntToDateTimeConverter() override = default;
 
-    Status init(const std::string& timezone);
+    Status init(const std::string& timezone) {
+        cctz::time_zone ctz;
+        if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+            return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
+        }
+
+        const auto tp = std::chrono::system_clock::now();
+        const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+        _offset = al.offset;
+
+        return Status::OK();
+    }
     Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
         return _convert_to_timestamp_column(src, dst);
     }
 
 private:
-    // convert column from int96 to timestamp
-    Status _convert_to_timestamp_column(const vectorized::ColumnPtr& src, vectorized::Column* dst);
+    // convert column from int64/int96 to timestamp
+    Status _convert_to_timestamp_column(const vectorized::ColumnPtr& src, vectorized::Column* dst) {
+        auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+        // hive only support null column
+        // TODO: support not null
+        auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        dst_nullable_column->resize(src_nullable_column->size());
+
+        auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<T>>(
+                src_nullable_column->data_column());
+        auto* dst_column =
+                vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
+
+        auto& src_data = src_column->get_data();
+        auto& dst_data = dst_column->get_data();
+        auto& src_null_data = src_nullable_column->null_column()->get_data();
+        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+        size_t size = src_column->size();
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                vectorized::Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
+                dst_data[i].set_timestamp(_utc_to_local(timestamp));
+            }
+        }
+        dst_nullable_column->set_has_null(src_nullable_column->has_null());
+        return Status::OK();
+    }
     // When Hive stores a timestamp value into Parquet format, it converts local time
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
@@ -58,49 +97,6 @@ private:
 private:
     int _offset = 0;
 };
-
-Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
-        return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
-    }
-
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
-
-    return Status::OK();
-}
-
-Status Int96ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::ColumnPtr& src,
-                                                              vectorized::Column* dst) {
-    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
-    // hive only support null column
-    // TODO: support not null
-    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
-
-    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int96_t>>(
-            src_nullable_column->data_column());
-    auto* dst_column =
-            vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
-
-    auto& src_data = src_column->get_data();
-    auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
-
-    size_t size = src_column->size();
-    for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            vectorized::Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
-        }
-    }
-    dst_nullable_column->set_has_null(src_nullable_column->has_null());
-    return Status::OK();
-}
 
 template <typename FROM, typename TO>
 class IntToIntConverter : public ColumnConverter {
@@ -479,6 +475,12 @@ Status ScalarColumnReader::_init_convert_info() {
             _converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL128>>(_field->scale,
                                                                                                  _col_type.scale);
             break;
+        case PrimitiveType::TYPE_DATETIME: {
+            std::unique_ptr<IntToDateTimeConverter<int64_t>> converter(new IntToDateTimeConverter<int64_t>());
+            RETURN_IF_ERROR(converter->init(_opts.timezone));
+            _converter = std::move(converter);
+            }
+            break;
         default:
             break;
         }
@@ -516,7 +518,7 @@ Status ScalarColumnReader::_init_convert_info() {
     case tparquet::Type::type::INT96: {
         if (col_type == PrimitiveType::TYPE_DATETIME) {
             _need_convert = true;
-            std::unique_ptr<Int96ToDateTimeConverter> converter(new Int96ToDateTimeConverter());
+            std::unique_ptr<IntToDateTimeConverter<int96_t>> converter(new IntToDateTimeConverter<int96_t>());
             RETURN_IF_ERROR(converter->init(_opts.timezone));
             _converter = std::move(converter);
         }
