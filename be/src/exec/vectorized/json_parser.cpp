@@ -98,10 +98,16 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
 }
 
 Status JsonArrayParser::advance() noexcept {
-    if (++_array_itr == _array.end()) {
-        return Status::EndOfFile("all values of the array are iterated");
+    try {
+        if (++_array_itr == _array.end()) {
+            return Status::EndOfFile("all values of the array are iterated");
+        }
+        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg =
+                strings::Substitute("Failed to iterate json as array. error: $0", simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
     }
-    return Status::OK();
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
