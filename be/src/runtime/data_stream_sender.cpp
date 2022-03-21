@@ -718,14 +718,14 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
         int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
         if (_compression_scratch.size() < max_compressed_size) {
-            _compression_scratch.resize(max_compressed_size);
+            TRY_CATCH_BAD_ALLOC(_compression_scratch.resize(max_compressed_size));
         }
 
         Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
         _compress_codec->compress(dst->data(), &compressed_slice);
         double compress_ratio = (static_cast<double>(uncompressed_size)) / compressed_slice.size;
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
-            _compression_scratch.resize(compressed_slice.size);
+            TRY_CATCH_BAD_ALLOC(_compression_scratch.resize(compressed_slice.size));
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
