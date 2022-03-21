@@ -3,7 +3,8 @@
 #include "exec/vectorized/hdfs_scanner.h"
 
 #include "exec/vectorized/hdfs_scan_node.h"
-
+#include "runtime/current_thread.h"
+#include "storage/vectorized/chunk_helper.h"
 namespace starrocks::vectorized {
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
@@ -83,7 +84,7 @@ void HdfsScanner::_build_file_read_param() {
     param.stats = &_stats;
 }
 
-Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+Status HdfsScanner::_get_next_once(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
     SCOPED_RAW_TIMER(&_stats.scan_ns);
     Status status = do_get_next(runtime_state, chunk);
@@ -98,6 +99,51 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
         LOG(ERROR) << "failed to read file: " << _scanner_params.path;
     }
     _stats.num_rows_read += (*chunk)->num_rows();
+    return status;
+}
+
+Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    if (_eos) {
+        if (_linger_chunk != nullptr) {
+            *chunk = std::move(_linger_chunk);
+            _linger_chunk = nullptr;
+            return Status::OK();
+        } else {
+            return Status::EndOfFile("eof");
+        }
+    }
+
+    ChunkPtr tmp = nullptr;
+    Status status = Status::OK();
+    for (;;) {
+        tmp = nullptr;
+        TRY_CATCH_BAD_ALLOC(_create_chunk(&tmp));
+        status = _get_next_once(runtime_state, &tmp);
+        if (!status.ok()) {
+            if (status.is_end_of_file()) {
+                _eos = true;
+                break;
+            } else {
+                return status;
+            }
+        }
+
+        if (_linger_chunk == nullptr) {
+            _linger_chunk = std::move(tmp);
+        } else {
+            size_t tmp_rows = tmp->num_rows();
+            if ((_linger_chunk->num_rows() + tmp_rows) > runtime_state->chunk_size()) {
+                break;
+            } else if (tmp_rows > 0) {
+                _linger_chunk->append(*tmp);
+            }
+        }
+    }
+
+    if (_linger_chunk != nullptr) {
+        (*chunk) = std::move(_linger_chunk);
+        _linger_chunk = std::move(tmp);
+    }
     return status;
 }
 
@@ -152,7 +198,7 @@ uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
 }
 
-void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
+void HdfsScanner::_update_hdfs_counter(HdfsScanProfile* profile) {
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
     if (_file == nullptr) return;
 
@@ -171,13 +217,17 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     }
 }
 
+void HdfsScanner::_create_chunk(ChunkPtr* chunk) {
+    (*chunk) = ChunkHelper::new_chunk(*_scanner_params.tuple_desc, _runtime_state->chunk_size());
+}
+
 void HdfsScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void HdfsScanner::update_counter() {
     HdfsScanProfile* profile = _scanner_params.profile;
     if (profile == nullptr) return;
 
-    update_hdfs_counter(profile);
+    _update_hdfs_counter(profile);
 
     COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);

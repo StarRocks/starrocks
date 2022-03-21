@@ -232,7 +232,11 @@ private:
     bool _keep_priority = false;
     void _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
-    void update_hdfs_counter(HdfsScanProfile* profile);
+    void _update_hdfs_counter(HdfsScanProfile* profile);
+    void _create_chunk(ChunkPtr* chunk);
+    Status _get_next_once(RuntimeState* runtime_state, ChunkPtr* chunk);
+    ChunkPtr _linger_chunk;
+    bool _eos = false;
 
 protected:
     std::atomic_bool _pending_token = false;
