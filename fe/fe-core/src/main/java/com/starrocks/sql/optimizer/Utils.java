@@ -374,10 +374,14 @@ public class Utils {
             if (operator instanceof LogicalOlapScanOperator) {
                 Table table = scanOperator.getTable();
                 if (table instanceof OlapTable) {
-                    // Currently, aggregate model has no column statistical information
-                    // It is still allowed to perform ReorderJoinRule
                     if (KeysType.AGG_KEYS.equals(((OlapTable) table).getKeysType())) {
-                        return false;
+                        List<String> keyColumnNames =
+                                scanOperator.getColRefToColumnMetaMap().values().stream().filter(Column::isKey)
+                                        .map(Column::getName)
+                                        .collect(Collectors.toList());
+                        List<ColumnStatistic> keyColumnStatisticList =
+                                Catalog.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                        return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
@@ -386,7 +390,8 @@ public class Utils {
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
                 try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap = hiveMetaStoreTable.getTableLevelColumnStats(colNames);
+                    Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                            hiveMetaStoreTable.getTableLevelColumnStats(colNames);
                     return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
                 } catch (Exception e) {
                     LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
