@@ -253,7 +253,7 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
         // num_columns
         for (int num_columns = 1; num_columns <= 8; num_columns++) {
             // limit
-            for (int limit = 1; limit <= num_chunks * kTestChunkSize; limit *= 8) {
+            for (int limit = 1; limit <= num_chunks * kTestChunkSize / 8; limit *= 8) {
                 b->Args({num_chunks, num_columns, limit});
             }
         }

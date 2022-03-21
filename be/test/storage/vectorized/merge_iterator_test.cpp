@@ -6,7 +6,6 @@
 #include <memory>
 #include <vector>
 
-#include "column/column_pool.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gtest/gtest.h"

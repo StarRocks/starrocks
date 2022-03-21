@@ -32,7 +32,6 @@
 #include "common/object_pool.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
-#include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/monotime.h"
 #include "util/pretty_printer.h"

@@ -23,16 +23,12 @@
 
 #include <cassert>
 #include <iostream>
-#include <sstream>
 
 #include "common/logging.h"
 #include "exprs/agg/java_udaf_function.h"
-#include "runtime/decimal_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/types.h"
 #include "storage/hll.h"
 #include "udf/udf_internal.h"
-#include "util/debug_util.h"
 
 #if STARROCKS_UDF_SDK_BUILD
 // For the SDK build, we are building the .lib that the developers would use to

@@ -122,7 +122,6 @@ struct HashTableProbeState {
     Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
-    std::vector<JoinKeyDesc> join_keys;
 
     // when exec right join
     // record the build items is matched or not
@@ -167,7 +166,6 @@ struct HashTableProbeState {
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),
-              join_keys(rhs.join_keys),
               build_match_index(rhs.build_match_index),
               probe_match_index(rhs.probe_match_index),
               probe_match_filter(rhs.probe_match_filter),

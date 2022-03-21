@@ -107,16 +107,16 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                 return createPropertySetByDistribution(leftScanDistributionSpec);
             }
 
-            DistributionSpec.PropertyInfo newPhysicalPropertyInfo = new DistributionSpec.PropertyInfo();
-
-            newPhysicalPropertyInfo.tableId = leftTableId;
+            DistributionSpec.PropertyInfo newPhysicalPropertyInfo;
             HashDistributionDesc outputDesc;
             if (requiredShuffleDesc.get().getColumns().containsAll(rightShuffleColumns)) {
                 outputDesc =
                         new HashDistributionDesc(rightShuffleColumns, HashDistributionDesc.SourceType.LOCAL);
+                newPhysicalPropertyInfo = rightScanDistributionSpec.getPropertyInfo();
             } else {
                 outputDesc =
                         new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.LOCAL);
+                newPhysicalPropertyInfo = leftScanDistributionSpec.getPropertyInfo();
             }
             return createPropertySetByDistribution(new HashDistributionSpec(outputDesc, newPhysicalPropertyInfo));
         }
@@ -145,11 +145,6 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
-
-        String hint = node.getJoinHint();
-        GroupExpression leftChild = childrenBestExprList.get(0);
-        GroupExpression rightChild = childrenBestExprList.get(1);
-
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
 

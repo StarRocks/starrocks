@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "common/config.h"
-#include "storage/compaction_utils.h"
 #include "testutil/parallel_test.h"
 #include "util/monotime.h"
 

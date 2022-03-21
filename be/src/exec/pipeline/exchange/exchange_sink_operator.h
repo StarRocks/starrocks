@@ -121,10 +121,7 @@ private:
     RuntimeProfile::Counter* _bytes_sent_counter = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;
-    RuntimeProfile::Counter* _ignore_rows = nullptr;
 
-    RuntimeProfile::Counter* _send_request_timer = nullptr;
-    RuntimeProfile::Counter* _wait_response_timer = nullptr;
     // Throughput per total time spent in sender
     RuntimeProfile::Counter* _overall_throughput = nullptr;
 

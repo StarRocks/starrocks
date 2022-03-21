@@ -26,8 +26,6 @@
 #include <memory>
 #include <sstream>
 
-#include "common/logging.h"
-
 namespace starrocks {
 
 static inline void url_encode(const char* in, int in_len, std::string* out) {

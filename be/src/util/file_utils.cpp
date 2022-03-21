@@ -42,11 +42,10 @@ namespace starrocks {
 
 using strings::Substitute;
 
-Status FileUtils::create_dir(const std::string& path, Env* env) {
+Status FileUtils::create_dir(Env* env, const std::string& path) {
     if (path.empty()) {
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", path));
     }
-
     std::filesystem::path p(path);
 
     std::string partial_path;
@@ -58,37 +57,40 @@ Status FileUtils::create_dir(const std::string& path, Env* env) {
     return Status::OK();
 }
 
-Status FileUtils::create_dir(const std::string& dir_path) {
-    return create_dir(dir_path, Env::Default());
+Status FileUtils::create_dir(const std::string& path) {
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
+    return create_dir(env.get(), path);
+}
+
+Status FileUtils::remove_all(Env* env, const std::string& file_path) {
+    return env->delete_dir_recursive(file_path);
 }
 
 Status FileUtils::remove_all(const std::string& file_path) {
-    std::error_code ec;
-    std::filesystem::remove_all(file_path, ec);
-    if (ec) {
-        std::stringstream ss;
-        ss << "remove all(" << file_path << ") failed, because: " << ec;
-        return Status::InternalError(ss.str());
-    }
-    return Status::OK();
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(file_path));
+    return remove_all(env.get(), file_path);
 }
 
 Status FileUtils::remove(const std::string& path, starrocks::Env* env) {
     ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(path));
-    if (is_dir) {
-        return env->delete_dir(path);
-    } else {
-        return env->delete_file(path);
-    }
+    return is_dir ? env->delete_dir(path) : env->delete_file(path);
 }
 
 Status FileUtils::remove(const std::string& path) {
-    return remove(path, Env::Default());
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
+    return remove(env.get(), path);
 }
 
 Status FileUtils::remove_paths(const std::vector<std::string>& paths) {
     for (const std::string& p : paths) {
         RETURN_IF_ERROR(remove(p));
+    }
+    return Status::OK();
+}
+
+Status FileUtils::remove_paths(Env* env, const std::vector<std::string>& paths) {
+    for (const std::string& p : paths) {
+        RETURN_IF_ERROR(remove(env, p));
     }
     return Status::OK();
 }
@@ -103,8 +105,13 @@ Status FileUtils::list_files(Env* env, const std::string& dir, std::vector<std::
     return env->iterate_dir(dir, cb);
 }
 
-Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files,
-                                  Env* env) {
+Status FileUtils::list_files(const std::string& dir, std::vector<std::string>* files) {
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(dir));
+    return list_files(env.get(), dir, files);
+}
+
+Status FileUtils::list_dirs_files(Env* env, const std::string& path, std::set<std::string>* dirs,
+                                  std::set<std::string>* files) {
     auto cb = [path, dirs, files, env](std::string_view name) -> bool {
         if (is_dot_or_dotdot(name)) {
             return true;
@@ -131,6 +138,11 @@ Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>
     return env->iterate_dir(path, cb);
 }
 
+Status FileUtils::list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files) {
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(path));
+    return list_dirs_files(env.get(), path, dirs, files);
+}
+
 Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* count) {
     auto cb = [count](std::string_view name) -> bool {
         if (!is_dot_or_dotdot(name)) {
@@ -146,8 +158,15 @@ bool FileUtils::is_dir(const std::string& file_path, Env* env) {
     return status_or.ok() ? status_or.value() : false;
 }
 
-bool FileUtils::is_dir(const std::string& path) {
-    return is_dir(path, Env::Default());
+Status FileUtils::get_children_count(const std::string& dir, int64_t* count) {
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(dir));
+    return get_children_count(env.get(), dir, count);
+}
+
+bool FileUtils::is_dir(const std::string& file_path) {
+    auto res = Env::CreateSharedFromString(file_path);
+    if (!res.ok()) return false;
+    return is_dir(res.value().get(), file_path);
 }
 
 // Through proc filesystem
@@ -194,12 +213,15 @@ Status FileUtils::split_pathes(const char* path, std::vector<std::string>* path_
     return Status::OK();
 }
 
-Status FileUtils::copy_file(const std::string& src_path, const std::string& dest_path) {
-    ASSIGN_OR_RETURN(auto src_file, Env::Default()->new_sequential_file(src_path));
-
-    ASSIGN_OR_RETURN(auto dest_file, Env::Default()->new_writable_file(dest_path));
-
-    return copy(src_file.get(), dest_file.get()).status();
+Status FileUtils::copy_file(const std::string& src_path, const std::string& dst_path) {
+    ASSIGN_OR_RETURN(auto src_env, Env::CreateSharedFromString(src_path));
+    ASSIGN_OR_RETURN(auto dst_env, Env::CreateSharedFromString(dst_path));
+    ASSIGN_OR_RETURN(auto src_file, src_env->new_sequential_file(src_path));
+    ASSIGN_OR_RETURN(auto dst_file, dst_env->new_writable_file(dst_path));
+    RETURN_IF_ERROR(copy(src_file.get(), dst_file.get()));
+    RETURN_IF_ERROR(dst_file->sync());
+    RETURN_IF_ERROR(dst_file->close());
+    return Status::OK();
 }
 
 StatusOr<int64_t> FileUtils::copy(SequentialFile* src, WritableFile* dest, size_t buff_size) {
@@ -254,12 +276,14 @@ Status FileUtils::md5sum(const std::string& file, std::string* md5sum) {
     return Status::OK();
 }
 
-bool FileUtils::check_exist(const std::string& path) {
-    return Env::Default()->path_exists(path).ok();
+bool FileUtils::check_exist(Env* env, const std::string& path) {
+    return env->path_exists(path).ok();
 }
 
-bool FileUtils::check_exist(const std::string& path, Env* env) {
-    return env->path_exists(path).ok();
+bool FileUtils::check_exist(const std::string& path) {
+    auto res = Env::CreateSharedFromString(path);
+    if (!res.ok()) return false;
+    return check_exist(res.value().get(), path);
 }
 
 Status FileUtils::canonicalize(const std::string& path, std::string* real_path) {

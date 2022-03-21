@@ -83,6 +83,7 @@ private:
 
     bool _submit_scanner(HdfsScanner* scanner, bool blockable);
     void _scanner_thread(HdfsScanner* scanner);
+    void _release_scanner(HdfsScanner* scanner);
     void _update_status(const Status& status);
     Status _get_status();
     void _fill_chunk_pool(int count);

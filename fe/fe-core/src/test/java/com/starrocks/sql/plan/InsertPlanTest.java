@@ -3,6 +3,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -375,6 +376,7 @@ public class InsertPlanTest extends PlanTestBase {
 
     @Test
     public void testInsertWithColocate() throws Exception {
+        FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("CREATE TABLE `user_profile` (\n" +
                 "  `distinct_id` bigint(20) NULL ,\n" +
                 "  `user_id` varchar(128) NULL ,\n" +
@@ -548,6 +550,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

@@ -21,10 +21,8 @@
 
 #include <gflags/gflags.h>
 
-#include <fstream>
 #include <iostream>
 #include <set>
-#include <sstream>
 #include <string>
 
 #include "common/status.h"
@@ -43,7 +41,6 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/utils.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/file_utils.h"

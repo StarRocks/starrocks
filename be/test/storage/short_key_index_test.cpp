@@ -23,9 +23,6 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/tablet_schema_helper.h"
-#include "util/debug_util.h"
-
 namespace starrocks {
 
 class ShortKeyIndexTest : public testing::Test {

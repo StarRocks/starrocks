@@ -24,15 +24,8 @@
 #include <mntent.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/statfs.h>
 #include <utime.h>
 
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
-#include <cctype>
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -82,7 +75,8 @@ DataDir::~DataDir() {
 }
 
 Status DataDir::init(bool read_only) {
-    if (!FileUtils::check_exist(_path)) {
+    ASSIGN_OR_RETURN(_env, Env::CreateSharedFromString(_path));
+    if (!FileUtils::check_exist(_env.get(), _path)) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("opendir failed, path=$0", _path)),
                                   "check file exist failed");
     }
@@ -182,7 +176,7 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
 
 Status DataDir::_init_data_dir() {
     std::string data_path = _path + DATA_PREFIX;
-    if (!FileUtils::check_exist(data_path) && !FileUtils::create_dir(data_path).ok()) {
+    if (!FileUtils::check_exist(_env.get(), data_path) && !FileUtils::create_dir(_env.get(), data_path).ok()) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create data root path $0", data_path)),
                                   "check_exist failed");
     }
@@ -191,7 +185,7 @@ Status DataDir::_init_data_dir() {
 
 Status DataDir::_init_tmp_dir() {
     std::string tmp_path = _path + TMP_PREFIX;
-    if (!FileUtils::check_exist(tmp_path) && !FileUtils::create_dir(tmp_path).ok()) {
+    if (!FileUtils::check_exist(_env.get(), tmp_path) && !FileUtils::create_dir(_env.get(), tmp_path).ok()) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create tmp path $0", tmp_path)),
                                   "check_exist failed");
     }
@@ -296,8 +290,8 @@ Status DataDir::get_shard(uint64_t* shard) {
     }
     shard_path_stream << _path << DATA_PREFIX << "/" << next_shard;
     std::string shard_path = shard_path_stream.str();
-    if (!FileUtils::check_exist(shard_path)) {
-        RETURN_IF_ERROR(FileUtils::create_dir(shard_path));
+    if (!FileUtils::check_exist(_env.get(), shard_path)) {
+        RETURN_IF_ERROR(FileUtils::create_dir(_env.get(), shard_path));
     }
 
     *shard = next_shard;
@@ -337,15 +331,15 @@ void DataDir::find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* 
     // path: /root_path/trash/time_label/tablet_id/schema_hash
     std::string trash_path = _path + TRASH_PREFIX;
     std::vector<std::string> sub_dirs;
-    FileUtils::list_files(Env::Default(), trash_path, &sub_dirs);
+    FileUtils::list_files(_env.get(), trash_path, &sub_dirs);
     for (auto& sub_dir : sub_dirs) {
         // sub dir is time_label
         std::string sub_path = trash_path + "/" + sub_dir;
-        if (!FileUtils::is_dir(sub_path)) {
+        if (!FileUtils::is_dir(_env.get(), sub_path)) {
             continue;
         }
         std::string tablet_path = sub_path + "/" + std::to_string(tablet_id);
-        if (FileUtils::check_exist(tablet_path)) {
+        if (FileUtils::check_exist(_env.get(), tablet_path)) {
             paths->emplace_back(std::move(tablet_path));
         }
     }
@@ -594,7 +588,7 @@ void DataDir::perform_path_scan() {
         std::set<std::string> shards;
         std::string data_path = _path + DATA_PREFIX;
 
-        Status ret = FileUtils::list_dirs_files(data_path, &shards, nullptr, Env::Default());
+        Status ret = FileUtils::list_dirs_files(_env.get(), data_path, &shards, nullptr);
         if (!ret.ok()) {
             LOG(WARNING) << "fail to walk dir. path=[" + data_path << "] error[" << ret.to_string() << "]";
             return;
@@ -603,7 +597,7 @@ void DataDir::perform_path_scan() {
         for (const auto& shard : shards) {
             std::string shard_path = data_path + "/" + shard;
             std::set<std::string> tablet_ids;
-            ret = FileUtils::list_dirs_files(shard_path, &tablet_ids, nullptr, Env::Default());
+            ret = FileUtils::list_dirs_files(_env.get(), shard_path, &tablet_ids, nullptr);
             if (!ret.ok()) {
                 LOG(WARNING) << "fail to walk dir. [path=" << shard_path << "] error[" << ret.to_string() << "]";
                 continue;
@@ -611,7 +605,7 @@ void DataDir::perform_path_scan() {
             for (const auto& tablet_id : tablet_ids) {
                 std::string tablet_id_path = shard_path + "/" + tablet_id;
                 std::set<std::string> schema_hashes;
-                ret = FileUtils::list_dirs_files(tablet_id_path, &schema_hashes, nullptr, Env::Default());
+                ret = FileUtils::list_dirs_files(_env.get(), tablet_id_path, &schema_hashes, nullptr);
                 if (!ret.ok()) {
                     LOG(WARNING) << "fail to walk dir. [path=" << tablet_id_path << "]"
                                  << " error[" << ret.to_string() << "]";
@@ -622,7 +616,7 @@ void DataDir::perform_path_scan() {
                     _all_tablet_schemahash_paths.insert(tablet_schema_hash_path);
                     std::set<std::string> rowset_files;
 
-                    ret = FileUtils::list_dirs_files(tablet_schema_hash_path, nullptr, &rowset_files, Env::Default());
+                    ret = FileUtils::list_dirs_files(_env.get(), tablet_schema_hash_path, nullptr, &rowset_files);
                     if (!ret.ok()) {
                         LOG(WARNING) << "fail to walk dir. [path=" << tablet_schema_hash_path << "] error["
                                      << ret.to_string() << "]";
@@ -641,9 +635,9 @@ void DataDir::perform_path_scan() {
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {
-    if (FileUtils::check_exist(path)) {
+    if (FileUtils::check_exist(_env.get(), path)) {
         LOG(INFO) << "collect garbage dir path: " << path;
-        WARN_IF_ERROR(FileUtils::remove_all(path), "remove garbage dir failed. path: " + path);
+        WARN_IF_ERROR(FileUtils::remove_all(_env.get(), path), "remove garbage dir failed. path: " + path);
     }
 }
 

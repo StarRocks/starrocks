@@ -12,9 +12,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-#include "column/object_column.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
 

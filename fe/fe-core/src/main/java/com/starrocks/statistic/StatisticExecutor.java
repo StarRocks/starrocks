@@ -268,6 +268,10 @@ public class StatisticExecutor {
     }
 
     public List<String> queryExpireTableSync(List<Long> tableIds) throws Exception {
+        if (null == tableIds || tableIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         StringBuilder sql = new StringBuilder(SELECT_EXPIRE_TABLE_TEMPLATE);
         sql.append(" AND table_id NOT IN (").append(StringUtils.join(tableIds, ",")).append(")");
         LOG.debug("Query expire statistic SQL: {}", sql);
