@@ -116,7 +116,7 @@ Status JsonArrayParser::advance() {
     }
 }
 
-Status JsonDocumentStreamParserWitRoot::get_current(simdjson::ondemand::object* row) {
+Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) {
     try {
         RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(row));
         // json root filter.
@@ -132,7 +132,7 @@ Status JsonDocumentStreamParserWitRoot::get_current(simdjson::ondemand::object* 
     }
 } // namespace starrocks::vectorized
 
-Status JsonArrayParserWitRoot::get_current(simdjson::ondemand::object* row) {
+Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) {
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(row));
     simdjson::ondemand::value val;
     // json root filter.
@@ -150,7 +150,7 @@ Status JsonArrayParserWitRoot::get_current(simdjson::ondemand::object* row) {
     }
 }
 
-Status ExpandedJsonDocumentStreamParserWitRoot::parse(uint8_t* data, size_t len, size_t allocated) {
+Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::parse(data, len, allocated));
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
     simdjson::ondemand::value val;
@@ -170,7 +170,7 @@ Status ExpandedJsonDocumentStreamParserWitRoot::parse(uint8_t* data, size_t len,
     return Status::OK();
 }
 
-Status ExpandedJsonDocumentStreamParserWitRoot::get_current(simdjson::ondemand::object* row) {
+Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) {
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all documents of the stream are iterated");
@@ -191,7 +191,7 @@ Status ExpandedJsonDocumentStreamParserWitRoot::get_current(simdjson::ondemand::
     }
 }
 
-Status ExpandedJsonDocumentStreamParserWitRoot::advance() {
+Status ExpandedJsonDocumentStreamParserWithRoot::advance() {
     if (++_array_itr == _array.end()) {
         do {
             // forward document stream parser.
@@ -216,7 +216,7 @@ Status ExpandedJsonDocumentStreamParserWitRoot::advance() {
     return Status::OK();
 }
 
-Status ExpandedJsonArrayParserWitRoot::parse(uint8_t* data, size_t len, size_t allocated) {
+Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) {
     RETURN_IF_ERROR(this->JsonArrayParser::parse(data, len, allocated));
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
@@ -237,7 +237,7 @@ Status ExpandedJsonArrayParserWitRoot::parse(uint8_t* data, size_t len, size_t a
     return Status::OK();
 }
 
-Status ExpandedJsonArrayParserWitRoot::get_current(simdjson::ondemand::object* row) {
+Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) {
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all documents of the stream are iterated");
@@ -258,7 +258,7 @@ Status ExpandedJsonArrayParserWitRoot::get_current(simdjson::ondemand::object* r
     }
 }
 
-Status ExpandedJsonArrayParserWitRoot::advance() {
+Status ExpandedJsonArrayParserWithRoot::advance() {
     if (++_array_itr == _array.end()) {
         do {
             // forward document stream parser.

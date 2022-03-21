@@ -132,7 +132,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
     std::vector<SimpleJsonPath> jsonroot;
     JsonFunctions::parse_json_paths("$.key0", &jsonroot);
 
-    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWitRoot(jsonroot));
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(jsonroot));
 
     auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
 
@@ -185,7 +185,7 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
     std::vector<SimpleJsonPath> jsonroot;
     JsonFunctions::parse_json_paths("$.key0", &jsonroot);
 
-    std::unique_ptr<JsonParser> parser(new JsonArrayParserWitRoot(jsonroot));
+    std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(jsonroot));
 
     auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
 
@@ -238,7 +238,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     std::vector<SimpleJsonPath> jsonroot;
     JsonFunctions::parse_json_paths("$.key0", &jsonroot);
 
-    std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWitRoot(jsonroot));
+    std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(jsonroot));
 
     auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
 
@@ -291,7 +291,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     std::vector<SimpleJsonPath> jsonroot;
     JsonFunctions::parse_json_paths("$.key0", &jsonroot);
 
-    std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWitRoot(jsonroot));
+    std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(jsonroot));
 
     auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
     ASSERT_TRUE(st.ok());

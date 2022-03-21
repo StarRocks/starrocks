@@ -47,27 +47,27 @@ private:
     simdjson::ondemand::array_iterator _array_itr;
 };
 
-class JsonDocumentStreamParserWitRoot : public JsonDocumentStreamParser {
+class JsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
 public:
-    JsonDocumentStreamParserWitRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    JsonDocumentStreamParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) override;
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
 };
 
-class JsonArrayParserWitRoot : public JsonArrayParser {
+class JsonArrayParserWithRoot : public JsonArrayParser {
 public:
-    JsonArrayParserWitRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    JsonArrayParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) override;
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
 };
 
-class ExpandedJsonDocumentStreamParserWitRoot : public JsonDocumentStreamParser {
+class ExpandedJsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
 public:
-    ExpandedJsonDocumentStreamParserWitRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    ExpandedJsonDocumentStreamParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
     Status get_current(simdjson::ondemand::object* row) override;
     Status advance() override;
@@ -79,9 +79,9 @@ private:
     simdjson::ondemand::array_iterator _array_itr;
 };
 
-class ExpandedJsonArrayParserWitRoot : public JsonArrayParser {
+class ExpandedJsonArrayParserWithRoot : public JsonArrayParser {
 public:
-    ExpandedJsonArrayParserWitRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    ExpandedJsonArrayParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) override;
     Status get_current(simdjson::ondemand::object* row) override;
     Status advance() override;

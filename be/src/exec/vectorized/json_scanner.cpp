@@ -340,15 +340,6 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
-    if (_is_ndjson) {
-        return _read_chunk_from_document_stream(chunk, rows_to_read, slot_descs);
-    } else {
-        return _read_chunk_from_array(chunk, rows_to_read, slot_descs);
-    }
-}
-
-Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
-                                                    const std::vector<SlotDescriptor*>& slot_descs) {
     if (_empty_parser) {
         auto st = _read_and_parse_json();
         if (!st.ok()) {
@@ -361,9 +352,32 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
             return st;
         }
     }
+
+    // Eliminates virtual function call.
+    if (_is_ndjson) {
+        if (_root_paths.empty()) {
+            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
+        } else if (!_strip_outer_array) {
+            return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+        } else {
+            return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+        }
+    } else {
+        if (_root_paths.empty()) {
+            return _read_chunk<JsonArrayParser>(chunk, rows_to_read, slot_descs);
+        } else if (!_strip_outer_array) {
+            return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+        } else {
+            return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+        }
+    }
+}
+
+template <typename ParserType>
+Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
     simdjson::ondemand::object row;
 
-    auto parser = down_cast<JsonDocumentStreamParser*>(_parser.get());
+    auto parser = down_cast<ParserType*>(_parser.get());
 
     std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for (int32_t n = 0; n < rows_to_read; n++) {
@@ -398,73 +412,6 @@ Status JsonReader::_read_chunk_from_document_stream(Chunk* chunk, int32_t rows_t
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
             }
             continue;
-        }
-
-        st = parser->advance();
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
-                _empty_parser = true;
-                return Status::OK();
-            }
-            chunk->set_num_rows(n);
-            _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
-            return st;
-        }
-    }
-    return Status::OK();
-}
-
-Status JsonReader::_read_chunk_from_array(Chunk* chunk, int32_t rows_to_read,
-                                          const std::vector<SlotDescriptor*>& slot_descs) {
-    if (_empty_parser) {
-        auto st = _read_and_parse_json();
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
-                return st;
-            }
-            // Parse error.
-            _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
-            return st;
-        }
-    }
-    simdjson::ondemand::object row;
-
-    auto parser = down_cast<JsonArrayParser*>(_parser.get());
-
-    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
-    for (int32_t n = 0; n < rows_to_read; n++) {
-        auto st = parser->get_current(&row);
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
-                _empty_parser = true;
-                return Status::OK();
-            }
-            chunk->set_num_rows(n);
-            _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
-            return st;
-        }
-
-        if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-            // Try to reorder the column according to the column order of first json row.
-            // It is much faster when we access the json field as the json key order.
-            _reorder_column(&reordered_slot_descs, row);
-            // Resetting the row after for-range iterating in _reorder_column.
-            row.reset();
-        }
-
-        st = _construct_row(&row, chunk, reordered_slot_descs);
-        if (!st.ok()) {
-            chunk->set_num_rows(n);
-            if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
-                // We would continue to construct row even if error is returned,
-                // hence the number of error appended to the file should be limited.
-                std::string_view sv;
-                (void)!row.raw_json().get(sv);
-                _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
-            }
         }
 
         st = parser->advance();
@@ -677,6 +624,8 @@ Status JsonReader::_read_and_parse_json() {
 #endif
 
     // Check the content formart accroding to the first non-space character.
+    // Treat json string started with '{' as ndjson.
+    // Treat json string started with '[' as json array.
     for (size_t i = 0; i < length; ++i) {
         // Skip spaces at the string head.
         if (data[i] == ' ' || data[i] == '\t' || data[i] == '\r' || data[i] == '\n') continue;
@@ -693,11 +642,21 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     if (_is_ndjson) {
-        // Treat json string with '{' as json array.
-        _parser.reset(new JsonDocumentStreamParser);
+        if (_root_paths.empty()) {
+            _parser.reset(new JsonDocumentStreamParser);
+        } else if (!_strip_outer_array) {
+            _parser.reset(new JsonDocumentStreamParserWithRoot(_root_paths));
+        } else {
+            _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_root_paths));
+        }
     } else {
-        // Treat json string with '[' as json array.
-        _parser.reset(new JsonArrayParser);
+        if (_root_paths.empty()) {
+            _parser.reset(new JsonArrayParser);
+        } else if (!_strip_outer_array) {
+            _parser.reset(new JsonArrayParserWithRoot(_root_paths));
+        } else {
+            _parser.reset(new ExpandedJsonArrayParserWithRoot(_root_paths));
+        }
     }
 
     _empty_parser = false;

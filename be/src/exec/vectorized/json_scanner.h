@@ -77,9 +77,8 @@ public:
     Status close();
 
 private:
-    Status _read_chunk_from_document_stream(Chunk* chunk, int32_t rows_to_read,
-                                            const std::vector<SlotDescriptor*>& slot_descs);
-    Status _read_chunk_from_array(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+    template <typename ParserType>
+    Status _read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
 
     Status _read_and_parse_json();
 
