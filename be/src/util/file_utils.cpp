@@ -71,9 +71,9 @@ Status FileUtils::remove_all(const std::string& file_path) {
     return remove_all(env.get(), file_path);
 }
 
-Status FileUtils::remove(const std::string& path, starrocks::Env* env) {
-    ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(path));
-    return is_dir ? env->delete_dir(path) : env->delete_file(path);
+Status FileUtils::remove(Env* env, const std::string& dir_path) {
+    ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(dir_path));
+    return is_dir ? env->delete_dir(dir_path) : env->delete_file(dir_path);
 }
 
 Status FileUtils::remove(const std::string& path) {
@@ -153,7 +153,7 @@ Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* 
     return env->iterate_dir(dir, cb);
 }
 
-bool FileUtils::is_dir(const std::string& file_path, Env* env) {
+bool FileUtils::is_dir(Env* env, const std::string& file_path) {
     const auto status_or = env->is_directory(file_path);
     return status_or.ok() ? status_or.value() : false;
 }
