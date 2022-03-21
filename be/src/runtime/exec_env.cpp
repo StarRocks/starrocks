@@ -138,10 +138,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? std::thread::hardware_concurrency()
                                  : config::pipeline_scan_thread_pool_thread_num;
+    int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
 
     _pipeline_scan_io_thread_pool =
             new PriorityThreadPool("pip_scan_io", // pipeline scan io
                                    num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+
+    _pipeline_hdfs_scan_io_thread_pool =
+            new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
+                                   hdfs_num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+
     std::unique_ptr<ThreadPool> scan_worker_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
                             .set_min_threads(0)
@@ -151,6 +157,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&scan_worker_thread_pool));
     _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
     _scan_executor->initialize(num_io_threads);
+
+    std::unique_ptr<ThreadPool> hdfs_scan_worker_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("hdfs_scan_executor") // hdfs_scan io task executor
+                            .set_min_threads(0)
+                            .set_max_threads(hdfs_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor = new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool));
+    _hdfs_scan_executor->initialize(hdfs_num_io_threads);
 
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool("elt", config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
@@ -380,9 +396,17 @@ void ExecEnv::_destroy() {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
     }
+    if (_pipeline_hdfs_scan_io_thread_pool) {
+        delete _pipeline_hdfs_scan_io_thread_pool;
+        _pipeline_hdfs_scan_io_thread_pool = nullptr;
+    }
     if (_scan_executor) {
         delete _scan_executor;
         _scan_executor = nullptr;
+    }
+    if (_hdfs_scan_executor) {
+        delete _hdfs_scan_executor;
+        _hdfs_scan_executor = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;
