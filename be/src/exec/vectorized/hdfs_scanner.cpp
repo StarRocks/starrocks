@@ -143,6 +143,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     if (_linger_chunk != nullptr) {
         (*chunk) = std::move(_linger_chunk);
         _linger_chunk = std::move(tmp);
+        return Status::OK();
     }
     return status;
 }
