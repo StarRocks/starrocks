@@ -228,7 +228,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (!st.ok()) {
         _set_state(kAborted);
     }
-    return Status::OK();
+    return st;
 }
 
 Status DeltaWriter::close() {
