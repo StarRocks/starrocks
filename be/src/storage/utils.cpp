@@ -116,56 +116,6 @@ Status move_to_trash(const std::filesystem::path& file_path) {
     return st;
 }
 
-Status copy_file(const string& src, const string& dest) {
-    int src_fd = -1;
-    int dest_fd = -1;
-    char* buf = new char[1024 * 1024];
-    Status res = Status::OK();
-
-    src_fd = ::open(src.c_str(), O_RDONLY);
-    if (src_fd < 0) {
-        PLOG(WARNING) << "Not found file: " << src;
-        res = Status::NotFound(fmt::format("Not found file: {}", src));
-        goto COPY_EXIT;
-    }
-
-    dest_fd = ::open(dest.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    if (dest_fd < 0) {
-        PLOG(WARNING) << "Not found file: " << dest;
-        res = Status::NotFound(fmt::format("Not found file: {}", dest));
-        goto COPY_EXIT;
-    }
-
-    while (true) {
-        ssize_t rd_size = ::read(src_fd, buf, sizeof(buf));
-        if (rd_size < 0) {
-            res = Status::IOError(fmt::format("Error to read file: {}, error:{} ", src, std::strerror(Errno::no())));
-            goto COPY_EXIT;
-        } else if (0 == rd_size) {
-            break;
-        }
-
-        ssize_t wr_size = ::write(dest_fd, buf, rd_size);
-        if (wr_size != rd_size) {
-            res = Status::IOError(fmt::format("Error to write file: {}, error:{} ", dest, std::strerror(Errno::no())));
-            goto COPY_EXIT;
-        }
-    }
-
-COPY_EXIT:
-    if (src_fd >= 0) {
-        ::close(src_fd);
-    }
-
-    if (dest_fd >= 0) {
-        ::close(dest_fd);
-    }
-
-    VLOG(3) << "copy file success. [src=" << src << " dest=" << dest << "]";
-    delete[] buf;
-    return res;
-}
-
 Status read_write_test_file(const string& test_file_path) {
     if (access(test_file_path.c_str(), F_OK) == 0) {
         if (remove(test_file_path.c_str()) != 0) {
