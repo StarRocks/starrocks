@@ -90,39 +90,33 @@ Status BetaRowset::do_load() {
 Status BetaRowset::remove() {
     VLOG(1) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
-    bool success = true;
-    for (int i = 0; i < num_segments(); ++i) {
+    Status result;
+    ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(_rowset_path));
+    auto merge_status = [&](const Status& st) {
+        if (result.ok() && !st.ok() && !st.is_not_found()) result = st;
+    };
+
+    for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;
-        // TODO(lingbin): use Env API
-        if (::remove(path.c_str()) != 0) {
-            PLOG(WARNING) << "Fail to delete " << path;
-            success = false;
-        }
+        auto st = env->delete_file(path);
+        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
+        merge_status(st);
     }
-    for (int i = 0; i < num_delete_files(); ++i) {
-        std::string del_path = segment_del_file_path(_rowset_path, rowset_id(), i);
-        VLOG(1) << "Deleting " << del_path;
-        if (::remove(del_path.c_str()) != 0) {
-            PLOG(WARNING) << "Fail to delete " << del_path;
-            success = false;
-        }
+    for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
+        std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
+        VLOG(1) << "Deleting " << path;
+        auto st = env->delete_file(path);
+        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
+        merge_status(st);
     }
-    for (int i = 0; i < num_segments(); ++i) {
+    for (int i = 0, sz = num_segments(); i < sz; ++i) {
         std::string path = segment_srcrssid_file_path(_rowset_path, rowset_id(), i);
-        if (::access(path.c_str(), F_OK) == 0) {
-            VLOG(1) << "Deleting " << path;
-            if (::remove(path.c_str()) != 0) {
-                PLOG(WARNING) << "Fail to delete " << path;
-                success = false;
-            }
-        }
+        auto st = env->delete_file(path);
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
+        merge_status(st);
     }
-    if (!success) {
-        LOG(WARNING) << "Fail to remove files in rowset id=" << unique_id();
-        return Status::IOError(fmt::format("Fail to remove files. rowset_id: {}", unique_id()));
-    }
-    return Status::OK();
+    return result;
 }
 
 void BetaRowset::do_close() {

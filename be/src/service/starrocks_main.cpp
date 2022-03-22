@@ -151,6 +151,9 @@ int main(int argc, char** argv) {
     }
 #endif
 
+    Aws::SDKOptions aws_sdk_options;
+    Aws::InitAPI(aws_sdk_options);
+
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
     if (!olap_res.ok()) {
@@ -277,9 +280,6 @@ int main(int argc, char** argv) {
     } else {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
-
-    Aws::SDKOptions aws_sdk_options;
-    Aws::InitAPI(aws_sdk_options);
 
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
