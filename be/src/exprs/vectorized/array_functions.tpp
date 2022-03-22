@@ -314,7 +314,7 @@ private:
 
     template <bool with_length>
     static void _array_slice_item(ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset,
-                                  [[maybe_unused]] int64_t length) {
+                                  int64_t length) {
         auto& dest_offsets = dest_column->offsets_column()->get_data();
         if (!offset) {
             dest_offsets.emplace_back(dest_offsets.back());
