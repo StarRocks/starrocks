@@ -2,12 +2,16 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class UpdatePlanTest extends PlanTestBase {
     @BeforeClass
@@ -24,6 +28,19 @@ public class UpdatePlanTest extends PlanTestBase {
         explainString = getUpdateExecPlan("update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         Assert.assertTrue(explainString.contains("v1 = 'aaa'"));
         Assert.assertTrue(explainString.contains("CAST(CAST(3: v2 AS BIGINT) + 1 AS INT)"));
+
+        testExplain("explain update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        testExplain("explain verbose update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+        testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+    }
+
+    private void testExplain(String explainStmt) throws Exception {
+        connectContext.getState().reset();
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(explainStmt, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statements.get(0));
+        stmtExecutor.execute();
+        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
 
     private static String getUpdateExecPlan(String originStmt) throws Exception {
@@ -37,5 +54,4 @@ public class UpdatePlanTest extends PlanTestBase {
         String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
         return ret;
     }
-
 }
