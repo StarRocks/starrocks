@@ -186,7 +186,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
     Status status = Status::OK();
     size_t column_group_del_filtered_rows = 0;
     size_t column_group_merged_rows = 0;
-    while (!should_stop()) {
+    while (LIKELY(!should_stop())) {
 #ifndef BE_TEST
         status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
         if (!status.ok()) {

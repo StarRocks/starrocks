@@ -108,7 +108,7 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, vec
     size_t output_rows = 0;
     auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
-    while (!should_stop()) {
+    while (LIKELY(!should_stop())) {
 #ifndef BE_TEST
         status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
         if (!status.ok()) {
