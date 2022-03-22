@@ -945,4 +945,29 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
+
+    @Test
+    public void testLocalGroupingSet1() throws Exception {
+        String sql = "select v1, v2, v3 from t0 group by grouping sets((v1, v2), (v1, v3), (v1))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID\n" +
+                "  |  \n" +
+                "  1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[1, 2], [1, 3], [1]]\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testLocalGroupingSetAgg() throws Exception {
+        String sql = "select v1, sum(v2) from " +
+                "(select v1, v2, v3 from t0 group by grouping sets((v1, v2), (v1, v3), (v1))) as xx group by v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[1, 2], [1, 3], [1]]\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
 }

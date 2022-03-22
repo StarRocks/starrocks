@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
@@ -153,6 +154,22 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
     }
 
     @Override
+    public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
+        List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
+        node.getRepeatColumnRef().forEach(subRefs::retainAll);
+
+        if (subRefs.isEmpty()) {
+            return visitOperator(node, context);
+        }
+
+        DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toList()),
+                        HashDistributionDesc.SourceType.SHUFFLE_AGG)));
+        requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(property)));
+        return null;
+    }
+
+    @Override
     public Void visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
         DistributionProperty requiredProperty = new DistributionProperty(gather);
@@ -165,24 +182,19 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         List<Integer> partitionColumnRefSet = new ArrayList<>();
 
-        node.getPartitionExpressions().forEach(e -> {
-            partitionColumnRefSet
-                    .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList()));
-        });
+        node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
+                .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
 
         SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
 
+        DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
-            DistributionProperty distributionProperty =
-                    new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
-            requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
+            distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
-            DistributionProperty distributionProperty = new DistributionProperty(DistributionSpec
-                    .createHashDistributionSpec(
-                            new HashDistributionDesc(partitionColumnRefSet,
-                                    HashDistributionDesc.SourceType.SHUFFLE_AGG)));
-            requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
+            distributionProperty = new DistributionProperty(DistributionSpec.createHashDistributionSpec(
+                    new HashDistributionDesc(partitionColumnRefSet, HashDistributionDesc.SourceType.SHUFFLE_AGG)));
         }
+        requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
 
         return null;
     }
@@ -246,8 +258,4 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY);
     }
 
-    private PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty);
-    }
 }
