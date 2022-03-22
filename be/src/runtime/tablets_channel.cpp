@@ -105,6 +105,46 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         return;
     }
 
+    {
+        std::lock_guard lock(_senders[request.sender_id()].lock);
+
+        // receive exists packet
+        if (_senders[request.sender_id()].receive_sliding_window.count(request.packet_seq()) != 0) {
+            if (_senders[request.sender_id()].success_sliding_window.count(request.packet_seq()) == 0 ||
+                request.eos()) {
+                // still in process
+                response->mutable_status()->set_status_code(TStatusCode::DUPLICATE_RPC_INVOCATION);
+                response->mutable_status()->add_error_msgs(fmt::format(
+                        "packet_seq {} in PTabletWriterAddChunkRequest already process", request.packet_seq()));
+                return;
+            } else {
+                // already success
+                LOG(INFO) << "packet_seq " << request.packet_seq()
+                          << " in PTabletWriterAddChunkRequest already success";
+                response->mutable_status()->set_status_code(TStatusCode::OK);
+                return;
+            }
+        } else {
+            // receive packet before sliding window
+            if (request.packet_seq() <= _senders[request.sender_id()].last_sliding_packet_seq) {
+                LOG(INFO) << "packet_seq " << request.packet_seq()
+                          << " in PTabletWriterAddChunkRequest less than last success packet_seq "
+                          << _senders[request.sender_id()].last_sliding_packet_seq;
+                response->mutable_status()->set_status_code(TStatusCode::OK);
+                return;
+            } else if (request.packet_seq() >
+                       _senders[request.sender_id()].last_sliding_packet_seq + _max_sliding_window_size) {
+                response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+                response->mutable_status()->add_error_msgs(fmt::format(
+                        "packet_seq {} in PTabletWriterAddChunkRequest forward last success packet_seq {} too much",
+                        request.packet_seq(), _senders[request.sender_id()].last_sliding_packet_seq));
+                return;
+            } else {
+                _senders[request.sender_id()].receive_sliding_window.insert(request.packet_seq());
+            }
+        }
+    }
+
     auto res = _create_write_context(request, response, done);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
@@ -178,6 +218,22 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+
+    {
+        std::lock_guard lock(_senders[request.sender_id()].lock);
+
+        _senders[request.sender_id()].success_sliding_window.insert(request.packet_seq());
+        while (_senders[request.sender_id()].success_sliding_window.size() > _max_sliding_window_size / 2) {
+            auto last_success_iter = _senders[request.sender_id()].success_sliding_window.cbegin();
+            auto last_receive_iter = _senders[request.sender_id()].receive_sliding_window.cbegin();
+            if (_senders[request.sender_id()].last_sliding_packet_seq + 1 == *last_success_iter &&
+                *last_success_iter == *last_receive_iter) {
+                _senders[request.sender_id()].receive_sliding_window.erase(last_receive_iter);
+                _senders[request.sender_id()].success_sliding_window.erase(last_success_iter);
+                _senders[request.sender_id()].last_sliding_packet_seq++;
+            }
+        }
+    }
 
     auto t1 = std::chrono::steady_clock::now();
     response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());

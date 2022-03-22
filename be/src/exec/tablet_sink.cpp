@@ -110,8 +110,8 @@ Status NodeChannel::init(RuntimeState* state) {
 
     if (state->query_options().__isset.load_dop) {
         _max_parallel_request_size = state->query_options().load_dop;
-        if (_max_parallel_request_size > 16 || _max_parallel_request_size < 1) {
-            _err_st = Status::InternalError(fmt::format("load_parallel_request_size should between [1-16]"));
+        if (_max_parallel_request_size > config::max_load_dop || _max_parallel_request_size < 1) {
+            _err_st = Status::InternalError(fmt::format("load_dop should between [1-%ld]", config::max_load_dop));
             return _err_st;
         }
     }
@@ -847,6 +847,9 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
                                   false /* eos */);
 
         if (!st.ok()) {
+            LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
+                         << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
+                         << ", errmsg=" << st.get_error_msg();
             channel->mark_as_failed(node);
             err_st = st;
         }
