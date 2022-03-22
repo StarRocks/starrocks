@@ -47,6 +47,7 @@ bool HashJoinProbeOperator::is_finished() const {
 }
 
 Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     _join_prober->push_chunk(state, std::move(const_cast<vectorized::ChunkPtr&>(chunk)));
     return Status::OK();
 }

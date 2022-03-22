@@ -252,6 +252,7 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     wg->driver_queue()->update_statistics(driver);
     wg->increment_real_runtime_ns(runtime_ns);
     wg->incr_total_cpu_cost(runtime_ns);
+    
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 

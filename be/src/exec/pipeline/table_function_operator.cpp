@@ -84,6 +84,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
 
     size_t chunk_size = state->chunk_size();
     size_t remain_chunk_size = chunk_size;

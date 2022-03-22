@@ -127,7 +127,7 @@ CONF_Int32(sleep_one_second, "1");
 CONF_Int32(sleep_five_seconds, "5");
 
 // The Minimum time to check big queries
-CONF_Int32(min_execute_time, "10");
+CONF_Int32(min_execute_time, "5");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");

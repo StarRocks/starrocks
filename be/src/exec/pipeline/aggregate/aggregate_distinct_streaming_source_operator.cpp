@@ -43,6 +43,8 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_ch
         return std::move(_aggregator->poll_chunk_buffer());
     }
 
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
+
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_set(&chunk, state);
     eval_runtime_bloom_filters(chunk.get());

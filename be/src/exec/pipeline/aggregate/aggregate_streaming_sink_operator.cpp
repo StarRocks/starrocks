@@ -35,6 +35,7 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(Runtim
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
 
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 

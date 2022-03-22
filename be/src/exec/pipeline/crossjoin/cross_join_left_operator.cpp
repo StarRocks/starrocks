@@ -196,6 +196,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
     vectorized::ChunkPtr chunk = nullptr;
     // we need a valid probe chunk to initialize the new chunk.
     _init_chunk(&chunk, state);
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
 
     for (;;) {
         // need row_count to fill in chunk.
@@ -305,7 +306,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
 Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _probe_chunk = chunk;
-
+     SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     _select_build_chunk(0, state);
 
     return Status::OK();

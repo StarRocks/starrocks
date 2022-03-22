@@ -290,8 +290,8 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
         _daemon_threads.emplace_back(std::move(calculate_metrics_thread));
     }
 
-    std::thread log_cpu_ratio_thread(calculate_wg, this);
-     _daemon_threads.emplace_back(std::move(log_cpu_ratio_thread));
+    //std::thread log_cpu_ratio_thread(calculate_wg, this);
+    //_daemon_threads.emplace_back(std::move(log_cpu_ratio_thread));
 
     init_signals();
     init_minidump();

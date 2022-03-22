@@ -20,6 +20,7 @@ HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t i
           _distribution_mode(distribution_mode) {}
 
 Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     return _join_builder->append_chunk_to_ht(state, chunk);
 }
 

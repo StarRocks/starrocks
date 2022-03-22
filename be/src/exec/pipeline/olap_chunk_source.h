@@ -53,11 +53,9 @@ public:
     int64_t last_spent_cpu_time_ns() override;
 
      // Return last bytes of Scan or Exchange Data, then reset it 
-    virtual int64_t get_and_reset_last_acquired_bytes() override { 
-        int64_t temp = _last_acquired_bytes;
-        _last_acquired_bytes = 0;
-        return temp; 
-    }
+    int64_t get_last_acquired_bytes() override;
+
+    int64_t last_spent_cpu_time_ns() override;
 
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.

@@ -15,6 +15,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinRightSinkOperator::pull_chunk(RuntimeSta
 }
 
 Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+     SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     const size_t row_number = chunk->num_rows();
     if (row_number > 0) {
         if (_cross_join_context->get_build_chunk(_driver_sequence) == nullptr) {

@@ -47,6 +47,8 @@ Status ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
     get_next_merging(state, &chunk);
+    
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
@@ -75,6 +77,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
 
             if (tmp_chunk) {
                 _num_rows_input += tmp_chunk->num_rows();
+                _total_io_bytes += tmp_chunk->bytes_usage();
             } else {
                 break;
             }

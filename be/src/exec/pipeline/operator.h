@@ -140,8 +140,8 @@ public:
 
     // 1. The different operators have their own independent logic for calculating Cost
     // 2. Cost rappresenta un overhead dell'operatore in un ciclo di esecuzione
-    virtual int64_t get_cpu_cost() const { return 0; }
-    virtual int64_t get_io_cost() const { return 0; }
+    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns; }
+    virtual int64_t get_io_cost() const { return _total_io_bytes; }
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -180,6 +180,10 @@ protected:
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
+
+    int64_t _total_cost_cpu_time_ns = 0;
+    int64_t _total_io_bytes = 0;
+
 
 private:
     void _init_rf_counters(bool init_bloom);

@@ -185,6 +185,13 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    // just for debug
+    LOG(WARNING) << "_cur_query_num: " <<  _cur_query_num
+                 << " total_cpu_cost: " << _total_cpu_cost
+                 << " get_init_wg_cpu_cost " << query_context.get_init_wg_cpu_cost()
+                 << " get_cpu_cost " << query_context.get_cpu_cost()
+                 << " query_begin_time: " << query_context.query_begin_time();
+
     // If there is only one query, do not check the big query
     if (_cur_query_num <= 1) { return false; }
 
@@ -195,14 +202,33 @@ bool WorkGroup::is_big_query(const QueryContext& query_context) {
 
     // check cpu
     int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.get_init_wg_cpu_cost();
+    // just for debug
+    LOG(WARNING) << "total_cpu_cost: " << total_cpu_cost()
+                 << " query_context.get_init_wg_cpu_cost: " << query_context.get_init_wg_cpu_cost();
+    if (wg_growth_cpu_use_cost == 0) {
+        return false;
+    }
+
+    // just for debug
+    LOG(WARNING) << "wg_growth_cpu_use_cost: " <<  wg_growth_cpu_use_cost
+                 << " query_context_init：" << query_context.get_init_wg_cpu_cost()
+                 << " query_context_cpu_cost: " << query_context.get_cpu_cost();
+
+
     double cpu_use_ratio = (double)(query_context.get_cpu_cost() / wg_growth_cpu_use_cost);
     if (cpu_use_ratio > 0.5 /* temp vaue */) {
+        LOG(WARNING) << "CPU exceed: " <<  cpu_use_ratio;
         return true;
     }
     // check io
     int64_t wg_growth_cpu_io_cost = total_io_cost() - query_context.get_init_wg_io_cost();
+    if (wg_growth_cpu_io_cost == 0) {
+        return false;
+    }
+
     double io_use_ratio = (double)(query_context.get_io_cost() / wg_growth_cpu_io_cost);
     if (io_use_ratio > 0.5) {
+        LOG(WARNING) << "IO exceed: " <<  io_use_ratio;
         return true;
     } 
     

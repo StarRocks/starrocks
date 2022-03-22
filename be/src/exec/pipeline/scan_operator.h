@@ -76,9 +76,6 @@ private:
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
 
-    int64_t _total_cost_cpu_time_ns = 0;
-    int64_t _total_scan_bytes = 0;
-
     workgroup::WorkGroupPtr _workgroup = nullptr;
 };
 

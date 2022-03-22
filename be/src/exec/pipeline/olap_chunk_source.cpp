@@ -462,6 +462,20 @@ void OlapChunkSource::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 }
 
+int64_t OlapChunkSource::get_last_acquired_bytes() { 
+    int64_t temp = _last_acquired_bytes;
+    _last_acquired_bytes = 0;
+    return temp; 
+}
+
+int64_t OlapChunkSource::last_spent_cpu_time_ns() {
+    int64_t time_ns = _last_spent_cpu_time_ns;
+    _last_spent_cpu_time_ns += _reader->stats().decompress_ns;
+    _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
+    _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
+    return _last_spent_cpu_time_ns - time_ns;
+}
+
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;

@@ -120,8 +120,8 @@ public:
         return now > _vacuum_ttl;
     }
 
-    int64_t total_cpu_cost() const { return _total_cpu_cost; }
-    void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost += _total_cpu_cost; }
+    int64_t total_cpu_cost() const { return _total_cpu_cost.load(); }
+    void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
     int64_t total_io_cost() const { return _total_io_cost; }
     void incr_total_io_cost(int64_t io_cost) { _total_io_cost += io_cost; }
