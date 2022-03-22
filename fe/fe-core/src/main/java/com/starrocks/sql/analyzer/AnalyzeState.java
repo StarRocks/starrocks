@@ -3,9 +3,11 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 
@@ -49,6 +51,13 @@ public class AnalyzeState {
      * whether two expressions come from the same column
      */
     private final Map<Expr, FieldId> columnReferences = new HashMap<>();
+
+    /**
+     * Non-deterministic functions should be mapped multiple times in the project,
+     * which requires different hashes for each non-deterministic function,
+     * so in Expression Analyzer, each non-deterministic function will be numbered to achieve different hash values.
+     */
+    private final IdGenerator<ExprId> nondeterministicIdGenerator = ExprId.createGenerator();
 
     public AnalyzeState() {
     }
@@ -208,5 +217,9 @@ public class AnalyzeState {
 
     public void setOrderByAnalytic(List<AnalyticExpr> orderByAnalytic) {
         this.orderByAnalytic = orderByAnalytic;
+    }
+
+    public ExprId getNextNondeterministicId() {
+        return nondeterministicIdGenerator.getNextId();
     }
 }
