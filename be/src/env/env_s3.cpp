@@ -498,7 +498,7 @@ Status EnvS3::delete_file(const std::string& path) {
     auto client = new_s3client(uri);
     auto outcome = client->DeleteObject(request);
     // NOTE: If the object does not exist, outcome.IsSuccess() is true and OK is returned, which
-    // is different than the behavior of posix env.
+    // is different from the behavior of posix env.
     if (outcome.IsSuccess()) {
         return Status::OK();
     } else {

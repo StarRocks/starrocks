@@ -130,7 +130,7 @@ public:
     virtual Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) = 0;
 
     // Delete the named file.
-    // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, based on the implementation.
+    // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, depend on the implementation.
     virtual Status delete_file(const std::string& fname) = 0;
 
     // Create the specified directory.
