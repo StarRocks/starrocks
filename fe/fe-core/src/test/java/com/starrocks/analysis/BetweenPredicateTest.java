@@ -24,34 +24,25 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Test;
 
 public class BetweenPredicateTest {
     @Mocked
     Analyzer analyzer;
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testWithCompareAndBoundSubquery(@Injectable Subquery compareExpr,
                                                 @Injectable Subquery lowerBound,
-                                                @Injectable Expr upperBound) {
+                                                @Injectable Expr upperBound) throws AnalysisException {
         BetweenPredicate betweenPredicate = new BetweenPredicate(compareExpr, lowerBound, upperBound, false);
-        try {
-            betweenPredicate.analyzeImpl(analyzer);
-            Assert.fail();
-        } catch (AnalysisException e) {
-        }
+        betweenPredicate.analyzeImpl(analyzer);
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testWithBoundSubquery(@Injectable Expr compareExpr,
                                       @Injectable Subquery lowerBound,
-                                      @Injectable Subquery upperBound) {
+                                      @Injectable Subquery upperBound) throws AnalysisException {
         BetweenPredicate betweenPredicate = new BetweenPredicate(compareExpr, lowerBound, upperBound, false);
-        try {
-            betweenPredicate.analyzeImpl(analyzer);
-        } catch (AnalysisException e) {
-            Assert.fail(e.getMessage());
-        }
+        betweenPredicate.analyzeImpl(analyzer);
     }
 }
