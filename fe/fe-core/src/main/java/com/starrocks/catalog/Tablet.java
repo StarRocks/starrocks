@@ -44,7 +44,7 @@ public abstract class Tablet extends MetaObject implements Writable {
         return id;
     }
 
-    public abstract long getDataSize();
+    public abstract long getDataSize(boolean singleReplica);
 
     public abstract long getRowCount(long version);
 

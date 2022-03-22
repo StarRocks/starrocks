@@ -381,13 +381,21 @@ public class LocalTablet extends Tablet {
         return id == tablet.id;
     }
 
-    // Get total data size of all replicas which state is NORMAL or SCHEMA_CHANGE.
+    // Get total data size of all replicas if singleReplica is true, else get max replica data size.
+    // Replica state must be NORMAL or SCHEMA_CHANGE.
     @Override
-    public long getDataSize() {
+    public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
         for (Replica replica : getReplicas()) {
             if (replica.getState() == ReplicaState.NORMAL || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
-                dataSize += replica.getDataSize();
+                if (singleReplica) {
+                    long replicaDataSize = replica.getDataSize();
+                    if (replicaDataSize > dataSize) {
+                        dataSize = replicaDataSize;
+                    }
+                } else {
+                    dataSize += replica.getDataSize();
+                }
             }
         }
         return dataSize;

@@ -109,7 +109,7 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // lst failed version
                     tabletInfo.add(0); // lst failed version hash
                     tabletInfo.add(-1); // lst failed time
-                    tabletInfo.add(starOSTablet.getDataSize());
+                    tabletInfo.add(starOSTablet.getDataSize(true));
                     tabletInfo.add(starOSTablet.getRowCount(0L));
                     tabletInfo.add(FeConstants.null_string); // state
                     tabletInfo.add(-1); // lst consistency check time
