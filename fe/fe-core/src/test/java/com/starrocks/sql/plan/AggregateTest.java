@@ -654,4 +654,20 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: [4: expr, BOOLEAN, false]"));
     }
 
+    @Test
+    public void testArrayAggFunctionWithColocateTable() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select L_ORDERKEY,retention([true,true]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=7/7");
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: retention([TRUE,TRUE])\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select v1,retention([true,true]) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: retention([TRUE,TRUE])");
+        FeConstants.runningUnitTest = false;
+    }
 }
