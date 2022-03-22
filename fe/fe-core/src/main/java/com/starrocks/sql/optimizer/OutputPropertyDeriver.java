@@ -27,12 +27,12 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
-import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,16 +46,8 @@ import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
 public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, ExpressionContext> {
     private PhysicalPropertySet requirements;
-    // children best group expression
-    private List<GroupExpression> childrenBestExprList;
     // children output property
     private List<PhysicalPropertySet> childrenOutputProperties;
-    private double curTotalCost;
-    private final OptimizerContext context;
-
-    public OutputPropertyDeriver(TaskContext taskContext) {
-        this.context = taskContext.getOptimizerContext();
-    }
 
     public PhysicalPropertySet getOutputProperty(
             PhysicalPropertySet requirements,
@@ -63,7 +55,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             List<GroupExpression> childrenBestExprList,
             List<PhysicalPropertySet> childrenOutputProperties) {
         this.requirements = requirements;
-        this.childrenBestExprList = childrenBestExprList;
+        // children best group expression
         this.childrenOutputProperties = childrenOutputProperties;
 
         return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
@@ -75,10 +67,9 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
             List<GroupExpression> childrenBestExprList,
             List<PhysicalPropertySet> childrenOutputProperties,
             double curTotalCost) {
-        this.curTotalCost = curTotalCost;
         PhysicalPropertySet outputProperty =
                 getOutputProperty(requirements, groupExpression, childrenBestExprList, childrenOutputProperties);
-        return Pair.create(outputProperty, this.curTotalCost);
+        return Pair.create(outputProperty, curTotalCost);
     }
 
     @Override
@@ -274,6 +265,12 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
                                                           ExpressionContext context) {
         Preconditions.checkState(this.childrenOutputProperties.size() == 1);
         // The child node meets the distribution attribute requirements for hash Aggregate nodes.
+        return childrenOutputProperties.get(0);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
+        Preconditions.checkState(this.childrenOutputProperties.size() == 1);
         return childrenOutputProperties.get(0);
     }
 
