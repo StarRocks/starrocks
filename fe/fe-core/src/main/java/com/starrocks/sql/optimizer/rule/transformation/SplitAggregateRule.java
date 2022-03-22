@@ -77,9 +77,10 @@ public class SplitAggregateRule extends TransformationRule {
         if (input.inputAt(0).getOp() instanceof LogicalRepeatOperator) {
             return true;
         }
-        // 2 Must do two stage aggregate is aggregate function has array type
+        // 2 Must do multi stage aggregate when aggregate distinct function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()))) {
+                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                callOperator.isDistinct())) {
             return true;
         }
         // 3. Must generate three, four phase aggregate for distinct aggregate with multi columns
