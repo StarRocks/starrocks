@@ -174,7 +174,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
 }
 
 PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
-    // ndjson with ' ', '/t', '\n'
+    // json array with ' ', '/t', '\n'
     std::string input = R"([   {"key0": {"key1": 1}}, {"key0": {"key2": 2}}  ,  {"key0": {"key3": 3}},
     {"key0": {"key4": 4}}])";
     // Reserved for simdjson padding.
@@ -279,8 +279,8 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jsonroot) {
-    // ndjson with ' ', '/t', '\n'
+PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
+    // json array with ' ', '/t', '\n'
     std::string input = R"([   {"key0": [{"key1": 1},  {"key2": 2}]},    {"key0": [{"key3": 3},
     {"key4": 4}]} ])";
     // Reserved for simdjson padding.
