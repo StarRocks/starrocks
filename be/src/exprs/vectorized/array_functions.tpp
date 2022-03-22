@@ -292,12 +292,12 @@ private:
 
         if (columns.size() > 2) {
             for (size_t i = 0; i < chunk_size; i++) {
-                _array_slice_item_with_length(array_column, i, dest_data_column, offset_column->get(i).get_int64(),
-                                              length_column->get(i).get_int64());
+                _array_slice_item<true>(array_column, i, dest_data_column, offset_column->get(i).get_int64(),
+                                        length_column->get(i).get_int64());
             }
         } else {
             for (size_t i = 0; i < chunk_size; i++) {
-                _array_slice_item(array_column, i, dest_data_column, offset_column->get(i).get_int64());
+                _array_slice_item<false>(array_column, i, dest_data_column, offset_column->get(i).get_int64(), 0);
             }
         }
 
@@ -312,8 +312,9 @@ private:
         }
     }
 
-    static void _array_slice_item_with_length(ArrayColumn* column, size_t index, ArrayColumn* dest_column,
-                                              int64_t offset, int64_t length) {
+    template <bool with_length>
+    static void _array_slice_item(ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset,
+                                  [[maybe_unused]] int64_t length) {
         auto& dest_offsets = dest_column->offsets_column()->get_data();
         if (!offset) {
             dest_offsets.emplace_back(dest_offsets.back());
@@ -331,7 +332,12 @@ private:
         }
 
         auto& dest_data_column = dest_column->elements_column();
-        auto end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
+        int64_t end;
+        if constexpr (with_length) {
+            end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
+        } else {
+            end = items.size();
+        }
         offset = (offset > 0 ? offset : 0);
         for (size_t i = offset; i < end; ++i) {
             if (items[i].is_null()) {
@@ -341,41 +347,6 @@ private:
             }
         }
         length = end - offset;
-        if (length > 0) {
-            dest_offsets.emplace_back(dest_offsets.back() + length);
-        } else {
-            dest_offsets.emplace_back(dest_offsets.back());
-        }
-    }
-
-    static void _array_slice_item(ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset) {
-        auto& dest_offsets = dest_column->offsets_column()->get_data();
-        if (!offset) {
-            dest_offsets.emplace_back(dest_offsets.back());
-            return;
-        }
-
-        Datum v = column->get(index);
-        const auto& items = v.get<DatumArray>();
-
-        if (offset > 0) {
-            // because offset start with 1.
-            --offset;
-        } else {
-            offset += items.size();
-        }
-
-        auto& dest_data_column = dest_column->elements_column();
-        int64_t end = items.size();
-        offset = (offset > 0 ? offset : 0);
-        for (size_t i = offset; i < end; ++i) {
-            if (items[i].is_null()) {
-                dest_data_column->append_nulls(1);
-            } else {
-                dest_data_column->append_datum(items[i]);
-            }
-        }
-        int64_t length = end - offset;
         if (length > 0) {
             dest_offsets.emplace_back(dest_offsets.back() + length);
         } else {
