@@ -39,7 +39,7 @@ public:
             return;
         }
         bool is_dir = status_or.value();
-        uint64_t size = _env->get_file_size(path).value();
+        uint64_t size = is_dir ? 0 : _env->get_file_size(path).value();
         status.__set_isSplitable(false);
         if (request.__isset.fileNameOnly && request.fileNameOnly) {
             status.__set_path(path.substr(path.rfind('/') + 1));
