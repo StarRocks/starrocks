@@ -728,7 +728,7 @@ public class Backend implements Writable {
      * BackendStatus status = Backend.getBackendStatus();
      * status.newItem = xxx;
      */
-    public class BackendStatus {
+    public static class BackendStatus {
         // this will be output as json, so not using FeConstants.null_string;
         public String lastSuccessReportTabletsTime = "N/A";
     }

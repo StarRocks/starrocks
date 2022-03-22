@@ -37,7 +37,6 @@ public class ClusterInfo implements Writable {
     private int instanceNum;
 
     private String newClusterName;
-    private long newClusterId;
     private int newInstanceNum;
 
     private List<Long> expandBackendIds = Lists.newArrayList();
