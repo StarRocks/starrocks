@@ -119,7 +119,6 @@ private:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
-    RuntimeProfile* _scan_profile = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
