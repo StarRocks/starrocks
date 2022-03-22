@@ -89,8 +89,8 @@ public:
 private:
     enum State {
         kUninitialized,
+        kInitialized,
         kPrepared,
-        kWriting,
         kClosed,
         kAborted,
         kCommitted, // committed state can transfer to kAborted state

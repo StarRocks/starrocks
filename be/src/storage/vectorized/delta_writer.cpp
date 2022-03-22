@@ -37,9 +37,9 @@ DeltaWriter::~DeltaWriter() {
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
-    case kPrepared:
+    case kInitialized:
         break;
-    case kWriting:
+    case kPrepared:
     case kClosed:
     case kAborted:
         _garbage_collection();
@@ -179,7 +179,7 @@ Status DeltaWriter::_init() {
     _tablet_schema = writer_context.tablet_schema;
     _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
-    _set_state(kPrepared);
+    _set_state(kInitialized);
     return Status::OK();
 }
 
@@ -193,16 +193,17 @@ Status DeltaWriter::_prepare() {
     case kClosed:
         return Status::InternalError(
                 fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
-    case kWriting:
+    case kPrepared:
         return Status::OK();
-    case kPrepared: {
+    case kInitialized: {
+        std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
         std::lock_guard push_lock(_tablet->get_push_lock());
         st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
         if (!st.ok()) {
             _set_state(kAborted);
             return st;
         }
-        _set_state(kWriting);
+        _set_state(kPrepared);
     } break;
     }
     return Status::OK();
@@ -243,10 +244,10 @@ Status DeltaWriter::close() {
                                                  _state_name(state)));
     case kClosed:
         return Status::OK();
-    case kPrepared:
+    case kInitialized:
         _set_state(kClosed);
         return st;
-    case kWriting:
+    case kPrepared:
         st = _flush_memtable_async();
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
@@ -274,9 +275,9 @@ Status DeltaWriter::commit() {
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
-    case kPrepared:
+    case kInitialized:
     case kAborted:
-    case kWriting:
+    case kPrepared:
         return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
                                                  _opt.tablet_id, _state_name(state)));
     case kCommitted:
@@ -340,12 +341,12 @@ const char* DeltaWriter::_state_name(State state) const {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";
-    case kPrepared:
-        return "kPrepared";
+    case kInitialized:
+        return "kInitialized";
     case kAborted:
         return "kAborted";
-    case kWriting:
-        return "kWriting";
+    case kPrepared:
+        return "kPrepared";
     case kCommitted:
         return "kCommitted";
     case kClosed:
