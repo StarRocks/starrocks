@@ -63,22 +63,6 @@ public class ConnectSchedulerTest {
     }
 
     @Test
-    public void testSubmit(@Mocked ConnectProcessor processor) throws Exception {
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        for (int i = 0; i < 2; ++i) {
-            ConnectContext context = new ConnectContext(socketChannel);
-            if (i == 1) {
-                context.setCatalog(AccessTestUtil.fetchBlockCatalog());
-            } else {
-                context.setCatalog(AccessTestUtil.fetchAdminCatalog());
-            }
-            context.setQualifiedUser("root");
-            Assert.assertTrue(scheduler.submit(context));
-            Assert.assertEquals(i, context.getConnectionId());
-        }
-    }
-
-    @Test
     public void testProcessException(@Mocked ConnectProcessor processor) throws Exception {
         ConnectScheduler scheduler = new ConnectScheduler(10);
 
