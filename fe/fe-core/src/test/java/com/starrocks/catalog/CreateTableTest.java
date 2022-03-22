@@ -26,6 +26,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -331,7 +332,7 @@ public class CreateTableTest {
 
     @Test
     public void testCreateOlapTableWithStarOSTablet() throws DdlException {
-        ConfigBase.setMutableConfig("use_staros", "true");
+        Config.use_staros = true;
 
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -362,7 +363,7 @@ public class CreateTableTest {
         checkOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
         dropOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
 
-        ConfigBase.setMutableConfig("use_staros", "false");
+        Config.use_staros = false;
     }
 
     @Test
