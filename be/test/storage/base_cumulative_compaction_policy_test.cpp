@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/base_cumulative_compaction_policy.h"
+#include "storage/base_and_cumulative_compaction_policy.h"
 
 #include <gtest/gtest.h>
 
