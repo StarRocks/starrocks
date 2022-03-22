@@ -587,6 +587,10 @@ public abstract class Type implements Cloneable {
                 isScalarType(PrimitiveType.PERCENTILE);
     }
 
+    public boolean isPredicableType() {
+        return !isOnlyMetricType() && !(this instanceof ArrayType);
+    }
+
     public static List<Type> getSupportedTypes() {
         return SUPPORTED_TYPES;
     }
