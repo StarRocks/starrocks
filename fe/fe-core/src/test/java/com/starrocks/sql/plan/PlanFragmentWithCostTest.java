@@ -867,6 +867,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
                 "     cardinality=1"));
+<<<<<<< HEAD
+=======
+
+        sql = "select * from test_mv limit 10";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("tabletList=12038,12040,12042,"));
+>>>>>>> 374a620b (Fix aggregate cannot generate one stage plan with array type params (#4343))
     }
 
     @Test
