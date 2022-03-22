@@ -195,17 +195,15 @@ Status DeltaWriter::_prepare() {
                 fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
     case kWriting:
         return Status::OK();
-    case kPrepared:
-        {
-            std::lock_guard push_lock(_tablet->get_push_lock());
-            st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-            if (!st.ok()) {
-                _set_state(kAborted);
-                return st;
-            }
-            _set_state(kWriting);
+    case kPrepared: {
+        std::lock_guard push_lock(_tablet->get_push_lock());
+        st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+        if (!st.ok()) {
+            _set_state(kAborted);
+            return st;
         }
-        break;
+        _set_state(kWriting);
+    } break;
     }
     return Status::OK();
 }
