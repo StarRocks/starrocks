@@ -21,11 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -36,44 +33,21 @@ public class BinaryPredicateTest {
     @Mocked
     Analyzer analyzer;
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testMultiColumnSubquery(@Injectable Expr child0,
-                                        @Injectable Subquery child1) {
+                                        @Injectable Subquery child1) throws AnalysisException {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, child0, child1);
-        new Expectations() {
-            {
-                child1.returnsScalarColumn();
-                result = false;
-            }
-        };
-
-        try {
-            binaryPredicate.analyzeImpl(analyzer);
-            Assert.fail();
-        } catch (AnalysisException e) {
-        }
+        binaryPredicate.analyzeImpl(analyzer);
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testSingleColumnSubquery(@Injectable Expr child0,
                                          @Injectable QueryStmt subquery,
-                                         @Injectable SlotRef slotRef) {
+                                         @Injectable SlotRef slotRef) throws AnalysisException {
         Subquery child1 = new Subquery(subquery);
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, child0, child1);
-        new Expectations() {
-            {
-                subquery.getResultExprs();
-                result = Lists.newArrayList(slotRef);
-                slotRef.getType();
-                result = Type.INT;
-            }
-        };
 
-        try {
-            binaryPredicate.analyzeImpl(analyzer);
-            Assert.assertSame(null, Deencapsulation.getField(binaryPredicate, "fn"));
-        } catch (AnalysisException e) {
-            Assert.fail(e.getMessage());
-        }
+        binaryPredicate.analyzeImpl(analyzer);
+        Assert.assertSame(null, Deencapsulation.getField(binaryPredicate, "fn"));
     }
 }
