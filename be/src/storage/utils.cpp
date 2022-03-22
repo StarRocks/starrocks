@@ -119,7 +119,7 @@ Status move_to_trash(const std::filesystem::path& file_path) {
 Status copy_file(const string& src, const string& dest) {
     int src_fd = -1;
     int dest_fd = -1;
-    char buf[1024 * 1024];
+    char* buf = new char[1024 * 1024];
     Status res = Status::OK();
 
     src_fd = ::open(src.c_str(), O_RDONLY);
@@ -162,7 +162,7 @@ COPY_EXIT:
     }
 
     VLOG(3) << "copy file success. [src=" << src << " dest=" << dest << "]";
-
+    delete[] buf;
     return res;
 }
 
