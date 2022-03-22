@@ -135,16 +135,16 @@ public class ReorderJoinRule extends Rule {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
 
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
-                //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
-                //and the query plan degenerates to the left deep tree
+                // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                // and the query plan degenerates to the left deep tree
                 if (Utils.hasUnknownColumnsStats(input) && !FeConstants.runningUnitTest) {
                     continue;
                 }
 
                 if (multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
-                    //10 table join reorder takes more than 100ms,
-                    //so the join reorder using dp is currently controlled below 10.
+                    // 10 table join reorder takes more than 100ms,
+                    // so the join reorder using dp is currently controlled below 10.
                     enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode);
                 }
 
@@ -281,7 +281,7 @@ public class ReorderJoinRule extends Rule {
 
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
-                        (LogicalJoinOperator) optExpression.getOp())
+                                (LogicalJoinOperator) optExpression.getOp())
                         .setProjection(null).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();

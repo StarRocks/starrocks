@@ -9,11 +9,13 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
@@ -370,13 +372,26 @@ public class Utils {
                     scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
                             Collectors.toList());
             if (operator instanceof LogicalOlapScanOperator) {
+                Table table = scanOperator.getTable();
+                if (table instanceof OlapTable) {
+                    if (KeysType.AGG_KEYS.equals(((OlapTable) table).getKeysType())) {
+                        List<String> keyColumnNames =
+                                scanOperator.getColRefToColumnMetaMap().values().stream().filter(Column::isKey)
+                                        .map(Column::getName)
+                                        .collect(Collectors.toList());
+                        List<ColumnStatistic> keyColumnStatisticList =
+                                Catalog.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                        return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
+                    }
+                }
                 List<ColumnStatistic> columnStatisticList =
-                        Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
+                        Catalog.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
                 try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap = hiveMetaStoreTable.getTableLevelColumnStats(colNames);
+                    Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                            hiveMetaStoreTable.getTableLevelColumnStats(colNames);
                     return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
                 } catch (Exception e) {
                     LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
