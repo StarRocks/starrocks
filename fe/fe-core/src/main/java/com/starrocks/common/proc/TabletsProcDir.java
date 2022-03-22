@@ -35,6 +35,7 @@ import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -49,15 +50,21 @@ import java.util.List;
  * show tablets' detail info within an index
  */
 public class TabletsProcDir implements ProcDirInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("ReplicaId").add("BackendId").add("SchemaHash").add("Version")
-            .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
-            .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
-            .add("DataSize").add("RowCount").add("State")
-            .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
-            .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
-            .add("ShardId")
-            .build();
+    public static final ImmutableList<String> TITLE_NAMES;
+
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("TabletId").add("ReplicaId").add("BackendId").add("SchemaHash").add("Version")
+                .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
+                .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
+                .add("DataSize").add("RowCount").add("State")
+                .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
+                .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus");
+        if (Config.use_staros) {
+            builder.add("ShardId");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private final Database db;
     private final Partition partition;
@@ -112,7 +119,9 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // path hash
                     tabletInfo.add(FeConstants.null_string); // meta url
                     tabletInfo.add(FeConstants.null_string); // compaction status
-                    tabletInfo.add(starOSTablet.getShardId());
+                    if (Config.use_staros) {
+                        tabletInfo.add(starOSTablet.getShardId());
+                    }
 
                     tabletInfos.add(tabletInfo);
                 }
@@ -144,7 +153,9 @@ public class TabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(-1); // path hash
                         tabletInfo.add(FeConstants.null_string); // meta url
                         tabletInfo.add(FeConstants.null_string); // compaction status
-                        tabletInfo.add(FeConstants.null_string); // shard id
+                        if (Config.use_staros) {
+                            tabletInfo.add(FeConstants.null_string); // shard id
+                        }
 
                         tabletInfos.add(tabletInfo);
                     } else {
@@ -197,7 +208,9 @@ public class TabletsProcDir implements ProcDirInterface {
                             }
                             tabletInfo.add(metaUrl);
                             tabletInfo.add(compactionUrl);
-                            tabletInfo.add(FeConstants.null_string); // shard id
+                            if (Config.use_staros) {
+                                tabletInfo.add(FeConstants.null_string); // shard id
+                            }
 
                             tabletInfos.add(tabletInfo);
                         }

@@ -30,6 +30,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 
@@ -42,9 +43,16 @@ import java.util.List;
  * show index's detail info within a partition
  */
 public class IndicesProcDir implements ProcDirInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime").add("UseStarOS")
-            .build();
+    public static final ImmutableList<String> TITLE_NAMES;
+
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("IndexId").add("IndexName").add("State").add("LastConsistencyCheckTime");
+        if (Config.use_staros) {
+            builder.add("UseStarOS");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private Database db;
     private OlapTable olapTable;
@@ -73,7 +81,9 @@ public class IndicesProcDir implements ProcDirInterface {
                 indexInfo.add(olapTable.getIndexNameById(materializedIndex.getId()));
                 indexInfo.add(materializedIndex.getState());
                 indexInfo.add(TimeUtils.longToTimeString(materializedIndex.getLastCheckTime()));
-                indexInfo.add(materializedIndex.isUseStarOS());
+                if (Config.use_staros) {
+                    indexInfo.add(materializedIndex.isUseStarOS());
+                }
 
                 indexInfos.add(indexInfo);
             }

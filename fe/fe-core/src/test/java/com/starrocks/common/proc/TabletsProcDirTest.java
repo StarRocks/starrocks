@@ -24,7 +24,7 @@ import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -104,6 +104,7 @@ public class TabletsProcDirTest {
         db.createTable(table);
 
         // Check
+        Config.use_staros = true;
         TabletsProcDir tabletsProcDir = new TabletsProcDir(db, partition, index);
         List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null);
         System.out.println(result);
@@ -114,6 +115,7 @@ public class TabletsProcDirTest {
         Assert.assertEquals((long) result.get(1).get(0), tablet2Id);
         Assert.assertEquals(result.get(1).get(1), -1);
         Assert.assertEquals((long) result.get(1).get(21), 1L);
+        Config.use_staros = false;
     }
 
     @Test
@@ -186,6 +188,7 @@ public class TabletsProcDirTest {
         db.createTable(table);
 
         // Check
+        Config.use_staros = false;
         TabletsProcDir tabletsProcDir = new TabletsProcDir(db, partition, index);
         List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null);
         System.out.println(result);
@@ -193,14 +196,11 @@ public class TabletsProcDirTest {
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
         Assert.assertEquals((long) result.get(0).get(1), replicaId);
         Assert.assertEquals((long) result.get(0).get(2), backendId);
-        Assert.assertEquals(result.get(0).get(21), FeConstants.null_string);
         Assert.assertEquals((long) result.get(1).get(0), tablet1Id);
         Assert.assertEquals((long) result.get(1).get(1), replicaId + 1);
         Assert.assertEquals((long) result.get(1).get(2), backendId + 1);
-        Assert.assertEquals(result.get(0).get(21), FeConstants.null_string);
         Assert.assertEquals((long) result.get(2).get(0), tablet2Id);
         Assert.assertEquals(result.get(2).get(1), -1);
         Assert.assertEquals(result.get(2).get(2), -1);
-        Assert.assertEquals(result.get(2).get(21), FeConstants.null_string);
     }
 }
