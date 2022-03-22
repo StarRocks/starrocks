@@ -472,8 +472,8 @@ public class ExpressionAnalyzer {
             node.setType(Type.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
-                if (expr.getType().isOnlyMetricType()) {
-                    throw new SemanticException("HLL, BITMAP and PERCENTILE type couldn't as Predicate");
+                if (!expr.getType().isPredicableType()) {
+                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
                 }
             }
         }
