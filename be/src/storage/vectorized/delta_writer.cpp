@@ -37,6 +37,7 @@ DeltaWriter::~DeltaWriter() {
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
+    case kPrepared:
         break;
     case kWriting:
     case kClosed:
@@ -68,7 +69,7 @@ Status DeltaWriter::_init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
-        _set_state(kAborted);
+        _set_state(kUninitialized);
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
         LOG(WARNING) << ss.str();
@@ -77,7 +78,7 @@ Status DeltaWriter::_init() {
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
-            _set_state(kAborted);
+            _set_state(kUninitialized);
             auto msg = Substitute(
                     "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
@@ -87,14 +88,14 @@ Status DeltaWriter::_init() {
             return Status::MemoryLimitExceeded(msg);
         }
         if (_tablet->updates()->is_error()) {
-            _set_state(kAborted);
+            _set_state(kUninitialized);
             auto msg = fmt::format("Tablet is in error state. This is a primary key table. tablet_id: {}",
                                    _tablet->tablet_id());
             return Status::ServiceUnavailable(msg);
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
-        _set_state(kAborted);
+        _set_state(kUninitialized);
         auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
                                _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;
@@ -120,13 +121,6 @@ Status DeltaWriter::_init() {
                 _tablet = new_tablet;
                 continue;
             }
-        }
-
-        std::lock_guard push_lock(_tablet->get_push_lock());
-        Status st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
-        if (!st.ok()) {
-            _set_state(kAborted);
-            return st;
         }
         break;
     }
@@ -175,7 +169,7 @@ Status DeltaWriter::_init() {
     writer_context.global_dicts = _opt.global_dicts;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
-        _set_state(kAborted);
+        _set_state(kUninitialized);
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
                                        st.to_string());
         LOG(WARNING) << msg;
@@ -185,12 +179,11 @@ Status DeltaWriter::_init() {
     _tablet_schema = writer_context.tablet_schema;
     _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
-    _set_state(kWriting);
+    _set_state(kPrepared);
     return Status::OK();
 }
 
-Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+Status DeltaWriter::_prepare() {
     Status st;
     auto state = _get_state();
     switch (state) {
@@ -199,24 +192,43 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     case kAborted:
     case kClosed:
         return Status::InternalError(
-                fmt::format("Fail to write delta. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+                fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
     case kWriting:
-        bool full = _mem_table->insert(chunk, indexes, from, size);
-        if (_mem_tracker->limit_exceeded()) {
-            VLOG(2) << "Flushing memory table due to memory limit exceeded";
-            st = _flush_memtable();
-            _reset_mem_table();
-        } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
-            VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
-            st = _flush_memtable();
-            _reset_mem_table();
-        } else if (full) {
-            st = _flush_memtable_async();
-            _reset_mem_table();
+        return Status::OK();
+    case kPrepared:
+        {
+            std::lock_guard push_lock(_tablet->get_push_lock());
+            st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+            if (!st.ok()) {
+                _set_state(kAborted);
+                return st;
+            }
+            _set_state(kWriting);
         }
-        if (!st.ok()) {
-            _set_state(kAborted);
-        }
+        break;
+    }
+    return Status::OK();
+}
+
+Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_prepare());
+    Status st;
+    bool full = _mem_table->insert(chunk, indexes, from, size);
+    if (_mem_tracker->limit_exceeded()) {
+        VLOG(2) << "Flushing memory table due to memory limit exceeded";
+        st = _flush_memtable();
+        _reset_mem_table();
+    } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
+        VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
+        st = _flush_memtable();
+        _reset_mem_table();
+    } else if (full) {
+        st = _flush_memtable_async();
+        _reset_mem_table();
+    }
+    if (!st.ok()) {
+        _set_state(kAborted);
     }
     return Status::OK();
 }
@@ -233,6 +245,9 @@ Status DeltaWriter::close() {
                                                  _state_name(state)));
     case kClosed:
         return Status::OK();
+    case kPrepared:
+        _set_state(kClosed);
+        return st;
     case kWriting:
         st = _flush_memtable_async();
         _set_state(st.ok() ? kClosed : kAborted);
@@ -261,6 +276,7 @@ Status DeltaWriter::commit() {
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
+    case kPrepared:
     case kAborted:
     case kWriting:
         return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
@@ -326,6 +342,8 @@ const char* DeltaWriter::_state_name(State state) const {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";
+    case kPrepared:
+        return "kPrepared";
     case kAborted:
         return "kAborted";
     case kWriting:

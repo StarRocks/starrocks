@@ -89,6 +89,7 @@ public:
 private:
     enum State {
         kUninitialized,
+        kPrepared,
         kWriting,
         kClosed,
         kAborted,
@@ -98,6 +99,7 @@ private:
     DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
+    Status _prepare();
     Status _flush_memtable_async();
     Status _flush_memtable();
     const char* _state_name(State state) const;
