@@ -293,8 +293,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(10,5)) * cast(v2 as decimal64(9,7)) from t0";
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n"));
+        Assert.assertTrue(planFragment.contains("1:Project\n" +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -4409,7 +4409,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select k5 from bigtable where k5 * 2 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(5: k5 AS DECIMAL64(18,3)) * 2 <= 3"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: 5: k5 * 2 <= 3"));
 
         sql = "select k5 from bigtable where 2 / k5 <= 3";
         planFragment = getFragmentPlan(sql);
@@ -5544,8 +5544,9 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+                "  |  group by: [4: expr, DECIMAL128(28,0), true]"));
         Config.enable_decimal_v3 = false;
     }
 
