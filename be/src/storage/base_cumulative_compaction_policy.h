@@ -11,12 +11,12 @@ namespace starrocks {
 
 class CompactionTask;
 
-// original compaction policy for tablet,
+// compaction policy for tablet,
 // including cumulative compaction and base compaction
-class OriginalCompactionPolicy : public CompactionPolicy {
+class BaseCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    OriginalCompactionPolicy(CompactionContext* compaction_context) : _compaction_context(compaction_context) {}
-    ~OriginalCompactionPolicy() = default;
+    BaseCumulativeCompactionPolicy(CompactionContext* compaction_context) : _compaction_context(compaction_context) {}
+    ~BaseCumulativeCompactionPolicy() = default;
 
     // used to judge whether a tablet should do compaction or not
     bool need_compaction() override;

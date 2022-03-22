@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include "storage/original_compaction_policy.h"
+#include "storage/base_cumulative_compaction_policy.h"
 
 #include <sstream>
 #include <vector>
@@ -13,7 +13,7 @@
 namespace starrocks {
 
 // should calculate the compaction score of each type
-bool OriginalCompactionPolicy::need_compaction() {
+bool BaseCumulativeCompactionPolicy::need_compaction() {
     _compaction_context->cumulative_score = _get_cumulative_compaction_score();
     _compaction_context->base_score = _get_base_compaction_score();
 
@@ -24,7 +24,7 @@ bool OriginalCompactionPolicy::need_compaction() {
 }
 
 // // create CompactionTask for chosen_compaction_type in _compaction_context
-std::shared_ptr<CompactionTask> OriginalCompactionPolicy::create_compaction() {
+std::shared_ptr<CompactionTask> BaseCumulativeCompactionPolicy::create_compaction() {
     // return nullptr if can not find enough rowsets
     VLOG(2) << "compaction context:" << _compaction_context->to_string();
     if (_compaction_context->chosen_compaction_type == CUMULATIVE_COMPACTION) {
@@ -41,7 +41,7 @@ std::shared_ptr<CompactionTask> OriginalCompactionPolicy::create_compaction() {
 // the first rowset in level-0 may be compacted already, and the creation_time may be larger than
 // the rowsets behind. when pick level-0 rowsets, the first compacted rowset should be picked no matter
 // whether the creation time is older enough.
-bool OriginalCompactionPolicy::_is_rowset_creation_time_ordered(
+bool BaseCumulativeCompactionPolicy::_is_rowset_creation_time_ordered(
         const std::set<Rowset*, RowsetComparator>& cumulative_rowsets) {
     if (cumulative_rowsets.size() <= 1) {
         return true;
@@ -53,8 +53,9 @@ bool OriginalCompactionPolicy::_is_rowset_creation_time_ordered(
     return first_rowset->creation_time() <= second_rowset->creation_time();
 }
 
-void OriginalCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version, size_t* rowsets_compaction_score,
-                                                        std::vector<RowsetSharedPtr>* rowsets) {
+void BaseCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version,
+                                                              size_t* rowsets_compaction_score,
+                                                              std::vector<RowsetSharedPtr>* rowsets) {
     int64_t now = UnixSeconds();
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
@@ -90,7 +91,7 @@ void OriginalCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version
     }
 }
 
-Status OriginalCompactionPolicy::_check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets) {
+Status BaseCumulativeCompactionPolicy::_check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets) {
     if (rowsets.empty()) {
         return Status::OK();
     }
@@ -109,7 +110,7 @@ Status OriginalCompactionPolicy::_check_version_continuity(const std::vector<Row
     return Status::OK();
 }
 
-std::shared_ptr<CompactionTask> OriginalCompactionPolicy::_create_cumulative_compaction() {
+std::shared_ptr<CompactionTask> BaseCumulativeCompactionPolicy::_create_cumulative_compaction() {
     if (_compaction_context->rowset_levels[0].size() == 0) {
         LOG(WARNING) << "no cumulative rowsets to create compaction task.";
         return nullptr;
@@ -150,7 +151,7 @@ std::shared_ptr<CompactionTask> OriginalCompactionPolicy::_create_cumulative_com
     return compaction_task;
 }
 
-void OriginalCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSharedPtr>* rowsets) {
+void BaseCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSharedPtr>* rowsets) {
     uint32_t input_rows_num = 0;
     size_t input_size = 0;
     // add the base rowset to input_rowsets
@@ -166,7 +167,7 @@ void OriginalCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSharedPtr>* 
     }
 }
 
-std::shared_ptr<CompactionTask> OriginalCompactionPolicy::_create_base_compaction() {
+std::shared_ptr<CompactionTask> BaseCumulativeCompactionPolicy::_create_base_compaction() {
     std::vector<RowsetSharedPtr> input_rowsets;
     _pick_base_rowsets(&input_rowsets);
     if (input_rowsets.size() <= 1) {
@@ -197,7 +198,7 @@ std::shared_ptr<CompactionTask> OriginalCompactionPolicy::_create_base_compactio
     return compaction_task;
 }
 
-double OriginalCompactionPolicy::_get_cumulative_compaction_score() {
+double BaseCumulativeCompactionPolicy::_get_cumulative_compaction_score() {
     uint32_t segment_num_score = 0;
     size_t rowsets_size = 0;
     for (auto& rowset : _compaction_context->rowset_levels[0]) {
@@ -213,7 +214,7 @@ double OriginalCompactionPolicy::_get_cumulative_compaction_score() {
     return score;
 }
 
-double OriginalCompactionPolicy::_get_base_compaction_score() {
+double BaseCumulativeCompactionPolicy::_get_base_compaction_score() {
     uint32_t segment_num_score = 0;
     size_t level_1_rowsets_size = 0;
     for (auto& rowset : _compaction_context->rowset_levels[1]) {

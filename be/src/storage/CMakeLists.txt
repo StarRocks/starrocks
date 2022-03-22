@@ -153,5 +153,5 @@ add_library(Storage STATIC
     compaction_manager.cpp
     compaction_scheduler.cpp
     compaction_task_factory.cpp
-    original_compaction_policy.cpp
+    base_cumulative_compaction_policy.cpp
 )
