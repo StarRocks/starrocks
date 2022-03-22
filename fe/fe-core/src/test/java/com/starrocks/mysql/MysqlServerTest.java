@@ -78,35 +78,6 @@ public class MysqlServerTest {
     }
 
     @Test
-    public void testNormal() throws IOException, InterruptedException {
-        ServerSocket socket = new ServerSocket(0);
-        int port = socket.getLocalPort();
-        socket.close();
-
-        MysqlServer server = new MysqlServer(port, scheduler);
-        Assert.assertTrue(server.start());
-
-        // submit
-        SocketChannel channel1 = SocketChannel.open();
-        channel1.connect(new InetSocketAddress("127.0.0.1", port));
-
-        // submit twice
-        SocketChannel channel2 = SocketChannel.open();
-        channel2.connect(new InetSocketAddress("127.0.0.1", port));
-        // sleep to wait mock process
-        Thread.sleep(3000);
-
-        channel1.close();
-        channel2.close();
-
-        // stop and join
-        server.stop();
-        server.join();
-
-        Assert.assertEquals(2, submitNum.get());
-    }
-
-    @Test
     public void testInvalidParam() throws IOException {
         ServerSocket socket = new ServerSocket(0);
         int port = socket.getLocalPort();
