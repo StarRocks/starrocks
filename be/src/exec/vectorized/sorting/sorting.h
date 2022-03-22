@@ -28,7 +28,7 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
 // Sort multiple columns in vertical
 Status sort_and_tie_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                                      bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                                     bool build_tie, int limit = 0);
+                                     bool build_tie, int limit = 0, int* limited = nullptr);
 
 // Sort multiple chunks in column-wise style
 Status sort_chunks_columnwise(const bool& cancel, const std::vector<Columns>& vertical_chunks,

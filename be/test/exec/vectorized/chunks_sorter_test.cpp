@@ -2,8 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
+
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "column/nullable_column.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -13,6 +16,7 @@
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "util/json.h"
 
 namespace starrocks::vectorized {
 
@@ -92,10 +96,12 @@ public:
         col_nation_1->append_datum(Datum(Slice("JORDAN")));
         col_region_1->append_datum(Datum(Slice("MIDDLE EAST")));
         col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
+
         col_cust_key_2->append_datum(Datum(int32_t(69)));
         col_nation_2->append_datum(Datum());
         col_region_2->append_datum(Datum());
         col_mkt_sgmt_2->append_datum(Datum());
+
         col_cust_key_3->append_datum(Datum(int32_t(70)));
         col_nation_3->append_datum(Datum());
         col_region_3->append_datum(Datum());
@@ -195,44 +201,124 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     clear_sort_exprs(sort_exprs);
 }
 
-// NOLINTNEXTLINE
-TEST_F(ChunksSorterTest, topn_sort_with_limit) {
-    std::vector<bool> is_asc{true};
-    std::vector<bool> is_null_first{true};
-    std::vector<ExprContext*> sort_exprs;
-    sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+static ColumnPtr make_int32_column(const std::vector<int32_t>& xs) {
+    auto column = Int32Column::create();
+    for (auto x : xs) {
+        column->append(x);
+    }
+    return column;
+}
 
-    constexpr int kTotalRows = 16;
-    for (int limit = 1; limit < kTotalRows; limit++) {
-        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 0, limit);
-        sorter.set_compare_strategy(ColumnInc);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
-        sorter.done(_runtime_state.get());
-
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
-
-        ASSERT_EQ(kTotalRows, total_rows);
-        ASSERT_EQ(limit, page_1->num_rows());
-        std::vector<int32_t> permutation{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71};
-        std::vector<int> result;
-        for (size_t i = 0; i < page_1->num_rows(); ++i) {
-            result.push_back(page_1->get(i).get(0).get_int32());
+static ColumnPtr make_nullable_int32_column(const std::vector<int32_t>& xs) {
+    auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true, false, xs.size());
+    for (auto x : xs) {
+        if (x == 0) {
+            column->append_nulls(1);
+        } else {
+            column->append_datum(Datum(x));
         }
-        permutation.resize(limit);
-        EXPECT_EQ(permutation, result);
+    }
+    return column;
+}
+
+static Permutation make_permutation(int len) {
+    Permutation perm(len);
+    for (int i = 0; i < perm.size(); i++) {
+        perm[i].index_in_chunk = i;
+    }
+    return perm;
+}
+
+TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
+    {
+        // notnull
+        auto column = make_int32_column({1, 1, 1, 2, 2, 3, 4, 5, 6});
+        auto cmp = [&](PermutationItem lhs, PermutationItem rhs) {
+            return column->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *column, 1);
+        };
+        std::pair<int, int> range{0, column->size()};
+
+        std::vector<int> expected{0, 3, 3, 3, 5, 5, 6, 7, 8, 9};
+        for (int limit = 1; limit < column->size(); limit++) {
+            int limited = column->size();
+            Tie tie(column->size(), 1);
+            Permutation perm = make_permutation(column->size());
+            sort_and_tie_helper(false, column.get(), true, perm, tie, cmp, range, true, limit, &limited);
+            EXPECT_EQ(expected[limit], limited);
+        }
     }
 
-    clear_sort_exprs(sort_exprs);
+    {
+        // nullable column
+        auto column = make_nullable_int32_column({0, 0, 0, 2, 2, 2, 3, 3, 4, 5, 6});
+        std::vector<ColumnPtr> data_columns{down_cast<NullableColumn*>(column.get())->data_column()};
+        auto null_pred = [&](PermutationItem item) { return column->is_null(item.index_in_chunk); };
+        std::pair<int, int> range{0, column->size()};
+
+        std::vector<int> expected{0, 3, 3, 3, 6, 6, 6, 8, 8, 9, 10, 11};
+        for (int limit = 1; limit < column->size(); limit++) {
+            int limited = column->size();
+            Permutation perm = make_permutation(column->size());
+            Tie tie(column->size(), 1);
+
+            sort_and_tie_helper_nullable_vertical(false, data_columns, null_pred, true, true, perm, tie, range, true,
+                                                  limit, &limited);
+            EXPECT_EQ(expected[limit], limited);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunksSorterTest, topn_sort_with_limit) {
+    std::vector<std::tuple<std::string, SlotRef*, std::vector<int32_t>>> test_cases = {
+            {"cust_key", _expr_cust_key.get(),
+             std::vector<int32_t>{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71}},
+            {"nation", _expr_nation.get(),
+             std::vector<int32_t>{69, 70, 71, 4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58}},
+            {"region", _expr_region.get(),
+             std::vector<int32_t>{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56}},
+    };
+
+    for (auto [name, column, expected] : test_cases) {
+        std::vector<bool> is_asc{true, true};
+        std::vector<bool> is_null_first{true, true};
+        std::vector<ExprContext*> sort_exprs;
+        sort_exprs.push_back(new ExprContext(column));
+        sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+
+        constexpr int kTotalRows = 16;
+        for (int limit = 1; limit < kTotalRows; limit++) {
+            std::cerr << fmt::format("order by column {} limit {}", name, limit) << std::endl;
+            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 0, limit);
+            sorter.set_compare_strategy(ColumnInc);
+            size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+            sorter.done(_runtime_state.get());
+
+            bool eos = false;
+            ChunkPtr page_1, page_2;
+            sorter.get_next(&page_1, &eos);
+            ASSERT_FALSE(eos);
+            ASSERT_TRUE(page_1 != nullptr);
+            sorter.get_next(&page_2, &eos);
+            ASSERT_TRUE(eos);
+            ASSERT_TRUE(page_2 == nullptr);
+
+            ASSERT_EQ(kTotalRows, total_rows);
+            ASSERT_EQ(limit, page_1->num_rows());
+            std::vector<int32_t> permutation = expected;
+            std::vector<int> result;
+            for (size_t i = 0; i < page_1->num_rows(); ++i) {
+                result.push_back(page_1->get(i).get(0).get_int32());
+            }
+            permutation.resize(limit);
+            EXPECT_EQ(permutation, result);
+        }
+
+        clear_sort_exprs(sort_exprs);
+    }
 }
 
 static std::vector<CompareStrategy> all_compare_strategy() {
@@ -494,7 +580,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
 
     for (auto strategy : all_compare_strategy()) {
         int offset = 7;
-        for (int limit = 1; limit + offset < 16; limit++) {
+        for (int limit = 8; limit + offset <= 16; limit++) {
             std::cerr << "sort with strategy: " << strategy << " limit:" << limit << std::endl;
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, offset, limit, 2);
             sorter.set_compare_strategy(strategy);

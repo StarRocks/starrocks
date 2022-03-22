@@ -10,6 +10,7 @@
 #include "exec/vectorized//sorting//sort_permute.h"
 #include "exec/vectorized//sorting//sorting.h"
 #include "runtime/timestamp_value.h"
+#include "util/json.h"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
@@ -80,7 +81,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
                                                            NullPred null_pred, bool is_asc_order, bool is_null_first,
                                                            Permutation& permutation, Tie& tie,
-                                                           std::pair<int, int> range, bool build_tie, int limit) {
+                                                           std::pair<int, int> range, bool build_tie, int limit,
+                                                           int* limited) {
     VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
 
     TieIterator iterator(tie, range.first, range.second);
@@ -88,6 +90,10 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
+        if (limit > 0 && range_first > limit) {
+            *limited = std::min(*limited, range_first);
+            break;
+        }
         if (range_last - range_first > 1) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
@@ -106,11 +112,16 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
                 null_end = range_last;
             }
 
+            // For null values, limit could only be pruned to end of null
+            if (limit > 0 && null_start < limit && limit <= null_end) {
+                *limited = std::min(*limited, null_end);
+            }
+
             if (notnull_start < notnull_end) {
                 tie[notnull_start] = 0;
                 RETURN_IF_ERROR(sort_and_tie_vertical_columns(cancel, data_columns, is_asc_order, is_null_first,
                                                               permutation, tie, {notnull_start, notnull_end}, build_tie,
-                                                              limit));
+                                                              limit, limited));
             }
             if (range_first <= null_start && null_start < range_last) {
                 // Mark all null as 0, they don
@@ -194,29 +205,29 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
                                          int* limited = nullptr) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
-    auto do_sort = [&](int first_iter, int last_iter) {
+    auto do_sort = [&](size_t first_iter, size_t last_iter) {
         auto begin = permutation.begin() + first_iter;
         auto end = permutation.begin() + last_iter;
 
-        if (limit > 0 && limited != nullptr && range.first == first_iter && range.first == 0 && range.first <= limit &&
-            limit < range.second && first_iter <= limit && limit < last_iter) {
+        // If this range could be used to prune the limit, use partial sort and calculate the end of limit
+        if (limit > 0 && first_iter < limit && limit <= last_iter) {
             int n = limit - first_iter;
-#ifndef NDEBUG
-            fmt::print("prune sorted elements from {} to {}\n", range.second, n);
-#endif
             if (is_asc_order) {
-                std::nth_element(begin, permutation.begin() + n, end, lesser);
-                auto nth = *(permutation.begin() + n);
-                auto pivot = std::partition(begin, end, [&](auto item) { return cmp(item, nth) <= 0; });
-                ::pdqsort(cancel, begin, pivot, lesser);
-                *limited = pivot - permutation.begin();
+                std::partial_sort(begin, begin + n, end, lesser);
             } else {
-                std::nth_element(begin, permutation.begin() + n, end, greater);
-                auto nth = *(permutation.begin() + n);
-                auto pivot = std::partition(begin, end, [&](auto item) { return cmp(item, nth) >= 0; });
-                ::pdqsort(cancel, begin, pivot, greater);
-                *limited = pivot - permutation.begin();
+                std::partial_sort(begin, begin + n, end, greater);
             }
+            auto nth = permutation[limit - 1];
+
+            // Find if any element equal with the nth element, take it into account of this run
+            size_t equal_count = 0;
+            for (auto iter = begin + n; iter < end; iter++) {
+                if (cmp(*iter, nth) == 0) {
+                    std::iter_swap(iter, begin + n + equal_count);
+                    equal_count++;
+                }
+            }
+            *limited = limit + equal_count;
         } else {
             if (is_asc_order) {
                 ::pdqsort(cancel, begin, end, lesser);
@@ -237,7 +248,7 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
-        if (limit > 0 && range_first >= limit) {
+        if (limit > 0 && range_first > limit) {
             break;
         }
 
