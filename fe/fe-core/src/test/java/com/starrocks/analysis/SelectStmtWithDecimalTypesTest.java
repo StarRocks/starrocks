@@ -679,7 +679,7 @@ public class SelectStmtWithDecimalTypesTest {
             stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.type, Type.BOOLEAN);
-            Type decimal128p38s5 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 12);
+            Type decimal128p38s5 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 12);
             Assert.assertEquals(expr.getChild(0).type, decimal128p38s5);
             Assert.assertEquals(expr.getChild(1).type, decimal128p38s5);
         }
