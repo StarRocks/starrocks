@@ -809,6 +809,12 @@ public class EditLog {
                     catalog.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
+                case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN:{
+                    ModifyTableColumnOperationLog modifyTableColumnOperationLog =
+                            (ModifyTableColumnOperationLog) journal.getData();
+                    catalog.replayModifyTableColumn(opCode, modifyTableColumnOperationLog);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -957,7 +963,8 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_PARTITION, info);
     }
 
-    public void logModifyPartition(ModifyPartitionInfo info) {
+    public void
+    logModifyPartition(ModifyPartitionInfo info) {
         logEdit(OperationType.OP_MODIFY_PARTITION, info);
     }
 
@@ -1377,5 +1384,9 @@ public class EditLog {
 
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
+    }
+
+    public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
 }

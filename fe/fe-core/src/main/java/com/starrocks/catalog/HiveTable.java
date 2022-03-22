@@ -38,6 +38,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.external.hive.*;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -186,7 +187,7 @@ public class HiveTable extends Table {
         return result;
     }
 
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
         org.apache.hadoop.hive.metastore.api.Table table = Catalog.getCurrentCatalog().getHiveRepository()
                 .getTable(resourceName, this.hiveDb, this.hiveTable);
         List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
@@ -211,14 +212,14 @@ public class HiveTable extends Table {
                     .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
                             new ArrayList<>(nameToColumn.keySet()));
         } else {
-            updateFullSchema(allHiveColumns);
+            updateFullSchema(dbName, tableName, allHiveColumns);
             Catalog.getCurrentCatalog().getHiveRepository()
                     .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
                             new ArrayList<>(allHiveColumns.keySet()));
         }
     }
 
-    private void updateFullSchema(Map<String, FieldSchema> allHiveColumns) throws DdlException {
+    private void updateFullSchema(String dbName, String tableName, Map<String, FieldSchema> allHiveColumns) throws DdlException {
         if (!Catalog.getCurrentCatalog().isMaster()) {
             return;
         }
@@ -233,6 +234,8 @@ public class HiveTable extends Table {
                     NULL_DEFAULT_VALUE, fieldSchema.getComment());
             fullSchema.add(column);
         }
+        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+        Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
     }
 
     public void refreshPartCache(List<String> partNames) throws DdlException {
