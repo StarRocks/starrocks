@@ -122,7 +122,6 @@ private:
 
     int64_t _last_spent_cpu_time_ns = 0;
 
-    RuntimeProfile* _scan_profile = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
