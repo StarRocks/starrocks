@@ -326,8 +326,8 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
         vertical_chunks.push_back(segment.order_by_columns);
     }
     auto do_sort = [&](Permutation& perm, size_t limit) {
-        return sort_chunks_columnwise(state->cancelled_ref(), vertical_chunks, _sort_order_flag, _null_first_flag, perm,
-                                      limit);
+        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_order_flag, _null_first_flag, perm,
+                                    limit);
     };
 
     size_t first_size = std::min(permutations.first.size(), rows_to_sort);
