@@ -130,11 +130,12 @@ public class CostModel {
                 return false;
             }
 
-            // 2. Must do two stage aggregate is aggregate function has array type
+            // 2. Must do multi stage aggregate when aggregate distinct function has array type
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()))) {
+                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                        callOperator.isDistinct())) {
                     return false;
                 }
             }
