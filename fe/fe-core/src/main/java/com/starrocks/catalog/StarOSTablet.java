@@ -38,8 +38,9 @@ public class StarOSTablet extends Tablet {
         return shardId;
     }
 
+    // singleReplica is not used
     @Override
-    public long getDataSize() {
+    public long getDataSize(boolean singleReplica) {
         return dataSize;
     }
 
