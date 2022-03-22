@@ -106,7 +106,12 @@ private:
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
     struct Sender {
-        std::mutex lock;
+        bthread::Mutex lock;
+
+        std::set<int64_t> receive_sliding_window;
+        std::set<int64_t> success_sliding_window;
+
+        int64_t last_sliding_packet_seq = -1;
     };
 
     class WriteContext : public RefCountedThreadSafe<WriteContext> {
@@ -199,6 +204,7 @@ private:
     // next sequence we expect
     std::atomic<int> _num_remaining_senders;
     std::vector<Sender> _senders;
+    size_t _max_sliding_window_size = config::max_load_dop * 3;
 
     mutable std::mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;

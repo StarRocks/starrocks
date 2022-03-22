@@ -57,6 +57,10 @@ public:
         }
         // new one stub and insert into map
         brpc::ChannelOptions options;
+        options.connect_timeout_ms = 3000;
+        // Explicitly set the max_retry
+        // TODO(meegoo): The retry strategy can be customized in the future
+        options.max_retry = 3;
         std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
         if (channel->Init(endpoint, &options)) {
             return nullptr;

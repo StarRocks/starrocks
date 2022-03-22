@@ -687,6 +687,8 @@ CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
 CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
+CONF_Int64(max_load_dop, "16");
+
 } // namespace config
 
 } // namespace starrocks
