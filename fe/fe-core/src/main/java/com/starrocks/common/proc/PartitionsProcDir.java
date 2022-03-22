@@ -45,6 +45,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -65,15 +66,20 @@ import java.util.stream.Collectors;
  * show [temp] partitions' detail info within a table
  */
 public class PartitionsProcDir implements ProcDirInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("PartitionId").add("PartitionName")
-            .add("VisibleVersion").add("VisibleVersionTime").add("VisibleVersionHash")
-            .add("State").add("PartitionKey").add("Range").add("DistributionKey")
-            .add("Buckets").add("ReplicationNum").add("StorageMedium").add("CooldownTime")
-            .add("LastConsistencyCheckTime")
-            .add("DataSize")
-            .add("IsInMemory")
-            .build();
+    public static final ImmutableList<String> TITLE_NAMES;
+
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("PartitionId").add("PartitionName")
+                .add("VisibleVersion").add("VisibleVersionTime").add("VisibleVersionHash")
+                .add("State").add("PartitionKey").add("Range").add("DistributionKey")
+                .add("Buckets").add("ReplicationNum").add("StorageMedium").add("CooldownTime")
+                .add("LastConsistencyCheckTime").add("DataSize").add("IsInMemory");
+        if (Config.use_staros) {
+            builder.add("UseStarOS");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private Database db;
     private OlapTable olapTable;
@@ -289,6 +295,9 @@ public class PartitionsProcDir implements ProcDirInterface {
                         + sizePair.second;
                 partitionInfo.add(readableSize);
                 partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
+                if (Config.use_staros) {
+                    partitionInfo.add(partition.isUseStarOS());
+                }
 
                 partitionInfos.add(partitionInfo);
             }
