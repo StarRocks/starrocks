@@ -147,6 +147,10 @@ public class TabletInvertedIndex {
                     Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
                     TabletMeta tabletMeta = tabletMetaMap.get(tabletId);
 
+                    if (tabletMeta.isUseStarOS()) {
+                        continue;
+                    }
+
                     if (backendTablets.containsKey(tabletId)) {
                         TTablet backendTablet = backendTablets.get(tabletId);
                         Replica replica = entry.getValue();

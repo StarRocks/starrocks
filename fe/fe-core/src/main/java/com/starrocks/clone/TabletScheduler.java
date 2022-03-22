@@ -517,6 +517,9 @@ public class TabletScheduler extends MasterDaemon {
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
             }
+            if (partition.isUseStarOS()) {
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
+            }
 
             short replicaNum = catalog.getReplicationNumIncludeRecycleBin(tbl.getPartitionInfo(), partition.getId());
             if (replicaNum == (short) -1) {
