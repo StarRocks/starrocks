@@ -28,6 +28,24 @@ void ScanTaskQueueWithWorkGroup::close() {
     _cv.notify_all();
 }
 
+void ScanTaskQueueWithWorkGroup::_cal_wg_cpu_real_use_ratio() {
+    int64_t total_run_time = 0;
+    std::vector<int64_t> growth_times;
+    growth_times.reserve(_ready_wgs.size());
+    for (auto& wg : _ready_wgs) {
+        growth_times.emplace_back(wg->growth_real_runtime_ns());
+        total_run_time += growth_times.back();
+        wg->update_last_real_runtime_ns(wg->real_runtime_ns());
+    }
+
+    int i = 0;
+    for (auto& wg : _ready_wgs) {
+        double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
+        wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
+        i++;
+    }
+}
+
 StatusOr<ScanTask> ScanTaskQueueWithWorkGroup::take(int worker_id) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
@@ -71,6 +89,8 @@ void ScanTaskQueueWithWorkGroup::_maybe_adjust_weight() {
     if (--_remaining_schedule_num_period > 0) {
         return;
     }
+
+    _cal_wg_cpu_real_use_ratio();
 
     int num_tasks = 0;
     // calculate all wg factors
