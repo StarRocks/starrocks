@@ -472,7 +472,7 @@ public class ExpressionAnalyzer {
             node.setType(Type.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
-                if (!expr.getType().isPredicableType()) {
+                if (!expr.getType().isPredicableType(node)) {
                     throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
                 }
             }

@@ -52,7 +52,7 @@ public abstract class Predicate extends Expr {
         numDistinctValues = 3;
 
         for (Expr expr : children) {
-            if (!expr.getType().isPredicableType()) {
+            if (!expr.getType().isPredicableType(this)) {
                 throw new AnalysisException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
             }
         }

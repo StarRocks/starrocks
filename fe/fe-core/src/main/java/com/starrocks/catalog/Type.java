@@ -26,6 +26,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
@@ -587,8 +589,9 @@ public abstract class Type implements Cloneable {
                 isScalarType(PrimitiveType.PERCENTILE);
     }
 
-    public boolean isPredicableType() {
-        return !isOnlyMetricType() && !(this instanceof ArrayType);
+    public boolean isPredicableType(Predicate predicate) {
+        return !isOnlyMetricType() &&
+                (!(this instanceof ArrayType) || predicate instanceof IsNullPredicate);
     }
 
     public static List<Type> getSupportedTypes() {
