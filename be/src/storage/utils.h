@@ -73,8 +73,6 @@ Status gen_timestamp_string(std::string* out_string);
 // move file to storage_root/trash, file can be a directory
 Status move_to_trash(const std::filesystem::path& tablet_id_path);
 
-Status copy_file(const std::string& src, const std::string& dest);
-
 Status copy_dir(const std::string& src_dir, const std::string& dst_dir);
 
 bool check_datapath_rw(const std::string& path);
