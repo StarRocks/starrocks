@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -286,7 +288,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     childPlan, expressionMapping);
 
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
-                root = root.withNewRoot(new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()));
+                root = root.withNewRoot(
+                        new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()));
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
             root = new OptExprBuilder(new LogicalExceptOperator.Builder()
@@ -302,7 +305,6 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
-
 
         if (setOperationRelation.hasOrderByClause()) {
             List<Ordering> orderings = new ArrayList<>();
@@ -326,7 +328,41 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitValues(ValuesRelation node, ExpressionMapping context) {
-        return new ValuesTransformer(columnRefFactory, session, cteContext).plan(node);
+        List<ColumnRefOperator> valuesOutputColumns = Lists.newArrayList();
+        for (int fieldIdx = 0; fieldIdx < node.getRelationFields().size(); ++fieldIdx) {
+            valuesOutputColumns.add(columnRefFactory.create(node.getColumnOutputNames().get(fieldIdx),
+                    node.getRelationFields().getFieldByIndex(fieldIdx).getType(), false));
+        }
+
+        List<List<ScalarOperator>> values = new ArrayList<>();
+        for (List<Expr> row : node.getRows()) {
+            List<ScalarOperator> valuesRow = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                Expr rowField = row.get(fieldIdx);
+                Type outputType = node.getRelationFields().getFieldByIndex(fieldIdx).getType();
+                Type fieldType = rowField.getType();
+                if (!outputType.equals(fieldType)) {
+                    if (fieldType.isNull()) {
+                        rowField.setType(outputType);
+                    } else {
+                        row.set(fieldIdx, TypeManager.addCastExpr(rowField, outputType));
+                    }
+                }
+
+                ScalarOperator constant = SqlToScalarOperatorTranslator.translate(row.get(fieldIdx),
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())));
+                valuesRow.add(constant);
+
+                if (constant.isNullable()) {
+                    valuesOutputColumns.get(fieldIdx).setNullable(true);
+                }
+            }
+            values.add(valuesRow);
+        }
+        OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
+                Collections.emptyList(),
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
     @Override

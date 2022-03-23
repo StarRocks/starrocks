@@ -17,38 +17,17 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
-public class ConstantExpressionTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/ConstantExpressTest/" + UUID.randomUUID().toString() + "/";
-
-    private static ConnectContext connectContext;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.setQueryId(UUIDUtil.genUUID());
+public class ConstantExpressionTest extends PlanTestBase {
+    private void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
+        String explainString = getFragmentPlan(sql);
+        Assert.assertTrue(explainString.contains(": " + result));
     }
 
-    private static void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {
-        String explainString = UtFrameUtils.getFragmentPlan(connectContext, sql);
-        System.out.println("explainString=" + explainString);
-        Assert.assertTrue(explainString.contains("constant exprs: \n         " + result));
-    }
-
-    private static void testFragmentPlanContains(String sql, String result) throws Exception {
-        String explainString = UtFrameUtils.getFragmentPlan(connectContext, sql);
-        System.out.println("explainString=" + explainString);
+    private void testFragmentPlanContains(String sql, String result) throws Exception {
+        String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains(result));
     }
 
@@ -236,5 +215,109 @@ public class ConstantExpressionTest {
         testFragmentPlanContains("select null in (2);", "NULL");
 
         testFragmentPlanContains("select null in (null);", "NULL");
+    }
+
+    @Test
+    public void testSysVariable() throws Exception {
+        String sql = "SELECT  @@session.auto_increment_increment AS auto_increment_increment," +
+                "@@character_set_client AS character_set_client, " +
+                "@@character_set_connection AS character_set_connection, " +
+                "@@character_set_results AS character_set_results, " +
+                "@@character_set_server AS character_set_server, " +
+                "@@init_connect AS init_connect, " +
+                "@@interactive_timeout AS interactive_timeout, " +
+                "@@language AS language, " +
+                "@@license AS license, " +
+                "@@lower_case_table_names AS lower_case_table_names, " +
+                "@@max_allowed_packet AS max_allowed_packet, " +
+                "@@net_buffer_length AS net_buffer_length, " +
+                "@@net_write_timeout AS net_write_timeout, " +
+                "@@query_cache_size AS query_cache_size, " +
+                "@@query_cache_type AS query_cache_type, " +
+                "@@sql_mode AS sql_mode, " +
+                "@@system_time_zone AS system_time_zone, " +
+                "@@time_zone AS time_zone, " +
+                "@@tx_isolation AS tx_isolation, " +
+                "@@wait_timeout AS wait_timeout;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "  |  <slot 2> : 1\n" +
+                        "  |  <slot 3> : 'utf8'\n" +
+                        "  |  <slot 4> : 'utf8'\n" +
+                        "  |  <slot 5> : 'utf8'\n" +
+                        "  |  <slot 6> : 'utf8'\n" +
+                        "  |  <slot 7> : ''\n" +
+                        "  |  <slot 8> : 3600\n" +
+                        "  |  <slot 9> : '/starrocks/share/english/'\n" +
+                        "  |  <slot 10> : 'Elastic License 2.0'\n" +
+                        "  |  <slot 11> : 0\n" +
+                        "  |  <slot 12> : 1048576\n" +
+                        "  |  <slot 13> : 16384\n" +
+                        "  |  <slot 14> : 60\n" +
+                        "  |  <slot 15> : 1048576\n" +
+                        "  |  <slot 16> : 0\n" +
+                        "  |  <slot 17> : ''\n" +
+                        "  |  <slot 18> : 'Asia/Shanghai'\n" +
+                        "  |  <slot 19> : 'Asia/Shanghai'\n" +
+                        "  |  <slot 20> : 'REPEATABLE-READ'\n" +
+                        "  |  <slot 21> : 28800"
+        ));
+    }
+
+    @Test
+    public void testRand() throws Exception {
+        String sql = "select rand(), rand() from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 4> : rand()\n" +
+                "  |  <slot 5> : rand()"));
+
+        sql = "select rand(), rand()";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : rand()\n" +
+                "  |  <slot 3> : rand()"));
+
+        sql = "select rand()+1, rand()";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : rand() + 1.0\n" +
+                "  |  <slot 3> : rand()"));
+
+        sql = "select rand()+1, rand()+1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : rand() + 1.0\n" +
+                "  |  <slot 3> : rand() + 1.0"));
+
+        sql = "select (rand()+1)+1, (rand()+1)+1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : rand() + 1.0 + 1.0\n" +
+                "  |  <slot 3> : rand() + 1.0 + 1.0"));
+
+        sql = "select rand() from t0 where rand() > 0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  <slot 4> : rand()"));
+        Assert.assertTrue(plan.contains("PREDICATES: rand() > 0.0"));
+
+        sql = "select sleep(1), sleep(1), sleep(2)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : sleep(1)\n" +
+                "  |  <slot 3> : sleep(1)\n" +
+                "  |  <slot 4> : sleep(2)"));
+
+        sql = "select random(), random()";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : random()\n" +
+                "  |  <slot 3> : random()"));
+
+        sql = "select uuid(), uuid()";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : uuid()\n" +
+                "  |  <slot 3> : uuid()"));
     }
 }

@@ -896,18 +896,6 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testValuesNodePredicate() throws Exception {
-        String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
-        String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: min(1: expr)\n"
-                + "  |  group by: \n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: abs(1) = 2\n"));
-    }
-
-    @Test
     public void testAggConstPredicate() throws Exception {
         String queryStr = "select MIN(v1) from t0 having abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
@@ -934,42 +922,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 4\n"
                 + "  |  limit: 3\n"
-                + "  |  \n"
-                + "  1:OlapScanNode"));
-    }
-
-    @Test
-    public void testExceptLimit() throws Exception {
-        String queryStr = "select 1 from (select 1, 3 from t0 except select 2, 3 ) as a limit 3";
-        String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  6:Project\n"
-                + "  |  <slot 10> : 1\n"
-                + "  |  limit: 3\n"
-                + "  |  \n"
-                + "  0:EXCEPT\n"
-                + "  |  limit: 3\n"));
-
-        Assert.assertTrue(explainString.contains("  2:Project\n"
-                + "  |  <slot 4> : 1\n"
-                + "  |  <slot 5> : 3\n"
-                + "  |  \n"
-                + "  1:OlapScanNode"));
-    }
-
-    @Test
-    public void testIntersectLimit() throws Exception {
-        String queryStr = "select 1 from (select 1, 3 from t0 intersect select 2, 3 ) as a limit 3";
-        String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  6:Project\n"
-                + "  |  <slot 10> : 1\n"
-                + "  |  limit: 3\n"
-                + "  |  \n"
-                + "  0:INTERSECT\n"
-                + "  |  limit: 3\n"));
-
-        Assert.assertTrue(explainString.contains("  2:Project\n"
-                + "  |  <slot 4> : 1\n"
-                + "  |  <slot 5> : 3\n"
                 + "  |  \n"
                 + "  1:OlapScanNode"));
     }
@@ -1129,20 +1081,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "from test_all_type) a ;";
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("ANALYTIC"));
-    }
-
-    @Test
-    public void testUnionAllConst() throws Exception {
-        String sql = "select b from (select t1a as a, t1b as b, t1c as c, t1d as d from test_all_type " +
-                "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
-        String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "const_expr_lists:[[TExpr(nodes:[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode"
-                        + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
-                        + "int_literal:TIntLiteral"
-                        + "(value:2), "
-                        + "output_scale:-1, has_nullable_child:false, is_nullable:false, "
-                        + "is_monotonic:true)])]]"));
     }
 
     @Test
@@ -2183,25 +2121,6 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testArrayElementExpr() throws Exception {
-        String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "NULL | CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
-
-        sql = "select v1, v3[1] + [1,2,3][1] as v, sum(v3[1]) from tarray group by v1, v order by v";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(5: expr)\n" +
-                "  |  group by: 1: v1, 4: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: v1\n" +
-                "  |  <slot 4> : 3: v3[1] + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
-                "  |  <slot 5> : 3: v3[1]\n"));
-    }
-
-    @Test
     public void testSetVar() throws Exception {
         String sql = "select * from db1.tbl3 as t1 JOIN db1.tbl4 as t2 ON t1.c2 = t2.c2";
         String plan = getFragmentPlan(sql);
@@ -2357,152 +2276,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String castSql3 = "select str_to_date('11/09/2011', k6) from test.baseall";
         starRocksAssert.query(castSql3).explainContains("  1:Project\n" +
                 "  |  <slot 12> : str_to_date('11/09/2011', 6: k6)");
-    }
-
-    @Test
-    public void testSetOperation() throws Exception {
-        // union
-        String sql1 = "select * from\n"
-                + "  (select k1, k2 from db1.tbl6\n"
-                + "   union all\n"
-                + "   select k1, k2 from db1.tbl6) a\n"
-                + "  inner join\n"
-                + "  db1.tbl6 b\n"
-                + "  on (a.k1 = b.k1)\n"
-                + "where b.k1 = 'a'";
-        starRocksAssert.query(sql1).explainContains("UNION", 1);
-
-        String sql2 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "union distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   union all\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=2)\n"
-                + "union distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   union all\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=3)\n"
-                + "   order by 3 limit 3)\n"
-                + "union all\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   union all\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=4)\n"
-                + "union all\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   union all\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
-                + "   order by 3 limit 3)";
-        starRocksAssert.query(sql2).explainContains("UNION", 6);
-
-        // intersect
-        String sql3 = "select * from\n"
-                + "  (select k1, k2 from db1.tbl6\n"
-                + "   intersect\n"
-                + "   select k1, k2 from db1.tbl6) a\n"
-                + "  inner join\n"
-                + "  db1.tbl6 b\n"
-                + "  on (a.k1 = b.k1)\n"
-                + "where b.k1 = 'a'";
-        starRocksAssert.query(sql3).explainContains("INTERSECT", 1);
-
-        String sql4 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "intersect distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   intersect\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=2)\n"
-                + "intersect distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   intersect\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=3)\n"
-                + "   order by 3 limit 3)\n"
-                + "intersect\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   intersect\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=4)\n"
-                + "intersect\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   intersect\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
-                + "   order by 3 limit 3)";
-        starRocksAssert.query(sql4).explainContains("INTERSECT", 5);
-
-        // except
-        String sql5 = "select * from\n"
-                + "  (select k1, k2 from db1.tbl6\n"
-                + "   except\n"
-                + "   select k1, k2 from db1.tbl6) a\n"
-                + "  inner join\n"
-                + "  db1.tbl6 b\n"
-                + "  on (a.k1 = b.k1)\n"
-                + "where b.k1 = 'a'";
-        starRocksAssert.query(sql5).explainContains("EXCEPT", 1);
-
-        String sql6 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "except\n"
-                + "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "except\n"
-                + "select * from db1.tbl6 where k1='a' and k4=2\n"
-                + "except distinct\n"
-                + "(select * from db1.tbl6 where k1='a' and k4=2)\n"
-                + "order by 3 limit 3";
-        starRocksAssert.query(sql6).explainContains("EXCEPT", 1);
-
-        String sql7 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "except distinct\n"
-                + "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "except\n"
-                + "select * from db1.tbl6 where k1='a' and k4=2\n"
-                + "except\n"
-                + "(select * from db1.tbl6 where k1='a' and k4=2)\n"
-                + "order by 3 limit 3";
-        starRocksAssert.query(sql7).explainContains("EXCEPT", 1);
-
-        // mixed
-        String sql8 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "union\n"
-                + "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "except\n"
-                + "select * from db1.tbl6 where k1='a' and k4=2\n"
-                + "intersect\n"
-                + "(select * from db1.tbl6 where k1='a' and k4=2)\n"
-                + "order by 3 limit 3";
-        starRocksAssert.query(sql8).explainContains("UNION", "INTERSECT", "EXCEPT");
-
-        String sql9 = "select * from db1.tbl6 where k1='a' and k4=1\n"
-                + "intersect distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   union all\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=2)\n"
-                + "intersect distinct\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=2\n"
-                + "   except\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=3)\n"
-                + "   order by 3 limit 3)\n"
-                + "union all\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   intersect\n"
-                + "   select * from db1.tbl6 where k1='b' and k4=4)\n"
-                + "except\n"
-                + "  (select * from db1.tbl6 where k1='b' and k4=3\n"
-                + "   intersect\n"
-                + "   (select * from db1.tbl6 where k1='b' and k4=5)\n"
-                + "   order by 3 limit 3)";
-        starRocksAssert.query(sql9).explainContains("UNION", 2);
-        starRocksAssert.query(sql9).explainContains("INTERSECT", 3);
-        starRocksAssert.query(sql9).explainContains("EXCEPT", 2);
-
-        String sql10 = "select 499 union select 670 except select 499";
-        String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  10:UNION\n" +
-                "     constant exprs: \n" +
-                "         499"));
-        Assert.assertTrue(plan.contains("1:UNION"));
-        Assert.assertTrue(plan.contains("  4:UNION\n" +
-                "     constant exprs: \n" +
-                "         670"));
-        Assert.assertTrue(plan.contains("  2:UNION\n" +
-                "     constant exprs: \n" +
-                "         499"));
-        Assert.assertTrue(plan.contains("0:EXCEPT"));
     }
 
     @Test
@@ -2814,75 +2587,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr"));
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 4> : NULL"));
-    }
-
-    @Test
-    public void testJoinConst() throws Exception {
-        String sql =
-                "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
-                        "select * from address a right join user_info b on b.user_id=a.user_id;";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: expr = 7: expr"));
-        Assert.assertTrue(plan.contains("2:UNION\n" +
-                "     constant exprs: \n" +
-                "         2 | 'mike'"));
-        Assert.assertTrue(plan.contains("0:UNION\n" +
-                "     constant exprs: \n" +
-                "         1 | 'newzland'"));
-    }
-
-    @Test
-    public void testVarianceStddevAnalyze() throws Exception {
-        String sql = "select stddev_pop(1222) from (select 1) t;";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
-                "  |  output: stddev_pop(1222)\n" +
-                "  |  group by: "));
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         1"));
-    }
-
-    @Test
-    public void testDateDateTimeFunctionMatch() throws Exception {
-        String sql = "select if(3, date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         if(CAST(3 AS BOOLEAN), '2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
-
-        sql = "select nullif(date('2021-01-12'), date('2021-01-11'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         nullif('2021-01-12', '2021-01-11')");
-
-        sql = "select nullif(date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
-
-        sql = "select if(3, 4, 5);";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         if(CAST(3 AS BOOLEAN), 4, 5)");
-
-        sql = "select ifnull(date('2021-01-12'), 123);";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         ifnull(CAST('2021-01-12' AS INT), 123)");
-
-        sql = "select ifnull(date('2021-01-12'), 'kks');";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         '2021-01-12'");
-
-        sql = "select ifnull(1234, 'kks');";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         '1234'");
     }
 
     @Test
@@ -3378,162 +3082,6 @@ public class PlanFragmentTest extends PlanTestBase {
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 4: dt > 1");
-    }
-
-    @Test
-    public void testConvertCaseWhenToConstant() throws Exception {
-        // basic test
-        String caseWhenSql = "select "
-                + "case when date_format(now(),'%H%i')  < 123 then 1 else 0 end as col "
-                + "from test.baseall "
-                +
-                "where k11 = case when date_format(now(),'%H%i') < 123 then date_format(date_sub(now(),2),'%Y%m%d') else date_format(date_sub(now(),1),'%Y%m%d') end";
-        Assert.assertFalse(StringUtils.containsIgnoreCase(getFragmentPlan(caseWhenSql), "CASE WHEN"));
-
-        // test 1: case when then
-        // 1.1 multi when in on `case when` and can be converted to constants
-        String sql11 = "select case when false then 2 when true then 3 else 0 end as col11;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql11), "constant exprs: \n         3"));
-
-        // 1.2 multi `when expr` in on `case when` ,`when expr` can not be converted to constants
-        String sql121 =
-                "select case when false then 2 when substr(k7,2,1) then 3 else 0 end as col121 from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql121),
-                "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 0)"));
-
-        // 1.2.2 when expr which can not be converted to constants in the first
-        String sql122 =
-                "select case when substr(k7,2,1) then 2 when false then 3 else 0 end as col122 from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql122),
-                "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 2, 0)"));
-
-        // 1.2.3 test return `then expr` in the middle
-        String sql124 = "select case when false then 1 when true then 2 when false then 3 else 'other' end as col124";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql124), "constant exprs: \n         '2'"));
-
-        // 1.3 test return null
-        String sql3 = "select case when false then 2 end as col3";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql3), "constant exprs: \n         NULL"));
-
-        // 1.3.1 test return else expr
-        String sql131 = "select case when false then 2 when false then 3 else 4 end as col131";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql131), "constant exprs: \n         4"));
-
-        // 1.4 nest `case when` and can be converted to constants
-        String sql14 =
-                "select case when (case when true then true else false end) then 2 when false then 3 else 0 end as col";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql14), "constant exprs: \n         2"));
-
-        // 1.5 nest `case when` and can not be converted to constants
-        String sql15 =
-                "select case when case when substr(k7,2,1) then true else false end then 2 when false then 3 else 0 end as col from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql15),
-                "if(if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), TRUE, FALSE), 2, 0)"));
-
-        // 1.6 test when expr is null
-        String sql16 = "select case when null then 1 else 2 end as col16;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql16), "constant exprs: \n         2"));
-
-        // 1.7 test when true in first return directly
-        String sql17 = "select case when true then 1 when substr(k7,2,1) then 3 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql17), "<slot 12> : 1"));
-
-        // 1.8 test when true in the middle not return directly
-        String sql18 = "select case when substr(k7,2,1) then 3 when true then 1 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql18),
-                "CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN 3 WHEN TRUE THEN 1 ELSE 2 END"));
-
-        // 1.9 test remove when clause when is false/null
-        String sql19 =
-                "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(StringUtils
-                .containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
-
-        // test 2: case xxx when then
-        // 2.1 test equal
-        String sql2 = "select case 1 when 1 then 'a' when 2 then 'b' else 'other' end as col2;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql2), "constant exprs: \n         'a'"));
-
-        // FIXME(yan): following cases are correct, we have to fix for them.
-        // 2.1.2 test not equal
-        String sql212 = "select case 'a' when 1 then 'a' when 'a' then 'b' else 'other' end as col212;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql212), "constant exprs: \n         'b'"));
-
-        // 2.2 test return null
-        String sql22 = "select case 'a' when 1 then 'a' when 'b' then 'b' end as col22;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql22), "constant exprs: \n         NULL"));
-
-        // 2.2.2 test return else
-        String sql222 = "select case 1 when 2 then 'a' when 3 then 'b' else 'other' end as col222;";
-        Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql222), "constant exprs: \n         'other'"));
-
-        // 2.3 test can not convert to constant,middle when expr is not constant
-        String sql23 =
-                "select case 'a' when 'b' then 'a' when substr(k7,2,1) then 2 when false then 3 else 0 end as col23 from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql23),
-                "if(substr(9: k7, 2, 1) = 'a', '2', '0')"));
-
-        // 2.3.1  first when expr is not constant
-        String sql231 =
-                "select case 'a' when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col231 from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql231),
-                "if(substr(9: k7, 2, 1) = 'a', '2', '0')"));
-
-        // 2.3.2 case expr is not constant
-        String sql232 =
-                "select case k1 when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col232 from test.baseall";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql232),
-                "CASE CAST(1: k1 AS VARCHAR) WHEN substr(9: k7, 2, 1) THEN '2' WHEN '1' THEN 'a' WHEN '0' THEN '3' ELSE '0' END"));
-
-        // 2.4 when expr has true but not equals case expr
-        String sql24 = "select case 10 when true then 'a' when 2 then 'b' else 'other' end as col2;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql24),
-                "constant exprs: \n         'other'"));
-
-        // 2.5 when expr has true but equals case expr
-        String sql25 = "select case 1 when true then 'a' when 2 then 'b' else 'other' end as col2;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql25),
-                "constant exprs: \n         'a'"));
-
-        // 2.6 when expr equals case expr in middle
-        String sql26 =
-                "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql26),
-                "CASE 'a' WHEN substr(9: k7, 2, 1) THEN '2' WHEN 'a' THEN 'b' ELSE 'other' END"));
-
-        // 2.7 test remove when clause not equals case expr
-        String sql27 =
-                "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
-        Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
-
-        // 3.1 test float,float in case expr
-        String sql31 = "select case cast(100 as float) when 1 then 'a' when 2 then 'b' else 'other' end as col31;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql31), "constant exprs: \n         'other'"));
-
-        // 4.1 test null in case expr return else
-        String sql41 = "select case null when 1 then 'a' when 2 then 'b' else 'other' end as col41";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql41), "constant exprs: \n         'other'"));
-
-        // 4.1.2 test null in case expr return null
-        String sql412 = "select case null when 1 then 'a' when 2 then 'b' end as col41";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql412), "constant exprs: \n         NULL"));
-
-        // 4.2.1 test null in when expr
-        String sql421 = "select case 'a' when null then 'a' else 'other' end as col421";
-        Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql421), "constant exprs: \n         'other'"));
-
-        // 4.2.2 test null/false in when expr
-        String sql422 = "select case 'a' when null then 'a' when false then 'b' else 'other' end as col421";
-        Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql422), "constant exprs: \n         'other'"));
-
-        // 4.2.3 test null false in when expr return null
-        String sql423 = "select case 'a' when null then 'a' when false then 'b' end as col421";
-        Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql423), "constant exprs: \n         NULL"));
     }
 
     @Test
@@ -5576,39 +5124,6 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnionNullConstant() throws Exception {
-        String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
-        String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [1, NULL_TYPE, true]\n" +
-                "  |      [2, NULL_TYPE, true]"));
-
-        sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(" 0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [1, TINYINT, false]\n" +
-                "  |      [2, TINYINT, true]"));
-
-        sql =
-                "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [1, DECIMAL64(12,2), true]\n" +
-                "  |      [2, DECIMAL64(12,2), true]"));
-
-        sql =
-                "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
-                "  |  child exprs:\n" +
-                "  |      [1, DECIMAL64(12,2), true]\n" +
-                "  |      [2, DECIMAL64(12,2), true]"));
-    }
-
-    @Test
     public void testBinaryPredicateNullable() throws Exception {
         String sql = "select distinct L_ORDERKEY < L_PARTKEY from lineitem";
         String plan = getVerboseExplain(sql);
@@ -5949,14 +5464,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue("plan is " + plan, plan.contains("common expressions:"));
         Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 8> "));
         Assert.assertTrue("plan is \n" + plan, plan.contains("<slot 9> "));
-    }
-
-    @Test
-    public void testLargeIntMod() throws Exception {
-        String sql = "select -123 % 100000000000000000000000000000000000";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("     constant exprs: \n" +
-                "         -123 % 100000000000000000000000000000000000"));
     }
 
     @Test

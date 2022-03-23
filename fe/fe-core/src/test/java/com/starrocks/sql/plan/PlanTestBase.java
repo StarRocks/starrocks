@@ -17,6 +17,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -1083,5 +1084,14 @@ public class PlanTestBase {
         JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(jsonObject);
+    }
+
+    protected void assertPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
     }
 }

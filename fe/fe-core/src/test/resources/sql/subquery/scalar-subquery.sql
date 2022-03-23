@@ -337,17 +337,6 @@ CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 <= 11: v4])
 [end]
 
 [sql]
-select * from t0 where v3 = (select 6)
-[result]
-INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        ASSERT LE 1
-            EXCHANGE GATHER
-                VALUES (6)
-[end]
-
-[sql]
 select * from t0 where v3 = (select * from (values(2)) t);
 [result]
 INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
@@ -361,7 +350,7 @@ INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
 [sql]
 select * from t0 where v3 > (select * from (values(2)) t);
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: expr as bigint(20))])
+CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: column_0 as bigint(20))])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
@@ -372,7 +361,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: expr as b
 [sql]
 select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [4: sum > cast(5: expr as bigint(20))])
+CROSS JOIN (join-predicate [null] post-join-predicate [4: sum > cast(5: column_0 as bigint(20))])
     ASSERT LE 1
         EXCHANGE GATHER
             VALUES (2)
@@ -429,30 +418,6 @@ LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [if(7: max >
             EXCHANGE SHUFFLE[5]
                 AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[5: v5]] having [null]
                     SCAN (columns[4: v4, 5: v5] predicate[null])
-[end]
-
-[sql]
-select case when (select max(v4) from t1) > 1 then 2 else 3 end
-[result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    VALUES (1)
-    EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{6: max=max(6: max)}] group by [[]] having [null]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{6: max=max(3: v4)}] group by [[]] having [null]
-                    SCAN (columns[3: v4] predicate[null])
-[end]
-
-[sql]
-select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end
-[result]
-CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    VALUES (1,2)
-    EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
-                    SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
