@@ -14,7 +14,7 @@ public class UpdateStmt extends DmlStmt {
     private final Expr wherePredicate;
 
     private Table table;
-    private QueryStatement updateRelation;
+    private QueryStatement queryStatement;
 
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, Expr wherePredicate) {
         this.tableName = tableName;
@@ -42,12 +42,12 @@ public class UpdateStmt extends DmlStmt {
         return table;
     }
 
-    public void setUpdateRelation(QueryStatement updateRelation) {
-        this.updateRelation = updateRelation;
+    public void setQueryStatement(QueryStatement queryStatement) {
+        this.queryStatement = queryStatement;
     }
 
-    public QueryStatement getUpdateRelation() {
-        return updateRelation;
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

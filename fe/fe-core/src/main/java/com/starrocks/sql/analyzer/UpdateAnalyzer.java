@@ -65,6 +65,6 @@ public class UpdateAnalyzer {
         new QueryAnalyzer(session).analyze(updateRelation);
 
         updateStmt.setTable(table);
-        updateStmt.setUpdateRelation(updateRelation);
+        updateStmt.setQueryStatement(updateRelation);
     }
 }

@@ -31,7 +31,7 @@ import java.util.Optional;
 
 public class UpdatePlanner {
     public ExecPlan plan(UpdateStmt updateStmt, ConnectContext session) {
-        QueryRelation query = updateStmt.getUpdateRelation().getQueryRelation();
+        QueryRelation query = updateStmt.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
