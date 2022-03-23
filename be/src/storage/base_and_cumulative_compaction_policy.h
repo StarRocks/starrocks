@@ -15,7 +15,8 @@ class CompactionTask;
 // including cumulative compaction and base compaction
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    BaseAndCumulativeCompactionPolicy(CompactionContext* compaction_context) : _compaction_context(compaction_context) {}
+    BaseAndCumulativeCompactionPolicy(CompactionContext* compaction_context)
+            : _compaction_context(compaction_context) {}
     ~BaseAndCumulativeCompactionPolicy() = default;
 
     // used to judge whether a tablet should do compaction or not

@@ -17,7 +17,7 @@
 
 namespace starrocks {
 
-TEST(BaseCumulativeCompactionPolicyTest, test_need_compaction) {
+TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
     TabletSharedPtr tablet = std::make_shared<Tablet>();
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(100);
@@ -68,11 +68,11 @@ TEST(BaseCumulativeCompactionPolicyTest, test_need_compaction) {
         compaction_context->rowset_levels[0].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
-    BaseCumulativeCompactionPolicy policy(compaction_context.get());
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     ASSERT_TRUE(policy.need_compaction());
 }
 
-TEST(BaseCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_recent_rowsets) {
+TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_recent_rowsets) {
     TabletSharedPtr tablet = std::make_shared<Tablet>();
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(100);
@@ -114,12 +114,12 @@ TEST(BaseCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_
         rowsets.emplace_back(std::move(rowset));
     }
     compaction_context->chosen_compaction_type = CUMULATIVE_COMPACTION;
-    BaseCumulativeCompactionPolicy policy(compaction_context.get());
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     std::shared_ptr<CompactionTask> cumulative_task = policy.create_compaction();
     ASSERT_EQ(cumulative_task, nullptr);
 }
 
-TEST(BaseCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_missed_versions) {
+TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_missed_versions) {
     TabletSharedPtr tablet = std::make_shared<Tablet>();
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(100);
@@ -161,12 +161,12 @@ TEST(BaseCumulativeCompactionPolicyTest, test_create_cumulative_compaction_with_
         rowsets.emplace_back(std::move(rowset));
     }
     compaction_context->chosen_compaction_type = CUMULATIVE_COMPACTION;
-    BaseCumulativeCompactionPolicy policy(compaction_context.get());
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     std::shared_ptr<CompactionTask> cumulative_task = policy.create_compaction();
     ASSERT_EQ(cumulative_task, nullptr);
 }
 
-TEST(BaseCumulativeCompactionPolicyTest, test_create_base_compaction_with_empty_base_rowset) {
+TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_empty_base_rowset) {
     TabletSharedPtr tablet = std::make_shared<Tablet>();
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(100);
@@ -202,12 +202,12 @@ TEST(BaseCumulativeCompactionPolicyTest, test_create_base_compaction_with_empty_
         rowsets.emplace_back(std::move(rowset));
     }
     compaction_context->chosen_compaction_type = BASE_COMPACTION;
-    BaseCumulativeCompactionPolicy policy(compaction_context.get());
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     std::shared_ptr<CompactionTask> base_task = policy.create_compaction();
     ASSERT_EQ(base_task, nullptr);
 }
 
-TEST(BaseCumulativeCompactionPolicyTest, test_create_base_compaction_with_missed_versions) {
+TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_missed_versions) {
     TabletSharedPtr tablet = std::make_shared<Tablet>();
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->set_tablet_id(100);
@@ -246,7 +246,7 @@ TEST(BaseCumulativeCompactionPolicyTest, test_create_base_compaction_with_missed
         rowsets.emplace_back(std::move(rowset));
     }
     compaction_context->chosen_compaction_type = BASE_COMPACTION;
-    BaseCumulativeCompactionPolicy policy(compaction_context.get());
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     std::shared_ptr<CompactionTask> base_task = policy.create_compaction();
     ASSERT_EQ(base_task, nullptr);
 }
