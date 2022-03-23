@@ -878,6 +878,10 @@ public class PlanTestBase {
         }
     }
 
+    public ExecPlan getExecPlan(String sql) throws Exception {
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+    }
+
     public String getFragmentPlan(String sql) throws Exception {
         String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);

@@ -670,4 +670,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: retention([TRUE,TRUE])");
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testLocalAggregateWithMultiStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select distinct L_ORDERKEY from lineitem_partition_colocate where L_ORDERKEY = 59633893 ;";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct L_ORDERKEY) from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        FeConstants.runningUnitTest = false;
+    }
 }
