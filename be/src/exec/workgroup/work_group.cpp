@@ -194,8 +194,6 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
             _workgroups.erase(wg_it);
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroup_expired_versions.erase(it++);
-            auto name = wg_it->second->name();
-            auto unique_id = wg_it->second->unique_id();
         } else {
             ++it;
         }
