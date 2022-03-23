@@ -92,13 +92,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     logicalHiveScanOperator.getLimit(),
                     logicalHiveScanOperator.getPredicate());
 
-            hiveScanOperator.getIdToPartitionKey().putAll(logicalHiveScanOperator.getIdToPartitionKey());
-            hiveScanOperator.setSelectedPartitionIds(logicalHiveScanOperator.getSelectedPartitionIds());
-            hiveScanOperator.getPartitionConjuncts().addAll(logicalHiveScanOperator.getPartitionConjuncts());
-            hiveScanOperator.getNoEvalPartitionConjuncts().addAll(logicalHiveScanOperator.getNoEvalPartitionConjuncts());
-            hiveScanOperator.getNonPartitionConjuncts().addAll(logicalHiveScanOperator.getNonPartitionConjuncts());
-            hiveScanOperator.getMinMaxConjuncts().addAll(logicalHiveScanOperator.getMinMaxConjuncts());
-            hiveScanOperator.getMinMaxColumnRefMap().putAll(logicalHiveScanOperator.getMinMaxColumnRefMap());
+            hiveScanOperator.setScanOperatorPredicates(logicalHiveScanOperator.getScanOperatorPredicates());
 
             return Lists.newArrayList(new OptExpression(hiveScanOperator));
         } else if (scanOperator instanceof LogicalIcebergScanOperator) {
@@ -131,13 +125,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     logicalHudiScanOperator.getLimit(),
                     logicalHudiScanOperator.getPredicate());
 
-            hudiScanOperator.getIdToPartitionKey().putAll(logicalHudiScanOperator.getIdToPartitionKey());
-            hudiScanOperator.setSelectedPartitionIds(logicalHudiScanOperator.getSelectedPartitionIds());
-            hudiScanOperator.getPartitionConjuncts().addAll(logicalHudiScanOperator.getPartitionConjuncts());
-            hudiScanOperator.getNoEvalPartitionConjuncts().addAll(logicalHudiScanOperator.getNoEvalPartitionConjuncts());
-            hudiScanOperator.getNonPartitionConjuncts().addAll(logicalHudiScanOperator.getNonPartitionConjuncts());
-            hudiScanOperator.getMinMaxConjuncts().addAll(logicalHudiScanOperator.getMinMaxConjuncts());
-            hudiScanOperator.getMinMaxColumnRefMap().putAll(logicalHudiScanOperator.getMinMaxColumnRefMap());
+            hudiScanOperator.setScanOperatorPredicates(logicalHudiScanOperator.getScanOperatorPredicates());
 
             return Lists.newArrayList(new OptExpression(hudiScanOperator));
         } else {
@@ -155,8 +143,12 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
 
     private boolean isPartitionColumn(LogicalScanOperator scanOperator, String columnName) {
         if (scanOperator instanceof LogicalHiveScanOperator) {
-            //Hive partition columns is not materialized column, so except partition columns
+            // Hive partition columns is not materialized column, so except partition columns
             return ((LogicalHiveScanOperator) scanOperator).getPartitionColumns().contains(columnName);
+        }
+        if (scanOperator instanceof LogicalHudiScanOperator) {
+            // Hudi partition columns is not materialized column, so except partition columns
+            return ((LogicalHudiScanOperator) scanOperator).getPartitionColumns().contains(columnName);
         }
         return false;
     }

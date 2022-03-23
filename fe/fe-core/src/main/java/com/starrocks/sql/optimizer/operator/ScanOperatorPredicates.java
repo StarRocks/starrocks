@@ -1,0 +1,64 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.sql.optimizer.operator;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+public class ScanOperatorPredicates {
+    // id -> partition key
+    private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
+    private Collection<Long> selectedPartitionIds = Lists.newArrayList();
+
+    // partitionConjuncts contains partition filters.
+    private List<ScalarOperator> partitionConjuncts = Lists.newArrayList();
+    // After partition pruner prune, conjuncts that are not evaled will be send to backend.
+    private List<ScalarOperator> noEvalPartitionConjuncts = Lists.newArrayList();
+    // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
+    private List<ScalarOperator> nonPartitionConjuncts = Lists.newArrayList();
+    // List of conjuncts for min/max values that are used to skip data when scanning Parquet/Orc files.
+    private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
+    // Map of columnRefOperator to column which column in minMaxConjuncts
+    private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+
+    public Map<Long, PartitionKey> getIdToPartitionKey() {
+        return idToPartitionKey;
+    }
+
+    public Collection<Long> getSelectedPartitionIds() {
+        return selectedPartitionIds;
+    }
+
+    public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.selectedPartitionIds = selectedPartitionIds;
+    }
+
+    public List<ScalarOperator> getPartitionConjuncts() {
+        return partitionConjuncts;
+    }
+
+    public List<ScalarOperator> getNoEvalPartitionConjuncts() {
+        return noEvalPartitionConjuncts;
+    }
+
+    public List<ScalarOperator> getNonPartitionConjuncts() {
+        return nonPartitionConjuncts;
+    }
+
+    public List<ScalarOperator> getMinMaxConjuncts() {
+        return minMaxConjuncts;
+    }
+
+    public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
+        return minMaxColumnRefMap;
+    }
+}

@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -12,69 +11,33 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 
 public class PhysicalHudiScanOperator extends PhysicalScanOperator {
-    private final Collection<Long> selectedPartitionIds;
-    // id -> partition key
-    private final Map<Long, PartitionKey> idToPartitionKey;
-
-    // After partition pruner prune, conjuncts that are not evaled will be send to backend.
-    private final List<ScalarOperator> noEvalPartitionConjuncts;
-    // nonPartitionConjuncts contains non-partition filters, and will be sent to backend.
-    private final List<ScalarOperator> nonPartitionConjuncts;
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet/Orc files.
-    private final List<ScalarOperator> minMaxConjuncts;
-    // Map of columnRefOperator to column which column in minMaxConjuncts
-    private final Map<ColumnRefOperator, Column> minMaxColumnRefMap;
+    private ScanOperatorPredicates predicates;
 
     public PhysicalHudiScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> columnRefMap,
-                                    Collection<Long> selectedPartitionIds,
-                                    Map<Long, PartitionKey> idToPartitionKey,
-                                    List<ScalarOperator> noEvalPartitionConjuncts,
-                                    List<ScalarOperator> nonPartitionConjuncts,
-                                    List<ScalarOperator> minMaxConjuncts,
-                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap,
+                                    ScanOperatorPredicates predicates,
                                     long limit,
                                     ScalarOperator predicate,
                                     Projection projection) {
         super(OperatorType.PHYSICAL_HUDI_SCAN, table, columnRefMap, limit, predicate, projection);
-        this.selectedPartitionIds = selectedPartitionIds;
-        this.idToPartitionKey = idToPartitionKey;
-        this.noEvalPartitionConjuncts = noEvalPartitionConjuncts;
-        this.nonPartitionConjuncts = nonPartitionConjuncts;
-        this.minMaxConjuncts = minMaxConjuncts;
-        this.minMaxColumnRefMap = minMaxColumnRefMap;
+        this.predicates = predicates;
     }
 
-    public Collection<Long> getSelectedPartitionIds() {
-        return this.selectedPartitionIds;
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return this.predicates;
     }
 
-    public Map<Long, PartitionKey> getIdToPartitionKey() {
-        return this.idToPartitionKey;
-    }
-
-    public List<ScalarOperator> getNoEvalPartitionConjuncts() {
-        return noEvalPartitionConjuncts;
-    }
-
-    public List<ScalarOperator> getNonPartitionConjuncts() {
-        return nonPartitionConjuncts;
-    }
-
-    public List<ScalarOperator> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
-        return minMaxColumnRefMap;
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
     }
 
     @Override
@@ -100,24 +63,28 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
         }
 
         PhysicalHudiScanOperator that = (PhysicalHudiScanOperator) o;
-        return Objects.equal(table, that.table) && Objects.equal(selectedPartitionIds, that.selectedPartitionIds) &&
-                Objects.equal(idToPartitionKey, that.idToPartitionKey) &&
-                Objects.equal(noEvalPartitionConjuncts, that.noEvalPartitionConjuncts) &&
-                Objects.equal(nonPartitionConjuncts, that.nonPartitionConjuncts) &&
-                Objects.equal(minMaxConjuncts, that.minMaxConjuncts) &&
-                Objects.equal(minMaxColumnRefMap, that.minMaxColumnRefMap);
+        ScanOperatorPredicates targetPredicts = ((PhysicalHudiScanOperator) o).getScanOperatorPredicates();
+        return Objects.equal(table, that.table) &&
+                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
+                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
+                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
+                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
+                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
+                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, minMaxConjuncts, minMaxColumnRefMap);
+        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
-        minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
-        minMaxColumnRefMap.keySet().forEach(refs::union);
+        predicates.getNoEvalPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
     }
 }
