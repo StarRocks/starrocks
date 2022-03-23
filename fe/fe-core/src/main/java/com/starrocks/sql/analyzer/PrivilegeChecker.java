@@ -34,7 +34,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_ACCESS_DENIED_ERROR, "ALTER RESOURCE_GROUP");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER RESOURCE_GROUP");
             }
             return null;
         }
@@ -66,7 +66,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
             }
             return null;
         }
@@ -74,7 +74,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_ACCESS_DENIED_ERROR, "DROP RESOURCE_GROUP");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP RESOURCE_GROUP");
             }
             return null;
         }
