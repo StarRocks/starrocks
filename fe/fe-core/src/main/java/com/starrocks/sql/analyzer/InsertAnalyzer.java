@@ -137,10 +137,6 @@ public class InsertAnalyzer {
             }
         }
 
-
-
-
-
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);

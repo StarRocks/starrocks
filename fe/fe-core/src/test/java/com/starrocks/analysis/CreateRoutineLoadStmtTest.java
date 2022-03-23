@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -33,7 +32,7 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
@@ -192,7 +191,7 @@ public class CreateRoutineLoadStmtTest {
         String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
         QueryStatement selectStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSQL, ctx);
 
-        Expr expr = ((ValuesRelation) (selectStmt.getQueryRelation())).getRow(0).get(0);
+        Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpr().get(0);
         Assert.assertTrue(expr instanceof StringLiteral);
         StringLiteral stringLiteral = (StringLiteral)expr;
         Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");

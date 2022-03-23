@@ -212,7 +212,8 @@ public class FunctionCallExpr extends Expr {
         FunctionCallExpr o = (FunctionCallExpr) obj;
         return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
-                && fnParams.isStar() == o.fnParams.isStar();
+                && fnParams.isStar() == o.fnParams.isStar()
+                && nondeterministicId.equals(o.nondeterministicId);
     }
 
     @Override
@@ -915,7 +916,7 @@ public class FunctionCallExpr extends Expr {
 
         final String fnName = this.fnName.getFunction();
         // Non-deterministic functions are never constant.
-        if (isNondeterministicBuiltinFnName(fnName)) {
+        if (isNondeterministicBuiltinFnName()) {
             return false;
         }
         // Sleep is a special function for testing.
@@ -925,12 +926,19 @@ public class FunctionCallExpr extends Expr {
         return super.isConstantImpl();
     }
 
-    private static boolean isNondeterministicBuiltinFnName(String fnName) {
-        if (fnName.equalsIgnoreCase("rand") || fnName.equalsIgnoreCase("random")
-                || fnName.equalsIgnoreCase("uuid")) {
-            return true;
-        }
-        return false;
+    /*
+        Non-deterministic functions should be mapped multiple times in the project,
+        which requires different hashes for each non-deterministic function,
+        so in Expression Analyzer, each non-deterministic function will be numbered to achieve different hash values.
+    */
+    private ExprId nondeterministicId = new ExprId(0);
+
+    public void setNondeterministicId(ExprId nondeterministicId) {
+        this.nondeterministicId = nondeterministicId;
+    }
+
+    public boolean isNondeterministicBuiltinFnName() {
+        return FunctionSet.nonDeterministicFunctions.contains(fnName.getFunction().toLowerCase());
     }
 
     @Override
@@ -939,6 +947,7 @@ public class FunctionCallExpr extends Expr {
         result = 31 * result + Objects.hashCode(opcode);
         result = 31 * result + Objects.hashCode(fnName);
         result = 31 * result + Objects.hashCode(fnParams);
+        result = 31 * result + Objects.hashCode(nondeterministicId);
         return result;
     }
 

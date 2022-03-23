@@ -4,21 +4,16 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -34,7 +29,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.io.StringReader;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -893,7 +887,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             QueryRelation queryRelation = analyzeSuccess(sql);
-            List<Expr> items = ((ValuesRelation) queryRelation).getRows().get(0);
+            List<Expr> items = queryRelation.getOutputExpression();
             Assert.assertEquals(items.get(0).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(1).getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));

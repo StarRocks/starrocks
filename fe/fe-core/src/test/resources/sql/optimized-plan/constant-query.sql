@@ -1,34 +1,4 @@
 [sql]
-select database();
-[result]
-VALUES (DATABASE(test, 0))
-[end]
-
-[sql]
-select SCHEMA();
-[result]
-VALUES (SCHEMA(test, 0))
-[end]
-
-[sql]
-select user();
-[result]
-VALUES (USER('root'@%, 0))
-[end]
-
-[sql]
-select current_user();
-[result]
-VALUES (CURRENT_USER('root'@'%', 0))
-[end]
-
-[sql]
-select connection_id();
-[result]
-VALUES (CONNECTION_ID(0))
-[end]
-
-[sql]
 select * from (values (1,2,3), (4,5,6)) v;
 [result]
 VALUES (1,2,3),(4,5,6)
@@ -132,7 +102,7 @@ select * from (values (1,2,3), (4,'a',6), (7,8,9)) v limit 2
 VALUES (1,2,3),(4,a,6),(7,8,9)
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:1: expr | 2: expr | 3: expr
+OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: column_2
 PARTITION: UNPARTITIONED
 
 RESULT SINK
@@ -190,10 +160,7 @@ VALUES
 [sql]
 select v1 from (select * from (select v1,sum(v2) from t0 group by v1  union all select null as v1,null ) t) temp where v1 = 1
 [result]
-UNION
-    AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
-        AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
-            SCAN (columns[1: v1] predicate[1: v1 = 1])
-    PREDICATE 5: expr = 1
-        VALUES (null)
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
+    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
+        SCAN (columns[1: v1] predicate[1: v1 = 1])
 [end]
