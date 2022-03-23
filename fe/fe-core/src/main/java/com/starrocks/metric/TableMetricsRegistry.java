@@ -14,7 +14,7 @@ public final class TableMetricsRegistry {
 
     private final Map<Long, TableMetricsEntity> idToTableMetrics;
     private ScheduledThreadPoolExecutor timer;
-    private static volatile TableMetricsRegistry instance;
+    private static final TableMetricsRegistry instance = new TableMetricsRegistry();
 
     private TableMetricsRegistry() {
         idToTableMetrics = Maps.newHashMap();
@@ -24,13 +24,6 @@ public final class TableMetricsRegistry {
     }
 
     public static TableMetricsRegistry getInstance() {
-        if (null == instance) {
-            synchronized (TableMetricsRegistry.class) {
-                if (null == instance) {
-                    instance = new TableMetricsRegistry();
-                }
-            }
-        }
         return instance;
     }
 

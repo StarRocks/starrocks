@@ -79,7 +79,7 @@ public class Load {
 
     public static final String LOAD_OP_COLUMN = "__op";
     // load job meta
-    private volatile LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
+    private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
 
     public Load() {
     }

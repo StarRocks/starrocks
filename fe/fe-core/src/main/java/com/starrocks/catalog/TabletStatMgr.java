@@ -46,7 +46,7 @@ public class TabletStatMgr extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     public TabletStatMgr() {
-        super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000);
+        super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
     @Override

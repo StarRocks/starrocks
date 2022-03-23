@@ -163,14 +163,15 @@ public abstract class BaseAction implements IAction {
             long contentLen = 0;
             boolean sslEnable = request.getContext().pipeline().get(SslHandler.class) != null;
             if (obj instanceof File) {
-                RandomAccessFile rafFile = new RandomAccessFile((File) obj, "r");
-                contentLen = rafFile.length();
-                if (!sslEnable) {
-                    // use zero-copy file transfer.
-                    writable = new DefaultFileRegion(rafFile.getChannel(), 0, contentLen);
-                } else {
-                    // cannot use zero-copy file transfer.
-                    writable = new ChunkedFile(rafFile, 0, contentLen, 8192);
+                try (RandomAccessFile rafFile = new RandomAccessFile((File) obj, "r")) {
+                    contentLen = rafFile.length();
+                    if (!sslEnable) {
+                        // use zero-copy file transfer.
+                        writable = new DefaultFileRegion(rafFile.getChannel(), 0, contentLen);
+                    } else {
+                        // cannot use zero-copy file transfer.
+                        writable = new ChunkedFile(rafFile, 0, contentLen, 8192);
+                    }
                 }
             } else if (obj instanceof byte[]) {
                 contentLen = ((byte[]) obj).length;

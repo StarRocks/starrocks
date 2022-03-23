@@ -190,7 +190,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException, UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException, UserException {
         finalizeParams();
     }
 

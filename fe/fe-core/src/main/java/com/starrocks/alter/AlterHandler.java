@@ -366,7 +366,7 @@ public abstract class AlterHandler extends MasterDaemon {
     }
 
     @Override
-    public void start() {
+    public synchronized void start() {
         super.start();
     }
 

@@ -1264,7 +1264,7 @@ public class SchemaChangeJob extends AlterJob {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
+    public synchronized void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
         tableName = Text.readString(in);
@@ -1357,10 +1357,6 @@ public class SchemaChangeJob extends AlterJob {
         SchemaChangeJob schemaChangeJob = new SchemaChangeJob();
         schemaChangeJob.readFields(in);
         return schemaChangeJob;
-    }
-
-    public boolean equals(Object obj) {
-        return true;
     }
 
     @Override

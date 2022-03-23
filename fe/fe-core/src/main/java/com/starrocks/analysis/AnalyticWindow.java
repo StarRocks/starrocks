@@ -415,7 +415,7 @@ public class AnalyticWindow implements ParseNode {
                                 + "constant positive number: " + boundary.toSql());
             }
 
-            boundary.offsetValue = new BigDecimal(val);
+            boundary.offsetValue = BigDecimal.valueOf(val);
         }
     }
 

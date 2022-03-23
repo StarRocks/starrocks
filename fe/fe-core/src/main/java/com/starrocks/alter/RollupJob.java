@@ -1049,7 +1049,7 @@ public class RollupJob extends AlterJob {
         }
     }
 
-    public void readFields(DataInput in) throws IOException {
+    public synchronized void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
         int partitionNum = in.readInt();
@@ -1110,10 +1110,6 @@ public class RollupJob extends AlterJob {
         RollupJob rollupJob = new RollupJob();
         rollupJob.readFields(in);
         return rollupJob;
-    }
-
-    public boolean equals(Object obj) {
-        return true;
     }
 
     @Override

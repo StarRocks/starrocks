@@ -110,7 +110,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         if (isFinalized) {
             return;
         }

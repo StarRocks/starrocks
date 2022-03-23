@@ -182,7 +182,7 @@ public class CatalogTest {
 
         catalog.addCluster(cluster);
         catalog.unprotectCreateDb(db1);
-        SchemaChangeJob job1 = new SchemaChangeJob(db1.getId(), table.getId(), null, table.getName(), -1);
+        SchemaChangeJob job1 = new SchemaChangeJob(db1.getId(), table.getId(), null, table.getName(), 2022);
 
         catalog.getSchemaChangeHandler().replayInitJob(job1, catalog);
         long checksum1 = catalog.saveAlterJob(dos, 0, JobType.SCHEMA_CHANGE);
@@ -197,7 +197,7 @@ public class CatalogTest {
         Map<Long, AlterJob> map = catalog.getSchemaChangeHandler().unprotectedGetAlterJobs();
         Assert.assertEquals(1, map.size());
         SchemaChangeJob job2 = (SchemaChangeJob) map.get(table.getId());
-        Assert.assertTrue(job1.equals(job2));
+        Assert.assertEquals(job1.getTransactionId(), (job2.getTransactionId()));
         dis.close();
 
         deleteDir(dir);
