@@ -18,7 +18,7 @@ public class ViewDefBuilder {
         return new ViewDefBuilderVisitor().visit(statement);
     }
 
-    private static class ViewDefBuilderVisitor extends AST2SQL.SQLLabelBuilderImpl {
+    private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
         @Override
         public String visitNode(ParseNode node, Void context) {
             return "";
@@ -49,9 +49,10 @@ public class ViewDefBuilder {
 
             sqlBuilder.append(Joiner.on(", ").join(selectListString));
 
-            if (stmt.getRelation() != null) {
+            String fromClause = visit(stmt.getRelation());
+            if (fromClause != null) {
                 sqlBuilder.append(" FROM ");
-                sqlBuilder.append(visit(stmt.getRelation()));
+                sqlBuilder.append(fromClause);
             }
 
             if (stmt.hasWhereClause()) {

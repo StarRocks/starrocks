@@ -176,7 +176,7 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
-        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
+        assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");
@@ -194,11 +194,4 @@ public class JsonTypeTest extends PlanTestBase {
                 "select json_array(v_smallint, v_tinyint, v_int, v_boolean, v_double, v_varchar) from tjson_test",
                 "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
     }
-
-    private void assertPlanContains(String sql, String expected) throws Exception {
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue("expected is: " + expected + " but plan is \n" + plan,
-                StringUtils.containsIgnoreCase(plan.toLowerCase(), expected));
-    }
-
 }

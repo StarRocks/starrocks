@@ -12,7 +12,7 @@ public class SqlDigestBuilder {
         return new SqlDigestBuilderVisitor().visit(statement);
     }
 
-    private static class SqlDigestBuilderVisitor extends AST2SQL.SQLLabelBuilderImpl {
+    private static class SqlDigestBuilderVisitor extends AST2SQL.SQLBuilder {
         @Override
         public String visitLiteral(LiteralExpr expr, Void context) {
             return "?";

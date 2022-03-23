@@ -10,6 +10,14 @@ public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
     private final List<String> columnOutputNames;
 
+    /*
+        isNullValues means a statement without from or from dual, add a single row of null values here,
+        so that the semantics are the same, and the processing of subsequent query logic can be simplified,
+        such as select sum(1) or select sum(1) from dual, will be converted to select sum(1) from (values(null)) t.
+        This can share the same logic as select sum(1) from table
+    */
+    private boolean isNullValues;
+
     public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
         this.rows = new ArrayList<>(rows);
         this.columnOutputNames = columnOutputNames;
@@ -35,6 +43,14 @@ public class ValuesRelation extends QueryRelation {
     @Override
     public List<Expr> getOutputExpression() {
         return rows.get(0);
+    }
+
+    public void setNullValues(boolean nullValues) {
+        isNullValues = nullValues;
+    }
+
+    public boolean isNullValues() {
+        return isNullValues;
     }
 
     @Override

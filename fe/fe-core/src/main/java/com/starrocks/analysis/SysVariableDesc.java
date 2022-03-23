@@ -37,11 +37,13 @@ import com.starrocks.thrift.TFloatLiteral;
 import com.starrocks.thrift.TIntLiteral;
 import com.starrocks.thrift.TStringLiteral;
 
+import java.util.Objects;
+
 // System variable
 // Converted to StringLiteral in analyze, if this variable is not exist, throw AnalysisException.
 public class SysVariableDesc extends Expr {
-    private String name;
-    private SetType setType;
+    private final String name;
+    private final SetType setType;
     private boolean boolValue;
     private long intValue;
     private double floatValue;
@@ -187,5 +189,27 @@ public class SysVariableDesc extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSysVariableDesc(this, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        SysVariableDesc that = (SysVariableDesc) o;
+        return boolValue == that.boolValue && intValue == that.intValue &&
+                Double.compare(that.floatValue, floatValue) == 0 && Objects.equals(name, that.name) &&
+                setType == that.setType && Objects.equals(strValue, that.strValue);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), name, setType, boolValue, intValue, floatValue, strValue);
     }
 }

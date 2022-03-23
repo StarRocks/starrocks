@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -145,6 +146,12 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
+
+        //Non-deterministic functions cannot be equal by default, and expression reuse is disabled
+        if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+            return false;
+        }
+
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&

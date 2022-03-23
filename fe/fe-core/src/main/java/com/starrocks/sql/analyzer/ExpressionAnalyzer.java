@@ -17,6 +17,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -500,6 +501,11 @@ public class ExpressionAnalyzer {
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
+            if (node.isNondeterministicBuiltinFnName()) {
+                ExprId exprId = analyzeState.getNextNondeterministicId();
+                node.setNondeterministicId(exprId);
+            }
+
             Function fn;
             String fnName = node.getFnName().getFunction();
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
@@ -826,7 +832,6 @@ public class ExpressionAnalyzer {
             node.setType(Type.VARCHAR);
             return null;
         }
-
     }
 
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {

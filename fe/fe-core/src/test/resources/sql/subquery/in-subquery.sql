@@ -362,24 +362,6 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate 
 [end]
 
 [sql]
-select * from t0 where v3 in (select 2);
-[result]
-LEFT SEMI JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        VALUES (2)
-[end]
-
-[sql]
-select * from t0 where v3 not in (select 2);
-[result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        VALUES (2)
-[end]
-
-[sql]
 select * from t0 where (v3 > 3) = (v3 in (select v7 from t2 where t0.v2 = t2.v8))
 [result]
 LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8 AND 3: v3 = 4: v7] post-join-predicate [3: v3 > 3 = 4: v7 IS NOT NULL AND 5: v8 IS NOT NULL])

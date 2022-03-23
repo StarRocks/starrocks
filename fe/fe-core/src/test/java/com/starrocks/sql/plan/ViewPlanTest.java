@@ -742,7 +742,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql151() throws Exception {
-        String sql = "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
+        String sql =
+                "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         testView(sql);
     }
 
@@ -1522,6 +1523,12 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test312() throws Exception {
+        String sql = "SELECT * FROM (VALUES(1,2,3),(4,5,6),(7,8,9)) T";
+        testView(sql);
+    }
+
+    @Test
     public void testArray() throws Exception {
         String sql = "select split('1,2,3', ',') from t1;";
         testView(sql);
@@ -1596,46 +1603,14 @@ public class ViewPlanTest extends PlanTestBase {
                 "(select '1' c1  union  all select '2') a " +
                 "group by grouping sets((case when c1=1 then 1 end, c1), (case  when c1=1 then 1 end));";
 
-        String viewName = "view" + INDEX.getAndIncrement();
-        String createView = "create view " + viewName + " as " + sql;
-        starRocksAssert.withView(createView);
-
-        String sqlPlan = getFragmentPlan(sql);
-        String viewPlan = getFragmentPlan("select * from " + viewName);
-
-        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || sqlPlan.contains("" +
-                "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
-
-        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[3, 4], [4]]") || viewPlan.contains("" +
-                "  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 1 lines [[4], [3, 4]]"));
-
-        starRocksAssert.dropView(viewName);
+        testView(sql);
     }
 
     @Test
     public void testGroupByView2() throws Exception {
         String sql = "select case  when c1=1 then 1 end from " +
                 "(select '1' c1  union  all select '2') a group by cube(case when c1=1 then 1 end, a.c1);";
-        String viewName = "view" + INDEX.getAndIncrement();
-        String createView = "create view " + viewName + " as " + sql;
-        starRocksAssert.withView(createView);
-
-        String sqlPlan = getFragmentPlan(sql);
-        String viewPlan = getFragmentPlan("select * from " + viewName);
-
-        Assert.assertTrue(sqlPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
-                sqlPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]"));
-        Assert.assertTrue(viewPlan.contains("  6:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[], [3], [4], [3, 4]]\n") ||
-                viewPlan.contains("  6:REPEAT_NODE\n" +
-                        "  |  repeat: repeat 3 lines [[], [4], [3], [3, 4]]\n"));
-        starRocksAssert.dropView(viewName);
+        testView(sql);
     }
 
     @Test
@@ -1683,7 +1658,8 @@ public class ViewPlanTest extends PlanTestBase {
                 "with testTbl_cte (w1, w2) as (select v1, v2 from t0) select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
         String alterView = "alter view " + viewName + " as " + alterStmt;
 
-        AlterViewStmt alterViewStmt = (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
+        AlterViewStmt alterViewStmt =
+                (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
         Catalog.getCurrentCatalog().alterView(alterViewStmt);
 
         sqlPlan = getFragmentPlan(alterStmt);
