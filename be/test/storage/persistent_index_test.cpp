@@ -22,7 +22,7 @@
 #include "util/file_utils.h"
 
 namespace starrocks {
-/*
+
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     using Key = uint64_t;
     vector<Key> keys;
@@ -275,7 +275,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     }
     ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data()).ok());
 }
-*/
+
 TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
     TCreateTabletReq request;
     request.tablet_id = tablet_id;
@@ -352,7 +352,6 @@ void build_persistent_index_from_tablet(size_t N) {
 
     TabletSharedPtr tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
-    //const int64_t N = 250000;
     std::vector<int64_t> keys(N);
     for (int64_t i = 0; i < N; ++i) {
         keys[i] = i;
@@ -415,7 +414,6 @@ void build_persistent_index_from_tablet(size_t N) {
     {
         // load data from index file
         PersistentIndex persistent_index(kPersistentIndexDir);
-        //ASSERT_TRUE(persistent_index.build(tablet.get()).ok());
         Status st = persistent_index.build(tablet.get());
         if (!st.ok()) {
             LOG(WARNING) << "build persistent index failed: " << st.to_string();
@@ -443,8 +441,11 @@ void build_persistent_index_from_tablet(size_t N) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
-    //build_persistent_index_from_tablet(100000);
-    //build_persistent_index_from_tablet(250000);
+    // dump snapshot
+    build_persistent_index_from_tablet(100000);
+    // write wal
+    build_persistent_index_from_tablet(250000);
+    // flush l1
     build_persistent_index_from_tablet(1000000);
 }
 
