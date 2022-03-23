@@ -69,7 +69,7 @@ public class LoadColumnsInfo implements ParseNode {
         sb.append(Joiner.on(",").join(columnNames));
         sb.append(")");
 
-        if (columnMappingList != null || columnMappingList.size() != 0) {
+        if (columnMappingList != null && columnMappingList.size() != 0) {
             sb.append(" SET (");
             sb.append(Joiner.on(",").join(columnMappingList.parallelStream()
                     .map(entity -> entity.toSql()).collect(Collectors.toList())));

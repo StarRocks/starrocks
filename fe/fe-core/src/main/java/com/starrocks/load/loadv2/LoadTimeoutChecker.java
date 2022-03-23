@@ -37,7 +37,7 @@ public class LoadTimeoutChecker extends MasterDaemon {
     private LoadManager loadManager;
 
     public LoadTimeoutChecker(LoadManager loadManager) {
-        super("Load job timeout checker", Config.load_checker_interval_second * 1000);
+        super("Load job timeout checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 

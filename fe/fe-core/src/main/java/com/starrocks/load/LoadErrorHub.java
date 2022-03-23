@@ -25,7 +25,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TErrorHubType;
@@ -37,7 +36,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 
 public abstract class LoadErrorHub {
     private static final Logger LOG = LogManager.getLogger(LoadErrorHub.class);
@@ -146,23 +144,6 @@ public abstract class LoadErrorHub {
                     Preconditions.checkState(false, "unknown hub type");
             }
             return info;
-        }
-
-        public Map<String, Object> toDppConfigInfo() {
-            Map<String, Object> dppHubInfo = Maps.newHashMap();
-            dppHubInfo.put("type", type.toString());
-            switch (type) {
-                case MYSQL_TYPE:
-                    dppHubInfo.put("info", mysqlParam);
-                    break;
-                case BROKER_TYPE:
-                    Preconditions.checkState(false, "hadoop load do not support broker error hub");
-                case NULL_TYPE:
-                    break;
-                default:
-                    Preconditions.checkState(false, "unknown hub type");
-            }
-            return dppHubInfo;
         }
 
         public List<String> getInfo() {

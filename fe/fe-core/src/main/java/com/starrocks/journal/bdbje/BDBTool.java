@@ -86,51 +86,51 @@ public class BDBTool {
                 DatabaseConfig dbConfig = new DatabaseConfig();
                 dbConfig.setAllowCreate(false);
                 dbConfig.setReadOnly(true);
-                Database db = env.openDatabase(null, dbName, dbConfig);
-
-                if (options.isDbStat()) {
-                    // get db stat
-                    Map<String, String> statMap = Maps.newHashMap();
-                    statMap.put("count", String.valueOf(db.count()));
-                    JSONObject jsonObject = new JSONObject(statMap);
-                    System.out.println(jsonObject.toString());
-                    return true;
-                } else {
-                    // set from key
-                    Long fromKey = 0L;
-                    String fromKeyStr = options.hasFromKey() ? options.getFromKey() : dbName;
-                    try {
-                        fromKey = Long.valueOf(fromKeyStr);
-                    } catch (NumberFormatException e) {
-                        System.err.println("Not a valid from key: " + fromKeyStr);
-                        return false;
-                    }
-
-                    // set end key
-                    Long endKey = fromKey + db.count() - 1;
-                    if (options.hasEndKey()) {
+                try (Database db = env.openDatabase(null, dbName, dbConfig)) {
+                    if (options.isDbStat()) {
+                        // get db stat
+                        Map<String, String> statMap = Maps.newHashMap();
+                        statMap.put("count", String.valueOf(db.count()));
+                        JSONObject jsonObject = new JSONObject(statMap);
+                        System.out.println(jsonObject.toString());
+                        return true;
+                    } else {
+                        // set from key
+                        long fromKey = 0L;
+                        String fromKeyStr = options.hasFromKey() ? options.getFromKey() : dbName;
                         try {
-                            endKey = Long.valueOf(options.getEndKey());
+                            fromKey = Long.parseLong(fromKeyStr);
                         } catch (NumberFormatException e) {
-                            System.err.println("Not a valid end key: " + options.getEndKey());
+                            System.err.println("Not a valid from key: " + fromKeyStr);
                             return false;
                         }
-                    }
 
-                    if (fromKey > endKey) {
-                        System.err.println("from key should less than or equal to end key["
-                                + fromKey + " vs. " + endKey + "]");
-                        return false;
-                    }
+                        // set end key
+                        long endKey = fromKey + db.count() - 1;
+                        if (options.hasEndKey()) {
+                            try {
+                                endKey = Long.parseLong(options.getEndKey());
+                            } catch (NumberFormatException e) {
+                                System.err.println("Not a valid end key: " + options.getEndKey());
+                                return false;
+                            }
+                        }
 
-                    // meta version
-                    MetaContext metaContext = new MetaContext();
-                    metaContext.setMetaVersion(options.getMetaVersion());
-                    metaContext.setStarRocksMetaVersion(options.getStarRocksMetaVersion());
-                    metaContext.setThreadLocalInfo();
+                        if (fromKey > endKey) {
+                            System.err.println("from key should less than or equal to end key["
+                                    + fromKey + " vs. " + endKey + "]");
+                            return false;
+                        }
 
-                    for (Long key = fromKey; key <= endKey; key++) {
-                        getValueByKey(db, key);
+                        // meta version
+                        MetaContext metaContext = new MetaContext();
+                        metaContext.setMetaVersion(options.getMetaVersion());
+                        metaContext.setStarRocksMetaVersion(options.getStarRocksMetaVersion());
+                        metaContext.setThreadLocalInfo();
+
+                        for (long key = fromKey; key <= endKey; key++) {
+                            getValueByKey(db, key);
+                        }
                     }
                 }
             }

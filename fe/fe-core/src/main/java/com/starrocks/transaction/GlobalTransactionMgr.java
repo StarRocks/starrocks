@@ -142,11 +142,9 @@ public class GlobalTransactionMgr implements Writable {
         request.setLabel(label);
         request.setSource_type(sourceType.ordinal());
         request.setTimeout_second(timeoutSecond);
-        boolean returnToPool = false;
         TBeginRemoteTxnResponse response;
         try {
             response = client.beginRemoteTxn(request);
-            returnToPool = true;
             List<String> errmsgs = response.status.getError_msgs();
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 LOG.info("errmsg: {}", errmsgs.get(0));
@@ -155,13 +153,10 @@ public class GlobalTransactionMgr implements Writable {
             }
         } catch (Exception e) {
             LOG.warn("call fe {} beginRemoteTxn rpc method failed", addr, e);
+            ClientPool.frontendPool.invalidateObject(addr, client);
             throw new BeginTransactionException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
-        } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
-        }
+        ClientPool.frontendPool.returnObject(addr, client);
         return response.getTxn_id();
     }
 
@@ -185,12 +180,9 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setCommit_infos(tabletCommitInfos);
-        // request.setLabel(label);
-        boolean returnToPool = false;
         TCommitRemoteTxnResponse response;
         try {
             response = client.commitRemoteTxn(request);
-            returnToPool = true;
             List<String> errmsgs = response.status.getError_msgs();
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 LOG.info("errmsg: {}", errmsgs.get(0));
@@ -200,13 +192,10 @@ public class GlobalTransactionMgr implements Writable {
             }
         } catch (Exception e) {
             LOG.warn("call fe {} commitRemoteTxn rpc method failed", addr, e);
+            ClientPool.frontendPool.invalidateObject(addr, client);
             throw new TransactionCommitFailedException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
-        } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
-        }
+        ClientPool.frontendPool.returnObject(addr, client);
         return commitSuccess;
     }
 
@@ -228,11 +217,9 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setError_msg(errorMsg);
-        boolean returnToPool = false;
         TAbortRemoteTxnResponse response;
         try {
             response = client.abortRemoteTxn(request);
-            returnToPool = true;
             List<String> errmsgs = response.status.getError_msgs();
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 LOG.info("errmsg: {}", errmsgs.get(0));
@@ -241,13 +228,10 @@ public class GlobalTransactionMgr implements Writable {
             }
         } catch (Exception e) {
             LOG.warn("call fe {} abort RemoteTxn rpc method failed", addr, e);
+            ClientPool.frontendPool.invalidateObject(addr, client);
             throw new AbortTransactionException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
-        } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
-        }
+        ClientPool.frontendPool.returnObject(addr, client);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,

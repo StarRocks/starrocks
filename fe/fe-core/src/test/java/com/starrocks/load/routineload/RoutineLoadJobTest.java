@@ -27,8 +27,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -41,7 +39,6 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
-import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -142,40 +139,6 @@ public class RoutineLoadJobTest {
 
         Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assert.assertEquals(new Long(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
-    }
-
-    @Test
-    public void testAfterCommittedWhileTaskAborted(@Mocked Catalog catalog,
-                                                   @Injectable TransactionState transactionState,
-                                                   @Injectable KafkaProgress progress) throws UserException {
-        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
-        long txnId = 1L;
-
-        new Expectations() {
-            {
-                transactionState.getTransactionId();
-                minTimes = 0;
-                result = txnId;
-            }
-        };
-
-        new MockUp<RoutineLoadJob>() {
-            @Mock
-            void writeUnlock() {
-            }
-        };
-
-        String txnStatusChangeReasonString = "no data";
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-        Deencapsulation.setField(routineLoadJob, "progress", progress);
-        try {
-            routineLoadJob.afterCommitted(transactionState, true);
-            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
-        } catch (TransactionException e) {
-            Assert.fail();
-        }
     }
 
     @Test

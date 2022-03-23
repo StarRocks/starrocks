@@ -131,7 +131,7 @@ public abstract class AlterJob implements Writable {
         return this.type;
     }
 
-    public void setState(JobState state) {
+    public synchronized void setState(JobState state) {
         this.state = state;
     }
 

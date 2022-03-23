@@ -33,7 +33,7 @@ import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class EsShardPartitions {
 
@@ -113,7 +113,7 @@ public class EsShardPartitions {
 
     public TNetworkAddress randomAddress(Map<String, EsNodeInfo> nodesInfo) {
         // return a random value between 0 and 32767 : [0, 32767)
-        int seed = new Random().nextInt(Short.MAX_VALUE) % nodesInfo.size();
+        int seed = ThreadLocalRandom.current().nextInt(Short.MAX_VALUE) % nodesInfo.size();
         EsNodeInfo[] nodeInfos = nodesInfo.values().toArray(new EsNodeInfo[0]);
         return nodeInfos[seed].getPublishAddress();
     }

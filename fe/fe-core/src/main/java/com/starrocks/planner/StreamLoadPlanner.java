@@ -71,7 +71,7 @@ import java.util.Optional;
 // TODO(zc): support other type table
 public class StreamLoadPlanner {
     private static final Logger LOG = LogManager.getLogger(StreamLoadPlanner.class);
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     // destination Db and table get from request
     // Data will load to this table
@@ -154,7 +154,7 @@ public class StreamLoadPlanner {
                 new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadTask);
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         descTable.computeMemLayout();
 

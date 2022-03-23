@@ -1044,12 +1044,12 @@ public abstract class Type implements Cloneable {
                     type = ScalarType.createHllType();
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
                     Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetPrecision());
+                            && scalarType.isSetScale());
                     type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMALV2) {
                     Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetPrecision());
+                            && scalarType.isSetScale());
                     type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||

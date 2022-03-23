@@ -568,7 +568,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 

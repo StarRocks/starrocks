@@ -531,9 +531,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         for (PlanNode child : children) {
-            child.finalize(analyzer);
+            child.finalizeStats(analyzer);
         }
         computeStats(analyzer);
     }

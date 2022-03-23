@@ -196,7 +196,7 @@ public class StreamLoadScanNodeTest {
             result = columns.get(3);
         }};
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -229,7 +229,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -259,7 +259,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -304,7 +304,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -380,7 +380,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -435,7 +435,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -465,7 +465,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -495,7 +495,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -544,7 +544,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -594,7 +594,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -647,7 +647,7 @@ public class StreamLoadScanNodeTest {
                         streamLoadTask);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -697,7 +697,7 @@ public class StreamLoadScanNodeTest {
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -744,7 +744,7 @@ public class StreamLoadScanNodeTest {
         };
 
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);

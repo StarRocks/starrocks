@@ -17,15 +17,15 @@ import java.util.Map;
 public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
     // tableId-><dbName, table>
-    private Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
     // tableName->partitionName->partitionRowCount
-    private Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
+    private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
-    private Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
     private SessionVariable sessionVariable;
     // tableName->createTableStmt
-    private Map<String, String> createTableStmtMap = new HashMap<>();
-    private List<String> exceptionList = new ArrayList<>();
+    private final Map<String, String> createTableStmtMap = new HashMap<>();
+    private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
 
     public QueryDumpInfo(SessionVariable sessionVariable) {
@@ -83,10 +83,6 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<String, Map<String, Long>> getPartitionRowCountMap() {
         return partitionRowCountMap;
-    }
-
-    public Long getRowCount(long tableId, String partition) {
-        return partitionRowCountMap.get(tableId).get(partition);
     }
 
     @Override

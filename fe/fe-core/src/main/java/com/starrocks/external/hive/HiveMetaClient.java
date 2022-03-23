@@ -518,7 +518,7 @@ public class HiveMetaClient {
                 return literalExpr.getDoubleValue();
             case DATE:
             case DATETIME:
-                return (((DateLiteral) literalExpr).unixTimestamp(TimeZone.getDefault())) / 1000L;
+                return (((DateLiteral) literalExpr).unixTimestamp(TimeZone.getDefault())) / 1000.0;
             default:
                 return Double.NaN;
         }

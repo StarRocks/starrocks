@@ -38,8 +38,6 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URISyntaxException;
-
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
 
@@ -63,10 +61,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         if (msg instanceof HttpRequest) {
             this.request = (HttpRequest) msg;
             LOG.debug("request: url:[{}]", request.uri());
-            if (!isRequestValid(ctx, request)) {
-                writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "this is a bad request.");
-                return;
-            }
             BaseRequest req = new BaseRequest(ctx, request);
 
             action = getAction(req);
@@ -77,10 +71,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         } else {
             ReferenceCountUtil.release(msg);
         }
-    }
-
-    private boolean isRequestValid(ChannelHandlerContext ctx, HttpRequest request) throws URISyntaxException {
-        return true;
     }
 
     private void writeResponse(ChannelHandlerContext context, HttpResponseStatus status, String content) {

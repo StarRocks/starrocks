@@ -73,6 +73,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class BackupJob extends AbstractJob {
     private static final Logger LOG = LogManager.getLogger(BackupJob.class);
@@ -556,9 +557,11 @@ public class BackupJob extends AbstractJob {
             File jobDir = new File(localJobDirPath.toString());
             if (jobDir.exists()) {
                 // if dir exists, delete it first
-                Files.walk(localJobDirPath,
-                        FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                        .forEach(File::delete);
+                try (Stream<Path> path = Files.walk(localJobDirPath,
+                        FileVisitOption.FOLLOW_LINKS)) {
+                    path.sorted(Comparator.reverseOrder()).map(Path::toFile)
+                            .forEach(File::delete);
+                }
             }
             if (!jobDir.mkdir()) {
                 status = new Status(ErrCode.COMMON_ERROR, "Failed to create tmp dir: " + localJobDirPath);
@@ -708,9 +711,11 @@ public class BackupJob extends AbstractJob {
             try {
                 File jobDir = new File(localJobDirPath.toString());
                 if (jobDir.exists()) {
-                    Files.walk(localJobDirPath,
-                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                            .forEach(File::delete);
+                    try (Stream<Path> path = Files.walk(localJobDirPath,
+                            FileVisitOption.FOLLOW_LINKS)) {
+                        path.sorted(Comparator.reverseOrder()).map(Path::toFile)
+                                .forEach(File::delete);
+                    }
                 }
             } catch (Exception e) {
                 LOG.warn("failed to clean the backup job dir: " + localJobDirPath.toString());

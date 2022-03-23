@@ -74,7 +74,7 @@ public class AdminRepairTableStmt extends DdlStmt {
             partitions.addAll(partitionNames.getPartitionNames());
         }
 
-        timeoutS = 4 * 3600; // default 4 hours
+        timeoutS = 4 * 3600L; // default 4 hours
     }
 
     public String getDbName() {
