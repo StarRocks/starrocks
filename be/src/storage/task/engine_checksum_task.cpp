@@ -127,7 +127,7 @@ Status EngineChecksumTask::_compute_checksum() {
     }
 
     if (bg_worker_stopped) {
-        return Status::InternalError("Process is going to quit. The checksum calculation will be stopped.");
+        return Status::InternalError("Process is going to quit. The checksum calculation will stop.");
     }
 
     if (!st.is_end_of_file() && !st.ok()) {
