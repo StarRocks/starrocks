@@ -41,6 +41,7 @@
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/union_iterator.h"
+#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -156,7 +157,7 @@ Status BetaRowset::copy_files_to(const std::string& dir) {
             return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (!copy_file(src_path, dst_path).ok()) {
+        if (!FileUtils::copy_file(src_path, dst_path).ok()) {
             LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
@@ -170,7 +171,7 @@ Status BetaRowset::copy_files_to(const std::string& dir) {
                 LOG(WARNING) << "Path already exist: " << dst_path;
                 return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (!copy_file(src_path, dst_path).ok()) {
+            if (!FileUtils::copy_file(src_path, dst_path).ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                              << ", errno=" << Errno::no();
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
