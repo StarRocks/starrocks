@@ -675,7 +675,9 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
 
             if (doc.type() != simdjson::ondemand::json_type::object) {
-                return Status::DataQualityError("json object is expected");
+                std::string_view sv = simdjson::to_json_string(doc);
+                auto err_msg = fmt::format("failed to parse content as object, content: {}", sv);
+                return Status::DataQualityError(err_msg);
             }
 
             *row = doc.get_object();
@@ -709,7 +711,7 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexc
         _doc = _parser.iterate(data, len, allocated);
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
-            return Status::DataQualityError("json array is expected");
+            return Status::DataQualityError("failed to parse input as array");
         }
 
         _array = _doc.get_array();
@@ -733,7 +735,9 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
         simdjson::ondemand::value val = *_array_itr;
 
         if (val.type() != simdjson::ondemand::json_type::object) {
-            return Status::DataQualityError("json object is expected");
+            std::string_view sv = simdjson::to_json_string(val);
+            auto err_msg = fmt::format("failed to parse content as object, content: {}", sv);
+            return Status::DataQualityError(err_msg);
         }
 
         *row = val.get_object();
@@ -821,7 +825,9 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
         simdjson::ondemand::value val = *_array_itr;
 
         if (val.type() != simdjson::ondemand::json_type::object) {
-            return Status::DataQualityError("json object is expected");
+            std::string_view sv = simdjson::to_json_string(val);
+            auto err_msg = fmt::format("failed to parse content as object, content: {}", sv);
+            return Status::DataQualityError(err_msg);
         }
 
         *row = val.get_object();
@@ -889,7 +895,9 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
         simdjson::ondemand::value val = *_array_itr;
 
         if (val.type() != simdjson::ondemand::json_type::object) {
-            return Status::DataQualityError("json object is expected");
+            std::string_view sv = simdjson::to_json_string(val);
+            auto err_msg = fmt::format("failed to parse content as object, content: {}", sv);
+            return Status::DataQualityError(err_msg);
         }
 
         *row = val.get_object();
