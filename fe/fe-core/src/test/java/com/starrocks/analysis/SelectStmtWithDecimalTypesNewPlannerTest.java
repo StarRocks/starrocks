@@ -34,6 +34,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "CREATE TABLE if not exists db1.decimal_table\n" +
                 "(\n" +
                 "key0 INT NOT NULL,\n" +
+                "col_decimal32p9s2 DECIMAL32(9,2) NOT NULL,\n" +
                 "col_decimal64p13s0 DECIMAL64(13,0) NOT NULL,\n" +
                 "col_double DOUBLE,\n" +
                 "col_decimal128p20s3 DECIMAL128(20, 3)\n" +
@@ -90,7 +91,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = " select  if(1, cast('3.14' AS decimal32(9, 2)), cast('1.9999' AS decimal32(5, 4))) " +
                 "AS res0 from db1.decimal_table;";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-        System.out.println(thrift);
         Assert.assertTrue(thrift.contains(
                 "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
 
@@ -124,18 +124,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testMultiply() throws Exception {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
-        String expectString = "TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
-                "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:5))]), opcode:MULTIPLY, num_children:2," +
-                " output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:false)," +
-                " TExprNode(node_type:CAST_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:3))])," +
-                " opcode:INVALID_OPCODE, num_children:1, output_scale:-1, output_column:-1, child_type:DECIMAL128, has_nullable_child:true, is_nullable:true, is_monotonic:false), " +
-                "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
-                "(type:DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:4, tuple_id:0)," +
-                " output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true)," +
-                " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:" +
-                "TScalarType(type:DECIMAL128, precision:38, scale:2))]), num_children:0, decimal_literal:" +
-                "TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false," +
-                " is_nullable:false, is_monotonic:true)";
+        String expectString =
+                "TPlanFragment(plan:TPlan(nodes:[TPlanNode(node_id:1, node_type:PROJECT_NODE, num_children:1, limit:-1, row_tuples:[1], nullable_tuples:[false], compact_data:false, use_vectorized:true, project_node:TProjectNode(slot_map:{6=TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), opcode:MULTIPLY, num_children:2, output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true), TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:5, tuple_id:0), output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true), TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:3, scale:2))]), num_children:0, decimal_literal:TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true)])}), need_create_tuple_columns:false), TPlanNode(node_id:0, node_type:OLAP_SCAN_NODE, num_children:0, limit:-1, row_tuples:[0], nullable_tuples:[false], compact_data:false, olap_scan_node:TOlapScanNode(tuple_id:0, key_column_name:[key0], key_column_type:[INT], is_preaggregation:true, rollup_name:decimal_table, enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}, unused_output_column_name:[]), use_vectorized:true, need_create_tuple_columns:false)]), output_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), num_children:0, slot_ref:TSlotRef(slot_id:6, tuple_id:1), output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true)])], output_sink:TDataSink(type:RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), partition:TDataPartition(type:RANDOM, partition_exprs:[]))";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
@@ -163,8 +153,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBinaryPredicate() throws Exception {
         String sql = "select col_decimal64p13s0 > -9.223372E+18 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                "> -9223372000000000000";
+        String snippet =
+                "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) > -9223372000000000000";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -172,8 +162,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalInPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 in (0, 1, 9999, -9.223372E+18)";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
-        String snippet = "CAST(2: col_decimal64p13s0 AS DECIMAL128(19,0))" +
+        String snippet = "CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0))" +
                 " IN (0, 1, 9999, -9223372000000000000)";
         Assert.assertTrue(plan.contains(snippet));
     }
@@ -182,11 +171,228 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBetweenPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
-        String snippet = "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                ">= -9223372000000000000, " +
-                "cast([2: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                "<= 9223372000000000000";
+        String snippet =
+                "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) >= -9223372000000000000, " +
+                        "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) <= 9223372000000000000";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32Sum() throws Exception {
+        String sql = "select sum(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: DECIMAL64(18,2); args nullable: false; result nullable: true]";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal64Sum() throws Exception {
+        String sql = "select sum(col_decimal64p13s0) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: DECIMAL64(18,0); args nullable: false; result nullable: true]";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal128Sum() throws Exception {
+        String sql = "select sum(col_decimal128p20s3) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,3)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32Avg() throws Exception {
+        String sql = "select avg(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "avg[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: DECIMAL128(38,8)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal64Avg() throws Exception {
+        String sql = "select avg(col_decimal64p13s0) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "avg[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: DECIMAL128(38,6)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal128Avg() throws Exception {
+        String sql = "select avg(col_decimal128p20s3) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "avg[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,9)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32MultiDistinctSum() throws Exception {
+        String sql = "select multi_distinct_sum(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: DECIMAL64(18,2); args nullable: false; result nullable: true]";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal64MultiDistinctSum() throws Exception {
+        String sql = "select multi_distinct_sum(col_decimal64p13s0) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: DECIMAL64(18,0); args nullable: false; result nullable: true]";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal128MultiDistinctSum() throws Exception {
+        String sql = "select multi_distinct_sum(col_decimal128p20s3) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,3)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32Count() throws Exception {
+        String sql = "select count(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: BIGINT";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32Stddev() throws Exception {
+        String sql = "select stddev(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "stddev[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal32Variance() throws Exception {
+        String sql = "select variance(col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet =
+                "variance[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalAddNULL() throws Exception {
+        String sql = "select col_decimal32p9s2 + NULL from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) + NULL";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalSubNULL() throws Exception {
+        String sql = "select col_decimal32p9s2 - NULL from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - NULL";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalMulNULL() throws Exception {
+        String sql = "select col_decimal32p9s2 * NULL from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * NULL";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalDivNULL() throws Exception {
+        String sql = "select col_decimal32p9s2 / NULL from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2)) / NULL";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalModNULL() throws Exception {
+        String sql = "select col_decimal32p9s2 % NULL from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) % NULL";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testNULLDivDecimal() throws Exception {
+        String sql = "select NULL / col_decimal32p9s2 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> NULL / cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2))";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testNULLModDecimal() throws Exception {
+        String sql = "select NULL % col_decimal32p9s2 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> NULL % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalAddZero() throws Exception {
+        String sql = "select col_decimal32p9s2 + 0.0 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) + 0";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalSubZero() throws Exception {
+        String sql = "select col_decimal32p9s2 - 0.0 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - 0";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalMulZero() throws Exception {
+        String sql = "select col_decimal32p9s2 * 0.0 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * 0";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalDivZero() throws Exception {
+        String sql = "select col_decimal32p9s2 / 0.0 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2)) / 0";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalModZero() throws Exception {
+        String sql = "select col_decimal32p9s2 % 0.0 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) % 0";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testZeroDivDecimal() throws Exception {
+        String sql = "select 0.0 / col_decimal32p9s2 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> 0 / cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2))";
+        Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testZeroModDecimal() throws Exception {
+        String sql = "select 0.0 % col_decimal32p9s2 from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "6 <-> 0 % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
         Assert.assertTrue(plan.contains(snippet));
     }
 }
