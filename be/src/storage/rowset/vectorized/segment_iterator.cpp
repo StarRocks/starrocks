@@ -485,6 +485,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             query_preds.clear();
         }
 
+
         const ColumnPredicate* del_pred;
         auto iter = del_predicates.find(cid);
         del_pred = iter != del_predicates.end() ? &(iter->second) : nullptr;
@@ -827,7 +828,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
 
     // evaluate brachless
     if (!_branchless_preds.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
+        SCOPED_RAW_TIMER(&_opts.stats->branchless_cond_evaluate_ns);
 
         uint16_t selected_size = 0;
         if (!_vectorized_preds.empty()) {
@@ -879,6 +880,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
 uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
     size_t chunk_size = chunk->num_rows();
     if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
+        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
         const auto* pred = _expr_ctx_preds[0];
         Column* c = chunk->get_column_by_id(pred->column_id()).get();
         pred->evaluate(c, _selection.data(), 0, chunk_size);

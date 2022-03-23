@@ -101,6 +101,9 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _block_seek_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockSeek", "SegmentRead");
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, "SegmentRead");
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", "SegmentRead");
+    _vec_pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "VecPredFilter", "PredFilter");
+    _branchless_pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BranchlessPredFilter", "PredFilter");
+    _expr_pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprPredFilter", "PredFilter");
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, "SegmentRead");
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", "SegmentRead");
@@ -491,7 +494,14 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
 
-    COUNTER_UPDATE(_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
+    int64_t cond_evaluate_ns = 0;
+    COUNTER_UPDATE(_vec_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
+    cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
+    COUNTER_UPDATE(_branchless_pred_filter_timer, _reader->stats().branchless_cond_evaluate_ns);
+    cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
+    COUNTER_UPDATE(_expr_pred_filter_timer, _reader->stats().expr_cond_evaluate_ns);
+    cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+    COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
