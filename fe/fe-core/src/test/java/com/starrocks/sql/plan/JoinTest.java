@@ -1689,17 +1689,25 @@ public class JoinTest extends PlanTestBase {
                 "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("  6:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: expr = 7: expr"));
-        Assert.assertTrue(plan.contains("2:UNION\n" +
+                "  |  equal join conjunct: 8: expr = 11: expr"));
+        Assert.assertTrue(plan.contains("  4:Project\n" +
+                "  |  <slot 11> : 2\n" +
+                "  |  <slot 12> : 'mike'\n" +
+                "  |  \n" +
+                "  3:UNION\n" +
                 "     constant exprs: \n" +
-                "         2 | 'mike'"));
-        Assert.assertTrue(plan.contains("0:UNION\n" +
+                "         NULL"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 8> : 1\n" +
+                "  |  <slot 9> : 'newzland'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         1 | 'newzland'"));
+                "         NULL"));
     }
 
     @Test

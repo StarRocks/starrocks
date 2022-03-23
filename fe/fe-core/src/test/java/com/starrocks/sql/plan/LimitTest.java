@@ -95,12 +95,12 @@ public class LimitTest extends PlanTestBase {
     public void testExceptLimit() throws Exception {
         String queryStr = "select 1 from (select 1, 3 from t0 except select 2, 3 ) as a limit 3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  6:Project\n"
-                + "  |  <slot 10> : 1\n"
-                + "  |  limit: 3\n"
-                + "  |  \n"
-                + "  0:EXCEPT\n"
-                + "  |  limit: 3\n"));
+        Assert.assertTrue(explainString.contains("  7:Project\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  limit: 3\n" +
+                "  |  \n" +
+                "  0:EXCEPT\n" +
+                "  |  limit: 3"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"
@@ -113,12 +113,12 @@ public class LimitTest extends PlanTestBase {
     public void testIntersectLimit() throws Exception {
         String queryStr = "select 1 from (select 1, 3 from t0 intersect select 2, 3 ) as a limit 3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  6:Project\n"
-                + "  |  <slot 10> : 1\n"
-                + "  |  limit: 3\n"
-                + "  |  \n"
-                + "  0:INTERSECT\n"
-                + "  |  limit: 3\n"));
+        Assert.assertTrue(explainString.contains("  7:Project\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  limit: 3\n" +
+                "  |  \n" +
+                "  0:INTERSECT\n" +
+                "  |  limit: 3"));
 
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 1\n"

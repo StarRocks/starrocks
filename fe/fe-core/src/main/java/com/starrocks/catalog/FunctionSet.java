@@ -234,6 +234,14 @@ public class FunctionSet {
                     .add("round_up_to")
                     .build();
 
+    public static final Set<String> nonDeterministicFunctions =
+            ImmutableSet.<String>builder()
+                    .add("rand")
+                    .add("random")
+                    .add("uuid")
+                    .add("sleep")
+                    .build();
+
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }

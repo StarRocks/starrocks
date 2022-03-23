@@ -384,8 +384,8 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("  26:Project\n" +
-                "  |  <slot 24> : 21: bitmap_union\n" +
-                "  |  <slot 32> : 32: bitmap_union"));
+                "  |  <slot 21> : 18: bitmap_union\n" +
+                "  |  <slot 29> : 29: bitmap_union"));
     }
 
     @Test

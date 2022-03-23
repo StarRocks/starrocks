@@ -47,8 +47,8 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayElementExpr() throws Exception {
         String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "NULL | CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
+        Assert.assertTrue(plan.contains("  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
 
         sql = "select v1, v3[1] + [1,2,3][1] as v, sum(v3[1]) from tarray group by v1, v order by v";
         plan = getFragmentPlan(sql);
@@ -99,6 +99,14 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
 
+        sql = "select [][1] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
+        sql = "select [][1] from (values(1,2,3), (4,5,6)) t";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
         sql = "select [v1,v2] from t0";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:Project\n" +
@@ -122,5 +130,4 @@ public class ArrayTypeTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
     }
-
 }

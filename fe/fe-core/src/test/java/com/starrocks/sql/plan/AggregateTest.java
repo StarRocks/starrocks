@@ -577,7 +577,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: "));
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         1"));
+                "         NULL"));
     }
 
     @Test
