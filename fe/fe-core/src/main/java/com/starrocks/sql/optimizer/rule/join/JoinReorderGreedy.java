@@ -30,23 +30,12 @@ public class JoinReorderGreedy extends JoinOrder {
     protected void enumerate() {
         for (int curJoinLevel = 2; curJoinLevel <= atomSize; curJoinLevel++) {
             searchJoinOrders(curJoinLevel - 1, 1);
-            searchBushyJoinOrders(curJoinLevel);
         }
     }
 
     @Override
     public List<OptExpression> getResult() {
         return topKExpr.stream().map(p -> p.expr).collect(Collectors.toList());
-    }
-
-    private void searchBushyJoinOrders(int curJoinLevel) {
-        // Search bushy joins tree fro level x and y, where
-        // x + y = curJoinLevel and x > 1 and y > 1 and x >= y.
-        // Note that join trees of level 3 and below are never bushy,
-        // so this loop only executes at curJoinLevel >= 4
-        for (int rightLevel = 2; rightLevel <= curJoinLevel / 2; rightLevel++) {
-            searchJoinOrders(curJoinLevel - rightLevel, rightLevel);
-        }
     }
 
     private void searchJoinOrders(int leftLevel, int rightLevel) {
