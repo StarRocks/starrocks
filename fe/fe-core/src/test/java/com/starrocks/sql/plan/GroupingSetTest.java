@@ -121,7 +121,6 @@ public class GroupingSetTest extends PlanTestBase {
                 ") t\n" +
                 "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         String plan = getFragmentPlan(sql1);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
                 "  |  <slot 7> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
