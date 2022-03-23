@@ -60,11 +60,11 @@ public class UpdateAnalyzer {
         TableRelation tableRelation = new TableRelation(tableName);
         SelectRelation selectRelation =
                 new SelectRelation(selectList, tableRelation, updateStmt.getWherePredicate(), null, null);
-        QueryStatement updateRelation = new QueryStatement(selectRelation);
-        updateRelation.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
-        new QueryAnalyzer(session).analyze(updateRelation);
+        QueryStatement queryStatement = new QueryStatement(selectRelation);
+        queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
+        new QueryAnalyzer(session).analyze(queryStatement);
 
         updateStmt.setTable(table);
-        updateStmt.setQueryStatement(updateRelation);
+        updateStmt.setQueryStatement(queryStatement);
     }
 }
