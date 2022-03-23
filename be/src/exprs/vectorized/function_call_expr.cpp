@@ -5,9 +5,11 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
@@ -138,7 +140,14 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     }
 #endif
 
-    ColumnPtr result = _fn_desc->scalar_function(fn_ctx, args);
+    ColumnPtr result;
+    if (_fn_desc->exception_safe) {
+        result = _fn_desc->scalar_function(fn_ctx, args);
+    } else {
+        SCOPED_SET_CATCHED(false);
+        result = _fn_desc->scalar_function(fn_ctx, args);
+    }
+
     // For no args function call (pi, e)
     if (result->is_constant() && ptr != nullptr) {
         result->resize(ptr->num_rows());

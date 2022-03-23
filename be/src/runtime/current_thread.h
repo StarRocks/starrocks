@@ -192,11 +192,45 @@ public:
 private:
     bool _prev_check;
 };
+
+class CurrentThreadCatchSetter {
+public:
+    explicit CurrentThreadCatchSetter(bool catched) { _prev_catched = tls_thread_status.set_is_catched(catched); }
+
+    ~CurrentThreadCatchSetter() { (void)tls_thread_status.set_is_catched(_prev_catched); }
+
+    CurrentThreadCatchSetter(const CurrentThreadCatchSetter&) = delete;
+    void operator=(const CurrentThreadCatchSetter&) = delete;
+    CurrentThreadCatchSetter(CurrentThreadCheckMemLimitSetter&&) = delete;
+    void operator=(CurrentThreadCatchSetter&&) = delete;
+
+private:
+    bool _prev_catched;
+};
+
+#define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
+
+#define TRY_CATCH_ALLOC_SCOPE_START() \
+    try {                             \
+        SCOPED_SET_CATCHED(true);
+
+#define TRY_CATCH_ALLOC_SCOPE_END()                                                     \
+    }                                                                                   \
+    catch (std::bad_alloc const&) {                                                     \
+        MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
+        tls_exceed_mem_tracker = nullptr;                                               \
+        tls_thread_status.set_is_catched(false);                                        \
+        if (LIKELY(exceed_tracker != nullptr)) {                                        \
+            return Status::MemoryLimitExceeded(exceed_tracker->err_msg(""));            \
+        } else {                                                                        \
+            return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
+        }                                                                               \
+    }
+
 #define TRY_CATCH_BAD_ALLOC(stmt)                                                           \
     do {                                                                                    \
         try {                                                                               \
-            bool prev = tls_thread_status.set_is_catched(true);                             \
-            DeferOp op([&] { tls_thread_status.set_is_catched(prev); });                    \
+            SCOPED_SET_CATCHED(true);                                                       \
             { stmt; }                                                                       \
         } catch (std::bad_alloc const&) {                                                   \
             MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
