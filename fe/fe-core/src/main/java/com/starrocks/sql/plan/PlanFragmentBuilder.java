@@ -1064,9 +1064,6 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
-                    if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                        aggregationNode.setColocate(true);
-                    }
                 } else {
                     aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                     AggregateInfo aggInfo = AggregateInfo.create(
@@ -1077,6 +1074,10 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
+                }
+                // set aggregate node can use local aggregate
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
                 }
 
                 // set predicate
