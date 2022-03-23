@@ -40,7 +40,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.hive.Utils;
 import com.starrocks.thrift.TColumn;
@@ -164,11 +163,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKeys);
-    }
-
-    @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
         return HiveMetaStoreTableUtils.getTableLevelColumnStats(resourceName, hiveDb, hiveTable,
                 this.nameToColumn, columnNames, getPartitionColumns());
@@ -189,36 +183,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         Catalog.getCurrentCatalog().getHiveRepository()
                 .refreshTableColumnStats(resourceName, hiveDb, hiveTable, getPartitionColumns(),
                         new ArrayList<>(nameToColumn.keySet()));
-    }
-
-    /**
-     * Returns an estimated row count for the given number of file bytes. The row count is
-     * extrapolated using the table-level row count and file bytes statistics.
-     */
-    public long getExtrapolatedRowCount(long totalPartitionFileBytes) {
-        if (totalPartitionFileBytes == 0) {
-            return 0;
-        }
-        if (totalPartitionFileBytes < 0) {
-            return -1;
-        }
-
-        HiveTableStats tableStats = null;
-        try {
-            tableStats = getTableStats();
-        } catch (DdlException e) {
-            LOG.warn("table {} gets stats failed", name, e);
-            return -1;
-        }
-        long numRows = tableStats.getNumRows();
-        long totalFileBytes = tableStats.getTotalFileBytes();
-        if (numRows < 0 || totalFileBytes <= 0 || (numRows == 0 && totalFileBytes != 0)) {
-            return -1;
-        }
-
-        double bytesPerRow = totalFileBytes / (double) numRows;
-        double extrapolatedNumRows = totalPartitionFileBytes / bytesPerRow;
-        return Math.max(1, Math.round(extrapolatedNumRows));
     }
 
     /**

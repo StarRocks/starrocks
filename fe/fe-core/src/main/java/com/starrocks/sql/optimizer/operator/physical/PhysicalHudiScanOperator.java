@@ -63,7 +63,7 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
         }
 
         PhysicalHudiScanOperator that = (PhysicalHudiScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHiveScanOperator) o).getScanOperatorPredicates();
+        ScanOperatorPredicates targetPredicts = ((PhysicalHudiScanOperator) o).getScanOperatorPredicates();
         return Objects.equal(table, that.table) &&
                 Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
                 Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
