@@ -126,7 +126,14 @@ public class WorkGroupAnalyzer {
                 continue;
             }
             if (key.equalsIgnoreCase(WorkGroup.WORKGROUP_TYPE)) {
-                workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
+                try {
+                    workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
+                    if (workgroup.getWorkGroupType() != TWorkGroupType.WG_NORMAL) {
+                        throw new SemanticException("Only support 'normal' type");
+                    }
+                } catch (Exception ignored) {
+                    throw new SemanticException("Only support 'normal' type");
+                }
                 continue;
             }
         }
