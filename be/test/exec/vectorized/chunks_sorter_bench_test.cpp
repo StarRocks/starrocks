@@ -216,10 +216,13 @@ static void BM_fullsort_varchar_column_incr(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_VARCHAR, state.range(0), state.range(1));
 }
 // Low cardinality
-static void BM_fullsort_low_card_column_wise(benchmark::State& state) {
+static void BM_fullsort_low_card_rowwise(benchmark::State& state) {
+    do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1), -1, true);
+}
+static void BM_fullsort_low_card_colwise(benchmark::State& state) {
     do_bench(state, FullSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), -1, true);
 }
-static void BM_fullsort_low_card_column_incr(benchmark::State& state) {
+static void BM_fullsort_low_card_colinc(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), -1, true);
 }
 
@@ -242,7 +245,7 @@ static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
     for (int num_chunks = 64; num_chunks <= 32768; num_chunks *= 8) {
         // num_columns
-        for (int num_columns = 1; num_columns <= 8; num_columns++) {
+        for (int num_columns = 1; num_columns <= 4; num_columns++) {
             b->Args({num_chunks, num_columns});
         }
     }
@@ -251,7 +254,7 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
     // num_chunks
     for (int num_chunks = 1024; num_chunks <= 32768; num_chunks *= 4) {
         // num_columns
-        for (int num_columns = 1; num_columns <= 8; num_columns++) {
+        for (int num_columns = 1; num_columns <= 4; num_columns++) {
             // limit
             for (int limit = 1; limit <= num_chunks * kTestChunkSize / 8; limit *= 8) {
                 b->Args({num_chunks, num_columns, limit});
@@ -260,13 +263,18 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
     }
 }
 
+// Full sort
 BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_incr)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_low_card_column_wise)->Apply(CustomArgsFull);
-BENCHMARK(BM_fullsort_low_card_column_incr)->Apply(CustomArgsFull);
+
+// Low-Cardinality Sort
+BENCHMARK(BM_fullsort_low_card_rowwise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_colwise)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_colinc)->Apply(CustomArgsFull);
+
 BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 
