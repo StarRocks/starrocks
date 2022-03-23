@@ -142,6 +142,19 @@ public:
     // 2. Cost rappresenta un overhead dell'operatore in un ciclo di esecuzione
     virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns; }
     virtual int64_t get_io_cost() const { return _total_io_bytes; }
+
+    virtual int64_t get_last_growth_cpu_time_ns() {
+        int64_t growth_time = _total_cost_cpu_time_ns - _last_growth_cpu_time_ns;
+        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns;
+        return growth_time;
+    }
+
+    virtual int64_t get_last_growth_io_bytes() {
+        int64_t growth_bytes = _total_io_bytes - _last_growth_io_bytes;
+        _last_growth_io_bytes = _total_io_bytes;
+        return growth_bytes;
+    }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -183,6 +196,9 @@ protected:
 
     int64_t _total_cost_cpu_time_ns = 0;
     int64_t _total_io_bytes = 0;
+
+    int64_t _last_growth_cpu_time_ns = 0;
+    int64_t _last_growth_io_bytes = 0;
 
 
 private:

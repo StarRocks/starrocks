@@ -105,7 +105,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 is_big_query = wg->is_big_query(*query_ctx);
             }
            
-            if (!status.ok() && is_big_query) {
+            if (!status.ok() || is_big_query) {
                 if (is_big_query) {
                     LOG(WARNING) << "[Driver] Process exceed limit, query_id=" << print_id(driver->query_ctx()->query_id())
                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());          

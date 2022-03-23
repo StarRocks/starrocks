@@ -185,17 +185,22 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    // If there is only one query, do not check the big query
+    int64_t time_now = MonotonicNanos();
+
     // just for debug
+    /*
     LOG(WARNING) << "_cur_query_num: " <<  _cur_query_num
                  << " total_cpu_cost: " << _total_cpu_cost
                  << " get_init_wg_cpu_cost " << query_context.get_init_wg_cpu_cost()
                  << " get_cpu_cost " << query_context.get_cpu_cost()
-                 << " query_begin_time: " << query_context.query_begin_time();
-
-    // If there is only one query, do not check the big query
+                 << " query_begin_time: " << query_context.query_begin_time()
+                 << " time_now: " << time_now
+                 << " judge: " << config::min_execute_time * NANOS_PER_SEC;
+    */
+    
     if (_cur_query_num <= 1) { return false; }
-
-    int64_t time_now = MonotonicNanos();
+    
     if (time_now - query_context.query_begin_time() >= config::min_execute_time * NANOS_PER_SEC) {
         return false;
     }

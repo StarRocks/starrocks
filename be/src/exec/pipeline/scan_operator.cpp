@@ -130,6 +130,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
