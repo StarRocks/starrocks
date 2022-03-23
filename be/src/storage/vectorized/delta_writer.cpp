@@ -79,11 +79,8 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kUninitialized);
-            auto msg = Substitute(
-                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
-                    " Memory stats of top five tablets: $3",
-                    _opt.tablet_id, tracker->consumption(), tracker->limit(),
-                    _storage_engine->update_manager()->topn_memory_stats(5));
+            auto msg = Substitute("Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2.",
+                                  _opt.tablet_id, tracker->consumption(), tracker->limit());
             LOG(WARNING) << msg;
             return Status::MemoryLimitExceeded(msg);
         }
