@@ -239,8 +239,8 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
         std::pair<int, int> range{0, column->size()};
 
         std::vector<int> expected{0, 3, 3, 3, 5, 5, 6, 7, 8, 9};
-        for (int limit = 1; limit < column->size(); limit++) {
-            int limited = column->size();
+        for (size_t limit = 1; limit < column->size(); limit++) {
+            size_t limited = column->size();
             Tie tie(column->size(), 1);
             Permutation perm = make_permutation(column->size());
             sort_and_tie_helper(false, column.get(), true, perm, tie, cmp, range, true, limit, &limited);
@@ -256,8 +256,8 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
         std::pair<int, int> range{0, column->size()};
 
         std::vector<int> expected{0, 3, 3, 3, 6, 6, 6, 8, 8, 9, 10, 11};
-        for (int limit = 1; limit < column->size(); limit++) {
-            int limited = column->size();
+        for (size_t limit = 1; limit < column->size(); limit++) {
+            size_t limited = column->size();
             Permutation perm = make_permutation(column->size());
             Tie tie(column->size(), 1);
 

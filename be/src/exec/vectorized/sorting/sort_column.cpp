@@ -393,7 +393,7 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
                     [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
         }
     }
-    
+
     return Status::OK();
 }
 
