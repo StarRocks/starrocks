@@ -65,17 +65,18 @@ public class WorkGroupMgr implements Writable {
         lock.writeLock().unlock();
     }
 
-    public void createWorkGroup(CreateWorkGroupStmt stmt) {
+    public void createWorkGroup(CreateWorkGroupStmt stmt) throws DdlException {
         writeLock();
         try {
             WorkGroup wg = stmt.getWorkgroup();
             if (workGroupMap.containsKey(wg.getName())) {
-                // create resource_group if exists <name> ...
-                if (stmt.isIfNotExists()) {
-                    return;
-                    // create resource_group or replace <name> ...
-                } else if (stmt.isReplaceIfExists()) {
+                // create resource_group or replace <name> ...
+                if (stmt.isReplaceIfExists()) {
                     dropWorkGroupUnlocked(wg.getName());
+                } else if (!stmt.isIfNotExists()) {
+                    throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
+                } else {
+                    return;
                 }
             }
             wg.setId(catalog.getCurrentCatalog().getNextId());
@@ -114,7 +115,10 @@ public class WorkGroupMgr implements Writable {
                 return workGroupList.stream().map(WorkGroup::show)
                         .flatMap(Collection::stream).collect(Collectors.toList());
             } else {
-                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+                String qualifiedUser = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+                //default_cluster:test
+                String[] userParts = qualifiedUser.split(":");
+                String user = userParts[userParts.length - 1];
                 String roleName = Catalog.getCurrentCatalog().getAuth()
                         .getRoleName(ConnectContext.get().getCurrentUserIdentity());
                 String remoteIp = ConnectContext.get().getRemoteIP();

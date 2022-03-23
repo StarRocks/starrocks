@@ -110,7 +110,7 @@ public class WorkGroupClassifier implements Writable {
             return false;
         }
         if (this.sourceIp != null) {
-            SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(sourceIp).getInfo();
+            SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(this.sourceIp).getInfo();
             if (!subnetInfo.isInRange(sourceIp)) {
                 return false;
             }
