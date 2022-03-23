@@ -138,8 +138,8 @@ public class SortInfo {
         Preconditions.checkState(orderingExprs_.size() == nullsFirstParams_.size());
         List<Boolean> nullsFirst = Lists.newArrayList();
         for (int i = 0; i < orderingExprs_.size(); ++i) {
-            nullsFirst.add(OrderByElement.nullsFirst(nullsFirstParams_.get(i),
-                    isAscOrder_.get(i)));
+            nullsFirst.add(OrderByElement.nullsFirst(nullsFirstParams_.get(i)
+            ));
         }
         return nullsFirst;
     }
