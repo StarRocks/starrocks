@@ -300,7 +300,7 @@ public class DecommissionBackendJob extends AlterJob {
      * @param in
      * @throws IOException
      */
-    public void readFields(DataInput in) throws IOException {
+    public synchronized void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
@@ -342,7 +342,7 @@ public class DecommissionBackendJob extends AlterJob {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
+    public synchronized void write(DataOutput out) throws IOException {
         super.write(out);
 
         out.writeLong(clusterBackendsMap.keySet().size());

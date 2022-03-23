@@ -140,7 +140,7 @@ public class FileScanNodeTest {
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
@@ -200,7 +200,7 @@ public class FileScanNodeTest {
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -252,7 +252,7 @@ public class FileScanNodeTest {
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -300,7 +300,7 @@ public class FileScanNodeTest {
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
@@ -333,7 +333,7 @@ public class FileScanNodeTest {
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);

@@ -158,7 +158,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.security.auth.login.LoginException;
@@ -338,8 +338,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
         if (metastoreUris.length <= 1) {
             return;
         }
-        Random rng = new Random();
-        int index = rng.nextInt(metastoreUris.length - 1) + 1;
+        int index = ThreadLocalRandom.current().nextInt(metastoreUris.length - 1) + 1;
         URI tmp = metastoreUris[0];
         metastoreUris[0] = metastoreUris[index];
         metastoreUris[index] = tmp;

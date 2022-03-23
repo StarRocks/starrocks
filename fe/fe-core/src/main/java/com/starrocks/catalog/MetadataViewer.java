@@ -255,7 +255,7 @@ public class MetadataViewer {
 
     private static String graph(int num, int totalNum, int mod) {
         StringBuilder sb = new StringBuilder();
-        int normalized = (int) Math.ceil(num * mod / totalNum);
+        int normalized = (int) Math.ceil(num * mod * 1.0 / totalNum);
         for (int i = 0; i < normalized; ++i) {
             sb.append(">");
         }

@@ -321,7 +321,7 @@ public class ExportJob implements Writable {
                 throw new UserException("Unsupported table type: " + exportTable.getType());
         }
 
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         return scanNode;
     }
 
@@ -461,7 +461,7 @@ public class ExportJob implements Writable {
         return columnNames;
     }
 
-    public int getProgress() {
+    public synchronized int getProgress() {
         return progress;
     }
 

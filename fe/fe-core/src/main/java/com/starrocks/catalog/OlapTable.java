@@ -256,13 +256,11 @@ public class OlapTable extends Table {
 
         // change single partition name
         if (this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-            // use for loop, because if we use getPartition(partitionName),
-            // we may not be able to get partition because this is a bug fix
-            for (Partition partition : getPartitions()) {
+            if (getPartitions().stream().findFirst().isPresent()) {
+                Partition partition = getPartitions().stream().findFirst().get();
                 partition.setName(newName);
                 nameToPartition.clear();
                 nameToPartition.put(newName, partition);
-                break;
             }
         }
     }

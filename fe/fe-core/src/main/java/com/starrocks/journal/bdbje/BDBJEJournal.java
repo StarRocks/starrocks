@@ -163,11 +163,10 @@ public class BDBJEJournal implements Journal {
                 } catch (DatabaseException e) {
                     LOG.error("catch an exception when writing to database. sleep and retry. journal id {}", id, e);
                     try {
-                        Thread.sleep(5 * 1000);
+                        this.wait(5 * 1000);
                     } catch (InterruptedException e1) {
                         e1.printStackTrace();
                     }
-                    continue;
                 }
             }
         } finally {

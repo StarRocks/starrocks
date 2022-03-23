@@ -105,10 +105,10 @@ public class EsMajorVersion {
             return false;
         }
 
-        EsMajorVersion version = (EsMajorVersion) o;
+        EsMajorVersion other = (EsMajorVersion) o;
 
-        return major == version.major &&
-                version.equals(version.version);
+        return major == other.major &&
+                version.equals(other.version);
     }
 
     @Override

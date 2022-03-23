@@ -1180,8 +1180,8 @@ public class MasterImpl {
             response.setStatus(status);
         } finally {
             db.readUnlock();
-            return response;
         }
+        return response;
     }
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {

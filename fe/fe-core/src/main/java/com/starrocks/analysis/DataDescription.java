@@ -442,7 +442,7 @@ public class DataDescription {
         }
 
         String precision = args.get(0).toLowerCase();
-        String regex = "^year|month|day|hour$";
+        String regex = "^(?:year|month|day|hour)$";
         if (!precision.matches(regex)) {
             throw new AnalysisException("Alignment precision error. regex: " + regex + ", arg: " + precision);
         }
