@@ -520,8 +520,6 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
                     _short_circuit_driver_sequences.end()) {
                     continue;
                 }
-            }
-            if (item.driver_sequence >= 0) {
                 _has_chunks_per_driver_sequence[item.driver_sequence] = true;
             }
             _chunk_queue.emplace_back(std::move(item));
