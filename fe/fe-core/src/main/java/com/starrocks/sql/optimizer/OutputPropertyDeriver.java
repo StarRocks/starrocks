@@ -271,7 +271,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     @Override
     public PhysicalPropertySet visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         Preconditions.checkState(this.childrenOutputProperties.size() == 1);
-        return childrenOutputProperties.get(0);
+        return requirements;
     }
 
     @Override
