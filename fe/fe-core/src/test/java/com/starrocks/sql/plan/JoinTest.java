@@ -2130,4 +2130,24 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testColocateJoinWithDiffPredicateOrders() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 a join t0 b on a.v1 = b.v2 and a.v2 = b.v1";
+        String plan = getFragmentPlan(sql);
+        // check cannot use colcoate join
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)");
+
+        sql = "select a.t1a from test_all_type a join test_all_type b on a.t1a = b.t1b and a.t1b = b.t1a";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 5:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: t1a = 21: cast\n" +
+                "  |  equal join conjunct: 22: cast = 11: t1a");
+        FeConstants.runningUnitTest = false;
+    }
 }
