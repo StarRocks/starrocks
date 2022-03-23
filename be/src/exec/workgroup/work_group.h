@@ -59,6 +59,10 @@ public:
 
     int64_t vruntime_ns() const { return _vruntime_ns; }
     int64_t real_runtime_ns() const { return _vruntime_ns * _cpu_limit; }
+
+    int64_t growth_real_runtime_ns() const { return _vruntime_ns * _cpu_limit - _last_vruntime_ns; }
+    void update_last_real_runtime_ns(int64_t last_vruntime_ns) { _last_vruntime_ns = last_vruntime_ns; }
+
     // Accumulate virtual runtime divided by _cpu_limit, so that the larger _cpu_limit,
     // the more cpu time can be consumed proportionally.
     void increment_real_runtime_ns(int64_t real_runtime_ns) { _vruntime_ns += real_runtime_ns / _cpu_limit; }
@@ -66,6 +70,7 @@ public:
 
     double get_cpu_expected_use_ratio() const;
     double get_cpu_actual_use_ratio() const;
+    void set_cpu_actual_use_ratio(double ratio) { _cpu_actual_use_ratio = ratio; }
 
     // If the scan layer generates data, then this interface should be called
     void incr_period_scaned_chunk_num(int32_t chunk_num);
@@ -137,6 +142,7 @@ private:
 
     pipeline::DriverQueuePtr _driver_queue = nullptr;
     int64_t _vruntime_ns = 0;
+    int64_t _last_vruntime_ns = 0;
 
     std::atomic<bool> _is_marked_del = false;
     std::atomic<size_t> _num_drivers = 0;
@@ -153,6 +159,8 @@ private:
     double _diff_factor = 0;
     double _select_factor = 0;
     double _cur_select_factor = 0;
+
+    double _cpu_actual_use_ratio = 0;
 };
 
 class WorkerOwnerManager {
