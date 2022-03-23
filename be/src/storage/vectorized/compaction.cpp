@@ -224,7 +224,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     }
 
     if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
-        return Status::InternalError("Process is going to quit. The compaction should be stopped as soon as possible.");
+        return Status::InternalError("Process is going to quit. The compaction will be stopped.");
     }
 
     if (stats_output != nullptr) {
@@ -330,8 +330,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         }
 
         if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
-            return Status::InternalError(
-                    "Process is going to quit. The compaction should be stopped as soon as possible.");
+            return Status::InternalError("Process is going to quit. The compaction will be stopped.");
         }
 
         if (is_key && stats_output != nullptr) {
@@ -363,7 +362,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
 Status Compaction::modify_rowsets() {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
-        return Status::InternalError("Process is going to quit. The compaction should be stopped as soon as possible.");
+        return Status::InternalError("Process is going to quit. The compaction will be stopped.");
     }
 
     std::vector<RowsetSharedPtr> output_rowsets;

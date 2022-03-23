@@ -66,7 +66,7 @@ Status EngineStorageMigrationTask::execute() {
 Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
-        LOG(WARNING) << "Process is going to quit. The migration should be stopped as soon as possible.";
+        LOG(WARNING) << "Process is going to quit. The migration will be stopped.";
         return Status::InternalError("Process is going to quit.");
     }
 
