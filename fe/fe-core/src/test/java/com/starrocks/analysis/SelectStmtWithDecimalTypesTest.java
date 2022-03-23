@@ -305,7 +305,7 @@ public class SelectStmtWithDecimalTypesTest {
         Assert.assertTrue(items.get(2).getExpr().getType().isFloatingPointType());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testSmallIntInPredicate() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
