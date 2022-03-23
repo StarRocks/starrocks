@@ -119,8 +119,11 @@ public class WorkGroupMgr implements Writable {
                 //default_cluster:test
                 String[] userParts = qualifiedUser.split(":");
                 String user = userParts[userParts.length - 1];
-                String roleName = Catalog.getCurrentCatalog().getAuth()
+                String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
                         .getRoleName(ConnectContext.get().getCurrentUserIdentity());
+                //default_cluster:role
+                String[] roleParts = qualifiedRoleName.split(":");
+                String roleName = roleParts[roleParts.length - 1];
                 String remoteIp = ConnectContext.get().getRemoteIP();
                 return workGroupList.stream().map(w -> w.showVisible(user, roleName, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
