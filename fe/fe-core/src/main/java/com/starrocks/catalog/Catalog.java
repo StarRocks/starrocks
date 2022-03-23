@@ -217,6 +217,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
@@ -7326,7 +7327,7 @@ public class Catalog {
 
         if (!isReplay) {
             // drop all replicas
-            AgentBatchTask batchTask = new AgentBatchTask();
+            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> allIndices = partition.getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
@@ -7335,23 +7336,55 @@ public class Catalog {
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         if (partition.isUseStarOS()) {
-                            DropReplicaTask dropTask = new DropReplicaTask(
-                                    ((StarOSTablet) tablet).getPrimaryBackendId(), tabletId, schemaHash, true);
+                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
                             batchTask.addTask(dropTask);
                         } else {
                             List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
                             for (Replica replica : replicas) {
                                 long backendId = replica.getBackendId();
                                 DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                                if (batchTask == null) {
+                                    batchTask = new AgentBatchTask();
+                                    batchTaskMap.put(backendId, batchTask);
+                                }
                                 batchTask.addTask(dropTask);
                             } // end for replicas
                         }
                     } // end for tablets
                 } // end for indices
             } // end for partitions
-            AgentTaskExecutor.submit(batchTask);
-        }
 
+            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+                AgentBatchTask originTasks = entry.getValue();
+                if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                    AgentBatchTask partTask = new AgentBatchTask();
+                    List<AgentTask> allTasks = originTasks.getAllTasks();
+                    int curTask = 1;
+                    for (AgentTask task : allTasks) {
+                        partTask.addTask(task);
+                        if (curTask++ > numDropTaskPerBe) {
+                            AgentTaskExecutor.submit(partTask);
+                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                            curTask = 1;
+                            partTask = new AgentBatchTask();
+                        }
+                    }
+                    if (partTask.getAllTasks().size() > 0) {
+                        AgentTaskExecutor.submit(partTask);
+                    }
+                } else {
+                    AgentTaskExecutor.submit(originTasks);
+                }
+            }
+        }
         // colocation
         Catalog.getCurrentColocateIndex().removeTable(olapTable.getId());
     }
