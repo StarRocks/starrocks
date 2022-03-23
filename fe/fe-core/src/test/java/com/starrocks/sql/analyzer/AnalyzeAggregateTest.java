@@ -50,6 +50,15 @@ public class AnalyzeAggregateTest {
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeSuccess("select abs(count(distinct b1)) from test_object;");
         analyzeSuccess("select date_add(ti, INTERVAL 2 DAY) from tall group by date_add(ti, INTERVAL 2 DAY)");
+
+        analyzeSuccess("select v1,count(*) FROM t0 group by v1 having array_position([1,2,3,4],v1) = 1");
+        analyzeSuccess("select v1,count(*) FROM t0 group by v1 having array_position([1,2,3,v1],4) = 1");
+        analyzeFail("select v1,count(*) FROM t0 group by v1 having array_position([1,2,3,4],v2) = 1");
+        analyzeFail("select v1,count(*) FROM t0 group by v1 having array_position([v1,v2,v3],v1) = 1");
+        analyzeSuccess("select v1,count(*) FROM t0 group by v1 having array_position([1,2,3,4],sum(v2)) = 1");
+        analyzeSuccess("select v1 from t0 group by v1 having parse_json('{\"a\": 1}')->'a'=1");
+        analyzeSuccess("select ta,tc from tall group by ta,tc having ta = @@sql_mode");
+        analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
     }
 
     @Test
