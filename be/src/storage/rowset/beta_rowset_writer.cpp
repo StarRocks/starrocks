@@ -222,6 +222,8 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
                 LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
             }
         }
+        // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
+        StorageEngine::instance()->release_rowset_id(_context.rowset_id);
     }
 }
 
@@ -547,6 +549,8 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
             auto st = _context.env->delete_file(path);
             LOG_IF(WARNING, !st.ok()) << "Fail to delete file=" << path << ", " << st.to_string();
         }
+        // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
+        StorageEngine::instance()->release_rowset_id(_context.rowset_id);
     }
 }
 
