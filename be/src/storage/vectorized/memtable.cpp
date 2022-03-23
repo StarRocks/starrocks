@@ -302,7 +302,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     }
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
-    if (!*deletes) {
+    if (!(*deletes)) {
         auto st = PrimaryKeyEncoder::create_column(_vectorized_schema, deletes);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << _vectorized_schema
