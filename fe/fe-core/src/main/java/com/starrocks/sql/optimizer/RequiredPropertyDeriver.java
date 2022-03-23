@@ -158,8 +158,9 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
         node.getRepeatColumnRef().forEach(subRefs::retainAll);
 
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         if (subRefs.isEmpty()) {
-            return visitOperator(node, context);
+            return null;
         }
 
         DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(
