@@ -100,21 +100,21 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
 
             Preconditions.checkState(leftLocalDistributionDesc.getColumns().size() ==
                     rightLocalDistributionDesc.getColumns().size());
+        }
+        // check orders of predicate columns is right
+        // check predicate columns is satisfy bucket hash columns
+        for (int i = 0; i < leftLocalDistributionDesc.getColumns().size(); ++i) {
+            int leftScanColumnId = leftLocalDistributionDesc.getColumns().get(i);
+            int leftIndex = leftShuffleColumns.indexOf(leftScanColumnId);
 
-            // check orders of predicate columns is right
-            // check predicate columns is satisfy bucket hash columns
-            for (int i = 0; i < leftLocalDistributionDesc.getColumns().size(); ++i) {
-                int leftScanColumnId = leftLocalDistributionDesc.getColumns().get(i);
-                int leftIndex = leftShuffleColumns.indexOf(leftScanColumnId);
+            int rightScanColumnId = rightLocalDistributionDesc.getColumns().get(i);
+            int rightIndex = rightShuffleColumns.indexOf(rightScanColumnId);
 
-                int rightScanColumnId = rightLocalDistributionDesc.getColumns().get(i);
-                int rightIndex = rightShuffleColumns.indexOf(rightScanColumnId);
-
-                if (leftIndex != rightIndex) {
-                    return false;
-                }
+            if (leftIndex != rightIndex) {
+                return false;
             }
         }
+
         return true;
     }
 
