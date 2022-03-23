@@ -28,6 +28,8 @@ public:
     std::shared_ptr<CompactionTask> create_compaction_task();
 
 private:
+    StatusOr<size_t> _get_segment_iterator_num();
+
     Version _output_version;
     TabletSharedPtr _tablet;
     std::vector<RowsetSharedPtr> _input_rowsets;
