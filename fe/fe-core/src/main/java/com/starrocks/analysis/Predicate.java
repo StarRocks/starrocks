@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -52,7 +53,8 @@ public abstract class Predicate extends Expr {
         numDistinctValues = 3;
 
         for (Expr expr : children) {
-            if (!expr.getType().isPredicableType(this)) {
+            if (expr.getType().isOnlyMetricType() ||
+                    (expr.getType() instanceof ArrayType && !(this instanceof IsNullPredicate))) {
                 throw new AnalysisException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
             }
         }
