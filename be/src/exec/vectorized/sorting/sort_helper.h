@@ -81,8 +81,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
                                                            NullPred null_pred, bool is_asc_order, bool is_null_first,
                                                            Permutation& permutation, Tie& tie,
-                                                           std::pair<int, int> range, bool build_tie, int limit,
-                                                           int* limited) {
+                                                           std::pair<int, int> range, bool build_tie, size_t limit,
+                                                           size_t* limited) {
     VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
 
     TieIterator iterator(tie, range.first, range.second);
@@ -94,15 +94,15 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
         int range_last = iterator.range_last;
 
         if (UNLIKELY(limit > 0 && range_first > limit)) {
-            *limited = std::min(*limited, range_first);
+            *limited = std::min(*limited, (size_t)range_first);
             break;
         }
         if (LIKELY(range_last - range_first > 1)) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
             int pivot_start = pivot_iter - permutation.begin();
-            std::pair<int, int> null_range = {range_first, pivot_start};
-            std::pair<int, int> notnull_range = {pivot_start, range_last};
+            std::pair<size_t, size_t> null_range = {range_first, pivot_start};
+            std::pair<size_t, size_t> notnull_range = {pivot_start, range_last};
             if (!is_null_first) {
                 std::swap(null_range, notnull_range);
             }
@@ -190,8 +190,8 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 template <class DataComparator, class PermutationType>
 static inline Status sort_and_tie_helper(const bool& cancel, const Column* column, bool is_asc_order,
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
-                                         std::pair<int, int> range, bool build_tie, int limit = 0,
-                                         int* limited = nullptr) {
+                                         std::pair<int, int> range, bool build_tie, size_t limit = 0,
+                                         size_t* limited = nullptr) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](size_t first_iter, size_t last_iter) {

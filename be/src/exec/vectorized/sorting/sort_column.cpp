@@ -117,7 +117,7 @@ class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSor
 public:
     explicit VerticalColumnSorter(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                                   bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                                  bool build_tie, int limit)
+                                  bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _is_asc_order(is_asc_order),
@@ -130,7 +130,7 @@ public:
               _limit(limit),
               _limited(permutation.size()) {}
 
-    int get_limited() const { return _limited; }
+    size_t get_limited() const { return _limited; }
 
     Status do_visit(const vectorized::NullableColumn& column) {
         std::vector<NullData> null_datas;
@@ -308,7 +308,7 @@ private:
 
     template <class T>
     void _restore_inlined_permutation(const InlinedChunkPermutation<T> inlined) {
-        size_t n = std::min(inlined.size(), (size_t)_limited);
+        size_t n = std::min(inlined.size(), _limited);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;
             _permutation[i].index_in_chunk = inlined[i].index_in_chunk;
@@ -331,8 +331,8 @@ private:
     Tie& _tie;
     std::pair<int, int> _range;
     bool _build_tie;
-    int _limit;
-    int _limited;
+    size_t _limit;
+    size_t _limited;
 };
 
 Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_asc_order, bool is_null_first,
@@ -399,7 +399,7 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
 
 Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                              bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             bool build_tie, int limit, int* limited) {
+                             bool build_tie, size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
     VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie,
@@ -413,7 +413,7 @@ Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& c
 
 Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            int limit) {
+                            size_t limit) {
     if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
