@@ -22,11 +22,9 @@
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.MysqlUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.thrift.TMysqlErrorHubInfo;
 import org.apache.logging.log4j.LogManager;
@@ -35,11 +33,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.List;
 import java.util.Map;
 
 public class MysqlLoadErrorHub extends LoadErrorHub {
@@ -142,63 +135,6 @@ public class MysqlLoadErrorHub extends LoadErrorHub {
     public MysqlLoadErrorHub(MysqlParam mysqlParam) {
         Preconditions.checkNotNull(mysqlParam);
         param = mysqlParam;
-    }
-
-    @Override
-    public List<ErrorMsg> fetchLoadError(long jobId) {
-        List<ErrorMsg> result = Lists.newArrayList();
-
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet resultSet = null;
-
-        conn = MysqlUtil.getConnection(
-                param.getHost(), param.getPort(), param.getDb(),
-                param.getUser(), param.getPasswd());
-        if (conn == null) {
-            return result;
-        }
-
-        String sql = null;
-        try {
-            sql = QUERY_SQL_FIRST + param.getTable() + QUERY_SQL_LAST;
-            stmt = conn.prepareStatement(sql);
-            stmt.setLong(1, jobId);
-            stmt.setLong(2, MAX_LINE);
-            stmt.setQueryTimeout(STMT_TIMEOUT_S);
-            resultSet = stmt.executeQuery();
-            while (resultSet.next()) {
-                String msg = resultSet.getString("error_msg");
-                result.add(new ErrorMsg(jobId, msg));
-            }
-        } catch (SQLException e) {
-            LOG.warn("fail to query load error mysql. "
-                            + "sql={}, table={}, jobId={}, max_line={}, exception={}",
-                    sql, param.getTable(), jobId, MAX_LINE, e);
-        } finally {
-            if (resultSet != null) {
-                try {
-                    resultSet.close();
-                } catch (SQLException sqlEx) {
-                    LOG.warn("fail to close resultSet of load error.");
-                }
-                resultSet = null;
-            }
-
-            if (stmt != null) {
-                try {
-                    stmt.close();
-                } catch (SQLException sqlEx) {
-                    LOG.warn("fail to close stmt.");
-                }
-                stmt = null;
-            }
-
-            MysqlUtil.closeConnection(conn);
-            conn = null;
-        }
-
-        return result;
     }
 
     @Override
