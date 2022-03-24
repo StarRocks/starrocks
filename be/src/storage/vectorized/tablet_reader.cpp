@@ -61,10 +61,6 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
-    VLOG(1) << "open table reader with "  << read_params.predicates.size() << " predicates";
-    for (auto pred: read_params.predicates) {
-        VLOG(1) << "table reader predicate: " << pred->debug_string();
-    }
     Status st = _init_collector(read_params);
     _rowsets.clear(); // unused anymore.
     return st;

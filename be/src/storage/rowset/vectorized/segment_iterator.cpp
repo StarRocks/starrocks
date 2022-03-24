@@ -485,7 +485,6 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             query_preds.clear();
         }
 
-
         const ColumnPredicate* del_pred;
         auto iter = del_predicates.find(cid);
         del_pred = iter != del_predicates.end() ? &(iter->second) : nullptr;
