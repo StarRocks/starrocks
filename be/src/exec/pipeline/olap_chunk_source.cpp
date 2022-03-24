@@ -40,6 +40,10 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
+    _tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    if (_tuple_desc == nullptr) {
+        return Status::InternalError("Failed to get tuple descriptor.");
+    }
 
     _init_counter(state);
 
@@ -72,6 +76,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 void OlapChunkSource::_init_counter(RuntimeState* state) {
+    _runtime_profile->add_info_string("Table", _tuple_desc->table_desc()->name());
+
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);

@@ -21,6 +21,8 @@
 
 #include "service/internal_service.h"
 
+#include <chrono>
+
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
@@ -88,6 +90,10 @@ void PInternalServiceImpl<T>::transmit_chunk(google::protobuf::RpcController* cn
     // transmit_data(), which will cause a dirty memory access.
     brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
     PTransmitChunkParams* req = const_cast<PTransmitChunkParams*>(request);
+    const auto receive_timestamp =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+    response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
         const butil::IOBuf& io_buf = cntl->request_attachment();
         size_t offset = 0;

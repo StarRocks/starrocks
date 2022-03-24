@@ -888,11 +888,14 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     // Initialize the counters
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
-    _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::BYTES);
+    _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
     _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTimer");
     _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTimer");
+    _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");
+
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
     _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
+
     _pass_through_context.init();
 }
 
@@ -914,6 +917,7 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
+    SCOPED_TIMER(_process_total_timer);
     SCOPED_TIMER(_sender_total_timer);
     COUNTER_UPDATE(_request_received_counter, 1);
     int use_sender_id = _is_merging ? request.sender_id() : 0;

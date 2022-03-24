@@ -358,6 +358,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
+    _network_overhead = ADD_TIMER(_unique_metrics, "NetworkOverhead");
+
     for (auto& _channel : _channels) {
         RETURN_IF_ERROR(_channel->init(state));
     }
@@ -535,6 +537,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
+    COUNTER_SET(_network_overhead, _buffer->network_overhead());
     Operator::close(state);
 }
 
