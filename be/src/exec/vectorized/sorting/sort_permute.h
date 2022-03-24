@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "glog/logging.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -76,6 +77,16 @@ inline void restore_small_permutation(const SmallPermutation& perm, Permutation&
     output.resize(perm.size());
     for (int i = 0; i < perm.size(); i++) {
         output[i].index_in_chunk = perm[i].index_in_chunk;
+    }
+}
+
+// Convert a permutation to selection vector, which could be used to filter chunk
+template <class Permutation>
+void permutate_to_selective(const Permutation& perm, std::vector<uint32_t>* select) {
+    DCHECK(!!select);
+    select->resize(perm.size());
+    for (size_t i = 0; i < perm.size(); i++) {
+        (*select)[i] = perm[i].index_in_chunk;
     }
 }
 

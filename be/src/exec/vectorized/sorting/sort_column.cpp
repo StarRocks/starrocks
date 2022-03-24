@@ -127,4 +127,26 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
     return Status::OK();
 }
 
+Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+                            const std::vector<int>& null_firsts, SmallPermutation* small_perm) {
+    if (columns.size() < 1) {
+        return Status::OK();
+    }
+    size_t num_rows = columns[0]->size();
+    DCHECK_EQ(num_rows, small_perm->size());
+    Tie tie(num_rows, 1);
+    std::pair<int, int> range{0, num_rows};
+
+    for (int col_index = 0; col_index < columns.size(); col_index++) {
+        ColumnPtr column = columns[col_index];
+        bool is_asc_order = (sort_orders[col_index] == 1);
+        bool is_null_first = is_asc_order ? (null_firsts[col_index] == -1) : (null_firsts[col_index] == 1);
+        bool build_tie = col_index != columns.size() - 1;
+        RETURN_IF_ERROR(
+                sort_and_tie_column(cancel, column, is_asc_order, is_null_first, *small_perm, tie, range, build_tie));
+    }
+
+    return Status::OK();
+}
+
 } // namespace starrocks::vectorized
