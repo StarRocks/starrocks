@@ -139,14 +139,15 @@ private:
 };
 
 void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    // if expr was slot reference, we don't have to rewrite predicate
-    if (expr_ctx->root()->is_slotref()) {
-        dict_opt_ctx->could_apply_dict_optimize = false;
-        return;
-    }
     if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
         dict_opt_ctx->slot_id = f->slot_id();
         dict_opt_ctx->could_apply_dict_optimize = true;
+        return;
+    }
+
+    // if expr was slot reference, we don't have to rewrite predicate
+    if (expr_ctx->root()->is_slotref()) {
+        dict_opt_ctx->could_apply_dict_optimize = false;
         return;
     }
 
@@ -344,6 +345,7 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
         }
     }
 
+    // TODO: remove this code in 2.4
     // rewrite slot-id for conjunct
     std::vector<SlotId> slots;
     for (auto& conjunct : conjunct_ctxs) {
