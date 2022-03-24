@@ -152,6 +152,8 @@ add_library(Storage STATIC
     compaction_utils.cpp
     compaction_manager.cpp
     compaction_scheduler.cpp
+    horizontal_compaction_task.cpp
+    vertical_compaction_task.cpp
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
 )
