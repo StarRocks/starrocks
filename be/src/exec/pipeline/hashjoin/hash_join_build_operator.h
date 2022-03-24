@@ -66,11 +66,12 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+    void retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns);
 
 private:
     HashJoinerFactoryPtr _hash_joiner_factory;
     std::unique_ptr<PartialRuntimeFilterMerger> _partial_rf_merger;
-
+    std::vector<vectorized::Columns> _string_key_columns;
     const TJoinDistributionMode::type _distribution_mode;
 };
 
