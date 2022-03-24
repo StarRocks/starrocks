@@ -10,9 +10,7 @@
 
 namespace starrocks::vectorized {
 TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc)
-        : ExecNode(pool, tnode, desc), _tnode(tnode) {
-    _input_chunk_ptr = nullptr;
-}
+        : ExecNode(pool, tnode, desc), _tnode(tnode) {}
 
 TableFunctionNode::~TableFunctionNode() = default;
 
@@ -208,8 +206,8 @@ Status TableFunctionNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    if (_table_function != nullptr) {
-        RETURN_IF_ERROR(_table_function->close(_table_function_state));
+    if (_table_function != nullptr && _table_function_state != nullptr) {
+        _table_function->close(_table_function_state);
     }
     return ExecNode::close(state);
 }
