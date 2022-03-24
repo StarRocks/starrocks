@@ -347,8 +347,13 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         int32_t dest_dop = -1;
         if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
             sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-            is_pipeline_level_shuffle = true;
             dest_dop = t_stream_sink.dest_dop;
+
+            // When pipeline_dop == 1, sender side willn't execute in pipeline level shuffle way,
+            // so at receiver side, we should disable is_pipeline_level_shuffle.
+            if (dest_dop > 1) {
+                is_pipeline_level_shuffle = true;
+            }
             DCHECK_GT(dest_dop, 0);
         }
 
