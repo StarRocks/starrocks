@@ -5,6 +5,7 @@
 #include <ostream>
 
 #include "column/chunk.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_define.h"
 #include "storage/vectorized/chunk_aggregator.h"
@@ -46,29 +47,19 @@ private:
     void _merge();
 
     void _sort(bool is_final);
-    void _sort_chunk_by_columns();
-    void _sort_chunk_by_rows();
-    template <bool is_final>
-    void _append_to_sorted_chunk(Chunk* src, Chunk* dest);
+    void _sort_column_inc();
+    void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
-
-    friend class SortHelper;
-
-    struct PermutationItem {
-        uint32_t index_in_chunk;
-        uint32_t permutation_index;
-    };
-    using Permutation = std::vector<PermutationItem>;
 
     ChunkPtr _chunk;
     ChunkPtr _result_chunk;
     vector<uint8_t> _result_deletes;
 
     // for sort by columns
-    Permutation _permutations;
+    SmallPermutation _permutations;
     std::vector<uint32_t> _selective_values;
     Schema _vectorized_schema;
 
