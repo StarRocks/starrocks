@@ -86,7 +86,6 @@ public class Storage {
         if (versionFile.isFile()) {
             try (FileInputStream in = new FileInputStream(versionFile)) {
                 prop.load(in);
-                in.close();
                 clusterID = Integer.parseInt(prop.getProperty(CLUSTER_ID));
                 if (prop.getProperty(TOKEN) != null) {
                     token = prop.getProperty(TOKEN);
@@ -98,7 +97,6 @@ public class Storage {
         if (roleFile.isFile()) {
             try (FileInputStream in = new FileInputStream(roleFile)) {
                 prop.load(in);
-                in.close();
                 role = FrontendNodeType.valueOf(prop.getProperty(FRONTEND_ROLE));
                 // For compatibility, NODE_NAME may not exist in ROLE file, set nodeName to null
                 nodeName = prop.getProperty(NODE_NAME, null);
@@ -108,9 +106,7 @@ public class Storage {
         // Find the latest image
         File dir = new File(metaDir);
         File[] children = dir.listFiles();
-        if (children == null) {
-            return;
-        } else {
+        if (children != null) {
             for (File child : children) {
                 String name = child.getName();
                 try {
