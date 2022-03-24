@@ -114,7 +114,6 @@ Status move_to_trash(const std::filesystem::path& file_path) {
 }
 
 OLAPStatus read_write_test_file(const string& test_file_path) {
-
     if (access(test_file_path.c_str(), F_OK) == 0) {
         if (remove(test_file_path.c_str()) != 0) {
             PLOG(WARNING) << "fail to delete " << test_file_path;
