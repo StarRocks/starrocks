@@ -25,6 +25,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -313,6 +314,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String column = ((Identifier) visit(ctx.identifier())).getValue();
         Expr expr = (Expr) visit(ctx.expressionOrDefault());
         return new ColumnAssignment(column, expr);
+    }
+
+    @Override
+    public ParseNode visitDelete(StarRocksParser.DeleteContext ctx) {
+        QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (ctx.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(ctx.partitionNames());
+        }
+        Expr where = ctx.where != null ? (Expr) visit(ctx.where) : null;
+        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, where);
+        if (ctx.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(ctx.explainDesc()));
+        }
+        return ret;
     }
 
     @Override
