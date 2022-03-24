@@ -2,17 +2,23 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class ArrayTypeTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>)" +
+        starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
     }
@@ -129,5 +135,33 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select * from test_array where array_length(c1) between 2 and 3;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
+    }
+
+    @Test
+    public void testArrayDifferenceArgs1() throws Exception {
+        String sql = "select array_difference(c2) from test_array";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_difference(3: c2)"));
+
+        sql = "select array_difference(c1) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("array_difference function only support numeric array types");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testArrayDifferenceArgs2() throws Exception {
+        String sql = "select array_difference(c0) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("No matching function with signature: array_difference(int(11)).");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testArrayDifferenceArgs3() throws Exception {
+        String sql = "select array_difference(c1, 3) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("No matching function with signature: array_difference(ARRAY<varchar(65533)>, tinyint(4)).");
+        getFragmentPlan(sql);
     }
 }
