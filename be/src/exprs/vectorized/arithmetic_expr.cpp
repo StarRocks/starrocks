@@ -100,7 +100,7 @@ public:
         auto r = _children[1]->evaluate(context, ptr);
 
         if constexpr (pt_is_decimal<Type>) {
-            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, false>;
+            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, true>;
             return VectorizedDiv::template evaluate<Type>(l, r);
         } else {
             using RightZeroCheck = ArithmeticRightZeroCheck<Type>;
