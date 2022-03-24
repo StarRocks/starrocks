@@ -111,7 +111,9 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema, is_key, mask_buffer);
     vectorized::TabletReaderParams reader_params;
-    reader_params.reader_type = ReaderType::READER_LEVEL_COMPACTION;
+    DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
+    reader_params.reader_type =
+            compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
     StatusOr<int32_t> ret = _calculate_chunk_size_for_column_group(column_group);
@@ -125,7 +127,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
     RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    StatusOr<size_t> rows_st = _compact_data(is_key, chunk_size, column_group, reader, schema, output_rs_writer,
+    StatusOr<size_t> rows_st = _compact_data(is_key, chunk_size, column_group, schema, &reader, output_rs_writer,
                                              mask_buffer, source_masks);
     if (!rows_st.ok()) {
         return rows_st.status();
@@ -175,10 +177,11 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
                                                        const std::vector<uint32_t>& column_group,
-                                                       const vectorized::TabletReader& reader,
-                                                       const vectorized::Schema& schema, RowsetWriter* output_rs_writer,
+                                                       const vectorized::Schema& schema,
+                                                       vectorized::TabletReader* reader, RowsetWriter* output_rs_writer,
                                                        vectorized::RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<vectorized::RowSourceMask>* source_masks) {
+    DCHECK(reader);
     size_t output_rows = 0;
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
@@ -196,7 +199,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
 #endif
 
         chunk->reset();
-        status = reader.get_next(chunk.get(), source_masks);
+        status = reader->get_next(chunk.get(), source_masks);
         if (!status.ok()) {
             if (status.is_end_of_file()) {
                 break;
@@ -213,10 +216,10 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
         RETURN_IF_ERROR(output_rs_writer->add_columns(*chunk, column_group, is_key));
 
         _task_info.total_output_num_rows += chunk->num_rows();
-        _task_info.total_del_filtered_rows += reader.stats().rows_del_filtered - column_group_del_filtered_rows;
-        _task_info.total_merged_rows += reader.merged_rows() - column_group_merged_rows;
-        column_group_del_filtered_rows = reader.stats().rows_del_filtered;
-        column_group_merged_rows = reader.merged_rows();
+        _task_info.total_del_filtered_rows += reader->stats().rows_del_filtered - column_group_del_filtered_rows;
+        _task_info.total_merged_rows += reader->merged_rows() - column_group_merged_rows;
+        column_group_del_filtered_rows = reader->stats().rows_del_filtered;
+        column_group_merged_rows = reader->merged_rows();
 
         if (is_key) {
             output_rows += chunk->num_rows();

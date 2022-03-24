@@ -50,7 +50,9 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema);
     vectorized::TabletReaderParams reader_params;
-    reader_params.reader_type = ReaderType::READER_LEVEL_COMPACTION;
+    DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
+    reader_params.reader_type =
+            compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
     int32_t chunk_size = CompactionUtils::get_read_chunk_size(
