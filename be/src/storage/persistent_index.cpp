@@ -1128,7 +1128,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     return status;
 }
 
-Status PersistentIndex::_upsert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
+Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
                                         const vectorized::Schema& pkey_schema, int64_t apply_version,
                                         std::unique_ptr<vectorized::Column> pk_column) {
     OlapReaderStatistics stats;
@@ -1297,7 +1297,7 @@ Status PersistentIndex::build(Tablet* tablet) {
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
-    RETURN_IF_ERROR(_upsert_rowsets(tablet, rowsets, pkey_schema, apply_version, std::move(pk_column)));
+    RETURN_IF_ERROR(_insert_rowsets(tablet, rowsets, pkey_schema, apply_version, std::move(pk_column)));
     if (size() != total_rows - total_dels) {
         LOG(WARNING) << strings::Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2",
                                             tablet->tablet_id(), size(), total_rows - total_dels);
