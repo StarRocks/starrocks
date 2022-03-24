@@ -156,6 +156,7 @@ public:
     // These two methods are used only by the hash join builder.
     void set_builder_finished();
     void set_prober_finished();
+    Columns string_key_columns() { return _string_key_columns; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -284,6 +285,9 @@ private:
                 builder.use_as_join_runtime_filter();
                 Status st = builder.create();
                 if (!st.ok()) continue;
+                if (probe_expr->type().is_string_type()) {
+                    _string_key_columns.emplace_back(column);
+                }
                 builder.add_values(column, kHashJoinKeyColumnOffset);
                 _runtime_in_filters.push_back(builder.get_in_const_predicate());
             }
@@ -353,6 +357,10 @@ private:
     JoinHashTable _ht;
 
     Columns _key_columns;
+    // lifetime of string-typed key columns must exceed HashJoiner's lifetime, because slices in the hash of runtime
+    // in-filter constructed from string-typed key columns reference the memory of this column, and the in-filter's
+    // lifetime can last beyond HashJoiner.
+    Columns _string_key_columns;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

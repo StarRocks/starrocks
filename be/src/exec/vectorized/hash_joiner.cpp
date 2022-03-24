@@ -260,7 +260,7 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
             _is_push_down = false;
         }
 
-        if (_is_push_down || _build_conjunct_ctxs_is_empty) {
+        if (_is_push_down || !_build_conjunct_ctxs_is_empty) {
             // In filter could be used to fast compute segment row range in storage engine
             RETURN_IF_ERROR(_create_runtime_in_filters(state));
         }
