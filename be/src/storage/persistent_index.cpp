@@ -1119,9 +1119,6 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         }
     }
 
-    std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-    std::string l1_index_file_path = _get_l0_index_file_name(_path, _l1_version);
-    LOG(INFO) << "l0_index_file: " << l0_index_file_path << ", l1_index_file: " << l1_index_file_path;
     RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
     _dump_snapshot = false;
     _flushed = false;
