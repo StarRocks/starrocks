@@ -7,7 +7,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/table_function_operator.h"
-#include "exprs/table_function/java_udtf_function.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
