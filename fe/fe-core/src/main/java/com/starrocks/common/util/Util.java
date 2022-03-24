@@ -39,7 +39,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -80,9 +79,6 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.BITMAP, "bitmap");
         TYPE_STRING_MAP.put(PrimitiveType.PERCENTILE, "percentile");
         TYPE_STRING_MAP.put(PrimitiveType.JSON, "json");
-    }
-
-    public Util() throws NoSuchAlgorithmException {
     }
 
     private static class CmdWorker extends Thread {
@@ -361,7 +357,7 @@ public class Util {
 
         long result = defaultVal;
         try {
-            result = Long.valueOf(valStr);
+            result = Long.parseLong(valStr);
         } catch (NumberFormatException e) {
             throw new AnalysisException(hintMsg);
         }
