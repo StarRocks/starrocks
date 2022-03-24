@@ -35,7 +35,7 @@ public class SqlParser {
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder()
+                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
                         .visitSingleStatement(sqlStatements.singleStatement(0));
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);

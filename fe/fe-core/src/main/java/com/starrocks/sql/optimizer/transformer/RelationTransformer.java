@@ -312,7 +312,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                         root.getExpressionMapping());
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
-                        OrderByElement.nullsFirst(item.getNullsFirstParam(), item.getIsAsc()));
+                        OrderByElement.nullsFirst(item.getNullsFirstParam()));
                 orderings.add(ordering);
             }
             root = root.withNewRoot(new LogicalTopNOperator(orderings));
