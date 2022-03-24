@@ -901,7 +901,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableSQLDigest() {
         return enableSQLDigest;
     }
-    
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

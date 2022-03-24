@@ -461,7 +461,7 @@ class QueryTransformer {
                     (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                             subOpt.getExpressionMapping());
             Ordering ordering = new Ordering(column, item.getIsAsc(),
-                    OrderByElement.nullsFirst(item.getNullsFirstParam(), item.getIsAsc()));
+                    OrderByElement.nullsFirst(item.getNullsFirstParam()));
             if (!orderByColumns.contains(column)) {
                 orderings.add(ordering);
                 orderByColumns.add(column);
