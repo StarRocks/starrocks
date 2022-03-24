@@ -6,6 +6,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -22,6 +23,7 @@ StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) 
 }
 
 Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
         chunk->append_column(_common_sub_expr_ctxs[i]->evaluate(chunk.get()), _common_sub_column_ids[i]);
     }
@@ -59,6 +61,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     }
     eval_runtime_bloom_filters(_cur_chunk.get());
     DCHECK_CHUNK(_cur_chunk);
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

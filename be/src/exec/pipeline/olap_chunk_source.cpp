@@ -414,6 +414,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
             return status;
         }
+        TRY_CATCH_ALLOC_SCOPE_START()
 
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
@@ -433,6 +434,8 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
             ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
             DCHECK_CHUNK(chunk);
         }
+        TRY_CATCH_ALLOC_SCOPE_END()
+
     } while (chunk->num_rows() == 0);
     _update_realtime_counter(chunk);
     // Improve for select * from table limit x, x is small
