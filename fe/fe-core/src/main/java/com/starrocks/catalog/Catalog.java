@@ -5001,7 +5001,10 @@ public class Catalog {
 
         db.dropTable(table.getName());
         if (!isForceDrop) {
-            Catalog.getCurrentRecycleBin().recycleTable(db.getId(), table);
+            Table oldTable = Catalog.getCurrentRecycleBin().recycleTable(db.getId(), table);
+            if (oldTable != null && oldTable.getType() == TableType.OLAP) {
+                Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) oldTable, false);
+            }
         } else {
             if (table.getType() == TableType.OLAP) {
                 Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, isReplay);
