@@ -87,9 +87,8 @@ public:
     const std::string& filename() const override { return _random_file.filename(); }
 
     Status skip(uint64_t n) override {
-        const StatusOr<uint64_t> status_or = _random_file.get_size();
-        CHECK(status_or.ok());
-        _offset = std::min(_offset + n, status_or.value());
+        ASSIGN_OR_RETURN(auto size, _random_file.get_size());
+        _offset = std::min(_offset + n, size);
         return Status::OK();
     }
 

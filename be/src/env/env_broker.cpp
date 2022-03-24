@@ -328,7 +328,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(co
     }
 
     // Get file size.
-    ASSIGN_OR_RETURN(const uint64_t file_size, _get_file_size(path));
+    ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
     return std::make_unique<BrokerRandomAccessFile>(_broker_addr, path, response.fd, file_size);
 }
 
@@ -472,14 +472,10 @@ Status EnvBroker::canonicalize(const std::string& path, std::string* file) {
     return Status::NotSupported("BrokerEnv::canonicalize");
 }
 
-StatusOr<uint64_t> EnvBroker::_get_file_size(const std::string& path) {
+StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
     TBrokerFileStatus stat;
     RETURN_IF_ERROR(_list_file(path, &stat));
     return stat.size;
-}
-
-StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
-    return _get_file_size(path);
 }
 
 StatusOr<uint64_t> EnvBroker::get_file_modified_time(const std::string& path) {

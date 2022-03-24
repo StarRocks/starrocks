@@ -74,7 +74,6 @@ public:
 #endif
 
 private:
-    StatusOr<uint64_t> _get_file_size(const std::string& params);
     Status _path_exists(const std::string& path);
     Status _delete_file(const std::string& path);
     Status _list_file(const std::string& path, TBrokerFileStatus* stat);
