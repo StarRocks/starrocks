@@ -31,7 +31,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
-            _network_overhead[instance_id.lo] = 0;
+            _network_time[instance_id.lo] = 0;
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -101,9 +101,9 @@ bool SinkBuffer::is_finished() const {
     return _num_sending_rpc == 0 && _total_in_flight_rpc == 0;
 }
 
-int64_t SinkBuffer::network_overhead() {
+int64_t SinkBuffer::network_time() {
     int64_t max = 0;
-    for (auto& [_, overhead] : _network_overhead) {
+    for (auto& [_, overhead] : _network_time) {
         if (overhead > max) {
             max = overhead;
         }
@@ -119,9 +119,9 @@ void SinkBuffer::cancel_one_sinker() {
     }
 }
 
-void SinkBuffer::_update_network_overhead(const TUniqueId& instance_id, const int64_t send_timestamp,
-                                          const int64_t receive_timestamp) {
-    _network_overhead[instance_id.lo] += (receive_timestamp - send_timestamp);
+void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
+                                      const int64_t receive_timestamp) {
+    _network_time[instance_id.lo] += (receive_timestamp - send_timestamp);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
@@ -246,7 +246,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
                 _process_send_window(ctx.instance_id, ctx.sequence);
-                _update_network_overhead(ctx.instance_id, send_timestamp, result.receive_timestamp());
+                _update_network_time(ctx.instance_id, send_timestamp, result.receive_timestamp());
                 _try_to_send_rpc(ctx.instance_id);
             }
             --_total_in_flight_rpc;

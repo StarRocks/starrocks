@@ -74,7 +74,6 @@ private:
     vectorized::TabletReaderParams _params = {};
 
     vectorized::OlapScanNode* _scan_node;
-    TupleDescriptor* _tuple_desc = nullptr;
     const int64_t _limit; // -1: no limit
     std::vector<ExprContext*> _conjunct_ctxs;
     const std::vector<ExprContext*>& _runtime_in_filters;
