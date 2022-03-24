@@ -23,8 +23,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.load.LoadErrorHub;
 
+@Deprecated
 public class LoadErrorHubProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Type").add("Properties")
@@ -40,10 +40,6 @@ public class LoadErrorHubProcNode implements ProcNodeInterface {
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        LoadErrorHub.Param param = catalog.getLoadInstance().getLoadErrorHubInfo();
-        if (param != null) {
-            result.addRow(param.getInfo());
-        }
 
         return result;
     }

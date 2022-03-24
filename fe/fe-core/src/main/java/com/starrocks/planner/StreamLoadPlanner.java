@@ -42,13 +42,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
-import com.starrocks.load.LoadErrorHub;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TLoadErrorHubInfo;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -218,15 +216,6 @@ public class StreamLoadPlanner {
         queryGlobals.setTimestamp_ms(new Date().getTime());
         queryGlobals.setTime_zone(streamLoadTask.getTimezone());
         params.setQuery_globals(queryGlobals);
-
-        // set load error hub if exist
-        LoadErrorHub.Param param = Catalog.getCurrentCatalog().getLoadInstance().getLoadErrorHubInfo();
-        if (param != null) {
-            TLoadErrorHubInfo info = param.toThrift();
-            if (info != null) {
-                params.setLoad_error_hub_info(info);
-            }
-        }
 
         LOG.info("load job id: {} tx id {} parallel {} compress {}", loadId, streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),

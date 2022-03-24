@@ -24,24 +24,18 @@ package com.starrocks.load;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.thrift.TErrorHubType;
-import com.starrocks.thrift.TLoadErrorHubInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
 
+@Deprecated
 public abstract class LoadErrorHub {
     private static final Logger LOG = LogManager.getLogger(LoadErrorHub.class);
-
-    public static final String MYSQL_PROTOCOL = "MYSQL";
-    public static final String BROKER_PROTOCAL = "BROKER";
 
     public static enum HubType {
         MYSQL_TYPE,
@@ -101,14 +95,6 @@ public abstract class LoadErrorHub {
             return type;
         }
 
-        public MysqlLoadErrorHub.MysqlParam getMysqlParam() {
-            return mysqlParam;
-        }
-
-        public BrokerLoadErrorHub.BrokerParam getBrokerParam() {
-            return brokerParam;
-        }
-
         public String toString() {
             ToStringHelper helper = MoreObjects.toStringHelper(this);
             helper.add("type", type.toString());
@@ -124,42 +110,6 @@ public abstract class LoadErrorHub {
             }
 
             return helper.toString();
-        }
-
-        public TLoadErrorHubInfo toThrift() {
-            TLoadErrorHubInfo info = new TLoadErrorHubInfo();
-            switch (type) {
-                case MYSQL_TYPE:
-                    info.setType(TErrorHubType.MYSQL);
-                    info.setMysql_info(mysqlParam.toThrift());
-                    break;
-                case BROKER_TYPE:
-                    info.setType(TErrorHubType.BROKER);
-                    info.setBroker_info(brokerParam.toThrift());
-                    break;
-                case NULL_TYPE:
-                    info.setType(TErrorHubType.NULL_TYPE);
-                    break;
-                default:
-                    Preconditions.checkState(false, "unknown hub type");
-            }
-            return info;
-        }
-
-        public List<String> getInfo() {
-            List<String> info = Lists.newArrayList();
-            info.add(type.name());
-            switch (type) {
-                case MYSQL_TYPE:
-                    info.add(mysqlParam.getBrief());
-                    break;
-                case BROKER_TYPE:
-                    info.add(brokerParam.getBrief());
-                    break;
-                default:
-                    info.add("");
-            }
-            return info;
         }
 
         @Override
@@ -201,23 +151,4 @@ public abstract class LoadErrorHub {
     public abstract boolean prepare();
 
     public abstract boolean close();
-
-    public static LoadErrorHub createHub(Param param) {
-        switch (param.getType()) {
-            case MYSQL_TYPE: {
-                LoadErrorHub hub = new MysqlLoadErrorHub(param.getMysqlParam());
-                hub.prepare();
-                return hub;
-            }
-            case BROKER_TYPE: {
-                LoadErrorHub hub = new BrokerLoadErrorHub(param.getBrokerParam());
-                hub.prepare();
-                return hub;
-            }
-            default:
-                Preconditions.checkState(false, "unknown hub type");
-        }
-
-        return null;
-    }
 }
