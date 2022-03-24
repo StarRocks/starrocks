@@ -198,8 +198,6 @@ public abstract class LoadErrorHub {
         }
     }
 
-    public abstract List<ErrorMsg> fetchLoadError(long jobId);
-
     public abstract boolean prepare();
 
     public abstract boolean close();
