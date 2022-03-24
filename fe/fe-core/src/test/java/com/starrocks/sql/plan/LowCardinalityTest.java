@@ -202,7 +202,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 9> : <string id 3>"));
-        Assert.assertTrue(plan.contains("     PREDICATES: 9: S_ADDRESS LIKE '%Customer%Complaints%'"));
+        Assert.assertTrue(plan.contains("PREDICATES: DictExpr(9: S_ADDRESS,[<place-holder> LIKE '%Customer%Complaints%'])"));
     }
 
     @Test
@@ -640,7 +640,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testScanFilter() throws Exception {
         String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3: S_ADDRESS = 'kks'"));
+        Assert.assertTrue(plan.contains("DictExpr(10: S_ADDRESS,[<place-holder> = 'kks'])"));
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
 
         sql = "select count(*) from supplier where S_ADDRESS + 2 > 'kks' group by S_ADDRESS";
@@ -652,7 +652,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testAggHaving() throws Exception {
         String sql = "select count(*) from supplier group by S_ADDRESS having S_ADDRESS = 'kks' ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3: S_ADDRESS = 'kks'"));
+        Assert.assertTrue(plan.contains("DictExpr(10: S_ADDRESS,[<place-holder> = 'kks'])"));
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
 
         sql = "select count(*) as b from supplier group by S_ADDRESS having b > 3";
@@ -703,8 +703,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
-        Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
-                "dict_string_id_to_int_ids:{20=28}"));
+        Assert.assertTrue(plan.contains("DictExpr(28: P_MFGR,[<place-holder> IN ('MFGR#1', 'MFGR#2')])"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
         Assert.assertTrue(

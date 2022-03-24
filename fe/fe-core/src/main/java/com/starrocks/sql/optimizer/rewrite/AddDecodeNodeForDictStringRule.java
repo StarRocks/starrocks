@@ -307,7 +307,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             dictStringIdToIntIds.remove(stringColumn.getId());
                             couldEncoded = false;
                         } else {
-                            for (ScalarOperator predicate : predicates) {
+                            for (int i = 0; i < predicates.size(); i++) {
+                                ScalarOperator predicate = predicates.get(i);
                                 if (predicate.getUsedColumns().contains(columnId)) {
                                     Preconditions.checkState(couldApplyDictOptimize(predicate));
                                     if (newDictColumn == null) {
@@ -315,22 +316,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
                                     }
 
-                                    // For simple predicate, our olap scan node handle it by string,
-                                    // So we couldn't rewrite it.
-                                    // TODO:
-                                    if (isSimpleStrictPredicate(predicate)) {
-                                        globalDictStringColumns.add(stringColumn);
-                                        dictStringIdToIntIds.put(stringColumn.getId(), newDictColumn.getId());
-                                    } else {
-                                        // Rewrite the predicate
-                                        Map<ColumnRefOperator, ScalarOperator> rewriteMap =
-                                                Maps.newHashMapWithExpectedSize(1);
-                                        rewriteMap.put(stringColumn, newDictColumn);
-                                        ReplaceColumnRefRewriter rewriter =
-                                                new ReplaceColumnRefRewriter(rewriteMap);
-                                        ScalarOperator rewritePredicate = predicate.accept(rewriter, null);
-                                        Preconditions.checkState(rewritePredicate.equals(predicate));
-                                    }
+                                    final DictMappingOperator newCallOperator =
+                                            new DictMappingOperator(newDictColumn, predicate.clone(),
+                                                    predicate.getType());
+
+                                    predicates.set(i, newCallOperator);
                                 }
                             }
                         }

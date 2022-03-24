@@ -457,7 +457,7 @@ public class ScalarOperatorToExpr {
                     new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
                             operator.getDictColumn().getName(),
                             dictExpr.isNullable());
-            context.colRefToExpr.put(key, new PlaceHolderExpr(key.getId(), dictExpr.isNullable(), Type.VARCHAR));
+            context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExecExpression(call, context);
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
