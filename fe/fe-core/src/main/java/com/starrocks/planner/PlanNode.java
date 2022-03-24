@@ -46,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -125,10 +126,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     // Runtime filters be consumed by this node.
     protected List<RuntimeFilterDescription> probeRuntimeFilters = Lists.newArrayList();
-
-    public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
-        return probeRuntimeFilters;
-    }
+    protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
+    protected ExprSubstitutionMap outputSmap;
+    protected ExprSubstitutionMap withoutTupleIsNullOutputSmap;
 
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
@@ -161,6 +161,39 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.cardinality = -1;
         this.planNodeName = planNodeName;
         this.numInstances = 1;
+    }
+
+    /**
+     * Computes and returns the sum of two cardinalities. If an overflow occurs,
+     * the maximum Long value is returned (Long.MAX_VALUE).
+     */
+    public static long addCardinalities(long a, long b) {
+        try {
+            return LongMath.checkedAdd(a, b);
+        } catch (ArithmeticException e) {
+            LOG.warn("overflow when adding cardinalities: " + a + ", " + b);
+            return Long.MAX_VALUE;
+        }
+    }
+
+    public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
+        return probeRuntimeFilters;
+    }
+
+    public void clearProbeRuntimeFilters() {
+        probeRuntimeFilters.clear();
+    }
+
+    public void fillLocalRfWaitingSet(Set<Integer> hashJoinNodeIds) {
+        for (RuntimeFilterDescription filter : probeRuntimeFilters) {
+            if (hashJoinNodeIds.contains(filter.getBuildPlanNodeId())) {
+                localRfWaitingSet.add(filter.getBuildPlanNodeId());
+            }
+        }
+    }
+
+    public Set<Integer> getLocalRfWaitingSet() {
+        return localRfWaitingSet;
     }
 
     public void computeTupleIds() {
@@ -196,12 +229,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         fragmentId = id;
     }
 
-    public void setFragment(PlanFragment fragment) {
-        fragment_ = fragment;
-    }
-
     public PlanFragment getFragment() {
         return fragment_;
+    }
+
+    public void setFragment(PlanFragment fragment) {
+        fragment_ = fragment;
     }
 
     public long getLimit() {
@@ -278,19 +311,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected void computeMemLayout(Analyzer analyzer) {
         for (TupleId id : tupleIds) {
             analyzer.getDescTbl().getTupleDesc(id).computeMemLayout();
-        }
-    }
-
-    /**
-     * Computes and returns the sum of two cardinalities. If an overflow occurs,
-     * the maximum Long value is returned (Long.MAX_VALUE).
-     */
-    public static long addCardinalities(long a, long b) {
-        try {
-            return LongMath.checkedAdd(a, b);
-        } catch (ArithmeticException e) {
-            LOG.warn("overflow when adding cardinalities: " + a + ", " + b);
-            return Long.MAX_VALUE;
         }
     }
 
@@ -515,14 +535,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (!probeRuntimeFilters.isEmpty()) {
             msg.setProbe_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(probeRuntimeFilters));
-            Set<Integer> waitingPlanNodeIds = Sets.newHashSet();
-            for (RuntimeFilterDescription filter : probeRuntimeFilters) {
-                if (!filter.isHasRemoteTargets()) {
-                    waitingPlanNodeIds.add(filter.getBuildPlanNodeId());
-                }
-            }
-            msg.setLocal_rf_waiting_set(waitingPlanNodeIds);
         }
+        msg.setLocal_rf_waiting_set(getLocalRfWaitingSet());
         msg.setNeed_create_tuple_columns(false);
     }
 
@@ -575,9 +589,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return prod;
     }
 
-    protected ExprSubstitutionMap outputSmap;
-    protected ExprSubstitutionMap withoutTupleIsNullOutputSmap;
-
     public ExprSubstitutionMap getOutputSmap() {
         return outputSmap;
     }
@@ -586,12 +597,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         outputSmap = smap;
     }
 
-    public void setWithoutTupleIsNullOutputSmap(ExprSubstitutionMap smap) {
-        withoutTupleIsNullOutputSmap = smap;
-    }
-
     public ExprSubstitutionMap getWithoutTupleIsNullOutputSmap() {
         return withoutTupleIsNullOutputSmap == null ? outputSmap : withoutTupleIsNullOutputSmap;
+    }
+
+    public void setWithoutTupleIsNullOutputSmap(ExprSubstitutionMap smap) {
+        withoutTupleIsNullOutputSmap = smap;
     }
 
     public void init(Analyzer analyzer) throws UserException {
