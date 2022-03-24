@@ -59,7 +59,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.load.LoadJob.JobState;
+import com.starrocks.load.loadv2.JobState;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
