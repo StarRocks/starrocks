@@ -803,7 +803,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public void getJobInfo(Load.JobInfo jobInfo) throws DdlException {
         checkAuth("SHOW LOAD");
         jobInfo.tblNames.addAll(getTableNamesForShow());
-        jobInfo.state = com.starrocks.load.LoadJob.JobState.valueOf(state.name());
+        jobInfo.state = com.starrocks.load.loadv2.JobState.valueOf(state.name());
         if (failMsg != null) {
             jobInfo.failMsg = failMsg.getMsg();
         } else {

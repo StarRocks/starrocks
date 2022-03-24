@@ -114,7 +114,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
-import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
@@ -125,7 +124,6 @@ import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.Load;
-import com.starrocks.load.LoadJob.JobState;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.meta.BlackListSql;
@@ -853,11 +851,6 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> loadInfo : loadInfos) {
             List<String> oneInfo = new ArrayList<String>(loadInfo.size());
-
-            // replace QUORUM_FINISHED -> FINISHED
-            if (loadInfo.get(LoadProcDir.STATE_INDEX).equals(JobState.QUORUM_FINISHED.name())) {
-                loadInfo.set(LoadProcDir.STATE_INDEX, JobState.FINISHED.name());
-            }
 
             for (Comparable element : loadInfo) {
                 oneInfo.add(element.toString());
