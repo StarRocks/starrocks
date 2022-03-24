@@ -833,7 +833,7 @@ public class TabletScheduler extends MasterDaemon {
     private boolean deleteReplicaWithLowerVersion(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
             if (!replica
-                    .checkVersionCatchUp(tabletCtx.getCommittedVersion(), false)) {
+                    .checkVersionCatchUp(tabletCtx.getVisibleVersion(), false)) {
                 deleteReplicaInternal(tabletCtx, replica, "lower version", force);
                 return true;
             }
