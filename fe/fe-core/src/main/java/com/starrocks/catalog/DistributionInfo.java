@@ -21,10 +21,8 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import org.apache.commons.lang.NotImplementedException;
@@ -32,8 +30,6 @@ import org.apache.commons.lang.NotImplementedException;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
 
 public abstract class DistributionInfo implements Writable {
 
@@ -82,38 +78,5 @@ public abstract class DistributionInfo implements Writable {
 
     public String toSql() {
         return "";
-    }
-
-    public boolean eqauls(DistributionInfo info) {
-        return false;
-    }
-
-    public static List<Expr> toDistExpr(OlapTable tbl, DistributionInfo distInfo, Map<String, Expr> exprByCol) {
-        List<Expr> distExprs = Lists.newArrayList();
-        if (distInfo instanceof RandomDistributionInfo) {
-            for (Column col : tbl.getBaseSchema()) {
-                if (col.isKey()) {
-                    Expr distExpr = exprByCol.get(col.getName());
-                    // used to compute hash
-                    if (col.getType().isChar()) {
-                        distExpr.setType(Type.CHAR);
-                    }
-                    distExprs.add(distExpr);
-                } else {
-                    break;
-                }
-            }
-        } else if (distInfo instanceof HashDistributionInfo) {
-            HashDistributionInfo hashDistInfo = (HashDistributionInfo) distInfo;
-            for (Column col : hashDistInfo.getDistributionColumns()) {
-                Expr distExpr = exprByCol.get(col.getName());
-                // used to compute hash
-                if (col.getPrimitiveType() == PrimitiveType.CHAR) {
-                    distExpr.setType(Type.CHAR);
-                }
-                distExprs.add(distExpr);
-            }
-        }
-        return distExprs;
     }
 }
