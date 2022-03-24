@@ -66,7 +66,7 @@ Status EngineStorageMigrationTask::execute() {
 Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     if (bg_worker_stopped) {
-        LOG(WARNING) << "Process is going to quit. The migration should be stopped as soon as possible.";
+        LOG(WARNING) << "Process is going to quit. The migration will stop.";
         return Status::InternalError("Process is going to quit.");
     }
 
@@ -105,17 +105,13 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         // get all versions to be migrate
         {
             std::shared_lock header_rdlock(tablet->get_header_lock());
-            const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
-            if (lastest_version == nullptr) {
-                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
-                             << ", version: " << lastest_version->start_version() << "-"
-                             << lastest_version->end_version();
-                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
-                                                    tablet->tablet_id(), lastest_version->start_version(),
-                                                    lastest_version->end_version()));
+            const RowsetSharedPtr max_version = tablet->rowset_with_max_version();
+            if (max_version == nullptr) {
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
+                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
             }
 
-            end_version = lastest_version->end_version();
+            end_version = max_version->end_version();
             res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
             if (!res.ok() || consistent_rowsets.empty()) {
                 LOG(WARNING) << "Fail to capture consistent rowsets. version=" << end_version;
@@ -210,18 +206,14 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         {
             // check version
             std::shared_lock header_rdlock(tablet->get_header_lock());
-            const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
-            if (lastest_version == nullptr) {
-                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
-                             << ", version: " << lastest_version->start_version() << "-"
-                             << lastest_version->end_version();
+            const RowsetSharedPtr max_version = tablet->rowset_with_max_version();
+            if (max_version == nullptr) {
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
                 need_remove_new_path = true;
-                res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
-                                                   tablet->tablet_id(), lastest_version->start_version(),
-                                                   lastest_version->end_version()));
+                res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
                 break;
             }
-            int32_t new_end_version = lastest_version->end_version();
+            int32_t new_end_version = max_version->end_version();
             if (end_version != new_end_version) {
                 LOG(WARNING) << "Version does not match. src_version: " << end_version
                              << ", dst_version: " << new_end_version;

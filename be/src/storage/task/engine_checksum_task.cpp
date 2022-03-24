@@ -126,6 +126,10 @@ Status EngineChecksumTask::_compute_checksum() {
         bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     }
 
+    if (bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The checksum calculation will stop.");
+    }
+
     if (!st.is_end_of_file() && !st.ok()) {
         LOG(WARNING) << "Failed to do checksum. tablet=" << tablet->full_name() << ", error:=" << st.to_string();
         return st;
