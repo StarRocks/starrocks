@@ -282,34 +282,6 @@ public class Backend implements Writable {
         return backendStatus;
     }
 
-    /**
-     * backend belong to some cluster
-     *
-     * @return
-     */
-    public boolean isUsedByCluster() {
-        return this.backendState == BackendState.using.ordinal();
-    }
-
-    /**
-     * backend is free, and it isn't belong to any cluster
-     *
-     * @return
-     */
-    public boolean isFreeFromCluster() {
-        return this.backendState == BackendState.free.ordinal();
-    }
-
-    /**
-     * backend execute discommission in cluster , and backendState will be free
-     * finally
-     *
-     * @return
-     */
-    public boolean isOffLineFromCluster() {
-        return this.backendState == BackendState.offline.ordinal();
-    }
-
     public ImmutableMap<String, DiskInfo> getDisks() {
         return this.disksRef;
     }
