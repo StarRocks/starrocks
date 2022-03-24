@@ -78,6 +78,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -117,7 +118,10 @@ import java.util.stream.Collectors;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
-    public AstBuilder() {
+    private final long sqlMode;
+
+    public AstBuilder(long sqlMode) {
+        this.sqlMode = sqlMode;
     }
 
     @Override
@@ -706,9 +710,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 getNullOrderingType(getOrderingType(context.ordering), context.nullOrdering));
     }
 
-    private static boolean getNullOrderingType(boolean isAsc, Token token) {
+    private boolean getNullOrderingType(boolean isAsc, Token token) {
         if (token == null) {
-            return isAsc;
+            return (!SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_SORT_NULLS_LAST)) == isAsc;
         }
         switch (token.getType()) {
             case StarRocksLexer.FIRST:
