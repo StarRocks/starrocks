@@ -45,7 +45,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.LoadErrorHub;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -82,7 +81,6 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
-import com.starrocks.thrift.TLoadErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TPlanFragmentDestination;
@@ -2059,15 +2057,6 @@ public class Coordinator {
                 }
                 params.params.setSend_query_statistics_with_every_batch(
                         fragment.isTransferQueryStatisticsWithEveryBatch());
-                if (queryOptions.getQuery_type() == TQueryType.LOAD) {
-                    LoadErrorHub.Param param = Catalog.getCurrentCatalog().getLoadInstance().getLoadErrorHubInfo();
-                    if (param != null) {
-                        TLoadErrorHubInfo info = param.toThrift();
-                        if (info != null) {
-                            params.setLoad_error_hub_info(info);
-                        }
-                    }
-                }
                 params.params.setInstances_number(hostToNumbers.get(instanceExecParams.get(i).host));
                 // For broker load, the ConnectContext.get() is null
                 if (ConnectContext.get() != null) {
