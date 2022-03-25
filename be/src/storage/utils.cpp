@@ -113,56 +113,6 @@ Status move_to_trash(const std::filesystem::path& file_path) {
     return st;
 }
 
-OLAPStatus copy_file(const string& src, const string& dest) {
-    int src_fd = -1;
-    int dest_fd = -1;
-    char buf[1024 * 1024];
-    OLAPStatus res = OLAP_SUCCESS;
-
-    src_fd = ::open(src.c_str(), O_RDONLY);
-    if (src_fd < 0) {
-        PLOG(WARNING) << "failed to open " << src;
-        res = OLAP_ERR_FILE_NOT_EXIST;
-        goto COPY_EXIT;
-    }
-
-    dest_fd = ::open(dest.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    if (dest_fd < 0) {
-        PLOG(WARNING) << "failed to open " << dest;
-        res = OLAP_ERR_FILE_NOT_EXIST;
-        goto COPY_EXIT;
-    }
-
-    while (true) {
-        ssize_t rd_size = ::read(src_fd, buf, sizeof(buf));
-        if (rd_size < 0) {
-            PLOG(WARNING) << "failed to read from " << src;
-            return OLAP_ERR_IO_ERROR;
-        } else if (0 == rd_size) {
-            break;
-        }
-
-        ssize_t wr_size = ::write(dest_fd, buf, rd_size);
-        if (wr_size != rd_size) {
-            PLOG(WARNING) << "failed to write to " << dest;
-            res = OLAP_ERR_IO_ERROR;
-            goto COPY_EXIT;
-        }
-    }
-
-COPY_EXIT:
-    if (src_fd >= 0) {
-        ::close(src_fd);
-    }
-
-    if (dest_fd >= 0) {
-        ::close(dest_fd);
-    }
-
-    VLOG(3) << "copy file success. [src=" << src << " dest=" << dest << "]";
-
-    return res;
-}
 OLAPStatus read_write_test_file(const string& test_file_path) {
     if (access(test_file_path.c_str(), F_OK) == 0) {
         if (remove(test_file_path.c_str()) != 0) {

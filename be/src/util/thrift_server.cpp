@@ -38,6 +38,8 @@
 #include <sstream>
 #include <utility>
 
+#include "util/monotime.h"
+
 namespace starrocks {
 
 // Helper class that starts a server in a separate thread, and handles

@@ -42,6 +42,7 @@
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/union_iterator.h"
+#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -165,8 +166,8 @@ OLAPStatus BetaRowset::copy_files_to(const std::string& dir) {
             return OLAP_ERR_FILE_ALREADY_EXIST;
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
+        if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+            LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path << ", errno=" << Errno::no();
             return OLAP_ERR_OS_ERROR;
         }
     }
@@ -179,8 +180,9 @@ OLAPStatus BetaRowset::copy_files_to(const std::string& dir) {
                 LOG(WARNING) << "Fail to copy file, dest path=" << dst_path << " already exist";
                 return OLAP_ERR_FILE_ALREADY_EXIST;
             }
-            if (copy_file(src_path, dst_path) != OLAP_SUCCESS) {
-                LOG(WARNING) << "Fail to copy source " << src_path << " to " << dst_path << ", errno=" << Errno::no();
+            if (!FileUtils::copy_file(src_path, dst_path).ok()) {
+                LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
+                             << ", errno=" << Errno::no();
                 return OLAP_ERR_OS_ERROR;
             }
         }
