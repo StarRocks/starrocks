@@ -358,21 +358,29 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
     }
 
     // Eliminates virtual function call.
-    if (_is_ndjson) {
-        if (_scanner->_root_paths.empty()) {
-            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
-        } else if (!_scanner->_strip_outer_array) {
-            return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+    if (!_scanner->_root_paths.empty()) {
+        // With json root set, expand the outer array automatically.
+        // The strip_outer_array determines whether to expand the sub-array of json root.
+        if (_scanner->_strip_outer_array) {
+            // Expand outer array automatically according to _is_ndjson.
+            if (_is_ndjson) {
+                return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+            } else {
+                return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+            }
         } else {
-            return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+            if (_is_ndjson) {
+                return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+            } else {
+                return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+            }
         }
     } else {
-        if (_scanner->_root_paths.empty()) {
+        // Without json root set, the strip_outer_array determines whether to expand outer array.
+        if (_scanner->_strip_outer_array) {
             return _read_chunk<JsonArrayParser>(chunk, rows_to_read, slot_descs);
-        } else if (!_scanner->_strip_outer_array) {
-            return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
         } else {
-            return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
         }
     }
 }
@@ -626,21 +634,29 @@ Status JsonReader::_read_and_parse_json() {
         }
     }
 
-    if (_is_ndjson) {
-        if (_scanner->_root_paths.empty()) {
-            _parser.reset(new JsonDocumentStreamParser);
-        } else if (!_scanner->_strip_outer_array) {
-            _parser.reset(new JsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+    if (!_scanner->_root_paths.empty()) {
+        // With json root set, expand the outer array automatically.
+        // The strip_outer_array determines whether to expand the sub-array of json root.
+        if (_scanner->_strip_outer_array) {
+            // Expand outer array automatically according to _is_ndjson.
+            if (_is_ndjson) {
+                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+            } else {
+                _parser.reset(new ExpandedJsonArrayParserWithRoot(_scanner->_root_paths));
+            }
         } else {
-            _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+            if (_is_ndjson) {
+                _parser.reset(new JsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+            } else {
+                _parser.reset(new JsonArrayParserWithRoot(_scanner->_root_paths));
+            }
         }
     } else {
-        if (_scanner->_root_paths.empty()) {
+        // Without json root set, the strip_outer_array determines whether to expand outer array.
+        if (_scanner->_strip_outer_array) {
             _parser.reset(new JsonArrayParser);
-        } else if (!_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParserWithRoot(_scanner->_root_paths));
         } else {
-            _parser.reset(new ExpandedJsonArrayParserWithRoot(_scanner->_root_paths));
+            _parser.reset(new JsonDocumentStreamParser);
         }
     }
 
