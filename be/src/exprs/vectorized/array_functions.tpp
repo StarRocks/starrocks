@@ -346,12 +346,10 @@ private:
                 dest_data_column->append_datum(items[i]);
             }
         }
-        length = end - offset;
-        if (length > 0) {
-            dest_offsets.emplace_back(dest_offsets.back() + length);
-        } else {
-            dest_offsets.emplace_back(dest_offsets.back());
-        }
+
+        // Protect when length < 0.
+        auto offset_delta = ((end < offset) ? 0 : end - offset);
+        dest_offsets.emplace_back(dest_offsets.back() + offset_delta);
     }
 };
 
