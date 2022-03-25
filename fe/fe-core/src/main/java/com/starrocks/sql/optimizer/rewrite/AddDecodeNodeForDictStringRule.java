@@ -278,6 +278,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
                 Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
                 ScalarOperator newPredicate = scanOperator.getPredicate();
+                List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
                 for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
                     if (context.disableDictOptimizeColumns.contains(columnId)) {
@@ -293,7 +294,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     boolean couldEncoded = true;
                     if (scanOperator.getPredicate() != null &&
                             scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
-                        List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
                         // If there is an unsupported expression in any of the low cardinality columns,
                         // we disable low cardinality optimization.
                         // TODO(stdpain):
@@ -324,8 +324,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                 }
                             }
                         }
-
-                        newPredicate = Utils.compoundAnd(predicates);
                     }
 
                     if (!couldEncoded) {
@@ -357,6 +355,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     context.hasEncoded = true;
                 }
 
+                newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
                     PhysicalOlapScanOperator newOlapScan = new PhysicalOlapScanOperator(
                             scanOperator.getTable(),
