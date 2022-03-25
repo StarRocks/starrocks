@@ -3,6 +3,7 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
@@ -51,6 +52,15 @@ public class StatementPlanner {
             try {
                 lock(dbs);
                 return new InsertPlanner().plan((InsertStmt) stmt, session);
+            } finally {
+                unLock(dbs);
+            }
+        } else if (stmt instanceof UpdateStmt) {
+            UpdateStmt updateStmt = (UpdateStmt) stmt;
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, updateStmt);
+            try {
+                lock(dbs);
+                return new UpdatePlanner().plan(updateStmt, session);
             } finally {
                 unLock(dbs);
             }

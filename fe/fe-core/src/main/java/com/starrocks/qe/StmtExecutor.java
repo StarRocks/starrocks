@@ -37,6 +37,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
@@ -60,6 +61,7 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -138,6 +140,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -386,19 +390,7 @@ public class StmtExecutor {
                             StringBuilder explainStringBuilder = new StringBuilder();
                             // StarRocksManager depends on explainString to get sql plan
                             if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-                                TExplainLevel level = null;
-                                switch (parsedStmt.getExplainLevel()) {
-                                    case NORMAL:
-                                        level = TExplainLevel.NORMAL;
-                                        break;
-                                    case VERBOSE:
-                                        level = TExplainLevel.VERBOSE;
-                                        break;
-                                    case COST:
-                                        level = TExplainLevel.COSTS;
-                                        break;
-                                }
-                                explainStringBuilder.append(execPlan.getExplainString(level));
+                                explainStringBuilder.append(execPlan.getExplainString(parsedStmt.getExplainLevel()));
                             }
                             handleQueryStmt(execPlan.getFragments(), execPlan.getScanNodes(),
                                     execPlan.getDescTbl().toThrift(),
@@ -436,15 +428,21 @@ public class StmtExecutor {
                 } else {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
-            } else if (parsedStmt instanceof InsertStmt) { // Must ahead of DdlStmt because InsertStmt is its subclass
+            } else if (parsedStmt instanceof DmlStmt) {
                 try {
-                    handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
+                    if (parsedStmt instanceof InsertStmt) {
+                        handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
+                    } else if (parsedStmt instanceof UpdateStmt) {
+                        handleUpdateStmtWithNewPlanner(execPlan, (UpdateStmt) parsedStmt);
+                    } else {
+                        throw unsupportedException(
+                                "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
+                    }
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
                 } catch (Throwable t) {
-                    LOG.warn("handle insert stmt fail", t);
-                    // the transaction of this insert may already begun, we will abort it at outer finally block.
+                    LOG.warn("handle dml stmt fail", t);
                     throw t;
                 } finally {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -490,7 +488,7 @@ public class StmtExecutor {
         } finally {
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
-                // The transaction of a insert operation begin at analyze phase.
+                // The transaction of an insert operation begin at analyze phase.
                 // So we should abort the transaction at this finally block if it encounter exception.
                 if (insertStmt.isTransactionBegin() && context.getState().getStateType() == MysqlStateType.ERR) {
                     try {
@@ -724,10 +722,10 @@ public class StmtExecutor {
         // 2. If this is a query, send the result expr fields first, and send result data back to client.
         RowBatch batch;
         MysqlChannel channel = context.getMysqlChannel();
-        boolean isOutfileQuery;
+        boolean isOutfileQuery = false;
         if (queryStmt instanceof QueryStmt) {
             isOutfileQuery = ((QueryStmt) queryStmt).hasOutFileClause();
-        } else {
+        } else if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
         }
         boolean isSendFields = false;
@@ -1047,12 +1045,30 @@ public class StmtExecutor {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof UpdateStmt;
+    }
+
+    public void handleUpdateStmtWithNewPlanner(ExecPlan execPlan, UpdateStmt stmt) throws Exception {
+        if (stmt.isExplain()) {
+            handleExplainStmt(execPlan.getExplainString(stmt.getExplainLevel()));
+            return;
+        }
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(execPlan.getExplainString(TExplainLevel.NORMAL));
+        }
+
+        MetaUtils.normalizationTableName(context, stmt.getTableName());
+        Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
+        Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+
+        String label = "update_" + DebugUtil.printId(context.getExecutionId());
+        handleDMLStmtWithNewPlanner(execPlan, database, targetTable, label);
     }
 
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
         if (stmt.getQueryStatement().isExplain()) {
-            handleExplainStmt(execPlan.getExplainString(TExplainLevel.NORMAL));
+            handleExplainStmt(execPlan.getExplainString(stmt.getQueryStatement().getExplainLevel()));
             return;
         }
         if (context.getQueryDetail() != null) {
@@ -1065,9 +1081,13 @@ public class StmtExecutor {
 
         String label = Strings.isNullOrEmpty(stmt.getLabel()) ?
                 "insert_" + DebugUtil.printId(context.getExecutionId()) : stmt.getLabel();
+        handleDMLStmtWithNewPlanner(execPlan, database, targetTable, label);
+    }
+
+    public void handleDMLStmtWithNewPlanner(ExecPlan execPlan, Database database, Table targetTable,
+                                            String label) throws Exception {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
@@ -1212,7 +1232,7 @@ public class StmtExecutor {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), stmt.getTransactionId(),
+                            externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             t.getMessage() == null ? "Unknown reason" : t.getMessage());

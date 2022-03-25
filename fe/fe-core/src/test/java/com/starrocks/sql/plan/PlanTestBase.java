@@ -852,6 +852,20 @@ public class PlanTestBase {
                 .withTable("create table test.nocolocate3\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 10\n" +
                         "properties(\"replication_num\" = \"1\");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
     }
 
