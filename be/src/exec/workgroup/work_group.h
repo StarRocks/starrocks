@@ -267,8 +267,6 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
-
-    int64_t _last_cal_wg_cpu_real_use_ratio_time = 0;
 };
 
 class DefaultWorkGroupInitialization {
