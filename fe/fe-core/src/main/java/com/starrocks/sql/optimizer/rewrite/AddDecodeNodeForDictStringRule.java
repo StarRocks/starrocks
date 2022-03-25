@@ -184,11 +184,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             // We Needn't handle common sub operator. because ScalarOperatorsReuseRule run after AddDecodeNodeForDictStringRule
             for (ScalarOperator operator : projection.getColumnRefMap().values()) {
                 final ColumnRefSet usedColumns = operator.getUsedColumns();
-                Preconditions.checkState(usedColumns.cardinality() == 1);
                 for (int cid : usedColumns.getColumnIds()) {
                     final Integer dictId = context.stringColumnIdToDictColumnIds.get(cid);
                     if (dictId != null && !globalDictIds.contains(dictId) && dictColumnIds.contains(dictId) &&
                             !projectOutputs.contains(dictId)) {
+                        Preconditions.checkState(usedColumns.cardinality() == 1);
                         return true;
                     }
                 }
