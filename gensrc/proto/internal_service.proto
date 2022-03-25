@@ -84,6 +84,7 @@ message PTransmitDataResult {
 
 message PTransmitChunkResult {
     optional PStatus status = 1;
+    optional int64 receive_timestamp = 2;
 };
 
 message PTransmitRuntimeFilterForwardTarget {

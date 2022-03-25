@@ -41,6 +41,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
+    _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
+
     _init_counter(state);
 
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());

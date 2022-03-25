@@ -656,8 +656,8 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
     _compress_timer = ADD_TIMER(_profile, "CompressTime");
     _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
-    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTimer");
-    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTimer");
+    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTime");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
 
     _load_mem_limit = state->get_load_mem_limit();
 
