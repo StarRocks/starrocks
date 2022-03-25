@@ -13,6 +13,8 @@ CloudCanal社区版是一款由[ClouGence公司](https://www.clougence.com)发�
 
 ## 功能说明
 
+- 本功能当前为**实验性版本**，限测试环境试用，请谨慎评估用于生产环境的风险。
+- 建议您在使用CloudCanal将增量数据导入至StarRocks时，控制导入的频率，increBatchWaitTimeMs参数的建议取值范围为**大于等于**10000，单位为ms。
 - StarRocks对端版本支持：支持StarRocks版本为1.18.x、1.19.x和2.0.x
 - 支持的源端以及功能项：
   | 数据源\功能项 | 结构迁移 | 全量数据迁移 | 增量实时同步 | 数据校验 |
