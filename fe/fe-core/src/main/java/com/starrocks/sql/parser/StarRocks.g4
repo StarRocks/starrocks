@@ -13,26 +13,33 @@ singleStatement
 
 statement
     : queryStatement                                                                    #statementDefault
-    | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
-    | EXPLAIN? INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
-    (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
+    | explainDesc queryStatement                                                        #explain
+    | explainDesc? INSERT INTO qualifiedName
+        (WITH LABEL label=identifier)? columnAliases?
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
         AS queryStatement                                                               #createTableAsSelect
+    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
-            ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-            comment? AS queryStatement                               #createView
+        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+        comment? AS queryStatement                               #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
     ;
+
+explainDesc
+    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    ;
+
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
@@ -454,6 +461,14 @@ identifierList
     : '(' identifier (',' identifier)* ')'
     ;
 
+assignment
+    : identifier EQ expressionOrDefault
+    ;
+
+assignmentList
+    : assignment (',' assignment)*
+    ;
+
 number
     : DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
@@ -463,7 +478,7 @@ number
 nonReserved
     : ARRAY
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS | COMMIT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT
@@ -471,11 +486,11 @@ nonReserved
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MINUTE | MONTH
+    | MINUTE | MONTH | MERGE
     | NONE | NULLS
     | OFFSET
     | PRECEDING | PROPERTIES
-    | ROLLUP
+    | ROLLUP | ROLLBACK
     | SECOND | SESSION | SETS | START
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER

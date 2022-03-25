@@ -14,6 +14,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -104,6 +105,12 @@ public class Analyzer {
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 queryRelation.setLimit(new LimitElement(selectLimit));
             }
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, ConnectContext context) {
+            UpdateAnalyzer.analyze(node, context);
             return null;
         }
     }

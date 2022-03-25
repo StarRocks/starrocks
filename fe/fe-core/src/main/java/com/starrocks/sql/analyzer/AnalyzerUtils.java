@@ -12,6 +12,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -86,6 +87,12 @@ public class AnalyzerUtils {
             }
             this.dbs.put(node.getDb(), db);
             return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            getDB(node.getTableName());
+            return null;
         }
 
         @Override
