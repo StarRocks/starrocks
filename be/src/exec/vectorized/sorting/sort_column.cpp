@@ -8,6 +8,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
 
@@ -127,8 +128,8 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
     return Status::OK();
 }
 
-Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
-                            const std::vector<int>& null_firsts, SmallPermutation* small_perm) {
+Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+                                   const std::vector<int>& null_firsts, SmallPermutation* small_perm) {
     if (columns.size() < 1) {
         return Status::OK();
     }
@@ -144,6 +145,17 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
         bool build_tie = col_index != columns.size() - 1;
         RETURN_IF_ERROR(
                 sort_and_tie_column(cancel, column, is_asc_order, is_null_first, *small_perm, tie, range, build_tie));
+    }
+
+    // Stable sort need extra runs of sorting on permutation
+    TieIterator ti(tie);
+    while (ti.next()) {
+        int range_first = ti.range_first, range_last = ti.range_last;
+        if (range_last - range_first > 1) {
+            ::pdqsort(
+                    cancel, small_perm->begin() + range_first, small_perm->begin() + range_last,
+                    [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
+        }
     }
 
     return Status::OK();

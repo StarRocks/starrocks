@@ -327,7 +327,7 @@ void MemTable::_sort_column_inc() {
         null_firsts.push_back(-1);
     }
 
-    Status st = sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
+    Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
     CHECK(st.ok());
 }
 
