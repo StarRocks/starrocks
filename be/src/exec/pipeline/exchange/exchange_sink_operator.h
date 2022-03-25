@@ -124,6 +124,7 @@ private:
 
     // Throughput per total time spent in sender
     RuntimeProfile::Counter* _overall_throughput = nullptr;
+    RuntimeProfile::Counter* _network_timer = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

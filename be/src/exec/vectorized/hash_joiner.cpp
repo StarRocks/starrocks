@@ -95,10 +95,10 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 
     runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
     runtime_profile->add_info_string("JoinType", to_string(_join_type));
-    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
     _probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     _other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     _where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");

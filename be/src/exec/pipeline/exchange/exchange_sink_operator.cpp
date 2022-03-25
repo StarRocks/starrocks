@@ -41,13 +41,12 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, int32_t channel_id, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _channel_id(channel_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
@@ -102,7 +101,6 @@ private:
     const TNetworkAddress _brpc_dest_addr;
     const TUniqueId _fragment_instance_id;
     const PlanNodeId _dest_node_id;
-    const int32_t _channel_id;
 
     const bool _enable_exchange_pass_through;
     PassThroughContext _pass_through_context;
@@ -302,10 +300,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
             _channels.emplace_back(pseudo_channel.value());
         } else {
-            const auto channel_id = _channels.size();
             _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
-                                               _num_shuffles, channel_id, enable_exchange_pass_through,
-                                               pass_through_chunk_buffer));
+                                               _num_shuffles, enable_exchange_pass_through, pass_through_chunk_buffer));
             if (fragment_instance_id.lo == -1) {
                 pseudo_channel = _channels.back();
             }
@@ -356,7 +352,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
     _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
-    _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTimer");
+    _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
     _overall_throughput = _unique_metrics->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
@@ -364,6 +360,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
+    _network_timer = ADD_TIMER(_unique_metrics, "NetworkTime");
+
     for (auto& _channel : _channels) {
         RETURN_IF_ERROR(_channel->init(state));
     }
@@ -542,6 +540,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
+    COUNTER_SET(_network_timer, _buffer->network_time());
     Operator::close(state);
 }
 
@@ -567,8 +566,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     const size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError("The input size for compression should be less than " +
-                                     _compress_codec->max_input_size());
+        return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                         _compress_codec->max_input_size()));
     }
 
     // try compress the ChunkPB data

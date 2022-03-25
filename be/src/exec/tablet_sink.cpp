@@ -566,6 +566,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
     _non_blocking_send_timer = ADD_TIMER(_profile, "NonBlockingSendTime");
     _serialize_batch_timer = ADD_TIMER(_profile, "SerializeBatchTime");
+    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
+    _compress_timer = ADD_TIMER(_profile, "CompressTime");
+    _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
+    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTime");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
+
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
