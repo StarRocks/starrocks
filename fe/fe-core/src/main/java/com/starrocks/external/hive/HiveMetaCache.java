@@ -170,19 +170,10 @@ public class HiveMetaCache {
     }
 
     public HivePartition getPartition(String dbName, String tableName,
-                                      PartitionKey partitionKey) throws DdlException {
+                                      PartitionKey partitionKey, boolean isHudiTable) throws DdlException {
         List<String> partitionValues = Utils.getPartitionValues(partitionKey);
         try {
-            return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues));
-        } catch (ExecutionException e) {
-            throw new DdlException("get partition detail failed: " + e.getMessage());
-        }
-    }
-
-    public HivePartition getHudiPartition(String dbName, String tableName, PartitionKey partitionKey) throws DdlException {
-        List<String> partitionValues = Utils.getPartitionValues(partitionKey);
-        try {
-            return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues, true));
+            return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues, isHudiTable));
         } catch (ExecutionException e) {
             throw new DdlException("get partition detail failed: " + e.getMessage());
         }
@@ -197,9 +188,10 @@ public class HiveMetaCache {
     }
 
     public HivePartitionStats getPartitionStats(String dbName, String tableName,
-                                                PartitionKey partitionKey) throws DdlException {
+                                                PartitionKey partitionKey,
+                                                boolean isHudiTable) throws DdlException {
         List<String> partValues = Utils.getPartitionValues(partitionKey);
-        HivePartitionKey key = HivePartitionKey.gen(dbName, tableName, partValues);
+        HivePartitionKey key = new HivePartitionKey(dbName, tableName, partValues, isHudiTable);
         try {
             return partitionStatsCache.get(key);
         } catch (ExecutionException e) {
@@ -286,7 +278,8 @@ public class HiveMetaCache {
         return partitionsCache.asMap().containsKey(partitionKey);
     }
 
-    public void refreshTable(String dbName, String tableName, List<Column> partColumns, List<String> columnNames)
+    public void refreshTable(String dbName, String tableName, List<Column> partColumns, List<String> columnNames,
+                             boolean isHudiTable)
             throws DdlException {
         HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, partColumns);
         HiveTableKey hiveTableKey = HiveTableKey.gen(dbName, tableName);
@@ -300,7 +293,7 @@ public class HiveMetaCache {
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
-                HivePartitionKey hivePartitionKey = HivePartitionKey.gen(dbName, tableName, new ArrayList<>());
+                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName, new ArrayList<>(), isHudiTable);
                 partitionsCache.put(hivePartitionKey, loadPartition(hivePartitionKey));
                 partitionStatsCache.put(hivePartitionKey, loadPartitionStats(hivePartitionKey));
             }
@@ -312,12 +305,13 @@ public class HiveMetaCache {
         }
     }
 
-    public void refreshPartition(String dbName, String tableName, List<String> partNames) throws DdlException {
+    public void refreshPartition(String dbName, String tableName, List<String> partNames,
+                                 boolean isHudiTable) throws DdlException {
         Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
-                HivePartitionKey key = HivePartitionKey.gen(dbName, tableName, partValues);
+                HivePartitionKey key = new HivePartitionKey(dbName, tableName, partValues, isHudiTable);
                 partitionsCache.put(key, loadPartition(key));
                 partitionStatsCache.put(key, loadPartitionStats(key));
             }

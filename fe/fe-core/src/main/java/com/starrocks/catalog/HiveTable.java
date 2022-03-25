@@ -175,17 +175,20 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 this.nameToColumn, columnNames, getPartitionColumns());
     }
 
+    @Override
     public void refreshTableCache() throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
                 .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
                         new ArrayList<>(nameToColumn.keySet()));
     }
 
+    @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
                 .refreshPartitionCache(resourceName, hiveDb, hiveTable, partNames);
     }
 
+    @Override
     public void refreshTableColumnStats() throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
                 .refreshTableColumnStats(resourceName, hiveDb, hiveTable, getPartitionColumns(),
