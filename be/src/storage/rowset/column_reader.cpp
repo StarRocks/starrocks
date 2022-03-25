@@ -213,10 +213,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     }
 }
 
-Status ColumnReader::new_bitmap_index_iterator(BitmapIndexIterator** iterator) {
+StatusOr<std::unique_ptr<BitmapIndexIterator>> ColumnReader::new_bitmap_index_iterator() {
     RETURN_IF_ERROR(_load_bitmap_index_once());
-    RETURN_IF_ERROR(_bitmap_index.reader->new_iterator(iterator));
-    return Status::OK();
+    return _bitmap_index.reader->new_iterator();
 }
 
 Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,

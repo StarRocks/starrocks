@@ -12,21 +12,17 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "fmt/compile.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "runtime/external_scan_context_mgr.h"
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
-#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
@@ -41,7 +37,6 @@
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
-#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
@@ -235,7 +230,7 @@ private:
     vectorized::SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
-    std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    std::vector<std::unique_ptr<BitmapIndexIterator>> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
@@ -1236,7 +1231,7 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
     for (const auto& pair : _opts.predicates) {
         ColumnId cid = pair.first;
         if (_bitmap_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_bitmap_index_iterator(cid, &_bitmap_index_iterators[cid]));
+            ASSIGN_OR_RETURN(_bitmap_index_iterators[cid], _segment->new_bitmap_index_iterator(cid));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
@@ -1263,7 +1258,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     size_t mul_selected = 1;
     size_t mul_cardinality = 1;
     for (auto& [cid, pred_list] : _opts.predicates) {
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[cid];
+        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[cid].get();
         if (bitmap_iter == nullptr) {
             continue;
         }
@@ -1311,7 +1306,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 
     for (size_t i = 0; i < bitmap_columns.size(); i++) {
         Roaring roaring;
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[bitmap_columns[i]];
+        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[bitmap_columns[i]].get();
         if (bitmap_iter->has_null_bitmap() && !has_is_null_predicate[i]) {
             Roaring null_bitmap;
             RETURN_IF_ERROR(bitmap_iter->read_null_bitmap(&null_bitmap));
@@ -1371,10 +1366,6 @@ void SegmentIterator::close() {
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
-
-    for (auto* iter : _bitmap_index_iterators) {
-        delete iter;
-    }
 }
 
 // put the field that has predicate on it ahead of those without one, for handle late

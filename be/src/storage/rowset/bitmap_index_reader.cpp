@@ -42,13 +42,13 @@ Status BitmapIndexReader::load(fs::BlockManager* block_mgr, const std::string& f
     return Status::OK();
 }
 
-Status BitmapIndexReader::new_iterator(BitmapIndexIterator** iterator) {
+StatusOr<std::unique_ptr<BitmapIndexIterator>> BitmapIndexReader::new_iterator() {
     std::unique_ptr<IndexedColumnIterator> dict_iter;
     std::unique_ptr<IndexedColumnIterator> bitmap_iter;
     RETURN_IF_ERROR(_dict_column_reader->new_iterator(&dict_iter));
     RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(&bitmap_iter));
-    *iterator = new BitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter), _has_null, bitmap_nums());
-    return Status::OK();
+    return std::make_unique<BitmapIndexIterator>(this, std::move(dict_iter), std::move(bitmap_iter), _has_null,
+                                                 bitmap_nums());
 }
 
 Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match) {

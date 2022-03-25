@@ -54,7 +54,7 @@ public:
                 bool use_page_cache, bool kept_in_memory);
 
     // create a new column iterator. Client should delete returned iterator
-    Status new_iterator(BitmapIndexIterator** iterator);
+    StatusOr<std::unique_ptr<BitmapIndexIterator>> new_iterator();
 
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
 
