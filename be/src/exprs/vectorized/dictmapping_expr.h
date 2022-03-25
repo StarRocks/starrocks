@@ -20,11 +20,15 @@ namespace starrocks::vectorized {
 class DictMappingExpr final : public Expr {
 public:
     DictMappingExpr(const TExprNode& node);
+
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictMappingExpr(*this)); }
-    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override { __builtin_unreachable(); }
+
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override { return get_child(1)->evaluate(context, ptr); }
+
     SlotId slot_id() {
         DCHECK_EQ(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override { return get_child(1)->get_slot_ids(slot_ids); }
 };
 } // namespace starrocks::vectorized
