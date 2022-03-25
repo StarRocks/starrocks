@@ -1231,7 +1231,9 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
     for (const auto& pair : _opts.predicates) {
         ColumnId cid = pair.first;
         if (_bitmap_index_iterators[cid] == nullptr) {
-            ASSIGN_OR_RETURN(_bitmap_index_iterators[cid], _segment->new_bitmap_index_iterator(cid));
+            ASSIGN_OR_RETURN(std::unique_ptr<BitmapIndexIterator> bitmap_index_iterator,
+                             _segment->new_bitmap_index_iterator(cid));
+            _bitmap_index_iterators[cid] = std::move(bitmap_index_iterator);
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
