@@ -32,6 +32,7 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -50,14 +51,16 @@ protected:
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
-                                BitmapIndexIterator** iter) {
+    std::unique_ptr<BitmapIndexIterator> get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta,
+                                                                BitmapIndexReader** reader) {
         *reader = new BitmapIndexReader();
-        auto st = (*reader)->load(_block_mgr.get(), file_name, &meta.bitmap_index(), true, false);
-        ASSERT_TRUE(st.ok());
-
-        st = (*reader)->new_iterator(iter);
-        ASSERT_TRUE(st.ok());
+        const Status st = (*reader)->load(_block_mgr.get(), file_name, &meta.bitmap_index(), true, false);
+        EXPECT_TRUE(st.ok());
+        if (!st.ok()) {
+            return nullptr;
+        }
+        ASSIGN_OR_ABORT(std::unique_ptr<BitmapIndexIterator> iter, (*reader)->new_iterator());
+        return iter;
     }
 
     template <FieldType type>
@@ -98,8 +101,7 @@ TEST_F(BitmapIndexTest, test_invert) {
     {
         std::unique_ptr<RandomAccessFile> rfile;
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
-        get_bitmap_reader_iter(file_name, meta, &reader, &iter);
+        std::unique_ptr<BitmapIndexIterator> iter = get_bitmap_reader_iter(file_name, meta, &reader);
 
         int value = 2;
         bool exact_match;
@@ -130,7 +132,6 @@ TEST_F(BitmapIndexTest, test_invert) {
         ASSERT_EQ(1024, bitmap2.cardinality());
 
         delete reader;
-        delete iter;
     }
     delete[] val;
 }
@@ -152,8 +153,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
-        get_bitmap_reader_iter(file_name, meta, &reader, &iter);
+        std::unique_ptr<BitmapIndexIterator> iter = get_bitmap_reader_iter(file_name, meta, &reader);
 
         int value = 1026;
         bool exact_match;
@@ -168,7 +168,6 @@ TEST_F(BitmapIndexTest, test_invert_2) {
         ASSERT_EQ(1024, bitmap.cardinality());
 
         delete reader;
-        delete iter;
     }
     delete[] val;
 }
@@ -186,8 +185,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
     write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
-        get_bitmap_reader_iter(file_name, meta, &reader, &iter);
+        std::unique_ptr<BitmapIndexIterator> iter = get_bitmap_reader_iter(file_name, meta, &reader);
 
         int64_t value = 2019;
         bool exact_match;
@@ -200,7 +198,6 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
         ASSERT_EQ(1, bitmap.cardinality());
 
         delete reader;
-        delete iter;
     }
     delete[] val;
 }
@@ -217,15 +214,13 @@ TEST_F(BitmapIndexTest, test_null) {
     write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
-        get_bitmap_reader_iter(file_name, meta, &reader, &iter);
+        std::unique_ptr<BitmapIndexIterator> iter = get_bitmap_reader_iter(file_name, meta, &reader);
 
         Roaring bitmap;
         iter->read_null_bitmap(&bitmap);
         ASSERT_EQ(30, bitmap.cardinality());
 
         delete reader;
-        delete iter;
     }
     delete[] val;
 }
