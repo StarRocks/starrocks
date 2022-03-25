@@ -26,6 +26,7 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
             DCHECK_EQ(_const_expr_lists[_next_processed_row_index + row_i].size(), columns_count);
 
             ColumnPtr src_column = _const_expr_lists[_next_processed_row_index + row_i][col_i]->evaluate(nullptr);
+            RETURN_IF_HAS_ERROR(_const_expr_lists[_next_processed_row_index + row_i]);
             auto cur_row_dst_column =
                     vectorized::ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(), src_column, 1);
             dst_column->append(*cur_row_dst_column, 0, 1);
