@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import io.netty.channel.ChannelHandlerContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -111,6 +112,8 @@ public class ConnectContext {
 
     // mysql net
     protected MysqlChannel mysqlChannel;
+    // http net
+    protected volatile ChannelHandlerContext nettyChannel;
     // state
     protected QueryState state;
     protected long returnRows;
@@ -215,6 +218,10 @@ public class ConnectContext {
 
     public boolean isSend() {
         return this.isSend;
+    }
+
+    public boolean isHttpQuery() {
+        return this.nettyChannel != null;
     }
 
     public ConnectContext() {
@@ -442,6 +449,14 @@ public class ConnectContext {
 
     public MysqlChannel getMysqlChannel() {
         return mysqlChannel;
+    }
+
+    public ChannelHandlerContext getNettyChannel() {
+        return nettyChannel;
+    }
+
+    public void setNettyChannel(ChannelHandlerContext nettyChannel) {
+        this.nettyChannel = nettyChannel;
     }
 
     public QueryState getState() {

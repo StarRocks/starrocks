@@ -90,6 +90,8 @@ public class RestBaseAction extends BaseAction {
         UserIdentity currentUser = checkPassword(authInfo);
         ConnectContext ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setNettyChannel(request.getContext());
+        ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
