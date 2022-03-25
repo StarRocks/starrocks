@@ -80,12 +80,14 @@ abstract public class StarRocksHttpTestCase {
             .build();
 
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    public static final MediaType TEXT = MediaType.parse("text/plain; charset=utf-8");
 
     private static HttpServer httpServer;
 
     public static final String CLUSTER_NAME = "default_cluster";
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
+    public static final String EXPECTED_DESC = "[{\"Field\":\"k1\",\"Type\":\"BIGINT\",\"Null\":\"No\",\"Key\":\"false\",\"Default\":\"\\\\N\",\"Extra\":\"\"},{\"Field\":\"k2\",\"Type\":\"DOUBLE\",\"Null\":\"No\",\"Key\":\"false\",\"Default\":\"\\\\N\",\"Extra\":\"\"}]";
 
     private static long testBackendId1 = 1000;
     private static long testBackendId2 = 1001;
@@ -107,6 +109,7 @@ abstract public class StarRocksHttpTestCase {
     public static int HTTP_PORT;
 
     protected static String URI;
+    protected static String BASE_URL;
 
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -282,6 +285,7 @@ abstract public class StarRocksHttpTestCase {
             socket = new ServerSocket(0);
             socket.setReuseAddress(true);
             HTTP_PORT = socket.getLocalPort();
+            BASE_URL = "http://localhost:" + HTTP_PORT;
             URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
         } catch (Exception e) {
             throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
