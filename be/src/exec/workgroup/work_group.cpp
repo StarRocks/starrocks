@@ -93,8 +93,7 @@ WorkGroupManager::WorkGroupManager()
                                                                    : std::thread::hardware_concurrency())),
           _scan_worker_owner_manager(std::make_unique<WorkerOwnerManager>(
                   config::pipeline_scan_thread_pool_thread_num > 0 ? config::pipeline_scan_thread_pool_thread_num
-                                                                   : std::thread::hardware_concurrency())) {
-}
+                                                                   : std::thread::hardware_concurrency())) {}
 
 WorkGroupManager::~WorkGroupManager() {}
 void WorkGroupManager::destroy() {
@@ -302,28 +301,6 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
-    }
-}
-
-void WorkGroupManager::cal_wg_cpu_real_use_ratio() {
-
-    std::shared_lock read_lock(_mutex);
-    int64_t total_run_time = 0;
-    std::vector<int64_t> growth_times;
-    growth_times.reserve(_workgroups.size());
-
-    for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-        const auto& wg = it->second;
-        growth_times.emplace_back(wg->growth_real_runtime_ns());
-        total_run_time += growth_times.back();
-        wg->update_last_real_runtime_ns(wg->real_runtime_ns());
-    }
-
-    int i = 0;
-    for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it, ++i) {
-        const auto& wg = it->second;
-        double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
-        wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
     }
 }
 

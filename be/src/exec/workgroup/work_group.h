@@ -231,8 +231,6 @@ public:
     // destruct workgroups
     void destroy();
 
-    void cal_wg_cpu_real_use_ratio();
-
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
