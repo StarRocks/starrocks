@@ -28,7 +28,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <algorithm>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
@@ -72,10 +71,9 @@ Status FileUtils::remove_all(const std::string& file_path) {
     return remove_all(env.get(), file_path);
 }
 
-Status FileUtils::remove(Env* env, const std::string& path) {
-    bool is_dir;
-    RETURN_IF_ERROR(env->is_directory(path, &is_dir));
-    return is_dir ? env->delete_dir(path) : env->delete_file(path);
+Status FileUtils::remove(Env* env, const std::string& dir_path) {
+    ASSIGN_OR_RETURN(const bool is_dir, env->is_directory(dir_path));
+    return is_dir ? env->delete_dir(dir_path) : env->delete_file(dir_path);
 }
 
 Status FileUtils::remove(const std::string& path) {
@@ -120,11 +118,10 @@ Status FileUtils::list_dirs_files(Env* env, const std::string& path, std::set<st
         }
 
         std::string temp_path = fmt::format("{}/{}", path, name);
-        bool is_dir;
 
-        auto st = env->is_directory(temp_path, &is_dir);
-        if (st.ok()) {
-            if (is_dir) {
+        auto status_or = env->is_directory(temp_path);
+        if (status_or.ok()) {
+            if (status_or.value()) {
                 if (dirs != nullptr) {
                     dirs->emplace(name);
                 }
@@ -132,7 +129,7 @@ Status FileUtils::list_dirs_files(Env* env, const std::string& path, std::set<st
                 files->emplace(name);
             }
         } else {
-            LOG(WARNING) << "check path " << path << "is directory error: " << st.to_string();
+            LOG(WARNING) << "check path " << path << "is directory error: " << status_or.status().to_string();
         }
 
         return true;
@@ -156,17 +153,14 @@ Status FileUtils::get_children_count(Env* env, const std::string& dir, int64_t* 
     return env->iterate_dir(dir, cb);
 }
 
+bool FileUtils::is_dir(Env* env, const std::string& file_path) {
+    const auto status_or = env->is_directory(file_path);
+    return status_or.ok() ? status_or.value() : false;
+}
+
 Status FileUtils::get_children_count(const std::string& dir, int64_t* count) {
     ASSIGN_OR_RETURN(auto env, Env::CreateSharedFromString(dir));
     return get_children_count(env.get(), dir, count);
-}
-
-bool FileUtils::is_dir(Env* env, const std::string& file_path) {
-    bool ret;
-    if (env->is_directory(file_path, &ret).ok()) {
-        return ret;
-    }
-    return false;
 }
 
 bool FileUtils::is_dir(const std::string& file_path) {

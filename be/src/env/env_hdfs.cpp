@@ -26,7 +26,7 @@ public:
     StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    Status size(uint64_t* size) const override;
+    StatusOr<uint64_t> get_size() const override;
     const std::string& filename() const override { return _file_name; }
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
 
@@ -64,7 +64,7 @@ Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t s
     return Status::OK();
 }
 
-Status HdfsRandomAccessFile::size(uint64_t* size) const {
+StatusOr<uint64_t> HdfsRandomAccessFile::get_size() const {
     if (_file_size == 0) {
         auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
         if (UNLIKELY(info == nullptr)) {
@@ -73,8 +73,7 @@ Status HdfsRandomAccessFile::size(uint64_t* size) const {
         _file_size = info->mSize;
         hdfsFreeFileInfo(info, 1);
     }
-    *size = _file_size;
-    return Status::OK();
+    return _file_size;
 }
 
 StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
@@ -162,7 +161,7 @@ public:
 
     Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::sync_dir"); }
 
-    Status is_directory(const std::string& path, bool* is_dir) override {
+    StatusOr<bool> is_directory(const std::string& path) override {
         return Status::NotSupported("EnvHdfs::is_directory");
     }
 
@@ -170,11 +169,11 @@ public:
         return Status::NotSupported("EnvHdfs::canonicalize");
     }
 
-    Status get_file_size(const std::string& path, uint64_t* size) override {
+    StatusOr<uint64_t> get_file_size(const std::string& path) override {
         return Status::NotSupported("EnvHdfs::get_file_size");
     }
 
-    Status get_file_modified_time(const std::string& path, uint64_t* file_mtime) override {
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
         return Status::NotSupported("EnvHdfs::get_file_modified_time");
     }
 

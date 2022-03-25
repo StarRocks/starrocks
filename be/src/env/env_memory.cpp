@@ -63,11 +63,7 @@ public:
         return Status::OK();
     }
 
-    Status size(uint64_t* size) const override {
-        const std::string& data = _inode->data;
-        *size = data.size();
-        return Status::OK();
-    }
+    StatusOr<uint64_t> get_size() const override { return _inode->data.size(); }
 
     const std::string& filename() const override { return _path; }
 
@@ -91,8 +87,7 @@ public:
     const std::string& filename() const override { return _random_file.filename(); }
 
     Status skip(uint64_t n) override {
-        uint64_t size = 0;
-        CHECK(_random_file.size(&size).ok());
+        ASSIGN_OR_RETURN(auto size, _random_file.get_size());
         _offset = std::min(_offset + n, size);
         return Status::OK();
     }
@@ -188,10 +183,7 @@ public:
         return Status::OK();
     }
 
-    Status size(uint64_t* size) const override {
-        *size = _inode->data.size();
-        return Status::OK();
-    }
+    StatusOr<uint64_t> get_size() const override { return _inode->data.size(); }
 
     const std::string& filename() const override { return _path; }
 
@@ -361,22 +353,20 @@ public:
         return Status::OK();
     }
 
-    Status is_directory(const butil::FilePath& path, bool* is_dir) {
+    StatusOr<bool> is_directory(const butil::FilePath& path) {
         auto inode = get_inode(path);
         if (inode == nullptr) {
             return Status::NotFound(path.value());
         }
-        *is_dir = (inode->type == kDir);
-        return Status::OK();
+        return inode->type == kDir;
     }
 
-    Status get_file_size(const butil::FilePath& path, uint64_t* size) {
+    StatusOr<uint64_t> get_file_size(const butil::FilePath& path) {
         auto inode = get_inode(path);
         if (inode == nullptr || inode->type != kNormal) {
             return Status::NotFound("not exist or is a directory");
         }
-        *size = inode->data.size();
-        return Status::OK();
+        return inode->data.size();
     }
 
     Status rename_file(const butil::FilePath& src, const butil::FilePath& target) {
@@ -565,10 +555,10 @@ Status EnvMemory::sync_dir(const std::string& dirname) {
     return Status::OK();
 }
 
-Status EnvMemory::is_directory(const std::string& path, bool* is_dir) {
+StatusOr<bool> EnvMemory::is_directory(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->is_directory(butil::FilePath(new_path), is_dir);
+    return _impl->is_directory(butil::FilePath(new_path));
 }
 
 Status EnvMemory::canonicalize(const std::string& path, std::string* file) {
@@ -608,13 +598,13 @@ Status EnvMemory::canonicalize(const std::string& path, std::string* file) {
     return Status::OK();
 }
 
-Status EnvMemory::get_file_size(const std::string& path, uint64_t* size) {
+StatusOr<uint64_t> EnvMemory::get_file_size(const std::string& path) {
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->get_file_size(butil::FilePath(new_path), size);
+    return _impl->get_file_size(butil::FilePath(new_path));
 }
 
-Status EnvMemory::get_file_modified_time(const std::string& path, uint64_t* file_mtime) {
+StatusOr<uint64_t> EnvMemory::get_file_modified_time(const std::string& path) {
     return Status::NotSupported("get_file_modified_time");
 }
 
@@ -646,11 +636,10 @@ Status EnvMemory::append_file(const std::string& path, const Slice& content) {
 }
 
 Status EnvMemory::read_file(const std::string& path, std::string* content) {
-    ASSIGN_OR_RETURN(auto f, new_random_access_file(path));
-    uint64_t size = 0;
-    RETURN_IF_ERROR(f->size(&size));
+    ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(path));
+    ASSIGN_OR_RETURN(const uint64_t size, random_access_file->get_size());
     raw::make_room(content, size);
-    return f->read_at_fully(0, content->data(), content->size());
+    return random_access_file->read_at_fully(0, content->data(), content->size());
 }
 
 } // namespace starrocks

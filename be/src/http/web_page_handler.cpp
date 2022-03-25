@@ -172,8 +172,8 @@ std::string WebPageHandler::mustache_partial_tag(const std::string& path) const 
 }
 
 bool WebPageHandler::static_pages_available() const {
-    bool is_dir = false;
-    return Env::Default()->is_directory(_www_path, &is_dir).ok() && is_dir;
+    const StatusOr<bool> status_or = Env::Default()->is_directory(_www_path);
+    return status_or.ok() && status_or.value();
 }
 
 bool WebPageHandler::mustache_template_available(const std::string& path) const {

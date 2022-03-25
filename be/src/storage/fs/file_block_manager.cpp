@@ -308,8 +308,7 @@ const string& FileReadableBlock::path() const {
 
 Status FileReadableBlock::size(uint64_t* sz) const {
     DCHECK(!_closed.load());
-
-    RETURN_IF_ERROR(_file->size(sz));
+    ASSIGN_OR_RETURN(*sz, _file->get_size());
     return Status::OK();
 }
 
