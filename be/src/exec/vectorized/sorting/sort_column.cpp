@@ -142,9 +142,8 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
         ColumnPtr column = columns[col_index];
         bool is_asc_order = (sort_orders[col_index] == 1);
         bool is_null_first = is_asc_order ? (null_firsts[col_index] == -1) : (null_firsts[col_index] == 1);
-        bool build_tie = col_index != columns.size() - 1;
         RETURN_IF_ERROR(
-                sort_and_tie_column(cancel, column, is_asc_order, is_null_first, *small_perm, tie, range, build_tie));
+                sort_and_tie_column(cancel, column, is_asc_order, is_null_first, *small_perm, tie, range, true));
     }
 
     // Stable sort need extra runs of sorting on permutation
