@@ -15,6 +15,7 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
 #include "util/json.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -322,6 +323,8 @@ TEST_P(JsonQueryTestFixture, json_query) {
         ASSERT_TRUE(datum.is_null());
     } else {
         ASSERT_TRUE(!datum.is_null());
+        auto st = datum.get_json()->to_string();
+        ASSERT_TRUE(st.ok()) << st->c_str();
         std::string json_result = datum.get_json()->to_string().value();
         StripWhiteSpace(&json_result);
         ASSERT_EQ(param_result, json_result);
@@ -378,8 +381,16 @@ INSTANTIATE_TEST_SUITE_P(
                 // Top Level Array
                 std::make_tuple(R"( [1,2,3] )", "$[1]", R"( 2 )"), 
                 std::make_tuple(R"( [1,2,3] )", "$[5]", R"( NULL )"),
-                std::make_tuple(R"( [1,2,3] )", "[1]", R"( 2 )"), 
-                std::make_tuple(R"( [1,2,3] )", "[5]", R"( NULL )"),
+                std::make_tuple(R"( [1,2,3] )", "[1]",  R"( 2 )"), 
+                std::make_tuple(R"( [1,2,3] )", "[5]",  R"( NULL )"),
+                std::make_tuple(R"( [1,2,3] )", "[*]",  R"( [1, 2, 3] )"),
+                std::make_tuple(R"( [1,2,3] )", "[*].k1",  R"( [] )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k1": 2}] )", "$[0]",      R"( {"k1": 1} )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k1": 2}] )", "$[0].k1",   R"( 1 )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k1": 2}] )", "$[*].k1",   R"( [1, 2] )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*].k1",   R"( [1] )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*].k2",   R"( [2] )"),
+                std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*]",      R"( [{"k1": 1}, {"k2": 2}] )"),
 
                 // array result
                 std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", "$.k1[*].k2", R"( [1, 2] )"),
