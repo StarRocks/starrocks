@@ -138,17 +138,17 @@ private:
     DictOptimizeContext* _dict_opt_ctx;
 };
 
-void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
+Status DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
     if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
         dict_opt_ctx->slot_id = f->slot_id();
         dict_opt_ctx->could_apply_dict_optimize = true;
-        return;
+        return Status::OK();
     }
 
     // if expr was slot reference, we don't have to rewrite predicate
     if (expr_ctx->root()->is_slotref()) {
         dict_opt_ctx->could_apply_dict_optimize = false;
-        return;
+        return Status::OK();
     }
 
     // TODO: remove these check after 2.4
@@ -170,10 +170,11 @@ void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx,
         dict_opt_ctx->slot_id = slot_ids.back();
         dict_opt_ctx->could_apply_dict_optimize = true;
     }
+    return Status::OK();
 }
 
-void DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
-                                         SlotId targetSlotId) {
+Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
+                                           SlotId targetSlotId) {
     DCHECK_NE(expr_ctx->root()->type().type, TYPE_VARCHAR);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     SlotId expr_slot_id = need_decode_slot_id;
@@ -187,6 +188,9 @@ void DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCont
     }
 
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
+    if (_mutable_dict_maps->count(need_decode_slot_id) == 0) {
+        return Status::InternalError(fmt::format("couldn't found dict cid:{}", need_decode_slot_id));
+    }
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
     auto [binary_column, codes] = extract_column_with_codes(column_dict_map);
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
@@ -256,11 +260,12 @@ void DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCont
         DCHECK_EQ(_mutable_dict_maps->count(targetSlotId), 0);
         _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
     }
+    return Status::OK();
 }
 
 template <bool close_original_expr>
-void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
-                                            const std::vector<SlotId>& slot_ids) {
+Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+                                              const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
@@ -283,29 +288,31 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
             _expr_close_list.emplace_back(expr_ctx);
         }
     }
+    return Status::OK();
 }
 
 template <bool close_original_expr>
-void DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    _rewrite_expr_ctxs<close_original_expr>(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
+    return _rewrite_expr_ctxs<close_original_expr>(pconjuncts_ctxs, state,
+                                                   std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
 }
 
-template void DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                          RuntimeState* state);
-template void DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                           RuntimeState* state);
+template Status DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                            RuntimeState* state);
+template Status DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                             RuntimeState* state);
 
-void DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
-                                       const std::vector<SlotId>& target_slotids) {
-    _rewrite_expr_ctxs<true>(pexpr_ctxs, state, target_slotids);
+Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+                                         const std::vector<SlotId>& target_slotids) {
+    return _rewrite_expr_ctxs<true>(pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {
     Expr::close(_expr_close_list, state);
 }
 
-void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    _check_could_apply_dict_optimize(expr_ctx, dict_opt_ctx);
+Status DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
+    return _check_could_apply_dict_optimize(expr_ctx, dict_opt_ctx);
 }
 
 std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_with_codes(

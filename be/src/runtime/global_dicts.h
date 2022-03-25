@@ -87,18 +87,16 @@ public:
         _mutable_dict_maps = dict_maps;
     }
 
-    void rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                       const std::vector<SlotId>& target_slotids);
+    Status rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                         const std::vector<SlotId>& target_slotids);
     template <bool close_original_expr>
-    void rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
+    Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
 
     void close(RuntimeState* state) noexcept;
 
-    void eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
-    void eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx);
-    void eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
+    Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
-    void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+    Status check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // For global dictionary optimized columns,
     // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
@@ -108,12 +106,12 @@ public:
                                    std::vector<SlotDescriptor*>* slot_descs);
 
 private:
-    void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+    Status _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
     template <bool close_original_expr>
-    void _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                            const std::vector<SlotId>& slot_ids);
+    Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                              const std::vector<SlotId>& slot_ids);
 
     RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;

@@ -76,11 +76,11 @@ Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
 
     auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
-        _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
+        return _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
     };
 
-    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_column_ids);
-    init_dict_optimize(_expr_ctxs, _column_ids);
+    RETURN_IF_ERROR(init_dict_optimize(_common_sub_expr_ctxs, _common_sub_column_ids));
+    RETURN_IF_ERROR(init_dict_optimize(_expr_ctxs, _column_ids));
 
     return Status::OK();
 }
