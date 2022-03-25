@@ -17,6 +17,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "util/json.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
@@ -198,7 +199,9 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
                 vpack::ArrayBuilder ab(builder);
                 array_selector->iterate(next_item, [&](vpack::Slice array_item) {
                     auto sub = extract(array_item, jsonpath, i + 1, builder);
-                    builder->add(sub);
+                    if (!sub.isNone()) {
+                        builder->add(sub);
+                    }
                 });
             }
             return builder->slice();
