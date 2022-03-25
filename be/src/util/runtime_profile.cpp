@@ -977,8 +977,8 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             counter0->set(merged_value);
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-            // TODO(hcf) is there a better way to tell whether save extra info or not
-            if (is_average_type(counter0->type()) && max_value - min_value > 2 * merged_value) {
+            const auto diff = max_value - min_value;
+            if (is_average_type(counter0->type()) && (diff > 5'000'000L && diff > merged_value / 5)) {
                 auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
                 auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
                 min_counter->set(min_value);

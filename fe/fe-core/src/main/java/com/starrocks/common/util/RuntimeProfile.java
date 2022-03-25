@@ -32,6 +32,7 @@ import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,6 +101,10 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
+    public Counter addCounter(String name, TUnit type) {
+        return addCounter(name, type, ROOT_COUNTER);
+    }
+
     public Counter addCounter(String name, TUnit type, String parentCounterName) {
         Counter counter = this.counterMap.get(name);
         if (counter != null) {
@@ -128,7 +133,7 @@ public class RuntimeProfile {
         }
 
         srcProfile.counterMap.forEach((name, counter) -> {
-            addCounter(name, counter.getType(), "");
+            addCounter(name, counter.getType());
             getCounter(name).setValue(counter.getValue());
         });
     }
@@ -460,7 +465,7 @@ public class RuntimeProfile {
                 continue;
             }
 
-            List<Counter> counters = Lists.newArrayList();
+            List<Triple<Counter, Counter, Counter>> counters = Lists.newArrayList();
             for (int j = 0; j < profiles.size(); j++) {
                 RuntimeProfile profile = profiles.get(j);
                 Counter counter = profile.getCounter(name);
@@ -475,7 +480,10 @@ public class RuntimeProfile {
                     LOG.warn("find non-isomorphic counter, profileName={}, name={}", profile0.name, name);
                     return;
                 }
-                counters.add(counter);
+
+                Counter minCounter = profile.getCounter(mergedInfoPrefixMin + name);
+                Counter maxCounter = profile.getCounter(mergedInfoPrefixMax + name);
+                counters.add(Triple.of(counter, minCounter, maxCounter));
             }
             Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(type, counters);
 
@@ -483,15 +491,13 @@ public class RuntimeProfile {
             // As memtioned before, some counters may only attach one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == null) {
-                counter0 = profile0.addCounter(name, type, "");
+                counter0 = profile0.addCounter(name, type);
             }
             counter0.setValue(mergedInfo.mergedValue);
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-            // TODO(hcf) is there a better way to tell whether save extra info or not
-            if (Counter.isAverageType(counter0.getType()) &&
-                    mergedInfo.maxValue - mergedInfo.minValue >
-                            2 * mergedInfo.mergedValue) {
+            double diff = mergedInfo.maxValue - mergedInfo.minValue;
+            if (Counter.isAverageType(counter0.getType()) && (diff > 5000000L && diff > mergedInfo.mergedValue / 5)) {
                 Counter minCounter =
                         profile0.addCounter(mergedInfoPrefixMin + name, type, name);
                 Counter maxCounter =
@@ -566,4 +572,3 @@ public class RuntimeProfile {
         }
     }
 }
-
