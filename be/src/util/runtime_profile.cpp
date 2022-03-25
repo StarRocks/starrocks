@@ -26,6 +26,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "common/config.h"
@@ -56,6 +57,8 @@ static const std::string ROOT_COUNTER = ""; // NOLINT
 
 // NOLINTNEXTLINE
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
+
+const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {"DegreeOfParallelism"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
@@ -923,6 +926,10 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
         for (auto* profile : profiles) {
             std::lock_guard<std::mutex> l(profile->_counter_lock);
             for (auto& [name, counter] : profile->_counter_map) {
+                if (NON_MERGE_COUNTER_NAMES.find(name) != NON_MERGE_COUNTER_NAMES.end()) {
+                    continue;
+                }
+
                 auto it = counter_types.find(name);
                 if (it == counter_types.end()) {
                     counter_types[name] = counter->type();

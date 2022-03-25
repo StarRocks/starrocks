@@ -24,9 +24,9 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
-import com.starrocks.common.util.Counter;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
@@ -50,21 +50,23 @@ import java.util.TreeSet;
  */
 public class RuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
-    private static String ROOT_COUNTER = "";
-    private Counter counterTotalTime;
-    private double localTimePercent;
+    private static final String ROOT_COUNTER = "";
+    private static final Set<String> NON_MERGE_COUNTER_NAMES = Sets.newHashSet("DegreeOfParallelism");
 
-    private Map<String, String> infoStrings = Maps.newHashMap();
-    private List<String> infoStringsDisplayOrder = Lists.newArrayList();
+    private final Counter counterTotalTime;
+
+    private final Map<String, String> infoStrings = Maps.newHashMap();
+    private final List<String> infoStringsDisplayOrder = Lists.newArrayList();
 
     // These will be hold by other thread.
-    private Map<String, Counter> counterMap = Maps.newConcurrentMap();
-    private Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
+    private final Map<String, Counter> counterMap = Maps.newConcurrentMap();
+    private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
-    private Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
-    private List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
+    private final Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
+    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
 
     private String name;
+    private double localTimePercent;
 
     public RuntimeProfile(String name) {
         this();
@@ -432,6 +434,11 @@ public class RuntimeProfile {
             for (Map.Entry<String, Counter> entry : profile.counterMap.entrySet()) {
                 String name = entry.getKey();
                 Counter counter = entry.getValue();
+
+                if (NON_MERGE_COUNTER_NAMES.contains(name)) {
+                    continue;
+                }
+
                 if (!counterTypes.containsKey(name)) {
                     counterTypes.put(name, counter.getType());
                     continue;

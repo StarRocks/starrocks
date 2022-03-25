@@ -90,6 +90,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _pool = pool;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
+    // add profile attributes
+    if (_tnode.analytic_node.__isset.sql_partition_keys) {
+        _runtime_profile->add_info_string("PartitionKeys", _tnode.analytic_node.sql_partition_keys);
+    }
+    if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
+        _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
+    }
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _mem_pool = std::make_unique<MemPool>();
 

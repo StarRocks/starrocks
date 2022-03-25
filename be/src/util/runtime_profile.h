@@ -28,6 +28,7 @@
 #include <functional>
 #include <iostream>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 
 #include "common/compiler_util.h"
@@ -619,6 +620,7 @@ public:
     static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
 
 private:
+    static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
     // The exact semantics of merge depends on TUnit::type
     // TODO(hcf) is the classification right?
