@@ -43,6 +43,7 @@ public:
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
     virtual int64_t last_spent_cpu_time_ns() { return 0; }
+    virtual int64_t last_acquired_bytes() { return 0; }
 
 protected:
     RuntimeProfile* _runtime_profile;

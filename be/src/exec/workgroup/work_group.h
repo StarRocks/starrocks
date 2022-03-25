@@ -180,7 +180,6 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
-
     std::atomic<int64_t> _total_cpu_cost = 0;
     std::atomic<int64_t> _total_io_cost = 0;
     double _cpu_actual_use_ratio = 0;

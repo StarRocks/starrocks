@@ -320,9 +320,9 @@ void WorkGroupManager::cal_wg_cpu_real_use_ratio() {
 
     for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
         const auto& wg = it->second;
-        growth_times.emplace_back(wg->growth_vruntime_ns());
+        growth_times.emplace_back(wg->growth_real_runtime_ns());
         total_run_time += growth_times.back();
-        wg->update_last_vruntime_ns(wg->real_runtime_ns());
+        wg->update_last_real_runtime_ns(wg->real_runtime_ns());
     }
 
     int i = 0;

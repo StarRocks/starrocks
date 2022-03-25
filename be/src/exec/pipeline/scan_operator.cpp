@@ -186,11 +186,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 // TODO (by laotan332): More detailed information is needed
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                 _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-                
 
                 // for big query check
                 _total_cost_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                _total_io_bytes += _chunk_sources[chunk_source_index]->get_last_acquired_bytes();
+                _total_io_bytes += _chunk_sources[chunk_source_index]->last_acquired_bytes();
             }
 
             _num_running_io_tasks--;

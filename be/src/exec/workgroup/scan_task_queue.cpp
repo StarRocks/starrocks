@@ -97,9 +97,9 @@ void ScanTaskQueueWithWorkGroup::cal_wg_cpu_real_use_ratio() {
     growth_times.reserve(_ready_wgs.size());
 
     for (auto& wg : _ready_wgs) {
-        growth_times.emplace_back(wg->growth_vruntime_ns());
+        growth_times.emplace_back(wg->growth_real_runtime_ns());
         total_run_time += growth_times.back();
-        wg->update_last_vruntime_ns(wg->real_runtime_ns());
+        wg->update_last_real_runtime_ns(wg->real_runtime_ns());
     }
 
     int i = 0;
