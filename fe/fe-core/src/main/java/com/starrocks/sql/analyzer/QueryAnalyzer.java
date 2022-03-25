@@ -580,21 +580,32 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "UNNEST");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "UNNEST");
             }
-            TableFunction fn = (TableFunction) Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+
+            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+            if (fn == null) {
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFunctionName(), argTypes);
+            }
 
             if (fn == null) {
                 throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
             }
 
-            node.setTableFunction(fn);
+            if (!(fn instanceof TableFunction)) {
+                throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),
+                        Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+            }
+
+            TableFunction tableFunction = (TableFunction) fn;
+            node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
-            for (int i = 0; i < fn.getTableFnReturnTypes().size(); ++i) {
-                Field field = new Field(fn.getDefaultColumnNames().get(i),
-                        fn.getTableFnReturnTypes().get(i), node.getAlias(),
+            for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+                Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
+                        tableFunction.getTableFnReturnTypes().get(i), node.getAlias(),
                         new SlotRef(node.getAlias(),
                                 node.getTableFunction().getDefaultColumnNames().get(i),
                                 node.getTableFunction().getDefaultColumnNames().get(i)));
