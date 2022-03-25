@@ -19,7 +19,6 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -38,7 +37,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -48,9 +46,7 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -64,7 +60,6 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -535,7 +530,7 @@ public class ExpressionAnalyzer {
             }
 
             if (fn == null) {
-                fn = getUdfFunction(node.getFnName(), argumentTypes);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
@@ -596,8 +591,8 @@ public class ExpressionAnalyzer {
 
             ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping);
             if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-                return Expr
-                        .getBuiltinFunction("str2date", argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                return Expr.getBuiltinFunction("str2date", argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
             return fn;
@@ -610,7 +605,7 @@ public class ExpressionAnalyzer {
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
-                fn = getUdfFunction(node.getFnName(), argumentTypes);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
@@ -840,35 +835,4 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyze(expression, state, scope);
     }
 
-    private Function getUdfFunction(FunctionName fnName, Type[] argTypes) {
-        String dbName = fnName.getDb();
-        if (StringUtils.isEmpty(dbName)) {
-            dbName = session.getDatabase();
-        } else {
-            dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
-        }
-
-        if (!session.getCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
-                    ErrorType.USER_ERROR);
-        }
-
-        Database db = session.getCatalog().getDb(dbName);
-        if (db == null) {
-            return null;
-        }
-
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
-        }
-
-        if (!Config.enable_udf) {
-            throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
-                    ErrorType.USER_ERROR);
-        }
-        return fn;
-    }
 }
