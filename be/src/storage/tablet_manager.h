@@ -143,6 +143,8 @@ public:
         return _shutdown_tablets.size();
     }
 
+    Status delete_shutdown_tablet(int64_t tablet_id);
+
     MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
 private:
