@@ -349,9 +349,9 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
             dest_dop = t_stream_sink.dest_dop;
 
-            // When pipeline_dop == 1, sender side willn't execute in pipeline level shuffle way,
-            // so at receiver side, we should disable is_pipeline_level_shuffle.
-            if (dest_dop > 1) {
+            // UNPARTITIONED mode will be performed if both num of destination and dest dop is 1
+            // So we only enable pipeline level shuffle when num of destination or dest dop is greater than 1
+            if (sender->destinations().size() > 1 || dest_dop > 1) {
                 is_pipeline_level_shuffle = true;
             }
             DCHECK_GT(dest_dop, 0);
