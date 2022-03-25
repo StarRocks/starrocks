@@ -188,7 +188,10 @@ private:
     RuntimeProfile::Counter* _decompress_row_batch_timer;
     RuntimeProfile::Counter* _request_received_counter;
 
+    RuntimeProfile::Counter* _process_total_timer = nullptr;
+
     // Total spent for senders putting data in the queue
+    // TODO(hcf) remove these two metrics after non-pipeline offlined
     RuntimeProfile::Counter* _sender_total_timer = nullptr;
     RuntimeProfile::Counter* _sender_wait_lock_timer = nullptr;
 

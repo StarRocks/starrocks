@@ -492,16 +492,16 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
     table_items->build_pool = std::make_unique<MemPool>();
-    table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
+    table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTime");
 }
 
 void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint32_t probe_row_count) {
     probe_state->probe_row_count = probe_row_count;
     probe_state->cur_probe_index = 0;
     probe_state->probe_pool = std::make_unique<MemPool>();
-    probe_state->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
-    probe_state->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTimer");
-    probe_state->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTimer");
+    probe_state->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTime");
+    probe_state->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTime");
+    probe_state->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTime");
     probe_state->build_index.resize(config::vector_chunk_size + 8);
     probe_state->probe_index.resize(config::vector_chunk_size + 8);
     probe_state->next.resize(config::vector_chunk_size);
@@ -1531,10 +1531,10 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
-    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -1593,10 +1593,10 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
-    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -1657,10 +1657,10 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
-    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -1720,10 +1720,10 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     param.join_keys.emplace_back(JoinKeyDesc{TYPE_VARCHAR, false});
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
-    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);

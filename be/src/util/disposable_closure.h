@@ -16,7 +16,11 @@ namespace starrocks {
 template <typename T, typename C = void>
 class DisposableClosure : public google::protobuf::Closure {
 public:
-    DisposableClosure(const C& ctx) : _ctx(ctx) {}
+    DisposableClosure(const C& ctx) : _ctx(ctx) {
+        _send_timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                  std::chrono::system_clock::now().time_since_epoch())
+                                  .count();
+    }
     ~DisposableClosure() override = default;
 
     // Disallow copy and assignment.
@@ -24,7 +28,9 @@ public:
     DisposableClosure& operator=(const DisposableClosure& other) = delete;
 
     void addFailedHandler(std::function<void(const C&)> fn) { _failed_handler = std::move(fn); }
-    void addSuccessHandler(std::function<void(const C&, const T&)> fn) { _success_handler = fn; }
+    void addSuccessHandler(std::function<void(const C&, const T&, const int64_t send_timestamp)> fn) {
+        _success_handler = fn;
+    }
 
     void Run() noexcept override {
         try {
@@ -33,7 +39,7 @@ public:
                              << ", error_text=" << cntl.ErrorText();
                 _failed_handler(_ctx);
             } else {
-                _success_handler(_ctx, result);
+                _success_handler(_ctx, result, _send_timestamp);
             }
             delete this;
         } catch (const std::exception& exp) {
@@ -48,7 +54,8 @@ public:
 
 private:
     const C _ctx;
+    int64_t _send_timestamp;
     std::function<void(const C&)> _failed_handler;
-    std::function<void(const C&, const T&)> _success_handler;
+    std::function<void(const C&, const T&, const int64_t send_timestamp)> _success_handler;
 };
 } // namespace starrocks
