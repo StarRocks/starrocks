@@ -794,6 +794,15 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
         plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  6:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> upper[([9, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  5:Decode\n" +
+                "  |  <dict id 12> : <string id 9>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])"));
         Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
                 "  |  group by: [12: lower, INT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
