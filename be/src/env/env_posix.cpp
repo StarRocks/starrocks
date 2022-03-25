@@ -26,7 +26,6 @@
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
 #include "util/errno.h"
-#include "util/file_cache.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -280,14 +279,13 @@ public:
         return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
     }
 
-    Status size(uint64_t* size) const override {
+    StatusOr<uint64_t> get_size() const override {
         struct stat st;
         auto res = fstat(_fd, &st);
         if (res != 0) {
             return io_error(_filename, errno);
         }
-        *size = st.st_size;
-        return Status::OK();
+        return st.st_size;
     }
 
     const std::string& filename() const override { return _filename; }
@@ -473,13 +471,12 @@ public:
         return s;
     }
 
-    Status size(uint64_t* size) const override {
+    StatusOr<uint64_t> get_size() const override {
         struct stat st;
         if (fstat(_fd, &st) == -1) {
             return io_error(_filename, errno);
         }
-        *size = st.st_size;
-        return Status::OK();
+        return st.st_size;
     }
 
     const string& filename() const override { return _filename; }
@@ -530,7 +527,7 @@ public:
 
         uint64_t file_size = 0;
         if (opts.mode == MUST_EXIST) {
-            RETURN_IF_ERROR(get_file_size(fname, &file_size));
+            ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
         return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
     }
@@ -605,8 +602,7 @@ public:
 
         // Check that dirname is actually a directory.
         if (s.is_already_exist()) {
-            bool is_dir = false;
-            RETURN_IF_ERROR(is_directory(dirname, &is_dir));
+            ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
             if (is_dir) {
                 return Status::OK();
             } else {
@@ -646,12 +642,12 @@ public:
         return Status::OK();
     }
 
-    Status is_directory(const std::string& path, bool* is_dir) override {
+    StatusOr<bool> is_directory(const std::string& path) override {
         struct stat path_stat;
         if (stat(path.c_str(), &path_stat) != 0) {
             return io_error(path, errno);
         } else {
-            *is_dir = S_ISDIR(path_stat.st_mode);
+            return S_ISDIR(path_stat.st_mode);
         }
 
         return Status::OK();
@@ -668,23 +664,21 @@ public:
         return Status::OK();
     }
 
-    Status get_file_size(const string& fname, uint64_t* size) override {
+    StatusOr<uint64_t> get_file_size(const string& fname) override {
         struct stat sbuf;
         if (stat(fname.c_str(), &sbuf) != 0) {
             return io_error(fname, errno);
         } else {
-            *size = sbuf.st_size;
+            return sbuf.st_size;
         }
-        return Status::OK();
     }
 
-    Status get_file_modified_time(const std::string& fname, uint64_t* file_mtime) override {
+    StatusOr<uint64_t> get_file_modified_time(const std::string& fname) override {
         struct stat s;
         if (stat(fname.c_str(), &s) != 0) {
             return io_error(fname, errno);
         }
-        *file_mtime = static_cast<uint64_t>(s.st_mtime);
-        return Status::OK();
+        return static_cast<uint64_t>(s.st_mtime);
     }
 
     Status rename_file(const std::string& src, const std::string& target) override {

@@ -45,9 +45,9 @@ public:
         std::string normalized_path;
         CHECK_OK(_env->canonicalize(path, &normalized_path));
         std::vector<std::string> result{normalized_path};
-        bool is_dir = false;
-        CHECK_OK(_env->is_directory(normalized_path, &is_dir));
-        if (is_dir) {
+        auto status_or = _env->is_directory(normalized_path);
+        CHECK_OK(status_or.status());
+        if (status_or.value()) {
             CHECK_OK(_env->iterate_dir(normalized_path, [&, this](std::string_view filename) -> bool {
                 auto subdir = walk(fmt::format("{}/{}", normalized_path, filename));
                 result.insert(result.end(), subdir.begin(), subdir.end());
@@ -193,8 +193,7 @@ TEST_F(EnvMemoryTest, test_new_writable_file) {
     EXPECT_STATUS(Status::OK(), _env->get_children("/", &children));
     ASSERT_EQ(1, children.size()) << JoinStrings(children, ",");
     EXPECT_EQ("1.csv", children[0]);
-    uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), _env->get_file_size("/1.csv", &size));
+    ASSIGN_OR_ABORT(const uint64_t size, _env->get_file_size("/1.csv"));
     EXPECT_EQ(3, size);
 }
 
@@ -408,8 +407,7 @@ TEST_F(EnvMemoryTest, test_random_rw_file) {
     std::string buff(10, '\0');
     Slice slice1(buff.data(), 5);
     Slice slice2(buff.data() + 5, 5);
-    uint64_t size = 0;
-    EXPECT_STATUS(Status::OK(), file->size(&size));
+    ASSIGN_OR_ABORT(const uint64_t size, file->get_size());
     EXPECT_EQ(14, size);
 
     EXPECT_STATUS(Status::OK(), file->read_at(5, slice1));
@@ -431,8 +429,7 @@ TEST_F(EnvMemoryTest, test_random_access_file) {
 
     auto f = *_env->new_random_access_file("/a.txt");
 
-    uint64_t size = 0;
-    ASSERT_OK(f->size(&size));
+    ASSIGN_OR_ABORT(const uint64_t size, f->get_size());
     EXPECT_EQ(content.size(), size);
 
     std::string buff(4, '\0');

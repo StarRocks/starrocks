@@ -70,9 +70,9 @@ TEST_F(EnvPosixTest, random_access) {
 
     ASSERT_EQ(115, wfile->size());
 
-    uint64_t size;
-    st = env->get_file_size(fname, &size);
-    ASSERT_TRUE(st.ok());
+    const auto status_or = env->get_file_size(fname);
+    ASSERT_TRUE(status_or.ok());
+    const uint64_t size = status_or.value();
     ASSERT_EQ(115, size);
     {
         char mem[1024];
@@ -144,9 +144,7 @@ TEST_F(EnvPosixTest, random_rw) {
     st = wfile->writev_at(0, slices, 2);
     ASSERT_TRUE(st.ok());
 
-    uint64_t size;
-    st = wfile->size(&size);
-    ASSERT_TRUE(st.ok());
+    ASSIGN_OR_ABORT(uint64_t size, wfile->get_size());
     ASSERT_EQ(109, size);
 
     st = wfile->flush(RandomRWFile::FLUSH_ASYNC, 0, 0);
@@ -156,8 +154,9 @@ TEST_F(EnvPosixTest, random_rw) {
     st = wfile->close();
     ASSERT_TRUE(st.ok());
 
-    st = env->get_file_size(fname, &size);
-    ASSERT_TRUE(st.ok());
+    const auto status_or = env->get_file_size(fname);
+    ASSERT_TRUE(status_or.ok());
+    size = status_or.value();
     ASSERT_EQ(109, size);
     {
         char mem[1024];
