@@ -889,8 +889,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
-    _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTimer");
-    _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTimer");
+    _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTime");
+    _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTime");
     _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");
 
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
