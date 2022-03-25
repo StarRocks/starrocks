@@ -94,7 +94,6 @@ WorkGroupManager::WorkGroupManager()
           _scan_worker_owner_manager(std::make_unique<WorkerOwnerManager>(
                   config::pipeline_scan_thread_pool_thread_num > 0 ? config::pipeline_scan_thread_pool_thread_num
                                                                    : std::thread::hardware_concurrency())) {
-    _last_cal_wg_cpu_real_use_ratio_time = MonotonicNanos();
 }
 
 WorkGroupManager::~WorkGroupManager() {}
@@ -307,11 +306,6 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::cal_wg_cpu_real_use_ratio() {
-    // Calculate the current time and the last time, less than 1s will not be calculated
-    // auto time_now = MonotonicNanos();
-    // if (time_now - _last_cal_wg_cpu_real_use_ratio_time < 5 * NANOS_PER_SEC) {
-    //    return;
-    // }
 
     std::shared_lock read_lock(_mutex);
     int64_t total_run_time = 0;
@@ -331,8 +325,6 @@ void WorkGroupManager::cal_wg_cpu_real_use_ratio() {
         double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
         wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
     }
-
-    //_last_cal_wg_cpu_real_use_ratio_time = time_now;
 }
 
 std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
