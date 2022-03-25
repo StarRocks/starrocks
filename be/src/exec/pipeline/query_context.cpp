@@ -20,6 +20,12 @@ QueryContext::~QueryContext() {
         }
     }
 }
+
+void QueryContext::init_mem_tracker(MemTracker* parent, int64_t limit) {
+    std::string name = print_id(_query_id);
+    _mem_tracker = std::make_shared<starrocks::MemTracker>(limit, name, parent);
+}
+
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }

@@ -8,8 +8,8 @@
 #include <unordered_map>
 
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/workgroup/scan_task_queue.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
@@ -49,8 +49,11 @@ public:
     void init();
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    double get_mem_limit() const { return _memory_limit; }
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
     ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
+
+    double get_big_query_limit() const { return _big_query_limit; }
 
     int64_t id() const { return _id; }
 
@@ -127,6 +130,7 @@ public:
     void incr_total_io_cost(int64_t io_cost) { _total_io_cost += io_cost; }
 
     bool is_big_query(const QueryContext& query_context);
+    bool is_check_big_query() { return _big_query_limit == 1 ? false : true; }
     void incr_cur_query_num() { _cur_query_num++; }
     void decr_cur_query_num() { _cur_query_num--; }
     int64_t get_cur_query_num() const { return _cur_query_num; }
@@ -152,6 +156,7 @@ private:
     double _memory_limit;
     size_t _concurrency;
     WorkGroupType _type;
+    double _big_query_limit = 1;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
@@ -228,16 +233,6 @@ public:
     void destroy();
 
     void cal_wg_cpu_real_use_ratio();
-
-    // just for debug
-    void log_cpu_use_ratio() {
-        std::shared_lock read_lock(_mutex);
-        LOG(WARNING) << "**********************************";
-        for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-            const auto& wg = it->second; 
-            LOG(WARNING) << "[" << wg->name() << "] " << " ratio " << wg->get_cpu_actual_use_ratio();
-        }
-    }
 
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }

@@ -462,10 +462,10 @@ void OlapChunkSource::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 }
 
-int64_t OlapChunkSource::get_last_acquired_bytes() { 
+int64_t OlapChunkSource::get_last_acquired_bytes() {
     int64_t temp = _last_acquired_bytes;
     _last_acquired_bytes = 0;
-    return temp; 
+    return temp;
 }
 
 int64_t OlapChunkSource::last_spent_cpu_time_ns() {

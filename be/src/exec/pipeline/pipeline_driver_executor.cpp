@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/work_group.h"
 
+#include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
@@ -49,7 +49,7 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
         QueryContextManager::instance()->remove(query_id);
         auto wg = driver->workgroup();
         if (wg) {
-            wg->decr_cur_query_num();    
+            wg->decr_cur_query_num();
         }
     }
 }
@@ -101,19 +101,20 @@ void GlobalDriverExecutor::_worker_thread() {
             // check If large query, if true, cancel it
             auto wg = driver->workgroup();
             bool is_big_query = false;
-            if (wg) {
+            if (wg && wg->is_check_big_query()) {
                 is_big_query = wg->is_big_query(*query_ctx);
             }
-           
+
             if (!status.ok() || is_big_query) {
                 if (is_big_query) {
-                    LOG(WARNING) << "[Driver] Process exceed limit, query_id=" << print_id(driver->query_ctx()->query_id())
-                                << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());          
+                    LOG(WARNING) << "[Driver] Process exceed limit, query_id="
+                                 << print_id(driver->query_ctx()->query_id())
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
                     query_ctx->cancel(Status::Corruption("exceed limit, is big query"));
                 } else {
                     LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                                << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                                << ", error=" << status.status().to_string();
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                                 << ", error=" << status.status().to_string();
                     query_ctx->cancel(status.status());
                 }
                 driver->cancel_operators(runtime_state);

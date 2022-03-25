@@ -72,6 +72,9 @@ public:
         return _desc_tbl;
     }
 
+    void init_mem_tracker(MemTracker* parent, int64_t limit);
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
+
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost += cost; }
     int64_t get_cpu_cost() const { return _cur_cpu_cost; }
     void incr_io_cost(int64_t cost) { _cur_io_cost += cost; }
@@ -98,6 +101,7 @@ private:
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 
+    std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
     int64_t _query_begin_time = 0;
     std::atomic<int64_t> _cur_cpu_cost = 0;

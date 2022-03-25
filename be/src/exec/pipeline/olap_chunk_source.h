@@ -52,7 +52,7 @@ public:
                                                            int worker_id, workgroup::WorkGroupPtr running_wg) override;
     int64_t last_spent_cpu_time_ns() override;
 
-     // Return last bytes of Scan or Exchange Data, then reset it 
+    // Return last bytes of Scan or Exchange Data, then reset it
     int64_t get_last_acquired_bytes() override;
 
     int64_t last_spent_cpu_time_ns() override;

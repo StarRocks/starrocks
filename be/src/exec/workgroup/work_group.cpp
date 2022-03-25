@@ -42,6 +42,10 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.version) {
         _version = twg.version;
     }
+
+    if (twg.__isset.big_query_limit) {
+        _big_query_limit = twg.big_query_limit;
+    }
 }
 
 TWorkGroup WorkGroup::to_thrift() const {
@@ -63,6 +67,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_mem_limit(_memory_limit);
     twg.__set_concurrency_limit(_concurrency);
     twg.__set_num_drivers(_acc_num_drivers);
+    twg.__set_big_query_limit(_big_query_limit);
     return twg;
 }
 
@@ -185,44 +190,24 @@ void WorkGroup::estimate_trend_factor_period() {
 }
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    if (_cur_query_num <= 1) {
+        return false;
+    }
+
     // If there is only one query, do not check the big query
     int64_t time_now = MonotonicNanos();
-
-    // just for debug
-    /*
-    LOG(WARNING) << "_cur_query_num: " <<  _cur_query_num
-                 << " total_cpu_cost: " << _total_cpu_cost
-                 << " get_init_wg_cpu_cost " << query_context.get_init_wg_cpu_cost()
-                 << " get_cpu_cost " << query_context.get_cpu_cost()
-                 << " query_begin_time: " << query_context.query_begin_time()
-                 << " time_now: " << time_now
-                 << " judge: " << config::min_execute_time * NANOS_PER_SEC;
-    */
-    
-    if (_cur_query_num <= 1) { return false; }
-    
-    if (time_now - query_context.query_begin_time() >= config::min_execute_time * NANOS_PER_SEC) {
+    if (time_now - query_context.query_begin_time() <= config::min_execute_time * NANOS_PER_SEC) {
         return false;
     }
 
     // check cpu
     int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.get_init_wg_cpu_cost();
-    // just for debug
-    LOG(WARNING) << "total_cpu_cost: " << total_cpu_cost()
-                 << " query_context.get_init_wg_cpu_cost: " << query_context.get_init_wg_cpu_cost();
     if (wg_growth_cpu_use_cost == 0) {
         return false;
     }
 
-    // just for debug
-    LOG(WARNING) << "wg_growth_cpu_use_cost: " <<  wg_growth_cpu_use_cost
-                 << " query_context_init：" << query_context.get_init_wg_cpu_cost()
-                 << " query_context_cpu_cost: " << query_context.get_cpu_cost();
-
-
     double cpu_use_ratio = (double)(query_context.get_cpu_cost() / wg_growth_cpu_use_cost);
-    if (cpu_use_ratio > 0.5 /* temp vaue */) {
-        LOG(WARNING) << "CPU exceed: " <<  cpu_use_ratio;
+    if (cpu_use_ratio > _big_query_limit) {
         return true;
     }
     // check io
@@ -232,14 +217,12 @@ bool WorkGroup::is_big_query(const QueryContext& query_context) {
     }
 
     double io_use_ratio = (double)(query_context.get_io_cost() / wg_growth_cpu_io_cost);
-    if (io_use_ratio > 0.5) {
-        LOG(WARNING) << "IO exceed: " <<  io_use_ratio;
+    if (io_use_ratio > _big_query_limit) {
         return true;
-    } 
-    
+    }
+
     return false;
 }
-
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
@@ -336,17 +319,17 @@ void WorkGroupManager::cal_wg_cpu_real_use_ratio() {
     growth_times.reserve(_workgroups.size());
 
     for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-       const auto& wg = it->second; 
-       growth_times.emplace_back(wg->growth_vruntime_ns());
-       total_run_time += growth_times.back();
-       wg->update_last_vruntime_ns(wg->real_runtime_ns());
+        const auto& wg = it->second;
+        growth_times.emplace_back(wg->growth_vruntime_ns());
+        total_run_time += growth_times.back();
+        wg->update_last_vruntime_ns(wg->real_runtime_ns());
     }
 
     int i = 0;
     for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it, ++i) {
-       const auto& wg = it->second; 
-       double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
-       wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
+        const auto& wg = it->second;
+        double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
+        wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
     }
 
     //_last_cal_wg_cpu_real_use_ratio_time = time_now;

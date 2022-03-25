@@ -130,7 +130,6 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -188,10 +187,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                 _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
                 
+
                 // for big query check
                 _total_cost_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
                 _total_io_bytes += _chunk_sources[chunk_source_index]->get_last_acquired_bytes();
-
             }
 
             _num_running_io_tasks--;

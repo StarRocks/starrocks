@@ -22,7 +22,6 @@ void AnalyticSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSourceOperator::pull_chunk(RuntimeState* state) {
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     return _analytor->poll_chunk_buffer();
 }
 } // namespace starrocks::pipeline

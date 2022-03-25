@@ -63,7 +63,6 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     const auto chunk_size = chunk->num_rows();
     DCHECK_LE(chunk_size, state->chunk_size());
 
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {

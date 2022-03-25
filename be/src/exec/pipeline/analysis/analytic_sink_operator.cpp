@@ -63,8 +63,6 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
     _analytor->remove_unused_buffer_values(state);
 
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
-
     for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
         for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
             ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(chunk.get());

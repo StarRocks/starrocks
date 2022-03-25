@@ -97,16 +97,16 @@ void ScanTaskQueueWithWorkGroup::cal_wg_cpu_real_use_ratio() {
     growth_times.reserve(_ready_wgs.size());
 
     for (auto& wg : _ready_wgs) {
-       growth_times.emplace_back(wg->growth_vruntime_ns());
-       total_run_time += growth_times.back();
-       wg->update_last_vruntime_ns(wg->real_runtime_ns());
+        growth_times.emplace_back(wg->growth_vruntime_ns());
+        total_run_time += growth_times.back();
+        wg->update_last_vruntime_ns(wg->real_runtime_ns());
     }
 
     int i = 0;
     for (auto& wg : _ready_wgs) {
-       double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
-       wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
-       i++;
+        double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
+        wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
+        i++;
     }
 
     //_last_cal_wg_cpu_real_use_ratio_time = time_now;

@@ -194,12 +194,11 @@ protected:
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 
-    int64_t _total_cost_cpu_time_ns = 0;
-    int64_t _total_io_bytes = 0;
+    std::atomic<int64_t> _total_cost_cpu_time_ns = 0;
+    std::atomic<int64_t> _total_io_bytes = 0;
 
     int64_t _last_growth_cpu_time_ns = 0;
     int64_t _last_growth_io_bytes = 0;
-
 
 private:
     void _init_rf_counters(bool init_bloom);

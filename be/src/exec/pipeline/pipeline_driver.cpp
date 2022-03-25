@@ -136,22 +136,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 StatusOr<vectorized::ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
-                    // just for debug
-                    int64_t op_time = 0;
-                    { 
-                        SCOPED_RAW_TIMER(&op_time);
-                        maybe_chunk = curr_op->pull_chunk(runtime_state);
-                    }
-
-                    int64_t cpu_cost = curr_op->get_last_growth_cpu_time_ns();
-                    _query_ctx->incr_cpu_cost(cpu_cost);
-                    _query_ctx->incr_io_cost(curr_op->get_last_growth_io_bytes());
-
-                    if (_workgroup) {
-                        _workgroup->incr_total_cpu_cost(cpu_cost);
-                    }
-                    // just for debug
-                    // LOG(WARNING) << "op cost: " << cpu_cost << " op time: " << op_time;
+                    maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
@@ -171,20 +156,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
-                            int64_t op_time = 0;
-                            { 
-                                SCOPED_RAW_TIMER(&op_time);
-                                status = next_op->push_chunk(runtime_state, maybe_chunk.value());
-                            }
-                            int64_t cpu_cost = next_op->get_last_growth_cpu_time_ns();
-                            _query_ctx->incr_cpu_cost(cpu_cost);
-                            _query_ctx->incr_io_cost(next_op->get_last_growth_io_bytes());
-
-                            if (_workgroup) {
-                                _workgroup->incr_total_cpu_cost(cpu_cost);
-                            }
-                            //just for debug
-                            //LOG(WARNING) << "op cost: " << cpu_cost << " op time: " << op_time;
+                            status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
 
                         if (!status.ok() && !status.is_end_of_file()) {
@@ -202,7 +174,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // Check curr_op finished again
                 if (curr_op->is_finished()) {
-                    // TODO: need add control flag    
+                    // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));

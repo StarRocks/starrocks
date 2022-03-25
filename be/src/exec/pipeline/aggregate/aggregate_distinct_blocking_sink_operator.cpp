@@ -46,7 +46,6 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk
 }
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
     _aggregator->evaluate_exprs(chunk.get());
 

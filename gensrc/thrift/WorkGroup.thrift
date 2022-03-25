@@ -19,6 +19,7 @@ struct TWorkGroup {
   7: optional i64 version
   9: optional string state
   10: optional i64 num_drivers
+  11: optional double big_query_limit 
 }
 
 enum TWorkGroupOpType {

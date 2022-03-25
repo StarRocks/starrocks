@@ -25,7 +25,6 @@ void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
-    SCOPED_RAW_TIMER(&_total_cost_cpu_time_ns);
 
     int32_t chunk_size = state->chunk_size();
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
