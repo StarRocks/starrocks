@@ -9,6 +9,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
@@ -864,13 +865,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select * from lineitem limit 10";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
-                "     cardinality=1"));
+        ExecPlan execPlan = getExecPlan(sql);
+        Assert.assertFalse(execPlan.getScanNodes().isEmpty());
+        Assert.assertEquals(1, ((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size());
 
         sql = "select * from test_mv limit 10";
+<<<<<<< HEAD
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("tabletList=11322,11324,11326"));
+=======
+        execPlan = getExecPlan(sql);
+        Assert.assertFalse(execPlan.getScanNodes().isEmpty());
+        Assert.assertTrue(((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size() > 1);
+>>>>>>> 97477314 (Fix Fe UT (#4444))
     }
 
     @Test
