@@ -227,7 +227,7 @@ public:
     Status load(const PersistentIndexMetaPB& index_meta);
 
     // build PersistentIndex from pre-existing tablet data
-    Status build(Tablet* tablet);
+    Status load_from_tablet(Tablet* tablet);
 
     // start modification with intended version
     Status prepare(const EditVersion& version);

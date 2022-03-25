@@ -271,7 +271,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
     for (size_t i = 0; i < n; i++) {
         auto t = schema.field(i)->type()->type();
         if (t == OLAP_FIELD_TYPE_VARCHAR || t == OLAP_FIELD_TYPE_CHAR) {
-            return -1;
+            return 0;
         }
         ret += TabletColumn::get_field_length_by_type(t, 0);
     }

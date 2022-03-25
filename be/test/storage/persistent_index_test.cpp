@@ -151,7 +151,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         version.to_pb(snapshot_meta->mutable_version());
 
         PersistentIndex index(kPersistentIndexDir);
-        ASSERT_TRUE(index.create(sizeof(Key), version).ok());
+        //ASSERT_TRUE(index.create(sizeof(Key), version).ok());
 
         ASSERT_TRUE(index.load(index_meta).ok());
         ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
@@ -186,7 +186,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     {
         // rebuild mutableindex according PersistentIndexMetaPB
         PersistentIndex new_index(kPersistentIndexDir);
-        ASSERT_TRUE(new_index.create(sizeof(Key), EditVersion(3, 0)).ok());
+        //ASSERT_TRUE(new_index.create(sizeof(Key), EditVersion(3, 0)).ok());
         ASSERT_TRUE(new_index.load(index_meta).ok());
         std::vector<IndexValue> get_values(keys.size());
 
@@ -210,7 +210,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     // rebuild mutableindex according to PersistentIndexMetaPB
     {
         PersistentIndex index(kPersistentIndexDir);
-        ASSERT_TRUE(index.create(sizeof(Key), EditVersion(4, 0)).ok());
+        //ASSERT_TRUE(index.create(sizeof(Key), EditVersion(4, 0)).ok());
         ASSERT_TRUE(index.load(index_meta).ok());
         std::vector<IndexValue> get_values(keys.size());
 
@@ -391,7 +391,7 @@ void build_persistent_index_from_tablet(size_t N) {
     const std::vector<ColumnUniquePtr>& upserts = state.upserts();
 
     PersistentIndex persistent_index(kPersistentIndexDir);
-    ASSERT_TRUE(persistent_index.build(tablet.get()).ok());
+    ASSERT_TRUE(persistent_index.load_from_tablet(tablet.get()).ok());
 
     // check data in persistent index
     for (size_t i = 0; i < upserts.size(); ++i) {
@@ -414,7 +414,7 @@ void build_persistent_index_from_tablet(size_t N) {
     {
         // load data from index file
         PersistentIndex persistent_index(kPersistentIndexDir);
-        Status st = persistent_index.build(tablet.get());
+        Status st = persistent_index.load_from_tablet(tablet.get());
         if (!st.ok()) {
             LOG(WARNING) << "build persistent index failed: " << st.to_string();
             ASSERT_TRUE(false);
