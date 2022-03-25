@@ -88,16 +88,17 @@ public class HashDistributionInfo extends DistributionInfo {
         return distributionInfo;
     }
 
-    public boolean equals(DistributionInfo info) {
-        if (this == info) {
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
             return true;
         }
 
-        if (!(info instanceof HashDistributionInfo)) {
+        if (!(other instanceof HashDistributionInfo)) {
             return false;
         }
 
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) info;
+        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) other;
 
         return type == hashDistributionInfo.type
                 && bucketNum == hashDistributionInfo.bucketNum

@@ -632,13 +632,7 @@ public class Roaring64Map {
 
         final int index;
         if (indexOk == 0) {
-            if (sortedHighs.length == 0) {
-                index = -1;
-                // } else if (sortedHighs[0] == currentHigh) {
-                // index = 0;
-            } else {
-                index = -1;
-            }
+            index = -1;
         } else if (indexOk < sortedHighs.length) {
             index = -indexOk - 1;
         } else {

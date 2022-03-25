@@ -1191,14 +1191,6 @@ public class OlapTable extends Table {
         rebuildFullSchema();
     }
 
-    @Override
-    public boolean equals(Table table) {
-        if (this == table) {
-            return true;
-        }
-        return table instanceof OlapTable;
-    }
-
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
         OlapTable copied = new OlapTable();
         if (!DeepCopy.copy(this, copied, OlapTable.class)) {
