@@ -99,7 +99,9 @@ public class HiveMetaClient {
                 String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf = conf;
 
-        init();
+        if (Config.enable_hms_events_incremental_sync) {
+            init();
+        }
     }
 
     private void init() throws DdlException {
