@@ -867,6 +867,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("     tabletList=10213\n" +
                 "     cardinality=1"));
+
+        sql = "select * from test_mv limit 10";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("tabletList=11322,11324,11326"));
     }
 
     @Test
