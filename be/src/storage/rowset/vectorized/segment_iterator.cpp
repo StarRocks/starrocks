@@ -1374,6 +1374,7 @@ void SegmentIterator::close() {
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
+    STLClearObject(&_bitmap_index_iterators);
 }
 
 // put the field that has predicate on it ahead of those without one, for handle late
