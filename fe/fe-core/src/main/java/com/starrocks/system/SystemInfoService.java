@@ -147,9 +147,9 @@ public class SystemInfoService {
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // set new backend's report version as 0L
-        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
-        copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
-        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+        Map<Long, AtomicLong> copiedReportVersions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
         if (!Strings.isNullOrEmpty(destCluster)) {
             // add backend to destCluster
