@@ -8,6 +8,7 @@
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "exprs/slot_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
@@ -534,6 +535,40 @@ static void reset_permutation(SmallPermutation& permutation, int n) {
     for (int i = 0; i < permutation.size(); i++) {
         permutation[i].index_in_chunk = i;
     }
+}
+
+TEST_F(ChunksSorterTest, stable_sort) {
+    constexpr int N = 7;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    ColumnPtr col1 = ColumnHelper::create_column(type_desc, false);
+    ColumnPtr col2 = ColumnHelper::create_column(type_desc, false);
+    Columns columns{col1, col2};
+    std::vector<int32_t> elements_col1{3, 1, 1, 2, 1, 2, 3};
+    std::vector<int32_t> elements_col2{3, 2, 1, 3, 1, 2, 3};
+    for (int i = 0; i < elements_col1.size(); i++) {
+        col1->append_datum(Datum(elements_col1[i]));
+        col2->append_datum(Datum(elements_col2[i]));
+    }
+
+    SmallPermutation perm = create_small_permutation(N);
+    stable_sort_and_tie_columns(false, columns, {1, 1}, {1, 1}, &perm);
+
+    bool sorted = std::is_sorted(perm.begin(), perm.end(), [&](SmallPermuteItem lhs, SmallPermuteItem rhs) {
+        int x = col1->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *col1, 1);
+        if (x != 0) {
+            return x < 0;
+        }
+        x = col2->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *col2, 1);
+        if (x != 0) {
+            return x < 0;
+        }
+        return lhs.index_in_chunk < rhs.index_in_chunk;
+    });
+    ASSERT_TRUE(sorted);
+    std::vector<uint32_t> result;
+    permutate_to_selective(perm, &result);
+    std::vector<uint32_t> expect{2, 4, 1, 5, 3, 0, 6};
+    ASSERT_EQ(expect, result);
 }
 
 TEST_F(ChunksSorterTest, column_incremental_sort) {

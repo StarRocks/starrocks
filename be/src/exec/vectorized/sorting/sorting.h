@@ -20,8 +20,10 @@ Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_a
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
 Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
                             const std::vector<int>& null_firsts, Permutation* permutation);
-Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
-                            const std::vector<int>& null_firsts, SmallPermutation* permutation);
+
+// Sort multiple columns, and stable
+Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+                                   const std::vector<int>& null_firsts, SmallPermutation* permutation);
 
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1
