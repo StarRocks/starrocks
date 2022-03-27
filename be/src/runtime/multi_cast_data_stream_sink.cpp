@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "runtime/multi_cast_data_stream_sink.h"
+
 namespace starrocks {
 
 static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");

@@ -147,7 +147,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _thread_pool.join();
 
             if (!result_st.ok()) {
-                // some of consumers encounter errors, cancel this task
+                // some consumers encounter errors, cancel this task
                 return result_st;
             }
 

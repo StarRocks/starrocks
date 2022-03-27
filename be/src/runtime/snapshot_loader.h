@@ -45,20 +45,20 @@ struct FileStat {
  * Upload:
  * upload() will upload the specified snapshot
  * to remote storage via broker.
- * Each call of upload() is reponsible for severval tablet snapshots.
+ * Each call of upload() is responsible for several tablet snapshots.
  *
  * It will try to get the existing files in remote storage,
  * and only upload the incremental part of files.
  *
  * Download:
- * download() will download the romote tablet snapshot files 
+ * download() will download the remote tablet snapshot files
  * to local snapshot dir via broker.
  * It will also only download files which does not exist in local dir.
  *
  * Move:
  * move() is the final step of restore process. it will replace the 
  * old tablet data dir with the newly downloaded snapshot dir.
- * and reload the tablet header to take this tablet on line.
+ * and reload the tablet header to take this tablet online.
  * 
  */
 class SnapshotLoader {

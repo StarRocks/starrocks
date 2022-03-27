@@ -287,7 +287,7 @@ private:
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
-    // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
+    // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.

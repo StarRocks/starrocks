@@ -89,7 +89,7 @@ public:
         if (_closure != nullptr && _closure->unref()) {
             delete _closure;
         }
-        // release this before request desctruct
+        // release this before request destruct
         _brpc_request.release_finst_id();
 
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
@@ -110,7 +110,7 @@ public:
                               uint32_t size);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    // When the chunk is sent really rather than bachend, *is_real_sent will
+    // When the chunk is sent really rather than backend, *is_real_sent will
     // be set to true.
     Status send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent);
 
