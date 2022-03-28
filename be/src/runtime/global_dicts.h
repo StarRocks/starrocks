@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 #pragma once
 
 #include <array>
@@ -72,25 +74,29 @@ struct DictOptimizeContext {
     // size: DICT_DECODE_MAX_SIZE + 1
     std::vector<int16_t> code_convert_map;
     Column::Filter filter;
+    // for no-string column convert map
+    ColumnPtr convert_column;
 };
 
 class DictOptimizeParser {
 public:
     DictOptimizeParser() = default;
     ~DictOptimizeParser() = default;
-    void set_mutable_dict_maps(GlobalDictMaps* dict_maps) { _mutable_dict_maps = dict_maps; }
+    void set_mutable_dict_maps(RuntimeState* state, GlobalDictMaps* dict_maps) {
+        _runtime_state = state;
+        _mutable_dict_maps = dict_maps;
+    }
 
-    void rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                       const std::vector<SlotId>& target_slotids);
+    Status rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                         const std::vector<SlotId>& target_slotids);
     template <bool close_original_expr>
-    void rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
+    Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
 
     void close(RuntimeState* state) noexcept;
 
-    void eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
-    void eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx);
+    Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
-    void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+    Status check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // For global dictionary optimized columns,
     // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
@@ -100,20 +106,21 @@ public:
                                    std::vector<SlotDescriptor*>* slot_descs);
 
 private:
-    template <bool is_predicate>
-    void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+    Status _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    template <bool close_original_expr, bool is_predicate, typename ExprType>
-    void _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
-                            const std::vector<SlotId>& slot_ids);
+    template <bool close_original_expr>
+    Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                              const std::vector<SlotId>& slot_ids);
 
-    GlobalDictMaps* _mutable_dict_maps;
+    RuntimeState* _runtime_state = nullptr;
+    GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
     std::vector<ExprContext*> _expr_close_list;
 };
 
-std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
+std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_with_codes(
+        const GlobalDictMap& dict_map);
 
 template <PrimitiveType primitive_type, typename Dict, PrimitiveType result_primitive_type>
 struct DictDecoder {

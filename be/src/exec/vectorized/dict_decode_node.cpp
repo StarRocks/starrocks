@@ -58,21 +58,20 @@ Status DictDecodeNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_children[0]->open(state));
 
     const auto& global_dict = state->get_query_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
-            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
-            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, slot_id);
+            RETURN_IF_ERROR(_dict_optimize_parser.eval_expression(expr_ctx, &dict_ctx, slot_id));
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {
