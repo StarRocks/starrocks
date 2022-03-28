@@ -15,10 +15,10 @@ namespace starrocks {
 constexpr static const char* kBucketName = "starrocks-env-s3-unit-test";
 constexpr static const std::string_view kTabletObjectMetastore = "/tablet_object_metastore_test";
 
-class ObjectMetastoreTest : public testing::Test {
+class S3ObjectMetastoreTest : public testing::Test {
 public:
-    ObjectMetastoreTest() = default;
-    ~ObjectMetastoreTest() override = default;
+    S3ObjectMetastoreTest() = default;
+    ~S3ObjectMetastoreTest() override = default;
     void SetUp() override { Aws::InitAPI(_options); }
     void TearDown() override { Aws::ShutdownAPI(_options); }
 
@@ -30,7 +30,7 @@ private:
     Aws::SDKOptions _options;
 };
 
-TEST_F(ObjectMetastoreTest, test_tablet_meta) {
+TEST_F(S3ObjectMetastoreTest, test_tablet_meta) {
     // Create a new TabletMeta
     TCreateTabletReq request;
     request.__set_tablet_id(1000001);
@@ -94,7 +94,7 @@ TEST_F(ObjectMetastoreTest, test_tablet_meta) {
     ASSERT_FALSE(metastore->get_tablet_meta(tablet_meta->tablet_id(), tablet_meta->schema_hash()).ok());
 }
 
-TEST_F(ObjectMetastoreTest, test_rowset_meta) {
+TEST_F(S3ObjectMetastoreTest, test_rowset_meta) {
     // Create a new RowsetMeta
     RowsetMeta rowset_meta1;
     rowset_meta1.set_tablet_uid(TabletUid(1, 1));
