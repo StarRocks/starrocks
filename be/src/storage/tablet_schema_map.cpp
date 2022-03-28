@@ -17,6 +17,24 @@ static void get_stats(std::ostream& os, void*) {
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
 
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
+                                             const std::shared_ptr<const TabletSchema>& schema_ptr) {
+    if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
+        schema_pb.column_size() != schema_ptr->num_columns()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < schema_ptr->num_columns(); ++i) {
+        int32_t pb_unique_id = schema_pb.column(i).unique_id();
+        int32_t unique_id = schema_ptr->column(i).unique_id();
+        if (pb_unique_id != unique_id) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
     SchemaId id = schema_pb.id();
     DCHECK_NE(TabletSchema::invalid_id(), id);
@@ -35,6 +53,11 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
             it->second = std::weak_ptr<const TabletSchema>(ptr);
             return std::make_pair(ptr, true);
         } else {
+            if (UNLIKELY(!check_schema_unique_id(schema_pb, ptr))) {
+                ptr = TabletSchema::create(_mem_tracker, schema_pb, this);
+                it->second = std::weak_ptr<const TabletSchema>(ptr);
+                return std::make_pair(ptr, true);
+            }
             return std::make_pair(ptr, false);
         }
     }
