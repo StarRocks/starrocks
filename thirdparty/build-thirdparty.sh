@@ -166,6 +166,13 @@ build_libevent() {
 }
 
 build_openssl() {
+    OLD_FLAGS=$CXXFLAGS
+    OLD_CFLAGS=$CFLAGS
+
+    unset CXXFLAGS
+    unset CPPFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
@@ -179,6 +186,10 @@ build_openssl() {
     ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
+
+    export CXXFLAGS=$OLD_FLAGS
+    export CPPFLAGS=$OLD_FLAGS
+    export CFLAGS=$OLD_CFLAGS
 }
 
 # thrift
@@ -501,6 +512,13 @@ build_flatbuffers() {
 
 # arrow
 build_arrow() {
+    OLD_FLAGS=$CXXFLAGS
+    OLD_CFLAGS=$CFLAGS
+
+    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    export CPPFLAGS=$CXXFLAGS
+
     check_if_source_exist $ARROW_SOURCE
     cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp
     mkdir -p release
@@ -542,6 +560,10 @@ build_arrow() {
     # copy zstd headers
     mkdir -p ${TP_INSTALL_DIR}/include/zstd 
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
+
+    export CXXFLAGS=$OLD_FLAGS
+    export CPPFLAGS=$OLD_FLAGS
+    export CFLAGS=$OLD_CFLAGS
 }
 
 # s2
@@ -746,6 +768,13 @@ build_hyperscan() {
 
 #mariadb-connector-c
 build_mariadb() {
+    OLD_FLAGS=$CXXFLAGS
+    OLD_CFLAGS=$CFLAGS
+
+    unset CXXFLAGS
+    unset CPPFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
@@ -759,6 +788,10 @@ build_mariadb() {
     # install mariadb headers
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
     make install
+
+    export CXXFLAGS=$OLD_FLAGS
+    export CPPFLAGS=$OLD_FLAGS
+    export CFLAGS=$OLD_CFLAGS
 }
 
 # aliyun_oss_jars
@@ -796,7 +829,8 @@ build_vpack() {
 
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
-export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE -I${TP_INCLUDE_DIR}"
+# https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
+export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L -I${TP_INCLUDE_DIR}"
 
 build_libevent
 build_zlib
