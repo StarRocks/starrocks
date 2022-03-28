@@ -25,6 +25,7 @@ StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) 
 Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
         chunk->append_column(_common_sub_expr_ctxs[i]->evaluate(chunk.get()), _common_sub_column_ids[i]);
+        RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
     }
 
     using namespace vectorized;
@@ -52,6 +53,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
                         NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
             }
         }
+        RETURN_IF_HAS_ERROR(_expr_ctxs);
     }
 
     _cur_chunk = std::make_shared<vectorized::Chunk>();
