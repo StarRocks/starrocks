@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -101,12 +102,33 @@ public class WorkGroupMgr implements Writable {
         if (stmt.getName() != null) {
             rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
         } else {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(stmt.isListAll());
+            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
         }
         return rows;
     }
 
-    public List<List<String>> showAllWorkGroups(Boolean isListAll) {
+    private String getUnqualifiedUser(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String qualifiedUser = ctx.getQualifiedUser();
+        //default_cluster:test
+        String[] userParts = qualifiedUser.split(":");
+        return userParts[userParts.length - 1];
+    }
+
+    private String getUnqualifiedRole(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String roleName = null;
+        String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
+                .getRoleName(ctx.getCurrentUserIdentity());
+        if (qualifiedRoleName != null) {
+            //default_cluster:role
+            String[] roleParts = qualifiedRoleName.split(":");
+            roleName = roleParts[roleParts.length - 1];
+        }
+        return roleName;
+    }
+
+    public List<List<String>> showAllWorkGroups(ConnectContext ctx, Boolean isListAll) {
         readLock();
         try {
             List<WorkGroup> workGroupList = new ArrayList<>(workGroupMap.values());
@@ -115,21 +137,9 @@ public class WorkGroupMgr implements Writable {
                 return workGroupList.stream().map(WorkGroup::show)
                         .flatMap(Collection::stream).collect(Collectors.toList());
             } else {
-                String qualifiedUser = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
-                //default_cluster:test
-                String[] userParts = qualifiedUser.split(":");
-                String user = userParts[userParts.length - 1];
-
-                String roleName = null;
-                String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
-                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
-                if (qualifiedRoleName != null) {
-                    //default_cluster:role
-                    String[] roleParts = qualifiedRoleName.split(":");
-                    roleName = roleParts[roleParts.length - 1];
-                }
-                String role = roleName;
-                String remoteIp = ConnectContext.get().getRemoteIP();
+                String user = getUnqualifiedUser(ctx);
+                String role = getUnqualifiedRole(ctx);
+                String remoteIp = ctx.getRemoteIP();
                 return workGroupList.stream().map(w -> w.showVisible(user, role, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
             }
@@ -362,15 +372,17 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(String user, String roleName, WorkGroupClassifier.QueryType queryType, String ip) {
-
+    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType) {
+        String user = getUnqualifiedUser(ctx);
+        String role = getUnqualifiedRole(ctx);
+        String remoteIp = ctx.getRemoteIP();
         List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, roleName, queryType, ip)).collect(Collectors.toList());
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp)).collect(Collectors.toList());
         classifierList.sort(Comparator.comparingDouble(WorkGroupClassifier::weight));
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            return id2WorkGroupMap.get(classifierList.get(0).getWorkgroupId());
+            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
         }
     }
 
