@@ -49,7 +49,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -315,7 +315,7 @@ static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, cons
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
     static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::RowsetReadOptions rs_opts;
     rs_opts.is_primary_keys = true;
     rs_opts.sorted = false;
