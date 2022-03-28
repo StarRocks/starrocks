@@ -1687,6 +1687,20 @@ public class Coordinator {
                 fragmentProfile.addChild(pipelineProfile);
             });
         }
+
+        // Set backend number
+        for (int i = 0; i < fragments.size(); i++) {
+            PlanFragment fragment = fragments.get(i);
+            RuntimeProfile profile = fragmentProfiles.get(i);
+
+            Set<TNetworkAddress> networkAddresses =
+                    fragmentExecParamsMap.get(fragment.getFragmentId()).instanceExecParams.stream()
+                            .map(param -> param.host)
+                            .collect(Collectors.toSet());
+
+            Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT);
+            backendNum.setValue(networkAddresses.size());
+        }
     }
 
     /*
