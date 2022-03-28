@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
@@ -37,7 +36,7 @@ public:
 
 private:
     const TPlanNode& _tnode;
-    const TableFunction* _table_function;
+    const TableFunction* _table_function = nullptr;
 
     //Slots of output by table function
     std::vector<SlotId> _fn_result_slots;
@@ -46,20 +45,18 @@ private:
     //Slots of table function input parameters
     std::vector<SlotId> _param_slots;
 
-    //Chunk context between multi get_next
-
     //Input chunk currently being processed
-    ChunkPtr _input_chunk_ptr;
+    ChunkPtr _input_chunk_ptr = nullptr;
     //The current chunk is processed to which row
-    int _input_chunk_seek_rows;
+    int _input_chunk_seek_rows = 0;
     //The current outer line needs to be repeated several times
-    int _outer_column_remain_repeat_times;
+    int _outer_column_remain_repeat_times = 0;
     //table function result
     std::pair<Columns, ColumnPtr> _table_function_result;
     //table function return result end ?
-    bool _table_function_result_eos;
+    bool _table_function_result_eos = false;
     //table function param and return offset
-    TableFunctionState* _table_function_state;
+    TableFunctionState* _table_function_state = nullptr;
 
     //Profile
     RuntimeProfile::Counter* _table_function_exec_timer = nullptr;
