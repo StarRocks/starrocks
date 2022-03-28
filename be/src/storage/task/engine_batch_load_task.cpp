@@ -65,7 +65,7 @@ Status EngineBatchLoadTask::execute() {
                     LOG(WARNING) << "transaction exists when realtime push, "
                                     "but unfinished, do not report to fe, signature: "
                                  << _signature;
-                    break; // not retry any more
+                    break; // not retry anymore
                 }
                 // Internal error, need retry
                 if (status == STARROCKS_ERROR) {

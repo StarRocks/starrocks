@@ -204,7 +204,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             ++received_rows;
             break;
         case RdKafka::ERR__TIMED_OUT:
-            // leave the status as OK, because this may happend
+            // leave the status as OK, because this may happened
             // if there is no data in kafka.
             LOG(INFO) << "kafka consume timeout: " << _id;
             break;

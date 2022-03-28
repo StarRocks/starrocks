@@ -33,7 +33,7 @@ public:
     virtual ~MessageBodySink() = default;
     virtual Status append(const char* data, size_t size) = 0;
     virtual Status append(const ByteBufferPtr& buf) { return append(buf->ptr, buf->remaining()); }
-    // called when all data has been append
+    // called when all data has been appended
     virtual Status finish() { return Status::OK(); }
     // called when read HTTP failed
     virtual void cancel(const Status& status) {}

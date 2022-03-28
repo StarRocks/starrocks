@@ -473,7 +473,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     }
 
     // not enough, have to forward this request to continue broadcast.
-    // copy modifed fields out.
+    // copy modified fields out.
     std::vector<PTransmitRuntimeFilterForwardTarget> targets;
     size_t size = request.forward_targets_size();
     for (size_t i = 0; i < size; i++) {
