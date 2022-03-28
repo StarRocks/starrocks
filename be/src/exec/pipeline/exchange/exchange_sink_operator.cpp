@@ -220,6 +220,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
         _parent->_buffer->add_request(info);
+        COUNTER_UPDATE(_parent->_request_sent_counter, 1);
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -238,6 +239,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
+    COUNTER_UPDATE(_parent->_request_sent_counter, 1);
 
     return Status::OK();
 }
@@ -342,6 +344,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     srand(reinterpret_cast<uint64_t>(this));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
+    _request_sent_counter = ADD_COUNTER(_unique_metrics, "RequestSent", TUnit::UNIT);
     _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
