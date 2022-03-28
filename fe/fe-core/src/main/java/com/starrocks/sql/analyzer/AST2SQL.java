@@ -106,7 +106,7 @@ public class AST2SQL {
             if (relation.getColumnOutputNames() != null) {
                 sqlBuilder.append("(").append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(new QueryStatement(relation.getCteQuery()))).append(") ");
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
             return sqlBuilder.toString();
         }
 
@@ -169,7 +169,7 @@ public class AST2SQL {
         public String visitSubquery(SubqueryRelation subquery, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append("(");
-            sqlBuilder.append(visit(new QueryStatement(subquery.getQuery())));
+            sqlBuilder.append(visit(subquery.getQueryStatement()));
             sqlBuilder.append(")");
             sqlBuilder.append(" ").append(subquery.getAlias());
             return sqlBuilder.toString();
@@ -179,7 +179,7 @@ public class AST2SQL {
         public String visitView(ViewRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append("(");
-            sqlBuilder.append(visit(new QueryStatement(node.getQuery())));
+            sqlBuilder.append(visit(node.getQueryStatement()));
             sqlBuilder.append(")");
             sqlBuilder.append(" ").append(node.getAlias());
             return sqlBuilder.toString();
@@ -479,7 +479,7 @@ public class AST2SQL {
         }
 
         public String visitSubquery(Subquery node, Void context) {
-            return "(" + visit(new QueryStatement(node.getQueryRelation())) + ")";
+            return "(" + visit(node.getQueryStatement()) + ")";
         }
 
         public String visitSysVariableDesc(SysVariableDesc node, Void context) {

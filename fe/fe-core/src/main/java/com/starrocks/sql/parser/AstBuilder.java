@@ -488,7 +488,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 RelationId.of(queryRelation).hashCode(),
                 ((Identifier) visit(context.name)).getValue(),
                 columnNames,
-                queryRelation);
+                new QueryStatement(queryRelation));
     }
 
     @Override
@@ -913,13 +913,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(null, (QueryRelation) visit(context.query()));
+        return new SubqueryRelation(null, new QueryStatement((QueryRelation) visit(context.query())));
     }
 
     @Override
     public ParseNode visitSubqueryPrimary(StarRocksParser.SubqueryPrimaryContext context) {
         SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return subqueryRelation.getQuery();
+        return subqueryRelation.getQueryStatement().getQueryRelation();
     }
 
     @Override
@@ -930,7 +930,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSubqueryExpression(StarRocksParser.SubqueryExpressionContext context) {
         SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return new Subquery(subqueryRelation.getQuery());
+        return new Subquery(subqueryRelation.getQueryStatement());
     }
 
     @Override
@@ -938,20 +938,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isNotIn = context.NOT() != null;
         QueryRelation query = (QueryRelation) visit(context.query());
 
-        return new InPredicate((Expr) visit(context.value), new Subquery(query), isNotIn);
+        return new InPredicate((Expr) visit(context.value), new Subquery(new QueryStatement(query)), isNotIn);
     }
 
     @Override
     public ParseNode visitExists(StarRocksParser.ExistsContext context) {
         QueryRelation query = (QueryRelation) visit(context.query());
-        return new ExistsPredicate(new Subquery(query), false);
+        return new ExistsPredicate(new Subquery(new QueryStatement(query)), false);
     }
 
     @Override
     public ParseNode visitScalarSubquery(StarRocksParser.ScalarSubqueryContext context) {
         BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
-        Subquery subquery = new Subquery((QueryRelation) visit(context.query()));
+        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.query())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
     }
 
