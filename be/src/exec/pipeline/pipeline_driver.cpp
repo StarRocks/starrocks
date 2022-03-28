@@ -324,6 +324,11 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
+            if (_fragment_ctx->enable_resource_group()) {
+                if (_workgroup && _workgroup->is_check_big_query()) {
+                    _workgroup->decr_cur_query_num();
+                }
+            }
             QueryContextManager::instance()->remove(query_id);
         }
     }
