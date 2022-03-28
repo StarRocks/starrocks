@@ -128,9 +128,9 @@ public:
               _range(range),
               _build_tie(build_tie),
               _limit(limit),
-              _limited(permutation.size()) {}
+              _pruned_limit(permutation.size()) {}
 
-    size_t get_limited() const { return _limited; }
+    size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const vectorized::NullableColumn& column) {
         std::vector<NullData> null_datas;
@@ -148,7 +148,7 @@ public:
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
                                                                   _is_null_first, _permutation, _tie, _range,
-                                                                  _build_tie, _limit, &_limited));
+                                                                  _build_tie, _limit, &_pruned_limit));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return null_datas[item.chunk_index][item.index_in_chunk] != 1;
@@ -156,7 +156,7 @@ public:
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
                                                                   _is_null_first, _permutation, _tie, _range,
-                                                                  _build_tie, _limit, &_limited));
+                                                                  _build_tie, _limit, &_pruned_limit));
         }
 
         _prune_limit();
@@ -168,7 +168,7 @@ public:
         using ColumnType = BinaryColumn;
 
         if (_need_inline_value()) {
-            using ItemType = InlineChunkItem<Slice>;
+            using ItemType = CompactChunkItem<Slice>;
             using Container = std::vector<Slice>;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
@@ -183,7 +183,7 @@ public:
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
-                                                _limit, &_limited));
+                                                _limit, &_pruned_limit));
             _restore_inlined_permutation(inlined);
         } else {
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
@@ -195,7 +195,7 @@ public:
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                                _build_tie, _limit, &_limited));
+                                                _build_tie, _limit, &_pruned_limit));
         }
         _prune_limit();
         return Status::OK();
@@ -207,7 +207,7 @@ public:
         using Container = typename FixedLengthColumnBase<T>::Container;
 
         if (_need_inline_value()) {
-            using ItemType = InlineChunkItem<T>;
+            using ItemType = CompactChunkItem<T>;
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) {
                 return SorterComparator<T>::compare(lhs.inline_value, rhs.inline_value);
             };
@@ -218,7 +218,7 @@ public:
             }
             auto inlined = _create_inlined_permutation<T>(containers);
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
-                                                _limit, &_limited));
+                                                _limit, &_pruned_limit));
             _restore_inlined_permutation(inlined);
         } else {
             using ItemType = PermutationItem;
@@ -231,7 +231,7 @@ public:
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                                _build_tie, _limit, &_limited));
+                                                _build_tie, _limit, &_pruned_limit));
         }
         _prune_limit();
         return Status::OK();
@@ -250,7 +250,7 @@ public:
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &_limited));
+                                            _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
     }
@@ -269,14 +269,14 @@ public:
         };
 
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                            _build_tie, _limit, &_limited));
+                                            _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
     }
 
 private:
     template <class T>
-    struct InlineChunkItem {
+    struct CompactChunkItem {
         uint32_t chunk_index;
         uint32_t index_in_chunk;
 
@@ -284,7 +284,7 @@ private:
     };
 
     template <class T>
-    using InlinedChunkPermutation = std::vector<InlineChunkItem<T>>;
+    using CompactChunkPermutation = std::vector<CompactChunkItem<T>>;
 
     bool _need_inline_value() {
         // TODO: figure out the inflection point
@@ -294,8 +294,8 @@ private:
     }
 
     template <class T, class DataContainer>
-    InlinedChunkPermutation<T> _create_inlined_permutation(const std::vector<DataContainer>& containers) {
-        InlinedChunkPermutation<T> result(_permutation.size());
+    CompactChunkPermutation<T> _create_inlined_permutation(const std::vector<DataContainer>& containers) {
+        CompactChunkPermutation<T> result(_permutation.size());
         for (size_t i = 0; i < _permutation.size(); i++) {
             int chunk_index = _permutation[i].chunk_index;
             int index_in_chunk = _permutation[i].index_in_chunk;
@@ -307,8 +307,8 @@ private:
     }
 
     template <class T>
-    void _restore_inlined_permutation(const InlinedChunkPermutation<T> inlined) {
-        size_t n = std::min(inlined.size(), _limited);
+    void _restore_inlined_permutation(const CompactChunkPermutation<T> inlined) {
+        size_t n = std::min(inlined.size(), _pruned_limit);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;
             _permutation[i].index_in_chunk = inlined[i].index_in_chunk;
@@ -316,12 +316,13 @@ private:
     }
 
     void _prune_limit() {
-        if (_limited < _permutation.size()) {
-            _permutation.resize(_limited);
-            _tie.resize(_limited);
+        if (_pruned_limit < _permutation.size()) {
+            _permutation.resize(_pruned_limit);
+            _tie.resize(_pruned_limit);
         }
     }
 
+private:
     const bool& _cancel;
     const bool _is_asc_order;
     const bool _is_null_first;
@@ -331,8 +332,8 @@ private:
     Tie& _tie;
     std::pair<int, int> _range;
     bool _build_tie;
-    size_t _limit;
-    size_t _limited;
+    size_t _limit;        // The requested limit
+    size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
 Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_asc_order, bool is_null_first,
