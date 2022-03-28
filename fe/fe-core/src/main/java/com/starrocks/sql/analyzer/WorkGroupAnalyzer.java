@@ -117,6 +117,23 @@ public class WorkGroupAnalyzer {
                 workgroup.setMemLimit(memLimit);
                 continue;
             }
+
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_LIMIT)) {
+                double bigQueryLimit;
+                if (value.endsWith("%")) {
+                    value = value.substring(0, value.length() - 1);
+                    bigQueryLimit = Double.parseDouble(value) / 100;
+                } else {
+                    bigQueryLimit = Double.parseDouble(value);
+                }
+
+                if (bigQueryLimit <= 0.5 || bigQueryLimit >= 1.0) {
+                    throw new SemanticException("big_query_limit should range from 0.5(exclude) to 1.00(exclude)");
+                }
+                workgroup.setBigQueryLimit(bigQueryLimit);
+                continue;
+            }
+
             if (key.equalsIgnoreCase(WorkGroup.CONCURRENCY_LIMIT)) {
                 int concurrencyLimit = Integer.parseInt(value);
                 if (concurrencyLimit <= 0) {

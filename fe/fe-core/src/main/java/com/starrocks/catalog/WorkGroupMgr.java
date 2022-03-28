@@ -228,6 +228,12 @@ public class WorkGroupMgr implements Writable {
                 if (memLimit != null) {
                     wg.setMemLimit(memLimit);
                 }
+
+                Double bigQueryLimit = changedProperties.getBigQueryLimit();
+                if (bigQueryLimit != null) {
+                    wg.setBigQueryLimit(bigQueryLimit);
+                } 
+                
                 Integer concurrentLimit = changedProperties.getConcurrencyLimit();
                 if (concurrentLimit != null) {
                     wg.setConcurrencyLimit(concurrentLimit);

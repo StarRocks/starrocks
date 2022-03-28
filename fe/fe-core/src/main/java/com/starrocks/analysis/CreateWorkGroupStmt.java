@@ -73,6 +73,9 @@ public class CreateWorkGroupStmt extends DdlStmt {
         }
         if (workgroup.getConcurrencyLimit() == null) {
             throw new SemanticException("property 'concurrent_limit' is absent");
+        } 
+        if (workgroup.getBigQueryLimit() == null) {
+            workgroup.setBigQueryLimit(1.0);
         }
     }
 

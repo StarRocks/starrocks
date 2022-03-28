@@ -25,6 +25,7 @@ public class WorkGroup implements Writable {
     public static final String SOURCE_IP = "source_ip";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MEM_LIMIT = "mem_limit";
+    public static final String BIG_QUERY_LIMIT = "big_query_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
     public static final ShowResultSetMetaData META_DATA =
@@ -32,6 +33,7 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("Name", ScalarType.createVarchar(100)))
                     .addColumn(new Column("Id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("BigQueryLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("MemLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("ConcurrencyLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(200)))
@@ -47,6 +49,8 @@ public class WorkGroup implements Writable {
     private Integer cpuCoreLimit;
     @SerializedName(value = "memLimit")
     private Double memLimit;
+    @SerializedName(value = "bigQueryLimit")
+    private Double bigQueryLimit;
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
     @SerializedName(value = "workGroupType")
@@ -123,6 +127,9 @@ public class WorkGroup implements Writable {
         if (memLimit != null) {
             twg.setMem_limit(memLimit);
         }
+        if (bigQueryLimit != null) {
+            twg.setBig_query_limit(bigQueryLimit);
+        }
         if (concurrencyLimit != null) {
             twg.setConcurrency_limit(concurrencyLimit);
         }
@@ -147,6 +154,14 @@ public class WorkGroup implements Writable {
 
     public void setMemLimit(double memLimit) {
         this.memLimit = memLimit;
+    }
+
+    public Double getBigQueryLimit() {
+        return bigQueryLimit;
+    }
+
+    public void setBigQueryLimit(double bigQueryLimit) {
+        this.bigQueryLimit = bigQueryLimit;
     }
 
     public Integer getConcurrencyLimit() {
