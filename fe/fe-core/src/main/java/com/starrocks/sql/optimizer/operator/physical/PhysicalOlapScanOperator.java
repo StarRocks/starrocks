@@ -39,6 +39,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     // For the simple predicate k1 = "olap", could apply global dict optimization,
     // need to store the string column k1 and generate the string slot in plan fragment builder
     private List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
+    // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public PhysicalOlapScanOperator(Table table,
