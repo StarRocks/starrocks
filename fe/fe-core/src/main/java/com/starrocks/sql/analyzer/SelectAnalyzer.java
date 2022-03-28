@@ -238,6 +238,7 @@ public class SelectAnalyzer {
         for (OrderByElement orderByElement : orderByElements) {
             Expr expression = orderByElement.getExpr();
             AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
+            AnalyzerUtils.verifyNoSubQuery(expression, "ORDER BY");
 
             if (expression instanceof IntLiteral) {
                 long ordinal = ((IntLiteral) expression).getLongValue();
