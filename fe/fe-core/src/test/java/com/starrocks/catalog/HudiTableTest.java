@@ -94,7 +94,7 @@ public class HudiTableTest {
         msTable.setTableType("MANAGED_TABLE");
         msTable.setParameters(new HashMap<>());
 
-        String[] hudiPartFields = new String[] {"col1", "col2"};
+        String[] hudiPartFields = new String[] {"col1"};
 
         new Expectations() {
             {
