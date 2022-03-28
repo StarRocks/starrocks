@@ -31,6 +31,7 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicationGroup;
 import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.UnknownMasterException;
+import com.sleepycat.je.rep.impl.RepNodeImpl;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -197,8 +198,7 @@ public class BDBHA implements HAProtocol {
         }
         try {
             replicationGroupAdmin.removeMember(nodeName);
-        } catch (MemberNotFoundException e) {
-            LOG.error("the deleting electable node is not found {}", nodeName, e);
+        } catch (MemberNotFoundException e) { LOG.error("the deleting electable node is not found {}", nodeName, e);
             return false;
         } catch (MasterStateException e) {
             LOG.error("the deleting electable node is master {}", nodeName, e);
@@ -222,6 +222,25 @@ public class BDBHA implements HAProtocol {
             helperSockets.add(newHelperSocket);
             environment.setNewReplicationGroupAdmin(helperSockets);
             LOG.info("add {}:{} to helper sockets", ip, port);
+        }
+    }
+
+    public void removeNodeIfExist(String host, int port) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        if (replicationGroupAdmin == null) {
+            return;
+        }
+
+        List<String> conflictNodes = Lists.newArrayList();
+        Set<ReplicationNode> nodes = replicationGroupAdmin.getGroup().getDataNodes();
+        for (ReplicationNode node : nodes) {
+            if (node.getHostName().equals(host) && node.getPort() == port) {
+                conflictNodes.add(node.getName());
+            }
+        }
+
+        for (String nodeName : conflictNodes) {
+            replicationGroupAdmin.removeMember(nodeName);
         }
     }
 }

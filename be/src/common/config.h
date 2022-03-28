@@ -487,8 +487,8 @@ CONF_mInt32(txn_commit_rpc_timeout_ms, "10000");
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
 
-// Max consumer num in one data consumer group, for routine load.
-CONF_mInt32(max_consumer_num_per_group, "3");
+// Max consumer num in one data consumer task , for routine load.
+CONF_mInt32(max_consumer_num_per_task, "3");
 
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
