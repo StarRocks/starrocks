@@ -41,12 +41,14 @@
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/compound_predicate.h"
 #include "exprs/vectorized/condition_expr.h"
+#include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/function_call_expr.h"
 #include "exprs/vectorized/in_predicate.h"
 #include "exprs/vectorized/info_func.h"
 #include "exprs/vectorized/is_null_predicate.h"
 #include "exprs/vectorized/java_function_call_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "exprs/vectorized/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/raw_value.h"
@@ -321,6 +323,12 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));
+        break;
+    case TExprNodeType::PLACEHOLDER_EXPR:
+        *expr = pool->add(new vectorized::PlaceHolderRef(texpr_node));
+        break;
+    case TExprNodeType::DICT_EXPR:
+        *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:

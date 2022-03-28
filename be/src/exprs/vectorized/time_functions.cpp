@@ -1302,8 +1302,7 @@ std::string format_for_yyyy_MM_dd_Impl(const DateValue& date_value) {
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
     DateValue d = (DateValue)v;
-    return d.to_string();
-    return format_for_yyyy_MM_dd_Impl((DateValue)v);
+    return format_for_yyyy_MM_dd_Impl((DateValue)d);
 }
 
 std::string format_for_yyyyMMddHHmmssImpl(const TimestampValue& date_value) {

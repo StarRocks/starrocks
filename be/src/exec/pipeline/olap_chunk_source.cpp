@@ -52,7 +52,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _init_counter(state);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
 
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     OlapScanConjunctsManager& cm = _conjuncts_manager;
