@@ -106,6 +106,25 @@ public class WorkGroupMgr implements Writable {
         return rows;
     }
 
+    private String getUnqualifiedUser() {
+        String qualifiedUser = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
+        //default_cluster:test
+        String[] userParts = qualifiedUser.split(":");
+        return userParts[userParts.length - 1];
+    }
+
+    private String getUnqualifiedRole() {
+        String roleName = null;
+        String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
+                .getRoleName(ConnectContext.get().getCurrentUserIdentity());
+        if (qualifiedRoleName != null) {
+            //default_cluster:role
+            String[] roleParts = qualifiedRoleName.split(":");
+            roleName = roleParts[roleParts.length - 1];
+        }
+        return roleName;
+    }
+
     public List<List<String>> showAllWorkGroups(Boolean isListAll) {
         readLock();
         try {
@@ -115,20 +134,8 @@ public class WorkGroupMgr implements Writable {
                 return workGroupList.stream().map(WorkGroup::show)
                         .flatMap(Collection::stream).collect(Collectors.toList());
             } else {
-                String qualifiedUser = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
-                //default_cluster:test
-                String[] userParts = qualifiedUser.split(":");
-                String user = userParts[userParts.length - 1];
-
-                String roleName = null;
-                String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
-                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
-                if (qualifiedRoleName != null) {
-                    //default_cluster:role
-                    String[] roleParts = qualifiedRoleName.split(":");
-                    roleName = roleParts[roleParts.length - 1];
-                }
-                String role = roleName;
+                String user = getUnqualifiedUser();
+                String role = getUnqualifiedRole();
                 String remoteIp = ConnectContext.get().getRemoteIP();
                 return workGroupList.stream().map(w -> w.showVisible(user, role, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
@@ -362,10 +369,12 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(String user, String roleName, WorkGroupClassifier.QueryType queryType, String ip) {
-
+    public WorkGroup chooseWorkGroup(WorkGroupClassifier.QueryType queryType) {
+        String user = getUnqualifiedUser();
+        String role = getUnqualifiedRole();
+        String remoteIp = ConnectContext.get().getRemoteIP();
         List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, roleName, queryType, ip)).collect(Collectors.toList());
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp)).collect(Collectors.toList());
         classifierList.sort(Comparator.comparingDouble(WorkGroupClassifier::weight));
         if (classifierList.isEmpty()) {
             return null;
