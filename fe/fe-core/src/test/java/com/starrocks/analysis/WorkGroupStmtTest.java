@@ -1,5 +1,8 @@
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
@@ -106,6 +109,8 @@ public class WorkGroupStmtTest {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         FeConstants.default_scheduler_interval_millisecond = 1;
         starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withRole("rg1_role1");
+        starRocksAssert.withUser("rg1_user1", "rg1_role1");
     }
 
     private static String rowsToString(List<List<String>> rows) {
@@ -308,6 +313,39 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(result.contains("rg2_user4"));
         Assert.assertTrue(result.contains("rg2_role5"));
         Assert.assertTrue(result.contains("192.169.6.1/16"));
+        dropResourceGroups();
+    }
+
+    @Test
+    public void testChooseResourceGroup() throws Exception {
+        createResourceGroups();
+        String qualifiedUser = "default_cluster:rg1_user1";
+        String remoteIp = "192.168.2.4";
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setRemoteIP(remoteIp);
+        WorkGroup wg = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                starRocksAssert.getCtx(),
+                WorkGroupClassifier.QueryType.SELECT);
+        Assert.assertEquals(wg.getName(), "rg1");
+        dropResourceGroups();
+    }
+
+    @Test
+    public void testShowVisibleResourceGroups() throws Exception {
+        createResourceGroups();
+        String qualifiedUser = "default_cluster:rg1_user1";
+        String remoteIp = "192.168.2.4";
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setRemoteIP(remoteIp);
+        List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(
+                starRocksAssert.getCtx(), false);
+        String result = rowsToString(rows);
+        String expect = "" +
+                "rg1|10|20.0%|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg3|32|80.0%|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
+        Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
 
