@@ -71,7 +71,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status TableFunctionNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _table_function_exec_timer = ADD_TIMER(_runtime_profile, "TableFunctionTime");
-    TFunction table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
     RETURN_IF_ERROR(_table_function->init(&_table_function_state));
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
     return Status::OK();
