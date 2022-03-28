@@ -305,12 +305,12 @@ public class CTASAnalyzerTest {
                 "SELECT  c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15 " +
                 "FROM     t2 WHERE     (NOT (false)) " +
                 "GROUP BY c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
-        CreateTableAsSelectStmt createTableStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
+        CreateTableAsSelectStmt createTableStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql, ctx);
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         try {
-            CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+            CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql2, ctx);
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Unsupported CTAS transform type: null"));
         }
