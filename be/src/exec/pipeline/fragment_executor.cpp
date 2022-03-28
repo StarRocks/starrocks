@@ -129,7 +129,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         DCHECK(wg != nullptr);
 
         // init query context
-        if (!existing_query_ctx) {
+        if (!existing_query_ctx && wg->is_check_big_query()) {
             _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
             _query_ctx->set_init_wg_io_cost(wg->total_io_cost());
             _query_ctx->init_query_begin_time();

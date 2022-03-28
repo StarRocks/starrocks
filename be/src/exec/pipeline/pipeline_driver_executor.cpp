@@ -47,9 +47,11 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
         auto query_id = driver->query_ctx()->query_id();
         DCHECK(!driver->is_still_pending_finish());
         QueryContextManager::instance()->remove(query_id);
-        auto wg = driver->workgroup();
-        if (wg) {
-            wg->decr_cur_query_num();
+        if (driver->fragment_ctx()->enable_resource_group()) {       
+            auto wg = driver->workgroup();
+            if (wg && wg->is_check_big_query()) {
+                wg->decr_cur_query_num();
+            }
         }
     }
 }
@@ -99,10 +101,12 @@ void GlobalDriverExecutor::_worker_thread() {
             this->_driver_queue->update_statistics(driver);
 
             // check If large query, if true, cancel it
-            auto wg = driver->workgroup();
             bool is_big_query = false;
-            if (wg && wg->is_check_big_query()) {
-                is_big_query = wg->is_big_query(*query_ctx);
+            if (driver->fragment_ctx()->enable_resource_group()) {
+                auto wg = driver->workgroup();
+                if (wg && wg->is_check_big_query()) {
+                    is_big_query = wg->is_big_query(*query_ctx);
+                }
             }
 
             if (!status.ok() || is_big_query) {
