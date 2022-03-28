@@ -1987,12 +1987,8 @@ public class Coordinator {
 
             WorkGroup workgroup = null;
             if (ConnectContext.get() != null) {
-                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
-                String roleName = Catalog.getCurrentCatalog().getAuth()
-                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
-                String remoteIp = ConnectContext.get().getRemoteIP();
                 workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
-                        user, roleName, WorkGroupClassifier.QueryType.SELECT, remoteIp);
+                        ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();

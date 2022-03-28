@@ -27,11 +27,15 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateResourceStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -90,6 +94,21 @@ public class StarRocksAssert {
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().createDb(createDbStmt);
+        return this;
+    }
+
+    public StarRocksAssert withRole(String roleName) throws Exception {
+        CreateRoleStmt createRoleStmt =
+                (CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt("create role " + roleName + ";", ctx);
+        Catalog.getCurrentCatalog().getAuth().createRole(createRoleStmt);
+        return this;
+    }
+
+    public StarRocksAssert withUser(String user, String roleName) throws Exception {
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(
+                        "create user " + user + " default role '" + roleName + "';", ctx);
+        Catalog.getCurrentCatalog().getAuth().createUser(createUserStmt);
         return this;
     }
 
