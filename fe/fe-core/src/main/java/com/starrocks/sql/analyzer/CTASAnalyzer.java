@@ -151,6 +151,8 @@ public class CTASAnalyzer {
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
+            } else if (PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
+                throw new SemanticException("Unsupported CTAS transform type: null");
             } else {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }
