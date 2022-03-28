@@ -61,7 +61,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
     _input_chunk_seek_rows = 0;
     _table_function_result_eos = true;
     _outer_column_remain_repeat_times = 0;
@@ -72,6 +71,8 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status TableFunctionNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _table_function_exec_timer = ADD_TIMER(_runtime_profile, "TableFunctionTime");
+    TFunction table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
+    RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
     return Status::OK();
 }

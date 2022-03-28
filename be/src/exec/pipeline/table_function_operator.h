@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include "column/column_helper.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/expr.h"
@@ -20,6 +18,8 @@ public:
     ~TableFunctionOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+
+    void close(RuntimeState* state) override;
 
     bool has_output() const override;
 
@@ -38,7 +38,7 @@ private:
     void _process_table_function();
 
     const TPlanNode& _tnode;
-    const vectorized::TableFunction* _table_function;
+    const vectorized::TableFunction* _table_function = nullptr;
 
     //Slots of output by table function
     std::vector<SlotId> _fn_result_slots;
@@ -52,15 +52,15 @@ private:
     //Input chunk currently being processed
     vectorized::ChunkPtr _input_chunk;
     //The current chunk is processed to which row
-    size_t _input_chunk_index;
+    size_t _input_chunk_index = 0;
     //The current outer line needs to be repeated several times
-    size_t _remain_repeat_times;
+    size_t _remain_repeat_times = 0;
     //table function result
     std::pair<vectorized::Columns, vectorized::ColumnPtr> _table_function_result;
     //table function return result end ?
-    bool _table_function_result_eos;
+    bool _table_function_result_eos = false;
     //table function param and return offset
-    vectorized::TableFunctionState* _table_function_state;
+    vectorized::TableFunctionState* _table_function_state = nullptr;
 
     //Profile
     RuntimeProfile::Counter* _table_function_exec_timer = nullptr;
