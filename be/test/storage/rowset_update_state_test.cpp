@@ -63,7 +63,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -135,7 +135,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(*partial_schema.get());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
 
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
@@ -158,7 +158,7 @@ protected:
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
     static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::RowsetReadOptions rs_opts;
     rs_opts.is_primary_keys = true;
     rs_opts.sorted = false;
@@ -293,7 +293,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = vectorized::ChunkHelper::convert_schema(_tablet->tablet_schema());
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, N);
     auto& cols = chunk->columns();
     for (size_t i = 0; i < N; i++) {
