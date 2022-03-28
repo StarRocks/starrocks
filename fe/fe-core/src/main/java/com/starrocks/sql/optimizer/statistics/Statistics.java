@@ -32,17 +32,23 @@ public class Statistics {
 
     public double getOutputSize(ColumnRefSet outputColumns) {
         double totalSize = 0;
+        boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
             if (outputColumns.contains(entry.getKey().getId())) {
                 totalSize += entry.getValue().getAverageRowSize();
+                nonEmpty = true;
             }
+        }
+        if (nonEmpty) {
+            totalSize = Math.max(totalSize, 1.0);
         }
         return totalSize * outputRowCount;
     }
 
     public double getComputeSize() {
-        return this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
-                reduce(0.0, Double::sum) * outputRowCount;
+        // Make it at least 1 byte, otherwise the cost model would propagate estimate error
+        return Math.max(1.0, this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
+                reduce(0.0, Double::sum)) * outputRowCount;
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
