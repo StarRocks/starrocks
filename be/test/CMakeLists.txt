@@ -35,6 +35,7 @@ set(EXEC_FILES
         ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
