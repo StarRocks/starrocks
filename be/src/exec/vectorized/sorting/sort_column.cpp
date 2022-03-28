@@ -133,17 +133,17 @@ public:
     size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const vectorized::NullableColumn& column) {
-        std::vector<NullData> null_datas;
+        std::vector<const NullData*> null_datas;
         std::vector<ColumnPtr> data_columns;
         for (auto& col : _vertical_columns) {
             auto real = down_cast<const NullableColumn*>(col.get());
-            null_datas.push_back(real->immutable_null_column_data());
+            null_datas.push_back(&real->immutable_null_column_data());
             data_columns.push_back(real->data_column());
         }
 
         if (_is_null_first) {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return null_datas[item.chunk_index][item.index_in_chunk] == 1;
+                return (*null_datas[item.chunk_index])[item.index_in_chunk] == 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
@@ -151,7 +151,7 @@ public:
                                                                   _build_tie, _limit, &_pruned_limit));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
-                return null_datas[item.chunk_index][item.index_in_chunk] != 1;
+                return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
             };
 
             RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
