@@ -102,10 +102,24 @@ public:
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
+<<<<<<< HEAD
     static bool extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                     simdjson::ondemand::value& value);
+=======
+    static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
+                                      simdjson::ondemand::value& value) noexcept;
+>>>>>>> a00c3b42 (Expand array in json root (#4302))
 
     static void parse_json_paths(const std::string& path_strings, std::vector<JsonPath>* parsed_paths);
+
+    template <typename ValueType>
+    static std::string_view to_json_string(ValueType&& val, size_t limit) {
+        std::string_view sv = simdjson::to_json_string(std::forward<ValueType>(val));
+        if (sv.size() > limit) {
+            return sv.substr(0, limit);
+        }
+        return sv;
+    }
 
 private:
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
