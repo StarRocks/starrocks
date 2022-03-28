@@ -1985,7 +1985,8 @@ public class Coordinator {
 
             WorkGroup workgroup = null;
             if (ConnectContext.get() != null) {
-                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(WorkGroupClassifier.QueryType.SELECT);
+                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                        ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
             }
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
