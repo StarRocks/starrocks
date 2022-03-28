@@ -504,6 +504,11 @@ public class ExpressionAnalyzer {
 
             Function fn;
             String fnName = node.getFnName().getFunction();
+
+            if (fnName.equals(FunctionSet.COUNT) && node.getChildren().size() == 0 && !node.getParams().isStar()) {
+                throw new SemanticException("No matching function with signature: count()");
+            }
+
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
@@ -548,8 +553,7 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).",
-                            fnName,
+                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
                             node.getParams().isStar() ? "*" : Joiner.on(", ")
                                     .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 }
