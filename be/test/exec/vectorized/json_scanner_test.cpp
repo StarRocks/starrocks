@@ -684,4 +684,78 @@ TEST_F(JsonScannerTest, test_native_json_single_column) {
     }
 }
 
+TEST_F(JsonScannerTest, test_expanded_with_json_root) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_json_type());
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "keyname"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}]", chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}]", chunk->debug_row(4));
+}
+
+TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_json_type());
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "keyname"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}]", chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}]", chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}]", chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}]", chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}]", chunk->debug_row(4));
+}
+
 } // namespace starrocks::vectorized
