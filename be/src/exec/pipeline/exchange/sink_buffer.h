@@ -31,11 +31,16 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
+
+    // The following fileds are initialized by SinkBuffer
+    int64_t enqueue_nanos;
 };
 
 struct ClosureContext {
     TUniqueId instance_id;
     int64_t sequence;
+    int64_t enqueue_nanos;
+    int64_t send_timestamp;
 };
 
 // TODO(hcf) how to export brpc error
@@ -45,7 +50,7 @@ public:
                bool is_dest_merge, size_t num_sinkers);
     ~SinkBuffer();
 
-    void add_request(const TransmitChunkInfo& request);
+    void add_request(TransmitChunkInfo& request);
     bool is_full() const;
     bool is_finished() const;
 
@@ -56,20 +61,20 @@ public:
     // among all destinations as the overall network time
     int64_t network_time();
 
-    // Roughly estimate network wait time
-    // For simplicity, we just sum the network wait time for each destination, and pick the maximum one
-    // among all destinations as the overall network wait time
-    int64_t network_wait_time();
+    // Roughly estimate whole lifecycle time
+    // For each destination, we may send multiply packages at the same time,
+    // but it's hard to calculate the actual average concurrency. So, for simplicity,
+    // we just sum the lifecycle time for each destination, and pick the maximum one
+    // among all destinations as the overall lifecycle time
+    int64_t lifecycle_time();
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
     void cancel_one_sinker();
 
 private:
-    void _update_network_wait_start_timestamp(const TUniqueId& instance_id);
-    void _update_network_wait_time(const TUniqueId& instance_id);
-    void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                              const int64_t receive_timestamp);
+    void _update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
+                      const int64_t receive_timestamp);
     // Update the discontinuous acked window, here are the invariants:
     // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
@@ -108,8 +113,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, int64_t> _network_times;
-    phmap::flat_hash_map<int64_t, int64_t> _network_wait_times;
-    phmap::flat_hash_map<int64_t, int64_t> _network_wait_start_timestamps;
+    phmap::flat_hash_map<int64_t, int64_t> _lifecycle_times;
     phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,

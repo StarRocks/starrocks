@@ -355,7 +355,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
             },
             "");
     _network_timer = ADD_TIMER(_unique_metrics, "NetworkTime");
-    _network_wait_timer = ADD_TIMER(_unique_metrics, "NetworkWaitTime");
+    _exchange_timer = ADD_TIMER(_unique_metrics, "ExchangeTime");
 
     for (auto& _channel : _channels) {
         RETURN_IF_ERROR(_channel->init(state));
@@ -535,7 +535,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
     COUNTER_SET(_network_timer, _buffer->network_time());
-    COUNTER_SET(_network_wait_timer, _buffer->network_wait_time());
+    COUNTER_SET(_exchange_timer, _buffer->lifecycle_time());
     Operator::close(state);
 }
 

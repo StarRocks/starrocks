@@ -4,14 +4,9 @@
 
 #include <chrono>
 
-static const int64_t INVALID = -1;
+#include "util/time.h"
 
 namespace starrocks::pipeline {
-
-static int64_t steady_timestamp() {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
-            .count();
-}
 
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                        bool is_dest_merge, size_t num_sinkers)
@@ -41,8 +36,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = 0;
-            _network_wait_times[instance_id.lo] = 0;
-            _network_wait_start_timestamps[instance_id.lo] = INVALID;
+            _lifecycle_times[instance_id.lo] = 0;
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -76,7 +70,7 @@ SinkBuffer::~SinkBuffer() {
     }
 }
 
-void SinkBuffer::add_request(const TransmitChunkInfo& request) {
+void SinkBuffer::add_request(TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
         // Once the request is added to SinkBuffer, its ownership will also be transferred,
@@ -84,6 +78,7 @@ void SinkBuffer::add_request(const TransmitChunkInfo& request) {
         request.params->release_finst_id();
         return;
     }
+    request.enqueue_nanos = MonotonicNanos();
     {
         auto& instance_id = request.fragment_instance_id;
         std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
@@ -122,9 +117,9 @@ int64_t SinkBuffer::network_time() {
     return max;
 }
 
-int64_t SinkBuffer::network_wait_time() {
+int64_t SinkBuffer::lifecycle_time() {
     int64_t max = 0;
-    for (auto& [_, time] : _network_wait_times) {
+    for (auto& [_, time] : _lifecycle_times) {
         if (time > max) {
             max = time;
         }
@@ -138,24 +133,10 @@ void SinkBuffer::cancel_one_sinker() {
     }
 }
 
-void SinkBuffer::_update_network_wait_start_timestamp(const TUniqueId& instance_id) {
-    if (_network_wait_start_timestamps[instance_id.lo] != INVALID) {
-        return;
-    }
-    _network_wait_start_timestamps[instance_id.lo] = steady_timestamp();
-}
-
-void SinkBuffer::_update_network_wait_time(const TUniqueId& instance_id) {
-    if (_network_wait_start_timestamps[instance_id.lo] == INVALID) {
-        return;
-    }
-    _network_wait_times[instance_id.lo] += steady_timestamp() - _network_wait_start_timestamps[instance_id.lo];
-    _network_wait_start_timestamps[instance_id.lo] = INVALID;
-}
-
-void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                                      const int64_t receive_timestamp) {
+void SinkBuffer::_update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
+                              const int64_t receive_timestamp) {
     _network_times[instance_id.lo] += (receive_timestamp - send_timestamp);
+    _lifecycle_times[instance_id.lo] += (MonotonicNanos() - enqueue_nanos);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
@@ -197,15 +178,13 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
         }
         if (buffer.empty() || too_much_brpc_process) {
-            _update_network_wait_start_timestamp(instance_id);
             return;
         }
 
         TransmitChunkInfo request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([this, &instance_id, &need_wait, &buffer]() {
+        DeferOp pop_defer([&need_wait, &buffer]() {
             if (need_wait) {
-                _update_network_wait_start_timestamp(instance_id);
                 return;
             }
             buffer.pop();
@@ -221,7 +200,6 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
                 if (need_wait) {
-                    _update_network_wait_start_timestamp(instance_id);
                     return;
                 }
                 if (--_num_remaining_eos == 0) {
@@ -255,9 +233,8 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
         request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
-        _update_network_wait_time(instance_id);
-        auto* closure =
-                new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
+        auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
+                {instance_id, request.params->sequence(), request.enqueue_nanos, GetCurrentTimeNanos()});
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
@@ -270,8 +247,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             _fragment_ctx->cancel(Status::InternalError("transmit chunk rpc failed"));
             LOG(WARNING) << "transmit chunk rpc failed";
         });
-        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result,
-                                          const int64_t send_timestamp) noexcept {
+        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
             Status status(result.status());
             {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -285,7 +261,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
                 _process_send_window(ctx.instance_id, ctx.sequence);
-                _update_network_time(ctx.instance_id, send_timestamp, result.receive_timestamp());
+                _update_time(ctx.instance_id, ctx.enqueue_nanos, ctx.send_timestamp, result.receive_timestamp());
                 _try_to_send_rpc(ctx.instance_id);
             }
             --_total_in_flight_rpc;
