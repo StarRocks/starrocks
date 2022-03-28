@@ -23,8 +23,6 @@
 
 #include <cstring>
 
-#include "exec/olap_utils.h"
-
 namespace starrocks {
 
 std::string StringValue::debug_string() const {

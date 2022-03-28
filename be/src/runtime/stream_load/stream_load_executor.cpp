@@ -195,8 +195,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     result = k_stream_load_commit_result;
 #endif
     // Return if this transaction is committed successful; otherwise, we need try
-    // to
-    // rollback this transaction
+    // to rollback this transaction.
     Status status(result.status);
     if (!status.ok()) {
         LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
@@ -291,7 +290,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         break;
     }
     default:
-        // unknown load type, should not happend
+        // unknown load type, should not happen
         return false;
     }
 

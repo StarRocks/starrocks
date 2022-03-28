@@ -165,7 +165,7 @@ private:
         // the last item of |_read_schema| and |_dict_decode_schema| is a row id field.
         bool _late_materialize{false};
 
-        // not all dict encdoe
+        // not all dict encode
         bool _has_force_dict_encode{false};
     };
 
@@ -1377,7 +1377,7 @@ void SegmentIterator::close() {
     }
 }
 
-// put the field that has predicate on it ahead of those without one, for handle late
+// put the field that has predicated on it ahead of those without one, for handle late
 // materialization easier.
 inline Schema reorder_schema(const Schema& input, const std::unordered_map<ColumnId, PredicateList>& predicates) {
     const std::vector<FieldPtr>& fields = input.fields();

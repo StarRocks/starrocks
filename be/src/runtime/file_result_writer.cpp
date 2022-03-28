@@ -150,7 +150,7 @@ Status FileResultWriter::_close_file_writer(bool done) {
 Status FileResultWriter::close() {
     // the following 2 profile "_written_rows_counter" and "_writer_close_timer"
     // must be outside the `_close_file_writer()`.
-    // because `_close_file_writer()` may be called in deconstructor,
+    // because `_close_file_writer()` may be called in deconstruct,
     // at that time, the RuntimeState may already been deconstructed,
     // so does the profile in RuntimeState.
     COUNTER_SET(_written_rows_counter, _written_rows);
