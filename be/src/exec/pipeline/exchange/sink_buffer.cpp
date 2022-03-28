@@ -36,7 +36,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = 0;
-            _lifecycle_times[instance_id.lo] = 0;
+            _wait_times[instance_id.lo] = 0;
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -117,9 +117,9 @@ int64_t SinkBuffer::network_time() {
     return max;
 }
 
-int64_t SinkBuffer::lifecycle_time() {
+int64_t SinkBuffer::wait_time() {
     int64_t max = 0;
-    for (auto& [_, time] : _lifecycle_times) {
+    for (auto& [_, time] : _wait_times) {
         if (time > max) {
             max = time;
         }
@@ -136,7 +136,7 @@ void SinkBuffer::cancel_one_sinker() {
 void SinkBuffer::_update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
                               const int64_t receive_timestamp) {
     _network_times[instance_id.lo] += (receive_timestamp - send_timestamp);
-    _lifecycle_times[instance_id.lo] += (MonotonicNanos() - enqueue_nanos);
+    _wait_times[instance_id.lo] += (MonotonicNanos() - enqueue_nanos);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {

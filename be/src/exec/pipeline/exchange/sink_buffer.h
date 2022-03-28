@@ -61,12 +61,15 @@ public:
     // among all destinations as the overall network time
     int64_t network_time();
 
-    // Roughly estimate whole lifecycle time
+    // Roughly estimate whole wait time including
+    // 1. the time waiting in the queue
+    // 2. the network time
+    // 3. the processing time at the receiving side
     // For each destination, we may send multiply packages at the same time,
     // but it's hard to calculate the actual average concurrency. So, for simplicity,
-    // we just sum the lifecycle time for each destination, and pick the maximum one
-    // among all destinations as the overall lifecycle time
-    int64_t lifecycle_time();
+    // we just sum the wait time for each destination, and pick the maximum one
+    // among all destinations as the overall wait time
+    int64_t wait_time();
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
@@ -113,7 +116,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, int64_t> _network_times;
-    phmap::flat_hash_map<int64_t, int64_t> _lifecycle_times;
+    phmap::flat_hash_map<int64_t, int64_t> _wait_times;
     phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
