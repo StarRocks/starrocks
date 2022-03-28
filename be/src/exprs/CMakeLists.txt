@@ -41,6 +41,8 @@ add_library(Exprs
   vectorized/binary_predicate.cpp
   vectorized/literal.cpp
   vectorized/cast_expr.cpp
+  vectorized/placeholder_ref.cpp
+  vectorized/dictmapping_expr.cpp
   vectorized/function_call_expr.cpp
   vectorized/function_helper.cpp
   vectorized/math_functions.cpp
