@@ -39,6 +39,7 @@ add_library(Storage STATIC
     memtable_flush_executor.cpp
     null_predicate.cpp
     kv_store.cpp
+    object_metastore.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp

@@ -137,7 +137,7 @@ public:
     Status deserialize(const std::string& meta_binary);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
-    void to_meta_pb(TabletMetaPB* tablet_meta_pb);
+    void to_meta_pb(TabletMetaPB* tablet_meta_pb) const;
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
     inline TabletTypePB tablet_type() const { return _tablet_type; }

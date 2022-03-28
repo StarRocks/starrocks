@@ -131,6 +131,7 @@ set(EXEC_FILES
         ./storage/key_coder_test.cpp
         ./storage/lru_cache_test.cpp
         ./storage/kv_store_test.cpp
+        ./storage/object_metastore_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
