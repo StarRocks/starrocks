@@ -289,7 +289,7 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         constexpr int kTotalRows = 16;
         for (int limit = 1; limit < kTotalRows; limit++) {
             std::cerr << fmt::format("order by column {} limit {}", name, limit) << std::endl;
-            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, 0, limit);
+            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit);
             sorter.set_compare_strategy(ColumnInc);
             size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
