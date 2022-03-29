@@ -164,4 +164,15 @@ public class ArrayTypeTest extends PlanTestBase {
         expectedEx.expectMessage("No matching function with signature: array_difference(ARRAY<varchar(65533)>, tinyint(4)).");
         getFragmentPlan(sql);
     }
+
+    @Test
+    public void testArrayDifferenceNullAndEmpty() throws Exception {
+        String sql = "select array_difference(null)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("NULL"));
+
+        sql = "select array_difference([])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_difference"));
+    }
 }
