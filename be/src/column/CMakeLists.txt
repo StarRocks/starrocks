@@ -15,7 +15,7 @@ add_library(Column STATIC
         fixed_length_column.cpp
         nullable_column.cpp
         schema.cpp
-        binary_column.cpp
+        binary_column_base.cpp
         object_column.cpp
         decimalv3_column.cpp
         column_visitor.cpp
