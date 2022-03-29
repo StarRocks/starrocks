@@ -133,6 +133,9 @@ public class InsertAnalyzer {
                             defaultValueType == Column.DefaultValueType.NULL) {
                         throw new SemanticException("Column has no default value, column=%s", column.getName());
                     }
+
+                    AnalyzerUtils.verifyNoAggregateFunctions(row.get(columnIdx), "Values");
+                    AnalyzerUtils.verifyNoWindowFunctions(row.get(columnIdx), "Values");
                 }
             }
         }
