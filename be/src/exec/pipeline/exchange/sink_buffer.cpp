@@ -35,8 +35,8 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
-            _network_times[instance_id.lo] = 0;
-            _wait_times[instance_id.lo] = 0;
+            _network_times[instance_id.lo] = TimeTrace{};
+            _wait_times[instance_id.lo] = TimeTrace{};
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -109,9 +109,13 @@ bool SinkBuffer::is_finished() const {
 
 int64_t SinkBuffer::network_time() {
     int64_t max = 0;
-    for (auto& [_, time] : _network_times) {
-        if (time > max) {
-            max = time;
+    for (auto& [_, time_trace] : _network_times) {
+        double average_concurrency =
+                static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
+        int64_t average_accumulated_time =
+                static_cast<int64_t>(time_trace.accumulated_time / std::max(1.0, average_concurrency));
+        if (average_accumulated_time > max) {
+            max = average_accumulated_time;
         }
     }
     return max;
@@ -119,9 +123,13 @@ int64_t SinkBuffer::network_time() {
 
 int64_t SinkBuffer::wait_time() {
     int64_t max = 0;
-    for (auto& [_, time] : _wait_times) {
-        if (time > max) {
-            max = time;
+    for (auto& [_, time_trace] : _wait_times) {
+        double average_concurrency =
+                static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
+        int64_t average_accumulated_time =
+                static_cast<int64_t>(time_trace.accumulated_time / std::max(1.0, average_concurrency));
+        if (average_accumulated_time > max) {
+            max = average_accumulated_time;
         }
     }
     return max;
@@ -135,8 +143,9 @@ void SinkBuffer::cancel_one_sinker() {
 
 void SinkBuffer::_update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
                               const int64_t receive_timestamp) {
-    _network_times[instance_id.lo] += (receive_timestamp - send_timestamp);
-    _wait_times[instance_id.lo] += (MonotonicNanos() - enqueue_nanos);
+    int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
+    _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
+    _wait_times[instance_id.lo].update(MonotonicNanos() - enqueue_nanos, concurrency);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {

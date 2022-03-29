@@ -43,6 +43,26 @@ struct ClosureContext {
     int64_t send_timestamp;
 };
 
+// TimeTrace is introduced to estimate time more accurately.
+// For every update
+// 1. times will be increased by 1.
+// 2. sample time will be accumulated to accumulated_time.
+// 3. sample concurrency will be accumulated to accumulated_concurrency.
+// So we can get the average time of each direction by
+// `average_concurrency = accumulated_concurrency / times`
+// `average_time = accumulated_time / average_concurrency`
+struct TimeTrace {
+    int32_t times = 0;
+    int64_t accumulated_time = 0;
+    int32_t accumulated_concurrency = 0;
+
+    void update(int64_t time, int32_t concurrency) {
+        times++;
+        accumulated_time += time;
+        accumulated_concurrency += concurrency;
+    }
+};
+
 // TODO(hcf) how to export brpc error
 class SinkBuffer {
 public:
@@ -54,21 +74,22 @@ public:
     bool is_full() const;
     bool is_finished() const;
 
-    // Roughly estimate network time
-    // For each destination, we may send multiply packages at the same time,
-    // but it's hard to calculate the actual average concurrency. So, for simplicity,
-    // we just sum the network time for each destination, and pick the maximum one
-    // among all destinations as the overall network time
+    // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
+    // and the processing time of both sides are excluded
+    // For each destination, we may send multiply packages at the same time, and the time is
+    // related to the degree of concurrency, so the network_time will be calculated as
+    // `accumulated_network_time / average_concurrency`
+    // And we just pick the maximum accumulated_network_time among all destination
     int64_t network_time();
 
-    // Roughly estimate whole wait time including
+    // Roughly estimate whole wait time which including
     // 1. the time waiting in the queue
     // 2. the network time
     // 3. the processing time at the receiving side
-    // For each destination, we may send multiply packages at the same time,
-    // but it's hard to calculate the actual average concurrency. So, for simplicity,
-    // we just sum the wait time for each destination, and pick the maximum one
-    // among all destinations as the overall wait time
+    // For each destination, we may send multiply packages at the same time, and the time is
+    // related to the degree of concurrency, so the wait_time will be calculated as
+    // `accumulated_wait_time / average_concurrency`
+    // And we just pick the maximum accumulated_wait_time among all destination
     int64_t wait_time();
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
@@ -115,8 +136,8 @@ private:
     phmap::flat_hash_map<int64_t, std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>> _buffers;
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
-    phmap::flat_hash_map<int64_t, int64_t> _network_times;
-    phmap::flat_hash_map<int64_t, int64_t> _wait_times;
+    phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
+    phmap::flat_hash_map<int64_t, TimeTrace> _wait_times;
     phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
