@@ -231,10 +231,11 @@ Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
             new_binary_column->append(src, i, 1);
             idx_begin = indexes[i] + 1;
         }
-        int64_t remain_count = _offsets.size() - idx_begin - 1;
-        if (remain_count > 0) {
+		if (indexes.back() < size() - 1) {
+			size_t remain_count = size() - 1 - indexes.back();
             new_binary_column->append(*this, idx_begin, remain_count);
-        }
+		}
+        
         swap_column(*new_binary_column.get());
     }
 
