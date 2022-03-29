@@ -309,7 +309,10 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         }
 
         // need row_count to fill in chunk.
-        size_t row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
+        size_t row_count = 0;
+        if (chunk) {
+            row_count = runtime_state()->chunk_size() - (*chunk)->num_rows();
+        }
 
         // means we have scan all chunks of right tables.
         // we should scan all remain rows of right table.
@@ -349,7 +352,6 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
                     ++_probe_rows_index;
                     _build_rows_index = _build_chunks_size;
                 }
-
                 // _probe_chunk is done with _build_chunk.
                 if (_probe_rows_index >= _probe_chunk_index) {
                     _probe_chunk = nullptr;
@@ -438,7 +440,6 @@ Status CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
-    child(0)->close(state);
     return ExecNode::close(state);
 }
 

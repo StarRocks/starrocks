@@ -12,6 +12,7 @@
 #include "common/object_pool.h"
 #include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type_infra.h"
 #include "simd/mulselector.h"
 #include "util/percentile_value.h"
 
@@ -370,6 +371,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL32, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL64, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
+        CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
     default: {                                                                            \
         LOG(WARNING) << "vectorized engine case expr no support when type: " << whenType; \
         return nullptr;                                                                   \
@@ -390,23 +392,7 @@ Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
     }
 
     switch (resultType) {
-        CASE_RESULT_TYPE(TYPE_BOOLEAN)
-        CASE_RESULT_TYPE(TYPE_TINYINT)
-        CASE_RESULT_TYPE(TYPE_SMALLINT)
-        CASE_RESULT_TYPE(TYPE_INT)
-        CASE_RESULT_TYPE(TYPE_BIGINT)
-        CASE_RESULT_TYPE(TYPE_LARGEINT)
-        CASE_RESULT_TYPE(TYPE_FLOAT)
-        CASE_RESULT_TYPE(TYPE_DOUBLE)
-        CASE_RESULT_TYPE(TYPE_CHAR)
-        CASE_RESULT_TYPE(TYPE_VARCHAR)
-        CASE_RESULT_TYPE(TYPE_DATE)
-        CASE_RESULT_TYPE(TYPE_DATETIME)
-        CASE_RESULT_TYPE(TYPE_TIME)
-        CASE_RESULT_TYPE(TYPE_DECIMALV2)
-        CASE_RESULT_TYPE(TYPE_DECIMAL32)
-        CASE_RESULT_TYPE(TYPE_DECIMAL64)
-        CASE_RESULT_TYPE(TYPE_DECIMAL128)
+        APPLY_FOR_ALL_SCALAR_TYPE(CASE_RESULT_TYPE)
         CASE_RESULT_TYPE(TYPE_OBJECT)
         CASE_RESULT_TYPE(TYPE_HLL)
         CASE_RESULT_TYPE(TYPE_PERCENTILE)
