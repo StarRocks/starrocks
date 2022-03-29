@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -115,7 +115,7 @@ public class DescribeStmt extends ShowStmt {
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         dbTableName.analyze(analyzer);
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
                 dbTableName.getTbl(), PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
                     ConnectContext.get().getQualifiedUser(),
@@ -123,7 +123,7 @@ public class DescribeStmt extends ShowStmt {
                     dbTableName.getTbl());
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbTableName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbTableName.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbTableName.getDb());
         }

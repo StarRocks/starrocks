@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -51,7 +52,7 @@ public class TabletStatMgr extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> backends = Catalog.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
         for (Backend backend : backends.values()) {
@@ -82,9 +83,9 @@ public class TabletStatMgr extends MasterDaemon {
 
         // after update replica in all backends, update index row num
         start = System.currentTimeMillis();
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -118,7 +119,7 @@ public class TabletStatMgr extends MasterDaemon {
     }
 
     private void updateTabletStat(Long beId, TTabletStatResult result) {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
             if (invertedIndex.getTabletMeta(entry.getKey()) == null) {

@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -105,7 +105,7 @@ public class DeleteStmt extends DdlStmt {
         analyzePredicate(wherePredicate);
 
         // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
                 PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                     ConnectContext.get().getQualifiedUser(),

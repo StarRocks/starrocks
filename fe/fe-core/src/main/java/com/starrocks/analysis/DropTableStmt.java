@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -78,7 +78,7 @@ public class DropTableStmt extends DdlStmt {
         tableName.analyze(analyzer);
 
         // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
                 tableName.getTbl(), PrivPredicate.DROP)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
         }

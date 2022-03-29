@@ -5,6 +5,7 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -59,12 +60,12 @@ public class StarOSTablet extends Tablet {
     }
 
     public long getPrimaryBackendId() {
-        return Catalog.getCurrentCatalog().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
     }
 
     @Override
     public Set<Long> getBackendIds() {
-        return Catalog.getCurrentCatalog().getStarOSAgent().getBackendIdsByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(shardId);
     }
 
     // visibleVersion and schemaHash is not used

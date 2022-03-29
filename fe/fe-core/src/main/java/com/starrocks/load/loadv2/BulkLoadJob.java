@@ -31,7 +31,7 @@ import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.AuthorizationInfo;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -49,6 +49,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -62,6 +63,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * parent class of BrokerLoadJob and SparkLoadJob from load stmt
@@ -105,7 +108,7 @@ public abstract class BulkLoadJob extends LoadJob {
     public static BulkLoadJob fromLoadStmt(LoadStmt stmt) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -153,7 +156,7 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     private AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -163,7 +166,7 @@ public abstract class BulkLoadJob extends LoadJob {
     @Override
     public Set<String> getTableNamesForShow() {
         Set<String> result = Sets.newHashSet();
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             for (long tableId : fileGroupAggInfo.getAllTableIds()) {
                 result.add(String.valueOf(tableId));
@@ -184,7 +187,7 @@ public abstract class BulkLoadJob extends LoadJob {
     @Override
     public Set<String> getTableNames() throws MetaNotFoundException {
         Set<String> result = Sets.newHashSet();
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -232,9 +235,9 @@ public abstract class BulkLoadJob extends LoadJob {
                 // load id will be added to loadStatistic when executing this task
                 try {
                     if (loadTask.getTaskType() == LoadTask.TaskType.PENDING) {
-                        submitTask(Catalog.getCurrentCatalog().getPendingLoadTaskScheduler(), loadTask);
+                        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), loadTask);
                     } else if (loadTask.getTaskType() == LoadTask.TaskType.LOADING) {
-                        submitTask(Catalog.getCurrentCatalog().getLoadingLoadTaskScheduler(), loadTask);
+                        submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
                     } else {
                         throw new LoadException(String.format("Unknown load task type: %s. task id: %d, job id, %d",
                                 loadTask.getTaskType(), loadTask.getSignature(), id));
@@ -268,7 +271,7 @@ public abstract class BulkLoadJob extends LoadJob {
             for (DataDescription dataDescription : stmt.getDataDescriptions()) {
                 dataDescription.analyzeWithoutCheckPriv();
             }
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 throw new DdlException("Database[" + dbId + "] does not exist");
             }
@@ -310,12 +313,12 @@ public abstract class BulkLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         brokerDesc = BrokerDesc.read(in);
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_61) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_61) {
             fileGroupAggInfo.readFields(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_58) {
-            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_58) {
+            if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
                 String stmt = Text.readString(in);
                 originStmt = new OriginStatement(stmt, 0);
             } else {
@@ -328,7 +331,7 @@ public abstract class BulkLoadJob extends LoadJob {
         // The reason is that it will thrown MetaNotFoundException when the tableId could not be found by tableName.
         // The origin stmt will be analyzed after the replay is completed.
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);

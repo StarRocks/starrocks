@@ -4,7 +4,7 @@ package com.starrocks.external;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.DdlException;
@@ -30,7 +30,7 @@ public class HiveMetaStoreTableUtils {
                                                                         List<Column> partColumns) throws DdlException {
         // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
         List<String> allColumnNames = new ArrayList<>(nameToColumn.keySet());
-        Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
+        Map<String, HiveColumnStats> allColumnStats = GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getTableLevelColumnStats(resourceName, db, table, partColumns, allColumnNames);
         Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
         for (String columnName : columnNames) {
@@ -51,14 +51,14 @@ public class HiveMetaStoreTableUtils {
                                                        String db,
                                                        String table,
                                                        List<PartitionKey> partitionKeys) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
+        return GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getPartitionsStats(resourceName, db, table, partitionKeys);
     }
 
     public static HiveTableStats getTableStats(String resourceName,
                                                String db,
                                                String table) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, db, table);
+        return GlobalStateMgr.getCurrentState().getHiveRepository().getTableStats(resourceName, db, table);
     }
 
     public static List<HivePartition> getPartitions(String resourceName,
@@ -66,7 +66,7 @@ public class HiveMetaStoreTableUtils {
                                              String table,
                                              List<PartitionKey> partitionKeys)
             throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
+        return GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getPartitions(resourceName, db, table, partitionKeys);
     }
 
@@ -74,7 +74,7 @@ public class HiveMetaStoreTableUtils {
                                                     String db,
                                                     String table,
                                                     List<Column> partColumns) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
+        return GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getPartitionKeys(resourceName, db, table, partColumns);
     }
 

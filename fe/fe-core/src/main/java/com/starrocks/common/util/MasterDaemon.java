@@ -21,7 +21,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,7 +45,7 @@ public class MasterDaemon extends Daemon {
 
     @Override
     protected void runOneCycle() {
-        while (!Catalog.getServingCatalog().isReady()) {
+        while (!GlobalStateMgr.getServingCatalog().isReady()) {
             // here we use getServingCatalog(), not getCurrentCatalog() because we truly want the Catalog instance,
             // not the Checkpoint catalog instance.
             // and if catalog is not ready, do not run

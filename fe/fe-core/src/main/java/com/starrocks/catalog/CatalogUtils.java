@@ -7,6 +7,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,7 +65,7 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on StarOS table and remove later.
     public static void checkOlapTableHasStarOSPartition(String dbName, String tableName) throws AnalysisException {
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return;
         }

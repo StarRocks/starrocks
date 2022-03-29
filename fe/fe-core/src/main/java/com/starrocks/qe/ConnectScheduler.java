@@ -23,12 +23,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -151,7 +152,7 @@ public class ConnectScheduler {
         for (ConnectContext ctx : connectionMap.values()) {
             // Check auth
             if (!ctx.getQualifiedUser().equals(user) &&
-                    !Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                             PrivPredicate.GRANT)) {
                 continue;
             }

@@ -4,7 +4,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -92,7 +92,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     if (backend == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;

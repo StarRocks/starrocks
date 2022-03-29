@@ -28,7 +28,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SysVariableDesc;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -38,6 +38,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,6 +56,8 @@ import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * Variable manager, merge session variable and global variable.
@@ -279,7 +282,7 @@ public class VariableMgr {
                 // write edit log
                 GlobalVarPersistInfo info =
                         new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(attr.name()));
-                EditLog editLog = Catalog.getCurrentCatalog().getEditLog();
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
                 editLog.logGlobalVariableV2(info);
             } finally {
                 wlock.unlock();
@@ -303,7 +306,7 @@ public class VariableMgr {
         wlock.lock();
         try {
             defaultSessionVariable.readFields(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_90) {
+            if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_90) {
                 GlobalVarPersistInfo info = GlobalVarPersistInfo.read(in);
                 replayGlobalVariableV2(info);
             }
@@ -578,5 +581,14 @@ public class VariableMgr {
             ctx = ctxByVarName.get(aliases.get(name));
         }
         return ctx;
+    }
+
+    // global variable persistence
+    public static long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+            read(in);
+        }
+        LOG.info("finished replay globalVariable from image");
+        return checksum;
     }
 }

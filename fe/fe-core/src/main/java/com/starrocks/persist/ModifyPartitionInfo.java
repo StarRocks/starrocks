@@ -22,7 +22,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
@@ -30,6 +30,8 @@ import com.starrocks.common.io.Writable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class ModifyPartitionInfo implements Writable {
 
@@ -135,7 +137,7 @@ public class ModifyPartitionInfo implements Writable {
         }
 
         replicationNum = in.readShort();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
             isInMemory = in.readBoolean();
         }
     }

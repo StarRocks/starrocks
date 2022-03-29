@@ -29,7 +29,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -53,6 +53,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
@@ -332,7 +333,7 @@ public class OlapTableSink extends DataSink {
 
         // check if disk capacity reach limit
         // this is for load process, so use high water mark to check
-        Status st = Catalog.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
+        Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
         if (!st.ok()) {
             throw new DdlException(st.getErrorMsg());
         }
@@ -341,7 +342,7 @@ public class OlapTableSink extends DataSink {
 
     private TNodesInfo createStarrocksNodesInfo() {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);;
         for (Long id : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));

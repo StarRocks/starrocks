@@ -5,7 +5,7 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -15,6 +15,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,7 +45,7 @@ public class HiveRepository {
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
                     Integer.MAX_VALUE, "hive-meta-concurrency-pool", true);
 
-    public HiveMetaClient getClient(String resourceName) throws DdlException {
+    public HiveMetaClient getClient(String resourceName, boolean isDefaultCatalog) throws DdlException {
         HiveMetaClient client;
         metaClientsLock.readLock().lock();
         try {
@@ -63,15 +64,15 @@ public class HiveRepository {
             if (client != null) {
                 return client;
             }
-            Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
-            if (resource == null) {
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+            if (resource == null && isDefaultCatalog) {
                 throw new DdlException("get hive client failed, resource[" + resourceName + "] not exists");
             }
-            if (resource.getType() != ResourceType.HIVE && resource.getType() != ResourceType.HUDI) {
+            if (resource.getType() != ResourceType.HIVE && resource.getType() != ResourceType.HUDI && isDefaultCatalog) {
                 throw new DdlException("resource [" + resourceName + "] is not hive/hudi resource");
             }
 
-            if (resource.getType() == ResourceType.HIVE) {
+            if (resource.getType() == ResourceType.HIVE || !isDefaultCatalog) {
                 client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
             } else if (resource.getType() == ResourceType.HUDI) {
                 client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
@@ -97,7 +98,7 @@ public class HiveRepository {
             return hiveMetaCache;
         }
 
-        HiveMetaClient metaClient = getClient(resourceName);
+        HiveMetaClient metaClient = getClient(resourceName, true);
         metaCachesLock.writeLock().lock();
         try {
             hiveMetaCache = metaCaches.get(resourceName);
@@ -114,7 +115,7 @@ public class HiveRepository {
     }
 
     public Table getTable(String resourceName, String dbName, String tableName) throws DdlException {
-        HiveMetaClient client = getClient(resourceName);
+        HiveMetaClient client = getClient(resourceName, true);
         return client.getTable(dbName, tableName);
     }
 

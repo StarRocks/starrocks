@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -36,6 +36,7 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Role;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -165,7 +166,7 @@ public class CreateUserStmt extends DdlStmt {
                     scramblePassword = new byte[0];
                 }
             } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(authPlugin) &&
-                    Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
+                    GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                 // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                 // If user realm is not specified when creating user, the service principal realm will be used as
                 // the user principal realm by default.
@@ -189,7 +190,7 @@ public class CreateUserStmt extends DdlStmt {
         }
 
         // check if current user has GRANT priv on GLOBAL or DATABASE level.
-        if (!Catalog.getCurrentCatalog().getAuth()
+        if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkHasPriv(ConnectContext.get(), PrivPredicate.GRANT, PrivLevel.GLOBAL, PrivLevel.DATABASE)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
         }

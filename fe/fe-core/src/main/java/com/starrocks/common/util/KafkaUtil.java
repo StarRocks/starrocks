@@ -24,7 +24,7 @@ package com.starrocks.common.util;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
@@ -160,12 +160,12 @@ public class KafkaUtil {
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             try {
-                List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 if (backendIds.isEmpty()) {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                Backend be = Catalog.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
                 TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info

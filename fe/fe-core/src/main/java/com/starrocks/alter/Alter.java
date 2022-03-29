@@ -40,7 +40,7 @@ import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -68,6 +68,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -100,12 +101,12 @@ public class Alter {
         String tableName = stmt.getBaseIndexName();
         // check db
         String dbName = stmt.getDBName();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         // check cluster capacity
-        Catalog.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
+        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
         // check db quota
         db.checkQuota();
 
@@ -131,7 +132,7 @@ public class Alter {
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         // check db
         String dbName = stmt.getDbName();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -192,7 +193,7 @@ public class Alter {
         String dbName = dbTableName.getDb();
         final String clusterName = stmt.getClusterName();
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -204,7 +205,7 @@ public class Alter {
 
         // check cluster capacity and db quota, only need to check once.
         if (currentAlterOps.needCheckCapacity()) {
-            Catalog.getCurrentSystemInfo().checkClusterCapacity(clusterName);
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(clusterName);
             db.checkQuota();
         }
 
@@ -240,9 +241,9 @@ public class Alter {
                     if (!((DropPartitionClause) alterClause).isTempPartition()) {
                         DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                     }
-                    Catalog.getCurrentCatalog().dropPartition(db, olapTable, ((DropPartitionClause) alterClause));
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, ((DropPartitionClause) alterClause));
                 } else if (alterClause instanceof ReplacePartitionClause) {
-                    Catalog.getCurrentCatalog()
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .replaceTempPartition(db, tableName, (ReplacePartitionClause) alterClause);
                 } else if (alterClause instanceof ModifyPartitionClause) {
                     ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
@@ -287,7 +288,7 @@ public class Alter {
                 if (!((AddPartitionClause) alterClause).isTempPartition()) {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
-                Catalog.getCurrentCatalog().addPartitions(db, tableName, (AddPartitionClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();
@@ -341,7 +342,7 @@ public class Alter {
 
         // write edit log
         SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
-        Catalog.getCurrentCatalog().getEditLog().logSwapTable(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
 
         LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
                 newTblName);
@@ -351,7 +352,7 @@ public class Alter {
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable origTable = (OlapTable) db.getTable(origTblId);
         OlapTable newTbl = (OlapTable) db.getTable(newTblId);
 
@@ -391,7 +392,7 @@ public class Alter {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -432,7 +433,7 @@ public class Alter {
 
         AlterViewInfo alterViewInfo =
                 new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-        Catalog.getCurrentCatalog().getEditLog().logModifyViewDef(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
         LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
     }
 
@@ -442,7 +443,7 @@ public class Alter {
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
         try {
             View view = (View) db.getTable(tableId);
@@ -471,16 +472,16 @@ public class Alter {
     private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof TableRenameClause) {
-                Catalog.getCurrentCatalog().renameTable(db, table, (TableRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, (TableRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof RollupRenameClause) {
-                Catalog.getCurrentCatalog().renameRollup(db, table, (RollupRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, table, (RollupRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof PartitionRenameClause) {
-                Catalog.getCurrentCatalog().renamePartition(db, table, (PartitionRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, (PartitionRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
-                Catalog.getCurrentCatalog().renameColumn(db, table, (ColumnRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
                 break;
             } else {
                 Preconditions.checkState(false);
@@ -498,7 +499,7 @@ public class Alter {
                                          Map<String, String> properties)
             throws DdlException, AnalysisException {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
-        ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s state is not NORMAL");
@@ -567,11 +568,11 @@ public class Alter {
 
         // log here
         BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
-        Catalog.getCurrentCatalog().getEditLog().logBatchModifyPartition(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
     }
 
     public void replayModifyPartition(ModifyPartitionInfo info) {
-        Database db = Catalog.getCurrentCatalog().getDb(info.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(info.getDbId());
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());

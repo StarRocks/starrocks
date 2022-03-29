@@ -6,7 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -24,6 +24,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -866,7 +867,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
                                               long pathHash) {
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return 0;
@@ -1197,7 +1198,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Preconditions.checkArgument(beIds != null || bePaths != null);
 
         List<Pair<Long, Set<Long>>> result = Lists.newArrayList();
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
 
         Database db = catalog.getDbIncludeRecycleBin(dbId);
         if (db == null) {
@@ -1273,7 +1274,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     // NOTICE: call this function as little as possible, cause this will get db lock
     private boolean isTabletHealthy(Long tabletId, TabletMeta tabletMeta, List<Long> aliveBeIds) {
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDbIncludeRecycleBin(tabletMeta.getDbId());
         if (db == null) {
             return false;
@@ -1357,9 +1358,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             Preconditions.checkArgument(bePaths.first != -1 && bePaths.second.size() > 1);
         }
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Map<Pair<Long, Long>, PartitionStat> partitionStats = Maps.newHashMap();
-        List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = catalog.getLocalMetastore().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = catalog.getDbIncludeRecycleBin(dbId);
             if (db == null) {

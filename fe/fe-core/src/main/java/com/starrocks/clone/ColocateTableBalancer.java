@@ -24,7 +24,7 @@ package com.starrocks.clone;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -40,6 +40,7 @@ import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -133,14 +134,14 @@ public class ColocateTableBalancer extends MasterDaemon {
             return;
         }
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = catalog.getColocateTableIndex();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
         for (GroupId groupId : groupIds) {
-            Database db = catalog.getDbIncludeRecycleBin(groupId.dbId);
+            Database db = catalog.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -179,7 +180,7 @@ public class ColocateTableBalancer extends MasterDaemon {
      * If every replicas match the backends in group, mark that group as stable.
      */
     private void matchGroup() {
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = catalog.getColocateTableIndex();
         TabletScheduler tabletScheduler = catalog.getTabletScheduler();
 
@@ -187,7 +188,7 @@ public class ColocateTableBalancer extends MasterDaemon {
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
         for (GroupId groupId : groupIds) {
             List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-            Database db = catalog.getDbIncludeRecycleBin(groupId.dbId);
+            Database db = catalog.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -202,13 +203,13 @@ public class ColocateTableBalancer extends MasterDaemon {
             try {
                 OUT:
                 for (Long tableId : tableIds) {
-                    OlapTable olapTable = (OlapTable) catalog.getTableIncludeRecycleBin(db, tableId);
+                    OlapTable olapTable = (OlapTable) catalog.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                     if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
                         continue;
                     }
 
-                    for (Partition partition : catalog.getPartitionsIncludeRecycleBin(olapTable)) {
-                        short replicationNum = catalog.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+                    for (Partition partition : catalog.getLocalMetastore().getPartitionsIncludeRecycleBin(olapTable)) {
+                        short replicationNum = catalog.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
                                 partition.getId());
                         if (replicationNum == (short) -1) {
                             continue;

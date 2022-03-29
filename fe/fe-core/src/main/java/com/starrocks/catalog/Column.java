@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMAT;
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * This class represents the column-related metadata.
@@ -605,20 +606,20 @@ public class Column implements Writable {
         if (notNull) {
             aggregationType = AggregateType.valueOf(Text.readString(in));
 
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+            if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
                 isAggregationTypeImplicit = in.readBoolean();
             } else {
                 isAggregationTypeImplicit = false;
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
             isKey = in.readBoolean();
         } else {
             isKey = (aggregationType == null);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
             isAllowNull = in.readBoolean();
         } else {
             isAllowNull = false;
@@ -630,7 +631,7 @@ public class Column implements Writable {
         }
         stats = ColumnStats.read(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
             comment = Text.readString(in);
         } else {
             comment = "";
@@ -638,7 +639,7 @@ public class Column implements Writable {
     }
 
     public static Column read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
             Column column = new Column();
             column.readFields(in);
             return column;

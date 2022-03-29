@@ -27,12 +27,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.server.GlobalStateMgr;
 
 /*
  * SHOW PROC '/jobs/dbId/'
@@ -50,10 +51,10 @@ public class JobsProcDir implements ProcDirInterface {
     private static final String SCHEMA_CHANGE = "schema_change";
     private static final String EXPORT = "export";
 
-    private Catalog catalog;
+    private GlobalStateMgr catalog;
     private Database db;
 
-    public JobsProcDir(Catalog catalog, Database db) {
+    public JobsProcDir(GlobalStateMgr catalog, Database db) {
         this.catalog = catalog;
         this.db = db;
     }
@@ -94,7 +95,7 @@ public class JobsProcDir implements ProcDirInterface {
 
         long dbId = db.getId();
         // load
-        LoadManager loadManager = Catalog.getCurrentCatalog().getLoadManager();
+        LoadManager loadManager = GlobalStateMgr.getCurrentState().getLoadManager();
         Long pendingNum = loadManager.getLoadJobNum(com.starrocks.load.loadv2.JobState.PENDING, dbId);
         Long runningNum = loadManager.getLoadJobNum(com.starrocks.load.loadv2.JobState.LOADING, dbId);
         Long finishedNum = loadManager.getLoadJobNum(com.starrocks.load.loadv2.JobState.FINISHED, dbId);
@@ -104,7 +105,7 @@ public class JobsProcDir implements ProcDirInterface {
                 cancelledNum.toString(), totalNum.toString()));
 
         // delete
-        MaterializedViewHandler materializedViewHandler = Catalog.getCurrentCatalog().getRollupHandler();
+        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         pendingNum = materializedViewHandler.getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.PENDING, dbId);
         runningNum =
                 materializedViewHandler.getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.WAITING_TXN, dbId)
@@ -119,7 +120,7 @@ public class JobsProcDir implements ProcDirInterface {
                 cancelledNum.toString(), totalNum.toString()));
 
         // schema change
-        SchemaChangeHandler schemaChangeHandler = Catalog.getCurrentCatalog().getSchemaChangeHandler();
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         pendingNum = schemaChangeHandler.getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.PENDING, dbId);
         runningNum = schemaChangeHandler.getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.WAITING_TXN, dbId)
                 + schemaChangeHandler.getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.RUNNING, dbId);
@@ -130,7 +131,7 @@ public class JobsProcDir implements ProcDirInterface {
                 finishedNum.toString(), cancelledNum.toString(), totalNum.toString()));
 
         // export
-        ExportMgr exportMgr = Catalog.getCurrentCatalog().getExportMgr();
+        ExportMgr exportMgr = GlobalStateMgr.getCurrentState().getExportMgr();
         pendingNum = exportMgr.getJobNum(ExportJob.JobState.PENDING, dbId);
         runningNum = exportMgr.getJobNum(ExportJob.JobState.EXPORTING, dbId);
         finishedNum = exportMgr.getJobNum(ExportJob.JobState.FINISHED, dbId);

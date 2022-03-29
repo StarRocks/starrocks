@@ -28,7 +28,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -52,6 +52,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -78,6 +79,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class RollupJob extends AlterJob {
     private static final Logger LOG = LogManager.getLogger(RollupJob.class);
@@ -315,7 +318,7 @@ public class RollupJob extends AlterJob {
         if (!clearFailed && batchClearAlterTask != null) {
             return 1;
         }
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             cancelMsg = "db[" + dbId + "] does not exist";
             LOG.warn(cancelMsg);
@@ -381,7 +384,7 @@ public class RollupJob extends AlterJob {
         // here we just rejoin tasks to AgentTaskQueue.
         // task report process will later resend these tasks
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             cancelMsg = "db[" + dbId + "] does not exist";
             LOG.warn(cancelMsg);
@@ -461,7 +464,7 @@ public class RollupJob extends AlterJob {
                     AgentTaskQueue.removeTask(backendId, TTaskType.ROLLUP, rollupTabletId);
                 }
 
-                Catalog.getCurrentInvertedIndex().deleteTablet(rollupTabletId);
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(rollupTabletId);
             }
             LOG.debug("rollup job[{}]'s all tasks removed", tableId);
         }
@@ -488,7 +491,7 @@ public class RollupJob extends AlterJob {
         this.finishedTime = System.currentTimeMillis();
 
         // log
-        Catalog.getCurrentCatalog().getEditLog().logCancelRollup(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logCancelRollup(this);
         LOG.debug("cancel rollup job[{}] finished. because: {}", tableId, cancelMsg);
     }
 
@@ -596,7 +599,7 @@ public class RollupJob extends AlterJob {
             return 0;
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             cancelMsg = "Db[" + dbId + "] does not exist";
             LOG.warn(cancelMsg);
@@ -730,13 +733,13 @@ public class RollupJob extends AlterJob {
 
                 this.state = JobState.FINISHING;
                 this.transactionId =
-                        Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             }
         } finally {
             db.writeUnlock();
         }
 
-        Catalog.getCurrentCatalog().getEditLog().logFinishingRollup(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishingRollup(this);
         LOG.info("rollup job[{}] is finishing.", this.getTableId());
 
         return 1;
@@ -759,7 +762,7 @@ public class RollupJob extends AlterJob {
         db.writeLock();
         try {
             // set state
-            TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
                 Partition partition = olapTable.getPartition(entry.getKey());
@@ -767,7 +770,7 @@ public class RollupJob extends AlterJob {
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                         partition.getId()).getStorageMedium();
 
-                if (!Catalog.isCheckpointThread()) {
+                if (!GlobalStateMgr.isCheckpointThread()) {
                     MaterializedIndex rollupIndex = entry.getValue();
                     TabletMeta tabletMeta = new TabletMeta(dbId, tableId, entry.getKey(), rollupIndexId,
                             rollupSchemaHash, medium);
@@ -791,7 +794,7 @@ public class RollupJob extends AlterJob {
 
     @Override
     public void replayFinishing(Database db) {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
@@ -800,7 +803,7 @@ public class RollupJob extends AlterJob {
                 MaterializedIndex rollupIndex = entry.getValue();
                 Partition partition = olapTable.getPartition(partitionId);
 
-                if (!Catalog.isCheckpointThread()) {
+                if (!GlobalStateMgr.isCheckpointThread()) {
                     // Here we have to use replicas in inverted index to rebuild the rollupIndex's tablet.
                     // Because the rollupIndex here is read from edit log, so the replicas in it are
                     // not the same objects as in inverted index.
@@ -897,11 +900,11 @@ public class RollupJob extends AlterJob {
                 return;
             }
 
-            if (!Catalog.isCheckpointThread()) {
+            if (!GlobalStateMgr.isCheckpointThread()) {
                 // remove from inverted index
                 for (MaterializedIndex rollupIndex : partitionIdToRollupIndex.values()) {
                     for (Tablet tablet : rollupIndex.getTablets()) {
-                        Catalog.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                        GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
                     }
                 }
             }
@@ -918,7 +921,7 @@ public class RollupJob extends AlterJob {
 
     @Override
     public void finishJob() {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             cancelMsg = String.format("database %d does not exist", dbId);
             LOG.warn(cancelMsg);
@@ -1098,7 +1101,7 @@ public class RollupJob extends AlterJob {
 
         rollupShortKeyColumnCount = in.readShort();
         rollupStorageType = TStorageType.valueOf(Text.readString(in));
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             boolean hasRollKeysType = in.readBoolean();
             if (hasRollKeysType) {
                 rollupKeysType = TKeysType.valueOf(Text.readString(in));

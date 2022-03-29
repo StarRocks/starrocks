@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -53,7 +53,7 @@ public class ShowRolesStmt extends ShowStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
         }
     }

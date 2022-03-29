@@ -27,7 +27,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -38,6 +38,8 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class Role implements Writable {
     // operator is responsible for operating cluster, such as add/drop node
@@ -166,7 +168,7 @@ public class Role implements Writable {
             PrivBitSet privs = PrivBitSet.read(in);
             tblPatternToPrivs.put(tblPattern, privs);
         }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
             size = in.readInt();
             for (int i = 0; i < size; i++) {
                 ResourcePattern resourcePattern = ResourcePattern.read(in);

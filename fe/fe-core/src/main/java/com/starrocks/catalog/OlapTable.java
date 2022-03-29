@@ -49,6 +49,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
@@ -73,6 +74,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.zip.Adler32;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A OlaptableFamilyGroup contains several tableFamily.
@@ -139,7 +142,7 @@ public class OlapTable extends Table {
         // for persist
         super(TableType.OLAP);
 
-        this.clusterId = Catalog.getCurrentCatalog().getClusterId();
+        this.clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
 
         this.bfColumns = null;
         this.bfFpp = 0;
@@ -159,7 +162,7 @@ public class OlapTable extends Table {
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                Catalog.getCurrentCatalog().getClusterId(), indexes);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -411,7 +414,7 @@ public class OlapTable extends Table {
         }
     }
 
-    public Status resetIdsForRestore(Catalog catalog, Database db, int restoreReplicationNum) {
+    public Status resetIdsForRestore(GlobalStateMgr catalog, Database db, int restoreReplicationNum) {
         // table id
         id = catalog.getNextId();
 
@@ -490,7 +493,7 @@ public class OlapTable extends Table {
                     idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
                     // replicas
-                    List<Long> beIds = Catalog.getCurrentSystemInfo()
+                    List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
                                     true, true,
                                     db.getClusterName());
@@ -680,13 +683,13 @@ public class OlapTable extends Table {
 
             if (!isForceDrop) {
                 // recycle partition
-                Catalog.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
+                GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
                         rangePartitionInfo.getRange(partition.getId()),
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()));
             } else if (!reserveTablets) {
-                Catalog.getCurrentCatalog().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
             }
 
             // drop partition info
@@ -1062,7 +1065,7 @@ public class OlapTable extends Table {
             long indexId = in.readLong();
             this.indexNameToId.put(indexName, indexId);
 
-            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_75) {
+            if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_75) {
                 // schema
                 int colCount = in.readInt();
                 List<Column> schema = new LinkedList<>();
@@ -1094,7 +1097,7 @@ public class OlapTable extends Table {
         }
 
         // partition and distribution info
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
             keysType = KeysType.valueOf(Text.readString(in));
         } else {
             keysType = KeysType.AGG_KEYS;
@@ -1131,7 +1134,7 @@ public class OlapTable extends Table {
             nameToPartition.put(partition.getName(), partition);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_9) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_9) {
             if (in.readBoolean()) {
                 int bfColumnCount = in.readInt();
                 bfColumns = Sets.newHashSet();
@@ -1143,13 +1146,13 @@ public class OlapTable extends Table {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_46) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_46) {
             if (in.readBoolean()) {
                 colocateGroup = Text.readString(in);
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_57) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_57) {
             baseIndexId = in.readLong();
         } else {
             // the old table use table id as base index id
@@ -1157,22 +1160,22 @@ public class OlapTable extends Table {
         }
 
         // read indexes
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_70) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_70) {
             if (in.readBoolean()) {
                 this.indexes = TableIndexes.read(in);
             }
         }
         // tableProperty
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_71) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_71) {
             if (in.readBoolean()) {
                 tableProperty = TableProperty.read(in);
             }
         }
 
         // temp partitions
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
             tempPartitions = TempPartitions.read(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
+            if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
                 RangePartitionInfo tempRangeInfo = tempPartitions.getPartitionInfo();
                 if (tempRangeInfo != null) {
                     for (long partitionId : tempRangeInfo.getIdToRange(false).keySet()) {
@@ -1294,8 +1297,8 @@ public class OlapTable extends Table {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        boolean isStable = isStable(Catalog.getCurrentSystemInfo(),
-                Catalog.getCurrentCatalog().getTabletScheduler(),
+        boolean isStable = isStable(GlobalStateMgr.getCurrentSystemInfo(),
+                GlobalStateMgr.getCurrentState().getTabletScheduler(),
                 clusterName);
         if (!isStable) {
             throw new DdlException("table [" + name + "] is not stable."

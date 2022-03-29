@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -104,13 +104,13 @@ public class DropMaterializedViewStmt extends DdlStmt {
             dbMvName.setDb(analyzer.getDefaultDb());
         }
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), getDbName(), PrivPredicate.DROP)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), getDbName(), PrivPredicate.DROP)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
         }
 
         dbMvName.analyze(analyzer);
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbMvName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbMvName.getDb());
         if (dbTblName == null) {
             boolean hasMv = false;
             for (Table table : db.getTables()) {

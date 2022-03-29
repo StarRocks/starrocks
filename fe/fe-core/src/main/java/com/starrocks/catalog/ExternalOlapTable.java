@@ -14,6 +14,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -261,12 +262,12 @@ public class ExternalOlapTable extends OlapTable {
 
     @Override
     public void onCreate() {
-        Catalog.getCurrentCatalog().getStarRocksRepository().registerTable(this);
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().registerTable(this);
     }
 
     @Override
     public void onDrop() {
-        Catalog.getCurrentCatalog().getStarRocksRepository().deRegisterTable(this);
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().deRegisterTable(this);
     }
 
     @Override
@@ -304,7 +305,7 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.setDbId(meta.getDb_id());
         externalTableInfo.setTableId(meta.getTable_id());
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new DdlException("database " + dbId + " does not exist");
         }
@@ -492,7 +493,7 @@ public class ExternalOlapTable extends OlapTable {
                 addPartition(partition);
             }
 
-            SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
                 Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
                 if (backend == null) {

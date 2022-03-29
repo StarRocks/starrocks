@@ -21,7 +21,7 @@
 
 package com.starrocks.system;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -32,6 +32,8 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class Frontend implements Writable {
     private FrontendNodeType role;
@@ -160,10 +162,10 @@ public class Frontend implements Writable {
         }
         host = Text.readString(in);
         editLogPort = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
             nodeName = Text.readString(in);
         } else {
-            nodeName = Catalog.genFeNodeName(host, editLogPort, true /* old style */);
+            nodeName = GlobalStateMgr.getCurrentState().getNodeMgr().genFeNodeName(host, editLogPort, true /* old style */);
         }
     }
 

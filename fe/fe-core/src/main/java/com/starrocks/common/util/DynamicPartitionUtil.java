@@ -24,7 +24,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.OlapTable;
@@ -232,10 +232,10 @@ public class DynamicPartitionUtil {
         if (olapTable.getTableProperty() != null
                 && olapTable.getTableProperty().getDynamicPartitionProperty() != null) {
             if (olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
-                Catalog.getCurrentCatalog().getDynamicPartitionScheduler()
+                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                         .registerDynamicPartitionTable(dbId, olapTable.getId());
             } else {
-                Catalog.getCurrentCatalog().getDynamicPartitionScheduler()
+                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                         .removeDynamicPartitionTable(dbId, olapTable.getId());
             }
         }

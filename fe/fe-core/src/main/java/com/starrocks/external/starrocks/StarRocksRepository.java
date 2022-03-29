@@ -3,7 +3,7 @@
 package com.starrocks.external.starrocks;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Table;
@@ -13,6 +13,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,7 +57,7 @@ public class StarRocksRepository extends MasterDaemon {
     }
 
     public void registerTable(ExternalOlapTable srTable) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         srTables.put(srTable.getId(), srTable);
@@ -70,7 +71,7 @@ public class StarRocksRepository extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (Catalog.getCurrentCatalog().getRole() != FrontendNodeType.FOLLOWER) {
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getRole() != FrontendNodeType.FOLLOWER) {
             return;
         }
         for (ExternalOlapTable table : srTables.values()) {
@@ -82,13 +83,13 @@ public class StarRocksRepository extends MasterDaemon {
     // the rest of tables will be added or removed by replaying edit log
     // when fe is start to load image, should call this method to init the state store
     public void loadTableFromCatalog() {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
 
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
-            Database database = Catalog.getCurrentCatalog().getDb(dbId);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
 
             List<Table> tables = database.getTables();
             for (Table table : tables) {

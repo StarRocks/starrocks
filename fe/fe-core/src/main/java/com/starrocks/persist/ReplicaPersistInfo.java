@@ -21,13 +21,15 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class ReplicaPersistInfo implements Writable {
 
@@ -326,7 +328,7 @@ public class ReplicaPersistInfo implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         opType = ReplicaOperationType.DEFAULT_OP;
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             opType = ReplicaOperationType.findByValue(in.readInt());
             if (opType == null) {
                 throw new IOException("could not parse operation type from replica info");
@@ -337,7 +339,7 @@ public class ReplicaPersistInfo implements Writable {
             in.readLong(); // read a version_hash for compatibility
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {
             schemaHash = in.readInt();
         }
     }

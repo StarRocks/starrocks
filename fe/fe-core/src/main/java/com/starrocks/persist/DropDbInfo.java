@@ -22,7 +22,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -31,6 +31,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class DropDbInfo implements Writable {
     @SerializedName(value = "dbName")
@@ -60,7 +62,7 @@ public class DropDbInfo implements Writable {
     }
 
     public static DropDbInfo read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_89) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_89) {
             DropDbInfo info = new DropDbInfo();
             info.readFields(in);
             return info;

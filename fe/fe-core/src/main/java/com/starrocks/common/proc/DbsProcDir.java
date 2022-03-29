@@ -24,13 +24,13 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,9 +46,9 @@ public class DbsProcDir implements ProcDirInterface {
             .add("LastConsistencyCheckTime").add("ReplicaQuota")
             .build();
 
-    private Catalog catalog;
+    private GlobalStateMgr catalog;
 
-    public DbsProcDir(Catalog catalog) {
+    public DbsProcDir(GlobalStateMgr catalog) {
         this.catalog = catalog;
     }
 
@@ -84,7 +84,7 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = catalog.getDbNames();
+        List<String> dbNames = catalog.getLocalMetastore().getDbNames();
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;

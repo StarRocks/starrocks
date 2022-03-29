@@ -22,7 +22,7 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
@@ -32,6 +32,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * PersistInfo for ColocateTableIndex
@@ -103,7 +105,7 @@ public class ColocatePersistInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         tableId = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
             long grpId = in.readLong();
             long dbId = in.readLong();
             groupId = new GroupId(dbId, grpId);

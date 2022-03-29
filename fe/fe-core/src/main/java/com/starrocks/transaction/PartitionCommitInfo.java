@@ -23,7 +23,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -33,6 +33,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class PartitionCommitInfo implements Writable {
 
@@ -82,7 +84,7 @@ public class PartitionCommitInfo implements Writable {
     }
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_88) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_88) {
             long partitionId = in.readLong();
             long version = in.readLong();
             in.readLong();

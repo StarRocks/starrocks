@@ -20,7 +20,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -55,7 +55,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
             NConnectContext context = new NConnectContext(connection);
-            context.setCatalog(Catalog.getCurrentCatalog());
+            context.setCatalog(GlobalStateMgr.getCurrentState());
             connectScheduler.submit(context);
 
             try {

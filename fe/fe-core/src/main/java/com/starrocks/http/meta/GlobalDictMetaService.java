@@ -3,7 +3,7 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -13,6 +13,7 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -80,7 +81,7 @@ public class GlobalDictMetaService {
 
                 long isEnable =  Long.valueOf(request.getSingleParameter(ENABLE).trim());
 
-                Catalog.getCurrentCatalog().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
                 writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);

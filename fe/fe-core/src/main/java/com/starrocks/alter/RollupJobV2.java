@@ -32,7 +32,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.MVColumnItem;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -60,6 +60,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -83,6 +84,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * Version 2 of RollupJob.
@@ -187,7 +190,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
 
         LOG.info("begin to send create rollup replica tasks. job: {}", jobId);
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
@@ -302,11 +305,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         this.watershedTxnId =
-                Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
 
         // write edit log
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer rollup job {} state to {}, watershed txn id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -344,7 +347,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -415,7 +418,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // must check if db or table still exist first.
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
@@ -490,7 +493,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("rollup job finished: {}", jobId);
     }
 
@@ -524,7 +527,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         return true;
     }
 
@@ -532,8 +535,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         // remove all rollup indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.writeLock();
             try {
@@ -557,7 +560,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return Catalog.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -567,7 +570,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * These changes should be same as changes in RollupHander.processAddRollup()
      */
     private void replayPending(RollupJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -593,7 +596,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     private void addTabletToInvertedIndex(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // add all rollup replicas to tablet inverted index
         for (Long partitionId : partitionIdToRollupIndex.keySet()) {
             MaterializedIndex rollupIndex = partitionIdToRollupIndex.get(partitionId);
@@ -615,7 +618,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runPendingJob()
      */
     private void replayWaitingTxn(RollupJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             // database may be dropped before replaying this log. just return
             return;
@@ -645,7 +648,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * Should replay all changes in runRuningJob()
      */
     private void replayFinished(RollupJobV2 replayedJob) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.writeLock();
             try {
@@ -766,7 +769,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * If the meta version >=86, it will be deserialized by the `read` of AlterJobV2 rather then here.
      */
     public static RollupJobV2 read(DataInput in) throws IOException {
-        Preconditions.checkState(Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86);
+        Preconditions.checkState(getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86);
         RollupJobV2 rollupJob = new RollupJobV2();
         rollupJob.readFields(in);
         return rollupJob;
@@ -808,7 +811,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         rollupShortKeyColumnCount = in.readShort();
 
         watershedTxnId = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_85) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_85) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }
@@ -828,12 +831,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 SqlModeHelper.MODE_DEFAULT));
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             return;
         }
         connectContext.setDatabase(db.getFullName());
-        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), connectContext);
         analyzer.setIgnoreCast();
         CreateMaterializedViewStmt stmt = null;
         try {

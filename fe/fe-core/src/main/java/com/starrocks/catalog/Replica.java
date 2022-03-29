@@ -33,6 +33,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Comparator;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 /**
  * This class represents the olap replica related metadata.
  */
@@ -488,7 +490,7 @@ public class Replica implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         state = ReplicaState.valueOf(Text.readString(in));
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             lastFailedVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             lastSuccessVersion = in.readLong();

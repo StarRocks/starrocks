@@ -8,7 +8,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -143,7 +143,7 @@ public class StatisticExecutor {
             return Collections.emptyList();
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
 
         OlapTable olapTable = (OlapTable) table;
@@ -393,7 +393,7 @@ public class StatisticExecutor {
     }
 
     private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         long count =
@@ -410,7 +410,7 @@ public class StatisticExecutor {
     private String buildFullInsertSQL(Long dbId, Long tableId, List<String> columnNames) {
         StringBuilder builder = new StringBuilder(INSERT_STATISTIC_TEMPLATE).append(" ");
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         for (String name : columnNames) {
@@ -447,7 +447,7 @@ public class StatisticExecutor {
     }
 
     private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         long hitRows = 1;

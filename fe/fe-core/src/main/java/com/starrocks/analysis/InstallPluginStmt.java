@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,6 +30,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.plugin.DynamicPluginLoader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
 
@@ -65,7 +66,7 @@ public class InstallPluginStmt extends DdlStmt {
         }
 
         // check operation privilege
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
         }
     }

@@ -40,7 +40,7 @@ import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
@@ -174,7 +174,7 @@ public class BDBEnvironment {
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
-                if (!selfNodeHostPort.equals(helperHostPort) && Catalog.getCurrentCatalog().isElectable()) {
+                if (!selfNodeHostPort.equals(helperHostPort) && GlobalStateMgr.getCurrentState().isElectable()) {
                     HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
                     InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
                             selfNodeAddress.getPort());
@@ -186,7 +186,7 @@ public class BDBEnvironment {
 
                 // get a BDBHA object and pass the reference to Catalog
                 HAProtocol protocol = new BDBHA(this, selfNodeName);
-                Catalog.getCurrentCatalog().setHaProtocol(protocol);
+                GlobalStateMgr.getCurrentState().setHaProtocol(protocol);
 
                 // start state change listener
                 StateChangeListener listener = new BDBStateChangeListener();

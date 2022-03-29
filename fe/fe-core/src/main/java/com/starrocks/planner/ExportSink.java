@@ -22,7 +22,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.thrift.TDataSink;
@@ -85,7 +85,7 @@ public class ExportSink extends DataSink {
         TDataSink result = new TDataSink(TDataSinkType.EXPORT_SINK);
         TExportSink tExportSink = new TExportSink(TFileType.FILE_BROKER, exportPath, columnSeparator, rowDelimiter);
 
-        FsBroker broker = Catalog.getCurrentCatalog().getBrokerMgr().getAnyBroker(brokerDesc.getName());
+        FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getAnyBroker(brokerDesc.getName());
         if (broker != null) {
             tExportSink.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
         }

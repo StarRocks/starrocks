@@ -26,13 +26,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -47,6 +48,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * This class extends the primary identifier of a Backend with ephemeral state,
@@ -430,7 +433,7 @@ public class Backend implements Writable {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
-                Catalog.getCurrentSystemInfo().updatePathInfo(new ArrayList<>(disks.values()), Lists.newArrayList());
+                GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(new ArrayList<>(disks.values()), Lists.newArrayList());
             }
         }
 
@@ -495,9 +498,9 @@ public class Backend implements Writable {
         if (isChanged) {
             // update disksRef
             disksRef = ImmutableMap.copyOf(newDiskInfos);
-            Catalog.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
+            GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
             // log disk changing
-            Catalog.getCurrentCatalog().getEditLog().logBackendStateChange(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }
     }
 
@@ -541,18 +544,18 @@ public class Backend implements Writable {
         heartbeatPort = in.readInt();
         bePort = in.readInt();
         httpPort = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_31) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_31) {
             beRpcPort = in.readInt();
         }
         isAlive.set(in.readBoolean());
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 5) {
+        if (getCurrentCatalogJournalVersion() >= 5) {
             isDecommissioned.set(in.readBoolean());
         }
 
         lastUpdateMs = in.readLong();
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 2) {
+        if (getCurrentCatalogJournalVersion() >= 2) {
             lastStartTime = in.readLong();
 
             Map<String, DiskInfo> disks = Maps.newHashMap();
@@ -565,7 +568,7 @@ public class Backend implements Writable {
 
             disksRef = ImmutableMap.copyOf(disks);
         }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
             ownerClusterName = Text.readString(in);
             backendState = in.readInt();
             decommissionType = in.readInt();
@@ -575,7 +578,7 @@ public class Backend implements Writable {
             decommissionType = DecommissionType.SystemDecommission.ordinal();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_40) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_40) {
             brpcPort = in.readInt();
         }
     }

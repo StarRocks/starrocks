@@ -109,8 +109,8 @@ public class MasterOpExecutor {
 
     // Send request to Master
     private void forward() throws Exception {
-        String masterHost = ctx.getCatalog().getMasterIp();
-        int masterRpcPort = ctx.getCatalog().getMasterRpcPort();
+        String masterHost = ctx.getCatalog().getNodeMgr().getMasterIp();
+        int masterRpcPort = ctx.getCatalog().getNodeMgr().getMasterRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
 
         FrontendService.Client client = null;

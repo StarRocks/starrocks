@@ -24,7 +24,7 @@ package com.starrocks.clone;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -107,7 +107,7 @@ public class BeLoadRebalancer extends Rebalancer {
         LOG.info("get number of low load paths: {}, with medium: {}", numOfLowPaths, medium);
 
         int clusterAvailableBEnum = infoService.getClusterBackendIds(clusterName, true).size();
-        ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         // choose tablets from high load backends.
         // BackendLoadStatistic is sorted by load score in ascend order,
         // so we need to traverse it from last to first

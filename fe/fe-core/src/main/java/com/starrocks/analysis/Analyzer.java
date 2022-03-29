@@ -29,7 +29,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -52,6 +52,7 @@ import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
 import com.starrocks.rewrite.ReplaceDateFormatRule;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -179,7 +180,7 @@ public class Analyzer {
     // them properties of the tuple descriptor itself.
     private static class GlobalState {
         private final DescriptorTable descTbl = new DescriptorTable();
-        private final Catalog catalog;
+        private final GlobalStateMgr catalog;
         private final IdGenerator<ExprId> conjunctIdGenerator = ExprId.createGenerator();
         private final ConnectContext context;
 
@@ -248,7 +249,7 @@ public class Analyzer {
         // Expr rewriter for normalizing and rewriting expressions.
         private final ExprRewriter exprRewriter_;
 
-        public GlobalState(Catalog catalog, ConnectContext context) {
+        public GlobalState(GlobalStateMgr catalog, ConnectContext context) {
             this.catalog = catalog;
             this.context = context;
             List<ExprRewriteRule> rules = Lists.newArrayList();
@@ -297,7 +298,7 @@ public class Analyzer {
     // conjunct evaluating to false.
     private boolean hasEmptySpjResultSet_ = false;
 
-    public Analyzer(Catalog catalog, ConnectContext context) {
+    public Analyzer(GlobalStateMgr catalog, ConnectContext context) {
         ancestors = Lists.newArrayList();
         globalState = new GlobalState(catalog, context);
     }
@@ -1024,7 +1025,7 @@ public class Analyzer {
         return globalState.descTbl;
     }
 
-    public Catalog getCatalog() {
+    public GlobalStateMgr getCatalog() {
         return globalState.catalog;
     }
 

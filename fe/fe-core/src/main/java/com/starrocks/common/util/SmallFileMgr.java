@@ -28,12 +28,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.FileInputStream;
@@ -167,7 +170,7 @@ public class SmallFileMgr implements Writable {
 
     public void createFile(CreateFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -177,7 +180,7 @@ public class SmallFileMgr implements Writable {
 
     public void dropFile(DropFileStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -208,7 +211,7 @@ public class SmallFileMgr implements Writable {
             smallFiles.addFile(fileName, smallFile);
             idToFiles.put(smallFile.id, smallFile);
 
-            Catalog.getCurrentCatalog().getEditLog().logCreateSmallFile(smallFile);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSmallFile(smallFile);
 
             LOG.info("finished to add file {} from url {}. current file number: {}", fileName, downloadUrl,
                     idToFiles.size());
@@ -243,7 +246,7 @@ public class SmallFileMgr implements Writable {
                 idToFiles.remove(smallFile.id);
 
                 if (!isReplay) {
-                    Catalog.getCurrentCatalog().getEditLog().logDropSmallFile(smallFile);
+                    GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(smallFile);
                 }
 
                 LOG.info("finished to remove file {}. current file number: {}. is replay: {}",
@@ -364,7 +367,7 @@ public class SmallFileMgr implements Writable {
             }
 
             SmallFile smallFile;
-            long fileId = Catalog.getCurrentCatalog().getNextId();
+            long fileId = GlobalStateMgr.getCurrentState().getNextId();
             if (saveContent) {
                 smallFile = new SmallFile(dbId, catalog, fileName, fileId, base64Content, bytesRead,
                         checksum, true /* is content */);
@@ -463,7 +466,7 @@ public class SmallFileMgr implements Writable {
     }
 
     public List<List<String>> getInfo(String dbName) throws DdlException {
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -522,5 +525,13 @@ public class SmallFileMgr implements Writable {
                 e.printStackTrace();
             }
         }
+    }
+
+    public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_52) {
+            readFields(in);
+        }
+        LOG.info("finished replay smallFiles from image");
+        return checksum;
     }
 }

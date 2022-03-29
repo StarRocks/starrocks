@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.system.Backend;
@@ -54,7 +54,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = Catalog.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);

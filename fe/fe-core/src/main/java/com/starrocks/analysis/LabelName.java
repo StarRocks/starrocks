@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -37,6 +37,8 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 // label name used to identify a load job
 public class LabelName implements Writable {
@@ -106,7 +108,7 @@ public class LabelName implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             dbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             dbName = Text.readString(in);

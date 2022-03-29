@@ -34,6 +34,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 public class FsBroker implements Writable, Comparable<FsBroker> {
     @SerializedName(value = "ip")
     public String ip;
@@ -141,7 +143,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_73) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_73) {
             FsBroker broker = new FsBroker();
             broker.readFields(in);
             return broker;

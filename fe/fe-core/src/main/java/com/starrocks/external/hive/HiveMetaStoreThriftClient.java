@@ -752,7 +752,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public List<String> getAllDatabases() throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_all_databases();
     }
 
     @Override

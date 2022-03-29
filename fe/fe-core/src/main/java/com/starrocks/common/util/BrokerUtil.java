@@ -24,7 +24,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
@@ -433,7 +433,7 @@ public class BrokerUtil {
         FsBroker broker = null;
         try {
             String localIP = FrontendOptions.getLocalHostAddress();
-            broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(brokerDesc.getName(), localIP);
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerDesc.getName(), localIP);
         } catch (AnalysisException e) {
             throw new UserException(e.getMessage());
         }

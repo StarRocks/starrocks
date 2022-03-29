@@ -205,6 +205,7 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -526,7 +527,7 @@ public class Catalog {
         this.alter = new Alter();
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
-        this.backupHandler = new BackupHandler(this);
+        this.backupHandler = new BackupHandler(GlobalStateMgr.getCurrentState());
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteHandler = new DeleteHandler();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
@@ -568,13 +569,13 @@ public class Catalog {
         this.brokerMgr = new BrokerMgr();
         this.resourceMgr = new ResourceMgr();
 
-        this.globalTransactionMgr = new GlobalTransactionMgr(this);
+        this.globalTransactionMgr = new GlobalTransactionMgr(GlobalStateMgr.getCurrentState());
         this.tabletStatMgr = new TabletStatMgr();
 
         this.auth = new Auth();
         this.domainResolver = new DomainResolver(auth);
 
-        this.workGroupMgr = new WorkGroupMgr(this);
+        this.workGroupMgr = new WorkGroupMgr(GlobalStateMgr.getCurrentState());
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
@@ -585,8 +586,8 @@ public class Catalog {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.tabletScheduler = new TabletScheduler(this, systemInfo, tabletInvertedIndex, stat);
-        this.tabletChecker = new TabletChecker(this, systemInfo, tabletScheduler, stat);
+        this.tabletScheduler = new TabletScheduler(GlobalStateMgr.getCurrentState(), systemInfo, tabletInvertedIndex, stat);
+        this.tabletChecker = new TabletChecker(GlobalStateMgr.getCurrentState(), systemInfo, tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
                 new MasterTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
@@ -1875,7 +1876,7 @@ public class Catalog {
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_42) {
             getBackupHandler().readFields(dis);
         }
-        getBackupHandler().setCatalog(this);
+//        getBackupHandler().setCatalog(this);
         LOG.info("finished replay backupHandler from image");
         return checksum;
     }
@@ -2525,7 +2526,7 @@ public class Catalog {
                 break;
             }
             hasLog = true;
-            EditLog.loadJournal(this, entity);
+            EditLog.loadJournal(GlobalStateMgr.getCurrentState(), entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
             if (feType != FrontendNodeType.MASTER) {

@@ -14,13 +14,17 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,7 +40,8 @@ import java.util.stream.Collectors;
 
 // WorkGroupMgr is employed by Catalog to manage WorkGroup in FE.
 public class WorkGroupMgr implements Writable {
-    private Catalog catalog;
+    private static final Logger LOG = LogManager.getLogger(WorkGroupMgr.class);
+    private GlobalStateMgr catalog;
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
     private Map<Long, WorkGroupClassifier> classifierMap = new HashMap<>();
@@ -46,7 +51,7 @@ public class WorkGroupMgr implements Writable {
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
 
-    WorkGroupMgr(Catalog catalog) {
+    public WorkGroupMgr(GlobalStateMgr catalog) {
         this.catalog = catalog;
     }
 
@@ -80,17 +85,17 @@ public class WorkGroupMgr implements Writable {
                     return;
                 }
             }
-            wg.setId(catalog.getCurrentCatalog().getNextId());
+            wg.setId(GlobalStateMgr.getCurrentState().getNextId());
             for (WorkGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setWorkgroupId(wg.getId());
-                classifier.setId(catalog.getCurrentCatalog().getNextId());
+                classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
                 classifierMap.put(classifier.getId(), classifier);
             }
             workGroupMap.put(wg.getName(), wg);
             id2WorkGroupMap.put(wg.getId(), wg);
             wg.setVersion(wg.getId());
             WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
-            catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+            GlobalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
             workGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
@@ -100,9 +105,9 @@ public class WorkGroupMgr implements Writable {
     public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) {
         List<List<String>> rows;
         if (stmt.getName() != null) {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
+            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
         } else {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
+            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
         }
         return rows;
     }
@@ -118,7 +123,7 @@ public class WorkGroupMgr implements Writable {
     private String getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
-        String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
+        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
         if (qualifiedRoleName != null) {
             //default_cluster:role
@@ -214,7 +219,7 @@ public class WorkGroupMgr implements Writable {
                 List<WorkGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (WorkGroupClassifier classifier : newAddedClassifiers) {
                     classifier.setWorkgroupId(wg.getId());
-                    classifier.setId(catalog.getCurrentCatalog().getNextId());
+                    classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
                     classifierMap.put(classifier.getId(), classifier);
                 }
                 wg.getClassifiers().addAll(newAddedClassifiers);
@@ -257,10 +262,10 @@ public class WorkGroupMgr implements Writable {
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterWorkGroupStmt.AlterProperties) {
-                wg.setVersion(catalog.getCurrentCatalog().getNextId());
+                wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
             }
             WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg);
-            catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+            GlobalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
             workGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
@@ -283,9 +288,9 @@ public class WorkGroupMgr implements Writable {
     public void dropWorkGroupUnlocked(String name) {
         WorkGroup wg = workGroupMap.get(name);
         removeWorkGroupInternal(name);
-        wg.setVersion(catalog.getCurrentCatalog().getNextId());
+        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
-        catalog.getCurrentCatalog().getEditLog().logWorkGroupOp(workGroupOp);
+        GlobalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
         workGroupOps.add(workGroupOp.toThrift());
     }
 
@@ -389,5 +394,15 @@ public class WorkGroupMgr implements Writable {
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<WorkGroup> workGroups;
+    }
+
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
     }
 }

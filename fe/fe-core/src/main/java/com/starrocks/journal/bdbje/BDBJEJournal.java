@@ -29,7 +29,7 @@ import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
@@ -78,9 +78,9 @@ public class BDBJEJournal implements Journal {
      * node name is ip_port (the port is edit_log_port)
      */
     private void initBDBEnv(String nodeName) {
-        environmentPath = Catalog.getCurrentCatalog().getBdbDir();
+        environmentPath = GlobalStateMgr.getCurrentState().getBdbDir();
         try {
-            Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
+            Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
             if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
                 System.exit(-1);
@@ -266,11 +266,11 @@ public class BDBJEJournal implements Journal {
         if (bdbEnvironment == null) {
             File dbEnv = new File(environmentPath);
             bdbEnvironment = new BDBEnvironment();
-            Pair<String, Integer> helperNode = Catalog.getCurrentCatalog().getHelperNode();
+            Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
             String helperHostPort = helperNode.first + ":" + helperNode.second;
             try {
                 bdbEnvironment.setup(dbEnv, selfNodeName, selfNodeHostPort,
-                        helperHostPort, Catalog.getCurrentCatalog().isElectable());
+                        helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
             } catch (Exception e) {
                 LOG.error("catch an exception when setup bdb environment. will exit.", e);
                 System.exit(-1);
@@ -278,7 +278,7 @@ public class BDBJEJournal implements Journal {
         }
 
         // Open a new journal database or get last existing one as current journal database
-        Pair<String, Integer> helperNode = Catalog.getCurrentCatalog().getHelperNode();
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
         List<Long> dbNames = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
@@ -293,9 +293,9 @@ public class BDBJEJournal implements Journal {
                      *  This is the very first time to open. Usually, we will open a new database named "1".
                      *  But when we start cluster with an image file copied from other cluster,
                      *  here we should open database with name image max journal id + 1.
-                     *  (default Catalog.getCurrentCatalog().getReplayedJournalId() is 0)
+                     *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
                      */
-                    String dbName = Long.toString(Catalog.getCurrentCatalog().getReplayedJournalId() + 1);
+                    String dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
                     LOG.info("the very first time to open bdb, dbname is {}", dbName);
                     currentJournalDB = bdbEnvironment.openDatabase(dbName);
                 } else {
@@ -323,7 +323,7 @@ public class BDBJEJournal implements Journal {
                     System.exit(-1);
                 }
                 bdbEnvironment.setup(new File(environmentPath), selfNodeName, selfNodeHostPort,
-                        helperNode.first + ":" + helperNode.second, Catalog.getCurrentCatalog().isElectable());
+                        helperNode.first + ":" + helperNode.second, GlobalStateMgr.getCurrentState().isElectable());
             }
         }
     }

@@ -21,7 +21,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class CreateTableInfo implements Writable {
     public static final Logger LOG = LoggerFactory.getLogger(CreateTableInfo.class);
@@ -64,7 +66,7 @@ public class CreateTableInfo implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             dbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             dbName = Text.readString(in);

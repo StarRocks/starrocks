@@ -37,6 +37,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 /*
  * Repository of a partition's related infos
  */
@@ -192,7 +194,7 @@ public class PartitionInfo implements Writable {
 
             short replicationNum = in.readShort();
             idToReplicationNum.put(partitionId, replicationNum);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
+            if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
                 idToInMemory.put(partitionId, in.readBoolean());
             } else {
                 // for compatibility, default is false

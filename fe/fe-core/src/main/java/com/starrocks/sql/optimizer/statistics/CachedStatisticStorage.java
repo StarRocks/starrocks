@@ -8,7 +8,7 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -136,7 +136,7 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {
-        Database db = Catalog.getCurrentCatalog().getDb(statisticData.dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, statisticData.dbId);
         }

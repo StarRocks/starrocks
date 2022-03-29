@@ -33,6 +33,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 public class DiskInfo implements Writable {
     private static final Logger LOG = LogManager.getLogger(DiskInfo.class);
 
@@ -181,7 +183,7 @@ public class DiskInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         this.rootPath = Text.readString(in);
         this.totalCapacityB = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_36) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_36) {
             this.dataUsedCapacityB = in.readLong();
             this.diskAvailableCapacityB = in.readLong();
         } else {

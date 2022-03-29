@@ -22,7 +22,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeMetaVersion;
@@ -36,6 +36,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     protected static final String ANY_HOST = "%";
@@ -246,7 +248,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
         privSet = PrivBitSet.read(in);
 
         isSetByDomainResolver = in.readBoolean();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_69) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_69) {
             isDomain = in.readBoolean();
         }
 

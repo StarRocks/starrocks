@@ -24,7 +24,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -34,6 +34,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -73,7 +74,7 @@ public class GetDdlStmtAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name and Table name");
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
@@ -89,7 +90,7 @@ public class GetDdlStmtAction extends RestBaseAction {
                 throw new DdlException("Table[" + tableName + "] does not exist");
             }
 
-            Catalog.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true, false /* show password */);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true, false /* show password */);
 
         } finally {
             db.readUnlock();

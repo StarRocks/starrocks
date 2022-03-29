@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -67,7 +67,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
             dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
         }
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(
                     ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
         }

@@ -494,6 +494,15 @@ public class HiveMetaClient {
         return result;
     }
 
+    public List<String> getAllDatabaseNames() throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getAllDatabases();
+        } catch (Exception e) {
+            LOG.warn("get all database names failed", e);
+            throw new DdlException("get all database names from meta store failed: " + e.getMessage());
+        }
+    }
+
     private boolean isStringType(String hiveType) {
         hiveType = Utils.getTypeKeyword(hiveType);
         return hiveType.equalsIgnoreCase("string")

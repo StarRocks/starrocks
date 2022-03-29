@@ -24,7 +24,7 @@ package com.starrocks.backup;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
@@ -652,7 +652,7 @@ public class BlobStorage implements Writable {
         FsBroker broker = null;
         try {
             String localIP = FrontendOptions.getLocalHostAddress();
-            broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(brokerName, localIP);
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, localIP);
         } catch (AnalysisException e) {
             return new Status(ErrCode.COMMON_ERROR, "failed to get a broker address: " + e.getMessage());
         }

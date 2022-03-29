@@ -8,7 +8,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
@@ -179,7 +179,7 @@ public class CacheDictManager implements IDictManager {
 
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
-            Database db = Catalog.getCurrentCatalog().getDb(id);
+            Database db = GlobalStateMgr.getCurrentState().getDb(id);
             if (db != null && db.getTable(tableId) != null) {
                 columnIdentifier.setDbId(db.getId());
                 break;

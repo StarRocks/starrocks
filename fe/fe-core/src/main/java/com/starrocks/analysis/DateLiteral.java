@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -45,6 +45,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class DateLiteral extends LiteralExpr {
     private static final Logger LOG = LogManager.getLogger(DateLiteral.class);
@@ -376,7 +378,7 @@ public class DateLiteral extends LiteralExpr {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_60) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_60) {
             short date_literal_type = in.readShort();
             fromPackedDatetime(in.readLong());
             if (date_literal_type == DateLiteralType.DATETIME.value()) {

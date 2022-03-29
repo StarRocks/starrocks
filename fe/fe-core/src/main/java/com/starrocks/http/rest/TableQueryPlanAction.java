@@ -24,7 +24,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
@@ -37,6 +37,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
@@ -129,7 +130,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             String fullDbName = ClusterNamespace.getFullName(ConnectContext.get().getClusterName(), dbName);
             // check privilege for select, otherwise return HTTP 401
             checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-            Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");

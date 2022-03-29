@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -73,7 +73,7 @@ public class ShowRestoreStmt extends ShowStmt {
         }
 
         // check auth
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ConnectContext.get().getQualifiedUser(), dbName);
         }

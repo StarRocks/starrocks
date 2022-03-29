@@ -68,7 +68,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void createTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getCatalog().createTable(createTableStmt);
+            session.getCatalog().getLocalMetastore().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -76,7 +76,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void dropTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getCatalog().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
+            session.getCatalog().getLocalMetastore().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -86,7 +86,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
         // TODO(zc): Support create table later.
         // Create table
         try {
-            analyzer.getCatalog().createTable(createTableStmt);
+            analyzer.getCatalog().getLocalMetastore().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }

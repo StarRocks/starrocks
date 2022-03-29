@@ -25,7 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -40,6 +40,7 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TTaskType;
@@ -58,7 +59,7 @@ public class StatisticProcDir implements ProcDirInterface {
             .build();
     private static final Logger LOG = LogManager.getLogger(StatisticProcDir.class);
 
-    private Catalog catalog;
+    private GlobalStateMgr catalog;
 
     // db id -> set(tablet id)
     Multimap<Long, Long> unhealthyTabletIds;
@@ -67,7 +68,7 @@ public class StatisticProcDir implements ProcDirInterface {
     // db id -> set(tablet id)
     Multimap<Long, Long> cloningTabletIds;
 
-    public StatisticProcDir(Catalog catalog) {
+    public StatisticProcDir(GlobalStateMgr catalog) {
         this.catalog = catalog;
         unhealthyTabletIds = HashMultimap.create();
         inconsistentTabletIds = HashMultimap.create();
@@ -81,13 +82,13 @@ public class StatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<Long> dbIds = catalog.getDbIds();
+        List<Long> dbIds = catalog.getLocalMetastore().getDbIds();
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
         int totalDbNum = 0;
         int totalTableNum = 0;

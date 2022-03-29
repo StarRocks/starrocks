@@ -38,7 +38,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -445,7 +445,7 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                 if (backend == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -537,7 +537,7 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = Catalog.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.

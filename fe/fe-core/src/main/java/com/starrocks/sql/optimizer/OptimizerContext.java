@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -16,7 +16,7 @@ import com.starrocks.sql.optimizer.task.TaskScheduler;
 public class OptimizerContext {
     private final Memo memo;
     private final RuleSet ruleSet;
-    private final Catalog catalog;
+    private final GlobalStateMgr catalog;
     private final TaskScheduler taskScheduler;
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
@@ -27,7 +27,7 @@ public class OptimizerContext {
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
-        this.catalog = Catalog.getCurrentCatalog();
+        this.catalog = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
@@ -36,7 +36,7 @@ public class OptimizerContext {
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
-        this.catalog = Catalog.getCurrentCatalog();
+        this.catalog = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = connectContext.getSessionVariable();
@@ -55,7 +55,7 @@ public class OptimizerContext {
         return ruleSet;
     }
 
-    public Catalog getCatalog() {
+    public GlobalStateMgr getCatalog() {
         return catalog;
     }
 

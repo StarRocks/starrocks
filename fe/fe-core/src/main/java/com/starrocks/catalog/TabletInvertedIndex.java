@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
@@ -130,7 +131,7 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (be != null) {
             backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }
@@ -207,7 +208,7 @@ public class TabletInvertedIndex {
                                 // check if should clear transactions
                                 if (backendTabletInfo.isSetTransaction_ids()) {
                                     List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
-                                    GlobalTransactionMgr transactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+                                    GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
                                     for (Long transactionId : transactionIds) {
                                         TransactionState transactionState =
                                                 transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
@@ -393,7 +394,7 @@ public class TabletInvertedIndex {
 
     // always add tablet before adding replicas
     public void addTablet(long tabletId, TabletMeta tabletMeta) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -414,7 +415,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteTablet(long tabletId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -442,7 +443,7 @@ public class TabletInvertedIndex {
     }
 
     public void addReplica(long tabletId, Replica replica) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -459,7 +460,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteReplica(long tabletId, long backendId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -505,7 +506,7 @@ public class TabletInvertedIndex {
     }
 
     public void setNewSchemaHash(long partitionId, long indexId, int newSchemaHash) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -518,7 +519,7 @@ public class TabletInvertedIndex {
     }
 
     public void updateToNewSchemaHash(long partitionId, long indexId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -531,7 +532,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteNewSchemaHash(long partitionId, long indexId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();

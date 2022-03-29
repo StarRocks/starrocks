@@ -32,6 +32,7 @@ import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 
@@ -51,8 +52,8 @@ public class MetadataViewer {
                                                       ReplicaStatus statusFilter, Operator op) throws DdlException {
         List<List<String>> result = Lists.newArrayList();
 
-        Catalog catalog = Catalog.getCurrentCatalog();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
         Database db = catalog.getDb(dbName);
         if (db == null) {
@@ -178,8 +179,8 @@ public class MetadataViewer {
 
         List<List<String>> result = Lists.newArrayList();
 
-        Catalog catalog = Catalog.getCurrentCatalog();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
         Database db = catalog.getDb(dbName);
         if (db == null) {

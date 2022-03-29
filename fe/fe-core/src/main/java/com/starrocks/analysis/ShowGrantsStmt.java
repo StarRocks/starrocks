@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -88,7 +88,7 @@ public class ShowGrantsStmt extends ShowStmt {
 
         // if show all grants, or show other user's grants, need global GRANT priv.
         if (isAll || !self.equals(userIdent)) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
         }

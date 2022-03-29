@@ -25,7 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -35,6 +35,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -52,6 +53,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 @Deprecated
 public class DecommissionBackendJob extends AlterJob {
@@ -176,8 +179,8 @@ public class DecommissionBackendJob extends AlterJob {
 
     @Override
     public synchronized int tryFinishJob() {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
-        SystemInfoService systemInfo = Catalog.getCurrentSystemInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentSystemInfo();
 
         LOG.debug("start try finish decommission backend job: {}", getBackendIdsString());
         for (String cluster : clusterBackendsMap.keySet()) {
@@ -227,7 +230,7 @@ public class DecommissionBackendJob extends AlterJob {
                 if (decommissionType == DecommissionType.ClusterDecommission) {
                     for (String clusterName : clusterBackendsMap.keySet()) {
                         final Map<Long, Backend> idToBackend = clusterBackendsMap.get(clusterName);
-                        final Cluster cluster = Catalog.getCurrentCatalog().getCluster(clusterName);
+                        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
                         List<Long> backendList = Lists.newArrayList();
                         for (long id : idToBackend.keySet()) {
                             final Backend backend = idToBackend.get(id);
@@ -238,7 +241,7 @@ public class DecommissionBackendJob extends AlterJob {
                             cluster.removeBackend(id);
                         }
                         BackendIdsUpdateInfo updateInfo = new BackendIdsUpdateInfo(backendList);
-                        Catalog.getCurrentCatalog().getEditLog().logUpdateClusterAndBackendState(updateInfo);
+                        GlobalStateMgr.getCurrentState().getEditLog().logUpdateClusterAndBackendState(updateInfo);
                     }
                 }
             }
@@ -246,7 +249,7 @@ public class DecommissionBackendJob extends AlterJob {
             this.finishedTime = System.currentTimeMillis();
             this.state = JobState.FINISHED;
 
-            Catalog.getCurrentCatalog().getEditLog().logFinishDecommissionBackend(this);
+            GlobalStateMgr.getCurrentState().getEditLog().logFinishDecommissionBackend(this);
 
             LOG.info("finished {} decommission {} backends: {}", decommissionType.toString(),
                     allClusterBackendIds.size(), getBackendIdsString());
@@ -303,7 +306,7 @@ public class DecommissionBackendJob extends AlterJob {
     public synchronized void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
             long clusterMapSize = in.readLong();
             while (clusterMapSize-- > 0) {
                 final String cluster = Text.readString(in);
@@ -311,14 +314,14 @@ public class DecommissionBackendJob extends AlterJob {
                 Map<Long, Backend> backends = Maps.newHashMap();
                 while (backendMspSize-- > 0) {
                     final long id = in.readLong();
-                    final Backend backend = Catalog.getCurrentSystemInfo().getBackend(id);
+                    final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(id);
                     backends.put(id, backend);
                     allClusterBackendIds.add(id);
                 }
                 clusterBackendsMap.put(cluster, backends);
             }
 
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_33) {
+            if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_33) {
                 String str = Text.readString(in);
                 // this is only for rectify misspellings...
                 if (str.equals("SystemDecomission")) {
@@ -334,7 +337,7 @@ public class DecommissionBackendJob extends AlterJob {
             for (int i = 0; i < backendNum; i++) {
                 final long backendId = in.readLong();
                 allClusterBackendIds.add(backendId);
-                final Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 backends.put(backendId, backend);
             }
             clusterBackendsMap.put(SystemInfoService.DEFAULT_CLUSTER, backends);

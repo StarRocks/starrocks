@@ -23,7 +23,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -41,6 +41,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,7 +80,7 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }

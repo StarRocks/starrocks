@@ -38,7 +38,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -64,6 +64,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -79,6 +80,7 @@ import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -97,6 +99,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -153,7 +156,7 @@ public class DeleteHandler implements Writable {
         String tableName = stmt.getTableName();
         List<String> partitionNames = stmt.getPartitionNames();
         List<Predicate> conditions = stmt.getDeleteConditions();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
@@ -215,10 +218,10 @@ public class DeleteHandler implements Writable {
 
                 // generate label
                 String label = "delete_" + UUID.randomUUID();
-                long jobId = Catalog.getCurrentCatalog().getNextId();
+                long jobId = GlobalStateMgr.getCurrentState().getNextId();
                 stmt.setJobId(jobId);
                 // begin txn here and generate txn id
-                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         // For version compatibility, keep this set to FRONTEND,
@@ -232,7 +235,7 @@ public class DeleteHandler implements Writable {
                 deleteJob = new DeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
                 idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
-                Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
                 // task sent to be
                 AgentBatchTask batchTask = new AgentBatchTask();
                 // count total replica num
@@ -273,7 +276,7 @@ public class DeleteHandler implements Writable {
                                         TPriority.NORMAL,
                                         TTaskType.REALTIME_PUSH,
                                         transactionId,
-                                        Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                                                 .getNextTransactionId());
                                 pushTask.setIsSchemaChanging(false);
                                 pushTask.setCountDownLatch(countDownLatch);
@@ -296,7 +299,7 @@ public class DeleteHandler implements Writable {
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
-                if (Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) != null) {
+                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) != null) {
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());
                 }
                 throw new DdlException(t.getMessage(), t);
@@ -497,9 +500,9 @@ public class DeleteHandler implements Writable {
         TransactionStatus status = null;
         try {
             if (unprotectedCommitJob(job, db, timeoutMs)) {
-                updateTableDeleteInfo(Catalog.getCurrentCatalog(), db.getId(), job.getDeleteInfo().getTableId());
+                updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(), job.getDeleteInfo().getTableId());
             }
-            status = Catalog.getCurrentGlobalTransactionMgr().
+            status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
                     getTransactionState(db.getId(), job.getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
             if (cancelJob(job, CancelType.COMMIT_FAIL, e.getMessage())) {
@@ -542,9 +545,9 @@ public class DeleteHandler implements Writable {
      */
     private boolean unprotectedCommitJob(DeleteJob job, Database db, long timeoutMs) throws UserException {
         long transactionId = job.getTransactionId();
-        GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         List<TabletCommitInfo> tabletCommitInfos = new ArrayList<TabletCommitInfo>();
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TabletDeleteInfo tDeleteInfo : job.getTabletDeleteInfo()) {
             for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
                 // the inverted index contains rolling up replica
@@ -616,17 +619,17 @@ public class DeleteHandler implements Writable {
                 cancelType.name());
 
         // create push task for each backends
-        List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
                     TTaskType.REALTIME_PUSH, job.getTransactionId(),
-                    Catalog.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
             AgentTaskQueue.removePushTaskByTransactionId(backendId, job.getTransactionId(),
                     TPushType.DELETE, TTaskType.REALTIME_PUSH);
             AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
         }
 
-        GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         try {
             globalTransactionMgr.abortTransaction(job.getDeleteInfo().getDbId(), job.getTransactionId(), reason);
         } catch (Exception e) {
@@ -843,7 +846,7 @@ public class DeleteHandler implements Writable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             return infos;
         }
@@ -859,7 +862,7 @@ public class DeleteHandler implements Writable {
 
             for (MultiDeleteInfo deleteInfo : deleteInfos) {
 
-                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
                         deleteInfo.getTableName(),
                         PrivPredicate.LOAD)) {
                     continue;
@@ -893,7 +896,7 @@ public class DeleteHandler implements Writable {
         return infos;
     }
 
-    public void replayDelete(DeleteInfo deleteInfo, Catalog catalog) {
+    public void replayDelete(DeleteInfo deleteInfo, GlobalStateMgr catalog) {
         // add to deleteInfos
         if (deleteInfo == null) {
             return;
@@ -911,7 +914,7 @@ public class DeleteHandler implements Writable {
         }
     }
 
-    public void replayMultiDelete(MultiDeleteInfo deleteInfo, Catalog catalog) {
+    public void replayMultiDelete(MultiDeleteInfo deleteInfo, GlobalStateMgr catalog) {
         // add to deleteInfos
         if (deleteInfo == null) {
             return;
@@ -929,7 +932,7 @@ public class DeleteHandler implements Writable {
         }
     }
 
-    private void updateTableDeleteInfo(Catalog catalog, long dbId, long tableId) {
+    private void updateTableDeleteInfo(GlobalStateMgr catalog, long dbId, long tableId) {
         Database db = catalog.getDb(dbId);
         if (db == null) {
             return;
@@ -993,5 +996,13 @@ public class DeleteHandler implements Writable {
                 lock.writeLock().unlock();
             }
         }
+    }
+
+    public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_82) {
+            GlobalStateMgr.getCurrentState().setDeleteHandler(read(dis));
+        }
+        LOG.info("finished replay deleteHandler from image");
+        return checksum;
     }
 }

@@ -42,7 +42,7 @@ import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -71,6 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TUniqueId;
@@ -93,6 +94,8 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * Routine load job is a function which stream load data from streaming medium to starrocks.
@@ -379,7 +382,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getDbFullName() throws MetaNotFoundException {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -396,7 +399,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public String getTableName() throws MetaNotFoundException {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -552,9 +555,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     RoutineLoadTaskInfo newTask =
                             unprotectRenewTask(System.currentTimeMillis() + taskSchedIntervalS * 1000,
                                     routineLoadTaskInfo);
-                    Catalog.getCurrentCatalog().getRoutineLoadManager()
+                    GlobalStateMgr.getCurrentState().getRoutineLoadManager()
                             .releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-                    Catalog.getCurrentCatalog().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
+                    GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newTask);
                     LOG.warn(
                             "routine load task [job name {}, task id {}] timeout, remove old task and generate new one",
                             name, routineLoadTaskInfo.getId().toString());
@@ -688,7 +691,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId) throws UserException {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
@@ -702,7 +705,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     new StreamLoadPlanner(db, (OlapTable) table, StreamLoadTask.fromRoutineLoadJob(this));
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             // add table indexes to transaction state
-            TransactionState txnState = Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
+            TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
                 throw new MetaNotFoundException("txn does not exist: " + txnId);
             }
@@ -888,8 +891,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
             }
             RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(timeToExecuteMs, routineLoadTaskInfo);
-            Catalog.getCurrentCatalog().getRoutineLoadManager().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-            Catalog.getCurrentCatalog().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
+            GlobalStateMgr.getCurrentState().getRoutineLoadManager().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+            GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
         } finally {
             writeUnlock();
         }
@@ -1012,8 +1015,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
                         System.currentTimeMillis() + taskSchedIntervalS * 1000, routineLoadTaskInfo);
                 newRoutineLoadTaskInfo.setMsg("previous task aborted because of " + txnStatusChangeReasonStr);
-                Catalog.getCurrentCatalog().getRoutineLoadManager().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
-                Catalog.getCurrentCatalog().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
+                GlobalStateMgr.getCurrentState().getRoutineLoadManager().releaseBeTaskSlot(routineLoadTaskInfo.getBeId());
+                GlobalStateMgr.getCurrentState().getRoutineLoadTaskScheduler().addTaskInQueue(newRoutineLoadTaskInfo);
                 LOG.warn(
                         "routine load task [job name {}, task id {}] aborted because of {}, remove old task and generate new one",
                         name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
@@ -1096,11 +1099,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         if (state.isFinalState()) {
-            Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         }
 
         if (!isReplay && jobState != JobState.RUNNING) {
-            Catalog.getCurrentCatalog().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
+            GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
         }
 
         if (!isReplay && MetricRepo.isInit && JobState.PAUSED == jobState) {
@@ -1147,7 +1150,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private void clearTasks() {
         for (RoutineLoadTaskInfo task : routineLoadTaskInfoList) {
             if (task.getBeId() != RoutineLoadTaskInfo.INVALID_BE_ID) {
-                Catalog.getCurrentCatalog().getRoutineLoadManager().releaseBeTaskSlot(task.getBeId());
+                GlobalStateMgr.getCurrentState().getRoutineLoadManager().releaseBeTaskSlot(task.getBeId());
             }
         }
         routineLoadTaskInfoList.clear();
@@ -1155,7 +1158,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public void update() throws UserException {
         // check if db and table exist
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                     .add("db_id", dbId)
@@ -1231,7 +1234,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected abstract String getStatistic();
 
     public List<String> getShowInfo() {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;
         if (db != null) {
             db.readLock();
@@ -1290,7 +1293,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public List<String> getShowStatistic() {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         readLock();
         try {
             List<String> row = Lists.newArrayList();
@@ -1462,14 +1465,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
 
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
+        if (getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
             String stmt = Text.readString(in);
             origStmt = new OriginStatement(stmt, 0);
         } else {
             origStmt = OriginStatement.read(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_59) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_59) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);
@@ -1481,7 +1484,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(LoadStmt.STRICT_MODE, Boolean.toString(false));
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);
@@ -1531,7 +1534,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (!isReplay) {
                 AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
                         jobProperties, dataSourceProperties, originStatement);
-                Catalog.getCurrentCatalog().getEditLog().logAlterRoutineLoadJob(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log);
             }
         } finally {
             writeUnlock();

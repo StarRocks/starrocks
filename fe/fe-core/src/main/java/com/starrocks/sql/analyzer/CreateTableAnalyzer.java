@@ -13,7 +13,7 @@ import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -58,7 +58,7 @@ public class CreateTableAnalyzer {
 
         FeNameFormat.verifyTableName(tableName.getTbl());
 
-        if (!Catalog.getCurrentCatalog().getAuth()
+        if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(), PrivPredicate.CREATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }

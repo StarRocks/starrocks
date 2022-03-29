@@ -22,7 +22,7 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
@@ -31,6 +31,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -74,7 +75,7 @@ public class RestBaseAction extends BaseAction {
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
         ConnectContext ctx = new ConnectContext(null);
-        ctx.setCatalog(Catalog.getCurrentCatalog());
+        ctx.setCatalog(GlobalStateMgr.getCurrentState());
         ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
@@ -122,11 +123,11 @@ public class RestBaseAction extends BaseAction {
     }
 
     public boolean redirectToMaster(BaseRequest request, BaseResponse response) throws DdlException {
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         if (catalog.isMaster()) {
             return false;
         }
-        redirectTo(request, response, new TNetworkAddress(catalog.getMasterIp(), catalog.getMasterHttpPort()));
+        redirectTo(request, response, new TNetworkAddress(catalog.getNodeMgr().getMasterIp(), catalog.getNodeMgr().getMasterHttpPort()));
         return true;
     }
 }

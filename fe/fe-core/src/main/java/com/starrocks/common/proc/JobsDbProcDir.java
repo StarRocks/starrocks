@@ -25,9 +25,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -39,9 +40,9 @@ public class JobsDbProcDir implements ProcDirInterface {
             .add("DbId").add("DbName")
             .build();
 
-    private Catalog catalog;
+    private GlobalStateMgr catalog;
 
-    public JobsDbProcDir(Catalog catalog) {
+    public JobsDbProcDir(GlobalStateMgr catalog) {
         this.catalog = catalog;
     }
 
@@ -78,7 +79,7 @@ public class JobsDbProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<String> names = catalog.getDbNames();
+        List<String> names = catalog.getLocalMetastore().getDbNames();
         if (names == null || names.isEmpty()) {
             // empty
             return result;

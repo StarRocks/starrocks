@@ -20,6 +20,7 @@ import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -182,7 +183,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         String resourceName = copiedProps.remove(HUDI_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         HudiResource hudiResource = (HudiResource) resource;
         if (hudiResource == null) {
             throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
@@ -192,7 +193,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
         hudiProperties.put(HUDI_METASTORE_URIS, hudiResource.getHiveMetastoreURIs());
 
-        org.apache.hadoop.hive.metastore.api.Table metastoreTable = Catalog.getCurrentCatalog().getHiveRepository()
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getTable(resourceName, this.db, this.table);
         String metastoreTableType = metastoreTable.getTableType();
         if (metastoreTableType == null) {

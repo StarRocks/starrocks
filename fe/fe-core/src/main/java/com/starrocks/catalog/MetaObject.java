@@ -29,6 +29,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.zip.Adler32;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 public class MetaObject implements Writable {
 
     protected long signature;
@@ -61,11 +63,11 @@ public class MetaObject implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
             this.signature = in.readLong();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
+        if (getCurrentCatalogJournalVersion() >= 6) {
             this.lastCheckTime = in.readLong();
         }
     }

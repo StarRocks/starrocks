@@ -14,7 +14,7 @@ import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,7 +77,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkDatabaseExist() {
-        return Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName) != null;
+        return GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName) != null;
     }
 
     private boolean createDatabase() {
@@ -84,7 +85,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            Catalog.getCurrentCatalog().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt);
         } catch (DdlException e) {
             LOG.warn("Failed to create database " + e.getMessage());
             return false;
@@ -94,13 +95,13 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkTableExist() {
-        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
         Preconditions.checkState(db != null);
         return db.getTable(Constants.StatisticsTableName) != null;
     }
 
     private boolean checkReplicateNormal() {
-        Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
         Preconditions.checkState(table != null);
@@ -125,7 +126,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 Constants.StatisticsTableName);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
-                Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, COLUMNS, "olap",
@@ -135,7 +136,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 properties,
                 null,
                 "");
-        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(),
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
                 StatisticUtils.buildConnectContext());
         try {
             stmt.analyze(analyzer);
@@ -144,7 +145,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         try {
-            Catalog.getCurrentCatalog().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (DdlException e) {
             LOG.warn("Failed to create table" + e.getMessage());
             return false;
@@ -159,7 +160,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         DropTableStmt stmt = new DropTableStmt(true, tableName, true);
 
         try {
-            Catalog.getCurrentCatalog().dropTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
         } catch (DdlException e) {
             LOG.warn("Failed to drop table" + e.getMessage());
             return false;

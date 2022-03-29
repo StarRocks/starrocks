@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -56,7 +56,7 @@ public class ShowClusterStmt extends ShowStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                         Privilege.NODE_PRIV),
                         Operator.OR))) {

@@ -74,7 +74,7 @@ public class HiveRepositoryTest {
         for (int i = 0; i < 10; i++) {
             es.execute(() -> {
                 try {
-                    queue.offer(repository.getClient(resourceName));
+                    queue.offer(repository.getClient(resourceName, true));
                 } catch (Exception e) {
                     Assert.fail("exception: " + e.getMessage());
                 }

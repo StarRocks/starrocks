@@ -31,6 +31,7 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -44,6 +45,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * This class represents the local olap tablet related metadata.
@@ -135,7 +138,7 @@ public class LocalTablet extends Tablet {
         if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
             replicas.add(replica);
             if (!isRestore) {
-                Catalog.getCurrentInvertedIndex().addReplica(id, replica);
+                GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
             }
         }
     }
@@ -159,9 +162,9 @@ public class LocalTablet extends Tablet {
 
     public List<String> getBackends() {
         List<String> backends = new ArrayList<String>();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
-            Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
             backends.add(backend.getHost());
         }
         return backends;
@@ -170,7 +173,7 @@ public class LocalTablet extends Tablet {
     // for loading data
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             if (replica.isBad()) {
                 continue;
@@ -187,7 +190,7 @@ public class LocalTablet extends Tablet {
     // return map of (BE id -> path hash) of normal replicas
     public Multimap<Long, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Long, Long> map = HashMultimap.create();
-        SystemInfoService infoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
                 continue;
@@ -275,7 +278,7 @@ public class LocalTablet extends Tablet {
     public boolean deleteReplica(Replica replica) {
         if (replicas.contains(replica)) {
             replicas.remove(replica);
-            Catalog.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+            GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
             return true;
         }
         return false;
@@ -287,7 +290,7 @@ public class LocalTablet extends Tablet {
             Replica replica = iterator.next();
             if (replica.getBackendId() == backendId) {
                 iterator.remove();
-                Catalog.getCurrentInvertedIndex().deleteReplica(id, backendId);
+                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
                 return true;
             }
         }
@@ -343,7 +346,7 @@ public class LocalTablet extends Tablet {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
+        if (getCurrentCatalogJournalVersion() >= 6) {
             checkedVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             isConsistent = in.readBoolean();

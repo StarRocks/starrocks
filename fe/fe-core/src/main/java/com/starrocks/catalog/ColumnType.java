@@ -29,6 +29,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 public abstract class ColumnType {
     private static Boolean[][] schemaChangeMatrix;
 
@@ -175,7 +177,7 @@ public abstract class ColumnType {
         int scale = in.readInt();
         int precision = in.readInt();
         int len = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
             // Useless, just for back compatible
             in.readBoolean();
         }

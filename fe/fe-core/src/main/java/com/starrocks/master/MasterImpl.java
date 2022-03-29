@@ -31,7 +31,7 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJob;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJob;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -64,6 +64,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -161,7 +162,7 @@ public class MasterImpl {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
-        Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
         if (backend == null) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             List<String> errorMsgs = new ArrayList<>();
@@ -309,10 +310,10 @@ public class MasterImpl {
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
             } else {
                 long tabletId = createReplicaTask.getTabletId();
-                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 if (!tabletMeta.isUseStarOS() && request.isSetFinish_tablet_infos()) {
-                    Replica replica = Catalog.getCurrentInvertedIndex().getReplica(tabletId, createReplicaTask.getBackendId());
+                    Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, createReplicaTask.getBackendId());
                     replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
 
                     if (createReplicaTask.isRecoverTask()) {
@@ -328,7 +329,7 @@ public class MasterImpl {
                 }
 
                 // this should be called before 'countDownLatch()'
-                Catalog.getCurrentSystemInfo()
+                GlobalStateMgr.getCurrentSystemInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
@@ -369,7 +370,7 @@ public class MasterImpl {
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             return;
@@ -422,19 +423,19 @@ public class MasterImpl {
 
             // should be done before addReplicaPersistInfos and countDownLatch
             long reportVersion = request.getReport_version();
-            Catalog.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
+            GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
                     task.getDbId());
 
             List<Long> tabletIds = finishTabletInfos.stream().map(
                     tTabletInfo -> tTabletInfo.getTablet_id()).collect(Collectors.toList());
-            List<TabletMeta> tabletMetaList = Catalog.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
+            List<TabletMeta> tabletMetaList = GlobalStateMgr.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
 
             // handle load job
             // TODO yiguolei: why delete should check request version and task version?
             if (pushTask.getPushType() == TPushType.LOAD || pushTask.getPushType() == TPushType.LOAD_DELETE) {
                 Preconditions.checkArgument(false, "LOAD and LOAD_DELETE not supported");
             } else if (pushTask.getPushType() == TPushType.DELETE) {
-                DeleteJob deleteJob = Catalog.getCurrentCatalog().getDeleteHandler().getDeleteJob(transactionId);
+                DeleteJob deleteJob = GlobalStateMgr.getCurrentState().getDeleteHandler().getDeleteJob(transactionId);
                 if (deleteJob == null) {
                     throw new MetaNotFoundException("cannot find delete job, job[" + transactionId + "]");
                 }
@@ -451,7 +452,7 @@ public class MasterImpl {
             } else if (pushTask.getPushType() == TPushType.LOAD_V2) {
                 long loadJobId = pushTask.getLoadJobId();
                 com.starrocks.load.loadv2.LoadJob job =
-                        Catalog.getCurrentCatalog().getLoadManager().getLoadJob(loadJobId);
+                        GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(loadJobId);
                 if (job == null) {
                     throw new MetaNotFoundException("cannot find load job, job[" + loadJobId + "]");
                 }
@@ -510,7 +511,7 @@ public class MasterImpl {
         MaterializedIndex index = partition.getIndex(indexId);
         if (index == null) {
             // this means the index is under rollup
-            MaterializedViewHandler materializedViewHandler = Catalog.getCurrentCatalog().getRollupHandler();
+            MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
             AlterJob alterJob = materializedViewHandler.getAlterJob(olapTable.getId());
             if (alterJob == null && olapTable.getState() == OlapTableState.ROLLUP) {
                 // this happens when:
@@ -565,7 +566,7 @@ public class MasterImpl {
         long dbId = pushTask.getDbId();
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             AgentTaskQueue.removePushTask(backendId, signature, finishVersion,
                     pushTask.getPushType(), pushTask.getTaskType());
@@ -616,7 +617,7 @@ public class MasterImpl {
             List<ReplicaPersistInfo> infos = new LinkedList<ReplicaPersistInfo>();
             List<Long> tabletIds = finishTabletInfos.stream().map(
                     finishTabletInfo -> finishTabletInfo.getTablet_id()).collect(Collectors.toList());
-            List<TabletMeta> tabletMetaList = Catalog.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
+            List<TabletMeta> tabletMetaList = GlobalStateMgr.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 TabletMeta tabletMeta = tabletMetaList.get(i);
                 TTabletInfo tTabletInfo = finishTabletInfos.get(i);
@@ -631,7 +632,7 @@ public class MasterImpl {
 
             // should be done before addReplicaPersistInfos and countDownLatch
             long reportVersion = request.getReport_version();
-            Catalog.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
+            GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
                     task.getDbId());
 
             if (pushTask.getPushType() == TPushType.LOAD || pushTask.getPushType() == TPushType.LOAD_DELETE) {
@@ -674,7 +675,7 @@ public class MasterImpl {
         if (request.isSetReport_version()) {
             // report version is required. here we check if set, for compatibility.
             long reportVersion = request.getReport_version();
-            Catalog.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentSystemInfo()
                     .updateBackendReportVersion(task.getBackendId(), reportVersion, task.getDbId());
         }
 
@@ -715,7 +716,7 @@ public class MasterImpl {
                 return null;
             }
 
-            MaterializedViewHandler materializedViewHandler = Catalog.getCurrentCatalog().getRollupHandler();
+            MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
             AlterJob alterJob = materializedViewHandler.getAlterJob(olapTable.getId());
             if (alterJob == null) {
                 // this happends when:
@@ -738,7 +739,7 @@ public class MasterImpl {
         int currentSchemaHash = olapTable.getSchemaHashByIndexId(pushIndexId);
         if (schemaHash != currentSchemaHash) {
             if (pushState == PartitionState.SCHEMA_CHANGE) {
-                SchemaChangeHandler schemaChangeHandler = Catalog.getCurrentCatalog().getSchemaChangeHandler();
+                SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
                 AlterJob alterJob = schemaChangeHandler.getAlterJob(olapTable.getId());
                 if (alterJob != null &&
                         schemaHash != ((SchemaChangeJob) alterJob).getSchemaHashByIndexId(pushIndexId)) {
@@ -786,7 +787,7 @@ public class MasterImpl {
         Preconditions.checkArgument(finishTabletInfos.size() == 1);
 
         SchemaChangeTask schemaChangeTask = (SchemaChangeTask) task;
-        SchemaChangeHandler schemaChangeHandler = Catalog.getCurrentCatalog().getSchemaChangeHandler();
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.handleFinishedReplica(schemaChangeTask, finishTabletInfos.get(0), reportVersion);
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.SCHEMA_CHANGE, task.getSignature());
     }
@@ -797,7 +798,7 @@ public class MasterImpl {
         Preconditions.checkArgument(finishTabletInfos.size() == 1);
 
         CreateRollupTask createRollupTask = (CreateRollupTask) task;
-        MaterializedViewHandler materializedViewHandler = Catalog.getCurrentCatalog().getRollupHandler();
+        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         materializedViewHandler.handleFinishedReplica(createRollupTask, finishTabletInfos.get(0), -1L);
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ROLLUP, task.getSignature());
     }
@@ -805,7 +806,7 @@ public class MasterImpl {
     private void finishClone(AgentTask task, TFinishTaskRequest request) {
         CloneTask cloneTask = (CloneTask) task;
         if (cloneTask.getTaskVersion() == CloneTask.VERSION_2) {
-            Catalog.getCurrentCatalog().getTabletScheduler().finishCloneTask(cloneTask, request);
+            GlobalStateMgr.getCurrentState().getTabletScheduler().finishCloneTask(cloneTask, request);
         } else {
             LOG.warn("invalid clone task, ignore it. {}", task);
         }
@@ -829,14 +830,14 @@ public class MasterImpl {
 
         TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
         long tabletId = reportedTablet.getTablet_id();
-        TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
             return;
         }
 
         long dbId = tabletMeta.getDbId();
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db does not exist. db id: {}", dbId);
             return;
@@ -845,7 +846,7 @@ public class MasterImpl {
         db.writeLock();
         try {
             // local migration just set path hash
-            Replica replica = Catalog.getCurrentInvertedIndex().getReplica(tabletId, backendId);
+            Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
             Preconditions.checkArgument(reportedTablet.isSetPath_hash());
             replica.setPathHash(reportedTablet.getPath_hash());
         } finally {
@@ -862,14 +863,14 @@ public class MasterImpl {
             return;
         }
 
-        Catalog.getCurrentCatalog().getConsistencyChecker().handleFinishedConsistencyCheck(checkConsistencyTask,
+        GlobalStateMgr.getCurrentState().getConsistencyChecker().handleFinishedConsistencyCheck(checkConsistencyTask,
                 request.getTablet_checksum());
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CHECK_CONSISTENCY, task.getSignature());
     }
 
     private void finishMakeSnapshot(AgentTask task, TFinishTaskRequest request) {
         SnapshotTask snapshotTask = (SnapshotTask) task;
-        if (Catalog.getCurrentCatalog().getBackupHandler().handleFinishedSnapshotTask(snapshotTask, request)) {
+        if (GlobalStateMgr.getCurrentState().getBackupHandler().handleFinishedSnapshotTask(snapshotTask, request)) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.MAKE_SNAPSHOT, task.getSignature());
         }
 
@@ -877,21 +878,21 @@ public class MasterImpl {
 
     private void finishUpload(AgentTask task, TFinishTaskRequest request) {
         UploadTask uploadTask = (UploadTask) task;
-        if (Catalog.getCurrentCatalog().getBackupHandler().handleFinishedSnapshotUploadTask(uploadTask, request)) {
+        if (GlobalStateMgr.getCurrentState().getBackupHandler().handleFinishedSnapshotUploadTask(uploadTask, request)) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.UPLOAD, task.getSignature());
         }
     }
 
     private void finishDownloadTask(AgentTask task, TFinishTaskRequest request) {
         DownloadTask downloadTask = (DownloadTask) task;
-        if (Catalog.getCurrentCatalog().getBackupHandler().handleDownloadSnapshotTask(downloadTask, request)) {
+        if (GlobalStateMgr.getCurrentState().getBackupHandler().handleDownloadSnapshotTask(downloadTask, request)) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DOWNLOAD, task.getSignature());
         }
     }
 
     private void finishMoveDirTask(AgentTask task, TFinishTaskRequest request) {
         DirMoveTask dirMoveTask = (DirMoveTask) task;
-        if (Catalog.getCurrentCatalog().getBackupHandler().handleDirMoveTask(dirMoveTask, request)) {
+        if (GlobalStateMgr.getCurrentState().getBackupHandler().handleDirMoveTask(dirMoveTask, request)) {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.MOVE, task.getSignature());
         }
     }
@@ -905,16 +906,16 @@ public class MasterImpl {
     }
 
     public TFetchResourceResult fetchResource() {
-        return Catalog.getCurrentCatalog().getAuth().toResourceThrift();
+        return GlobalStateMgr.getCurrentState().getAuth().toResourceThrift();
     }
 
     private void finishAlterTask(AgentTask task) {
         AlterReplicaTask alterTask = (AlterReplicaTask) task;
         try {
             if (alterTask.getJobType() == JobType.ROLLUP) {
-                Catalog.getCurrentCatalog().getRollupHandler().handleFinishAlterTask(alterTask);
+                GlobalStateMgr.getCurrentState().getRollupHandler().handleFinishAlterTask(alterTask);
             } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
-                Catalog.getCurrentCatalog().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
             }
             alterTask.setFinished(true);
         } catch (MetaNotFoundException e) {
@@ -938,7 +939,7 @@ public class MasterImpl {
 
         String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
         // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -971,7 +972,7 @@ public class MasterImpl {
             tableMeta.setTable_name(tableName);
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
-            tableMeta.setCluster_id(Catalog.getCurrentCatalog().getClusterId());
+            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
             if (olapTable.getCopiedBfColumns() != null) {
@@ -1124,7 +1125,7 @@ public class MasterImpl {
                         tTabletMeta.setTablet_id(tablet.getId());
                         tTabletMeta.setChecked_version(localTablet.getCheckedVersion());
                         tTabletMeta.setConsistent(localTablet.isConsistent());
-                        TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
+                        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
                         tTabletMeta.setDb_id(tabletMeta.getDbId());
                         tTabletMeta.setTable_id(tabletMeta.getTableId());
                         tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
@@ -1158,7 +1159,7 @@ public class MasterImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo()
+            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                     .getClusterBackends(db.getClusterName())) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
@@ -1186,7 +1187,7 @@ public class MasterImpl {
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
         TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
-        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_id());
+        Database db = GlobalStateMgr.getCurrentState().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -1196,7 +1197,7 @@ public class MasterImpl {
 
         long txnId;
         try {
-            txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+            txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
@@ -1219,7 +1220,7 @@ public class MasterImpl {
     public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
         TCommitRemoteTxnResponse response = new TCommitRemoteTxnResponse();
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
@@ -1235,7 +1236,7 @@ public class MasterImpl {
             // Otherwise, the publish will be successful but commit timeout in FE
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
-            boolean ret = Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+            boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     timeoutMs, attachment);
@@ -1260,7 +1261,7 @@ public class MasterImpl {
 
     public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws TException {
         TAbortRemoteTxnResponse response = new TAbortRemoteTxnResponse();
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
@@ -1270,7 +1271,7 @@ public class MasterImpl {
         }
 
         try {
-            Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

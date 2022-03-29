@@ -3,7 +3,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -84,7 +84,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         List<Integer> leftShuffleColumns = leftScanDistributionSpec.getShuffleColumns();
         List<Integer> rightShuffleColumns = rightScanDistributionSpec.getShuffleColumns();
 
-        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
         long rightTableId = rightInfo.tableId;
 

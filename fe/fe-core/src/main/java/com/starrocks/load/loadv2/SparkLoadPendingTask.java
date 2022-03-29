@@ -32,7 +32,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -132,7 +132,7 @@ public class SparkLoadPendingTask extends LoadTask {
     }
 
     private void createEtlJobConf() throws LoadException {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new LoadException("db does not exist. id: " + dbId);
         }
@@ -166,7 +166,7 @@ public class SparkLoadPendingTask extends LoadTask {
                     tables.put(tableId, etlTable);
 
                     // add table indexes to transaction state
-                    TransactionState txnState = Catalog.getCurrentGlobalTransactionMgr()
+                    TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                             .getTransactionState(dbId, transactionId);
                     if (txnState == null) {
                         throw new LoadException("txn does not exist. id: " + transactionId);

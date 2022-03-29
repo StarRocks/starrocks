@@ -21,13 +21,15 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class DropInfo implements Writable {
     private long dbId;
@@ -78,7 +80,7 @@ public class DropInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_89) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_89) {
             forceDrop = in.readBoolean();
         }
         boolean hasIndexId = in.readBoolean();

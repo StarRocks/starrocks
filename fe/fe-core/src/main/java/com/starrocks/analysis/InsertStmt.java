@@ -29,7 +29,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -212,7 +212,7 @@ public class InsertStmt extends DmlStmt {
         }
 
         // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tblName.getDb(), tblName.getTbl(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblName.getDb(), tblName.getTbl(),
                 PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                     ConnectContext.get().getQualifiedUser(),
@@ -282,7 +282,7 @@ public class InsertStmt extends DmlStmt {
         }
 
         // Check privilege
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tblName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblName.getDb(),
                 tblName.getTbl(), PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                     ConnectContext.get().getQualifiedUser(),
@@ -316,7 +316,7 @@ public class InsertStmt extends DmlStmt {
             if (targetTable instanceof ExternalOlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                transactionId = Catalog.getCurrentGlobalTransactionMgr()
+                transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .beginRemoteTransaction(externalTable.getSourceTableDbId(),
                                 Lists.newArrayList(externalTable.getSourceTableId()), label,
                                 externalTable.getSourceTableHost(),
@@ -326,7 +326,7 @@ public class InsertStmt extends DmlStmt {
             } else if (targetTable instanceof OlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(targetTable.getId()), label,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         sourceType, timeoutSecond);
@@ -825,7 +825,7 @@ public class InsertStmt extends DmlStmt {
             if (!(targetTable instanceof ExternalOlapTable)) {
                 // add table indexes to transaction state
                 TransactionState txnState =
-                        Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId);
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId);
                 if (txnState == null) {
                     throw new DdlException("txn does not exist: " + transactionId);
                 }

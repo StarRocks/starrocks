@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.ClientPool;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -149,7 +149,7 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 if (backend == null || !backend.isAlive()) {
                     continue;
                 }

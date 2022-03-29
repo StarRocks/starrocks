@@ -44,6 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
+
 public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
@@ -358,7 +360,7 @@ public class RangePartitionInfo extends PartitionInfo {
             idToRange.put(partitionId, range);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
             counter = in.readInt();
             for (int i = 0; i < counter; i++) {
                 long partitionId = in.readLong();

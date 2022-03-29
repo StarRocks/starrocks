@@ -10,7 +10,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -283,7 +283,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // 1. get table row count
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateHMSTableScanColumns(table, tableRowCount, colRefToColumnMetaMap);
+        Statistics.Builder builder =
+                estimateHMSTableScanColumns(table, tableRowCount, colRefToColumnMetaMap);
         builder.setOutputRowCount(tableRowCount);
 
         // 3. estimate cardinality
@@ -350,7 +351,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<ColumnStatistic> columnStatisticList = Catalog.getCurrentStatisticStorage().getColumnStatistics(table,
+        List<ColumnStatistic> columnStatisticList = GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table,
                 requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
@@ -453,7 +454,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             String partitionColumn = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
             ColumnStatistic partitionColumnStatistic =
-                    Catalog.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
+                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
             optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();

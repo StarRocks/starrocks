@@ -10,7 +10,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -33,7 +33,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER RESOURCE_GROUP");
             }
             return null;
@@ -42,7 +42,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
                     tableName.getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "ALTER VIEW",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
@@ -54,7 +54,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
                     tableName.getTbl(), PrivPredicate.CREATE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
             }
@@ -65,7 +65,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
             }
             return null;
@@ -73,7 +73,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP RESOURCE_GROUP");
             }
             return null;
@@ -82,7 +82,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
                     tableName.getTbl(), PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
@@ -96,7 +96,7 @@ public class PrivilegeChecker {
             Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(stmt);
             for (Map.Entry<TableName, Table> table : tables.entrySet()) {
                 TableName tableName = table.getKey();
-                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, tableName.getDb(),
                         tableName.getTbl(), PrivPredicate.SELECT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                             session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
@@ -108,7 +108,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitShowTableStatusStmt(ShowTableStatusStmt statement, ConnectContext session) {
             String db = statement.getDb();
-            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;

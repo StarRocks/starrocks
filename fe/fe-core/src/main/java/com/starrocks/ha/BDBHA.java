@@ -32,9 +32,10 @@ import com.sleepycat.je.rep.ReplicationGroup;
 import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.CloseSafeDatabase;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,7 +77,7 @@ public class BDBHA implements HAProtocol {
                 DatabaseEntry theData = new DatabaseEntry(new byte[1]);
                 OperationStatus status = epochDb.putNoOverwrite(null, theKey, theData);
                 if (status == OperationStatus.SUCCESS) {
-                    Catalog.getCurrentCatalog().setEpoch(myEpoch);
+                    GlobalStateMgr.getCurrentState().setEpoch(myEpoch);
                     return true;
                 } else if (status == OperationStatus.KEYEXIST) {
                     return false;

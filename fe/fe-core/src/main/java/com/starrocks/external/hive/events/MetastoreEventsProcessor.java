@@ -9,7 +9,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -17,6 +16,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -106,8 +106,8 @@ public class MetastoreEventsProcessor extends MasterDaemon {
 
     public void init() {
         // register hive tables
-        Catalog catalog = Catalog.getCurrentCatalog();
-        catalog.getDbIds().stream()
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
+        catalog.getLocalMetastore().getDbIds().stream()
                 .map(catalog::getDb)
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isInfoSchemaDb())
@@ -191,7 +191,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
             throws MetastoreNotificationFetchException {
         Long lastSyncedEventId = null;
         try {
-            HiveMetaClient client = hiveRepository.getClient(resourceName);
+            HiveMetaClient client = hiveRepository.getClient(resourceName, true);
             if (client == null) {
                 return Collections.emptyList();
             }

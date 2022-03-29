@@ -30,6 +30,7 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +42,8 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -256,14 +259,14 @@ public class Table extends MetaObject implements Writable {
             this.nameToColumn.put(column.getName(), column);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_63) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_63) {
             comment = Text.readString(in);
         } else {
             comment = "";
         }
 
         // read create time
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_64) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_64) {
             this.createTime = in.readLong();
         } else {
             this.createTime = -1L;
@@ -349,7 +352,7 @@ public class Table extends MetaObject implements Writable {
             return false;
         }
 
-        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         if (colocateIndex.isColocateTable(getId())) {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {

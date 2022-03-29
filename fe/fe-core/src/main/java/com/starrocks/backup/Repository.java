@@ -26,7 +26,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -34,6 +33,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -508,9 +508,9 @@ public class Repository implements Writable {
         return origPath.substring(0, origPath.lastIndexOf(PATH_DELIMITER) + 1) + fileNameWithChecksum;
     }
 
-    public Status getBrokerAddress(Long beId, Catalog catalog, List<FsBroker> brokerAddrs) {
+    public Status getBrokerAddress(Long beId, GlobalStateMgr catalog, List<FsBroker> brokerAddrs) {
         // get backend
-        Backend be = Catalog.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");

@@ -23,17 +23,19 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -52,7 +54,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,10 +80,11 @@ public class GlobalTransactionMgr implements Writable {
     private TransactionIdGenerator idGenerator = new TransactionIdGenerator();
     private TxnStateCallbackFactory callbackFactory = new TxnStateCallbackFactory();
 
-    private Catalog catalog;
+//    private Catalog catalog;
+    private GlobalStateMgr stateMgr;
 
-    public GlobalTransactionMgr(Catalog catalog) {
-        this.catalog = catalog;
+    public GlobalTransactionMgr(GlobalStateMgr stateMgr) {
+        this.stateMgr = stateMgr;
     }
 
     public TxnStateCallbackFactory getCallbackFactory() {
@@ -95,7 +100,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
-        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, catalog, idGenerator)) ==
+        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, stateMgr, idGenerator)) ==
                 null) {
             LOG.debug("add database transaction manager for db {}", dbId);
         }
@@ -502,7 +507,7 @@ public class GlobalTransactionMgr implements Writable {
         for (long dbId : dbIds) {
             List<Comparable> info = new ArrayList<Comparable>();
             info.add(dbId);
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -636,5 +641,24 @@ public class GlobalTransactionMgr implements Writable {
     public void updateDatabaseUsedQuotaData(long dbId, long usedQuotaDataBytes) throws AnalysisException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.updateDatabaseUsedQuotaData(usedQuotaDataBytes);
+    }
+
+    public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+            int size = dis.readInt();
+            long newChecksum = checksum ^ size;
+            readFields(dis);
+            LOG.info("finished replay transactionState from image");
+            return newChecksum;
+        }
+        return checksum;
+    }
+
+    public long saveTransactionState(DataOutputStream dos, long checksum) throws IOException {
+        int size = getTransactionNum();
+        checksum ^= size;
+        dos.writeInt(size);
+        write(dos);
+        return checksum;
     }
 }
