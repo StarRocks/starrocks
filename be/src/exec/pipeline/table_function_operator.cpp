@@ -4,6 +4,13 @@
 
 namespace starrocks::pipeline {
 
+Status TableFunctionOperator::close(RuntimeState* state) {
+    if (_table_function != nullptr && _table_function_state != nullptr) {
+        _table_function->close(_table_function_state);
+    }
+    return Operator::close(state);
+}
+
 bool TableFunctionOperator::has_output() const {
     return _input_chunk != nullptr && (_remain_repeat_times > 0 || _input_chunk_index < _input_chunk->num_rows());
 }

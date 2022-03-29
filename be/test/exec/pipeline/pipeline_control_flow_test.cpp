@@ -581,7 +581,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
 
         start_test();
 
-        ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
         ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num * i);
         ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num * i, chunk_num * i);
         ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num * i, 0);

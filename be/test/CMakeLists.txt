@@ -41,6 +41,7 @@ set(EXEC_FILES
         ./exec/vectorized/table_function_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
+        ./exec/pipeline/table_function_operator_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
         ./exec/parquet/encoding_test.cpp
         ./exec/parquet/page_reader_test.cpp
