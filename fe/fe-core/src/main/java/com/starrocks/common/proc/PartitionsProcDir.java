@@ -74,10 +74,11 @@ public class PartitionsProcDir implements ProcDirInterface {
                 .add("VisibleVersion").add("VisibleVersionTime").add("VisibleVersionHash")
                 .add("State").add("PartitionKey").add("Range").add("DistributionKey")
                 .add("Buckets").add("ReplicationNum").add("StorageMedium").add("CooldownTime")
-                .add("LastConsistencyCheckTime").add("DataSize").add("RowCount").add("IsInMemory");
+                .add("LastConsistencyCheckTime").add("DataSize").add("IsInMemory");
         if (Config.use_staros) {
             builder.add("UseStarOS");
         }
+        builder.add("RowCount");
         TITLE_NAMES = builder.build();
     }
 
@@ -294,11 +295,11 @@ public class PartitionsProcDir implements ProcDirInterface {
                 String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(sizePair.first) + " "
                         + sizePair.second;
                 partitionInfo.add(readableSize);
-                partitionInfo.add(partition.getRowCount());
                 partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
                 if (Config.use_staros) {
                     partitionInfo.add(partition.isUseStarOS());
                 }
+                partitionInfo.add(partition.getRowCount());
 
                 partitionInfos.add(partitionInfo);
             }
