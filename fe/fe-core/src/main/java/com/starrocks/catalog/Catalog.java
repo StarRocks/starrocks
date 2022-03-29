@@ -6577,14 +6577,14 @@ public class Catalog {
         if (db == null) {
             throw new DdlException("db: " + dbName + " not exists");
         }
-        HiveTable table;
+        HiveMetaStoreTable table;
         db.readLock();
         try {
             Table tbl = db.getTable(tableName);
-            if (!(tbl instanceof HiveTable)) {
-                throw new DdlException("table : " + tableName + " not exists, or is not hive external table");
+            if (!(tbl instanceof HiveMetaStoreTable)) {
+                throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
-            table = (HiveTable) tbl;
+            table = (HiveMetaStoreTable) tbl;
         } finally {
             db.readUnlock();
         }

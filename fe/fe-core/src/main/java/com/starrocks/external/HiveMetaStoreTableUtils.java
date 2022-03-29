@@ -48,11 +48,12 @@ public class HiveMetaStoreTableUtils {
     }
 
     public static List<HivePartitionStats> getPartitionsStats(String resourceName,
-                                                       String db,
-                                                       String table,
-                                                       List<PartitionKey> partitionKeys) throws DdlException {
+                                                              String db,
+                                                              String table,
+                                                              List<PartitionKey> partitionKeys,
+                                                              boolean isHudiTable) throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionsStats(resourceName, db, table, partitionKeys);
+                .getPartitionsStats(resourceName, db, table, partitionKeys, isHudiTable);
     }
 
     public static HiveTableStats getTableStats(String resourceName,
@@ -62,18 +63,25 @@ public class HiveMetaStoreTableUtils {
     }
 
     public static List<HivePartition> getPartitions(String resourceName,
-                                             String db,
-                                             String table,
-                                             List<PartitionKey> partitionKeys)
-            throws DdlException {
+                                                    String db,
+                                                    String table,
+                                                    List<PartitionKey> partitionKeys) throws DdlException {
+        return getPartitions(resourceName, db, table, partitionKeys, false);
+    }
+
+    public static List<HivePartition> getPartitions(String resourceName,
+                                                    String db,
+                                                    String table,
+                                                    List<PartitionKey> partitionKeys,
+                                                    boolean isHudiTable) throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitions(resourceName, db, table, partitionKeys);
+                .getPartitions(resourceName, db, table, partitionKeys, isHudiTable);
     }
 
     public static Map<PartitionKey, Long> getPartitionKeys(String resourceName,
-                                                    String db,
-                                                    String table,
-                                                    List<Column> partColumns) throws DdlException {
+                                                           String db,
+                                                           String table,
+                                                           List<Column> partColumns) throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
                 .getPartitionKeys(resourceName, db, table, partColumns);
     }
@@ -83,6 +91,15 @@ public class HiveMetaStoreTableUtils {
                                                  String table,
                                                  List<PartitionKey> partitions,
                                                  List<Column> partColumns) {
+        return getPartitionStatsRowCount(resourceName, db, table, partitions, partColumns, false);
+    }
+
+    public static long getPartitionStatsRowCount(String resourceName,
+                                                 String db,
+                                                 String table,
+                                                 List<PartitionKey> partitions,
+                                                 List<Column> partColumns,
+                                                 boolean isHudiTable) {
         if (partitions == null) {
             try {
                 partitions = Lists.newArrayList(getPartitionKeys(resourceName, db, table, partColumns).keySet());
@@ -99,7 +116,7 @@ public class HiveMetaStoreTableUtils {
 
         List<HivePartitionStats> partitionsStats = Lists.newArrayList();
         try {
-            partitionsStats = getPartitionsStats(resourceName, db, table, partitions);
+            partitionsStats = getPartitionsStats(resourceName, db, table, partitions, isHudiTable);
         } catch (DdlException e) {
             LOG.warn("Failed to get table {} partitions stats.", table, e);
         }
