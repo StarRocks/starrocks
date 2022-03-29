@@ -33,6 +33,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieTableType;
+import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.Option;
@@ -218,24 +219,25 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+        HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
-        HoodieTableType hudiTableType = metaClient.getTableConfig().getTableType();
+        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
         if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
             throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
         }
         hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
 
-        Option<String[]> hudiTablePrimaryKey = metaClient.getTableConfig().getRecordKeyFields();
+        Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
         if (hudiTablePrimaryKey.isPresent()) {
-            hudiProperties.put(HUDI_TABLE_PRIMARY_KEY, metaClient.getTableConfig().getRecordKeyFieldProp());
+            hudiProperties.put(HUDI_TABLE_PRIMARY_KEY, hudiTableConfig.getRecordKeyFieldProp());
         }
 
-        String hudiTablePreCombineField = metaClient.getTableConfig().getPreCombineField();
+        String hudiTablePreCombineField = hudiTableConfig.getPreCombineField();
         if (!Strings.isNullOrEmpty(hudiTablePreCombineField)) {
             hudiProperties.put(HUDI_TABLE_PRE_COMBINE_FIELD, hudiTablePreCombineField);
         }
 
-        HoodieFileFormat hudiBaseFileFormat = metaClient.getTableConfig().getBaseFileFormat();
+        HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
         hudiProperties.put(HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
 
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
@@ -246,7 +248,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             throw new DdlException("Cannot get hudi table schema.");
         }
 
-        Option<String[]> hudiPartitionFields = metaClient.getTableConfig().getPartitionFields();
+        Option<String[]> hudiPartitionFields = hudiTableConfig.getPartitionFields();
         if (hudiPartitionFields.isPresent()) {
             for (String partField : hudiPartitionFields.get()) {
                 Column partColumn = this.nameToColumn.get(partField);
