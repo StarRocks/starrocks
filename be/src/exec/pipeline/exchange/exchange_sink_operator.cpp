@@ -220,9 +220,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
         _parent->_buffer->add_request(info);
-        if (!info.attachment.empty()) {
-            COUNTER_UPDATE(_parent->_request_sent_counter, 1);
-        }
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -241,9 +238,6 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
-    if (!info.attachment.empty()) {
-        COUNTER_UPDATE(_parent->_request_sent_counter, 1);
-    }
 
     return Status::OK();
 }
@@ -348,21 +342,11 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     srand(reinterpret_cast<uint64_t>(this));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
-    _request_sent_counter = ADD_COUNTER(_unique_metrics, "RequestSent", TUnit::UNIT);
-    _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
     _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
-    _overall_throughput = _unique_metrics->add_derived_counter(
-            "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            [capture0 = _bytes_sent_counter, capture1 = _total_timer] {
-                return RuntimeProfile::units_per_second(capture0, capture1);
-            },
-            "");
-    _network_timer = ADD_TIMER(_unique_metrics, "NetworkTime");
-    _wait_timer = ADD_TIMER(_unique_metrics, "WaitTime");
 
     for (auto& _channel : _channels) {
         RETURN_IF_ERROR(_channel->init(state));
@@ -541,8 +525,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
-    COUNTER_SET(_network_timer, _buffer->network_time());
-    COUNTER_SET(_wait_timer, _buffer->wait_time());
+    _buffer->update_profile(_unique_metrics.get());
     Operator::close(state);
 }
 
@@ -597,7 +580,6 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     size_t chunk_size = dst->data().size();
     VLOG_ROW << "chunk data size " << chunk_size;
 
-    COUNTER_UPDATE(_bytes_sent_counter, chunk_size * num_receivers);
     COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
     return Status::OK();
 }

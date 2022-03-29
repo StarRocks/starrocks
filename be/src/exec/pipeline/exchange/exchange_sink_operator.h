@@ -118,15 +118,8 @@ private:
     RuntimeProfile::Counter* _serialize_batch_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;
-    RuntimeProfile::Counter* _request_sent_counter = nullptr;
-    RuntimeProfile::Counter* _bytes_sent_counter = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;
-
-    // Throughput per total time spent in sender
-    RuntimeProfile::Counter* _overall_throughput = nullptr;
-    RuntimeProfile::Counter* _network_timer = nullptr;
-    RuntimeProfile::Counter* _wait_timer = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

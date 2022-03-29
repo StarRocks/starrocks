@@ -78,6 +78,10 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
         request.params->release_finst_id();
         return;
     }
+    if (!request.attachment.empty()) {
+        _bytes_enqueued += request.attachment.size();
+        _request_enqueued++;
+    }
     request.enqueue_nanos = MonotonicNanos();
     {
         auto& instance_id = request.fragment_instance_id;
@@ -107,7 +111,37 @@ bool SinkBuffer::is_finished() const {
     return _num_sending_rpc == 0 && _total_in_flight_rpc == 0;
 }
 
-int64_t SinkBuffer::network_time() {
+void SinkBuffer::update_profile(RuntimeProfile* profile) {
+    bool flag = false;
+    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
+        return;
+    }
+
+    auto* network_timer = ADD_TIMER(profile, "NetworkTime");
+    auto* wait_timer = ADD_TIMER(profile, "WaitTime");
+
+    COUNTER_SET(network_timer, _network_time());
+    COUNTER_SET(wait_timer, _wait_time());
+
+    auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
+    auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+
+    COUNTER_SET(bytes_sent_counter, _bytes_sent);
+    COUNTER_SET(request_sent_counter, _request_sent);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
+
+    profile->add_derived_counter(
+            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            [bytes_sent_counter, network_timer] {
+                return RuntimeProfile::units_per_second(bytes_sent_counter, network_timer);
+            },
+            "");
+}
+
+int64_t SinkBuffer::_network_time() {
     int64_t max = 0;
     for (auto& [_, time_trace] : _network_times) {
         double average_concurrency =
@@ -121,7 +155,7 @@ int64_t SinkBuffer::network_time() {
     return max;
 }
 
-int64_t SinkBuffer::wait_time() {
+int64_t SinkBuffer::_wait_time() {
     int64_t max = 0;
     for (auto& [_, time_trace] : _wait_times) {
         double average_concurrency =
@@ -241,6 +275,11 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
 
         request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
         request.params->set_sequence(_request_seqs[instance_id.lo]++);
+
+        if (!request.attachment.empty()) {
+            _bytes_sent += request.attachment.size();
+            _request_sent++;
+        }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), request.enqueue_nanos, GetCurrentTimeNanos()});

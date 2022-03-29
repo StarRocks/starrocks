@@ -74,23 +74,8 @@ public:
     bool is_full() const;
     bool is_finished() const;
 
-    // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
-    // and the processing time of both sides are excluded
-    // For each destination, we may send multiply packages at the same time, and the time is
-    // related to the degree of concurrency, so the network_time will be calculated as
-    // `accumulated_network_time / average_concurrency`
-    // And we just pick the maximum accumulated_network_time among all destination
-    int64_t network_time();
-
-    // Roughly estimate whole wait time which including
-    // 1. the time waiting in the queue
-    // 2. the network time
-    // 3. the processing time at the receiving side
-    // For each destination, we may send multiply packages at the same time, and the time is
-    // related to the degree of concurrency, so the wait_time will be calculated as
-    // `accumulated_wait_time / average_concurrency`
-    // And we just pick the maximum accumulated_wait_time among all destination
-    int64_t wait_time();
+    // Add counters to the given profile
+    void update_profile(RuntimeProfile* profile);
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
@@ -105,6 +90,24 @@ private:
     // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
     void _try_to_send_rpc(const TUniqueId& instance_id);
+
+    // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
+    // and the processing time of both sides are excluded
+    // For each destination, we may send multiply packages at the same time, and the time is
+    // related to the degree of concurrency, so the network_time will be calculated as
+    // `accumulated_network_time / average_concurrency`
+    // And we just pick the maximum accumulated_network_time among all destination
+    int64_t _network_time();
+
+    // Roughly estimate whole wait time which including
+    // 1. the time waiting in the queue
+    // 2. the network time
+    // 3. the processing time at the receiving side
+    // For each destination, we may send multiply packages at the same time, and the time is
+    // related to the degree of concurrency, so the wait_time will be calculated as
+    // `accumulated_wait_time / average_concurrency`
+    // And we just pick the maximum accumulated_wait_time among all destination
+    int64_t _wait_time();
 
     FragmentContext* _fragment_ctx;
     const MemTracker* _mem_tracker;
@@ -152,6 +155,13 @@ private:
     // of how many threads are calling _try_to_send_rpc
     std::atomic<bool> _is_finishing = false;
     std::atomic<int32_t> _num_sending_rpc = 0;
+
+    // RuntimeProfile counters
+    std::atomic_bool _is_profile_updated = false;
+    std::atomic<int64_t> _bytes_enqueued = 0;
+    std::atomic<int64_t> _request_enqueued = 0;
+    std::atomic<int64_t> _bytes_sent = 0;
+    std::atomic<int64_t> _request_sent = 0;
 
 }; // namespace starrocks::pipeline
 
