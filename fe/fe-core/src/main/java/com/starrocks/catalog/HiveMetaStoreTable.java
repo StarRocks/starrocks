@@ -23,4 +23,10 @@ public interface HiveMetaStoreTable {
     List<Column> getPartitionColumns();
 
     Map<PartitionKey, Long> getPartitionKeys() throws DdlException;
+
+    void refreshTableCache() throws DdlException;
+
+    void refreshPartCache(List<String> partNames) throws DdlException;
+
+    void refreshTableColumnStats() throws DdlException;
 }

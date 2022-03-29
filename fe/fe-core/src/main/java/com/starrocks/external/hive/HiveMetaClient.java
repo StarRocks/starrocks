@@ -42,9 +42,13 @@ import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.FileSystemViewManager;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -234,12 +238,23 @@ public class HiveMetaClient {
                 sd = partition.getSd();
                 partName = FSUtils.getRelativePartitionPath(new Path(basePath), new Path(sd.getLocation()));
             }
-            HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-            if (format == null) {
-                throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
+            Configuration conf = new Configuration();
+            HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+            HoodieFileFormat hudiBaseFileFormat = metaClient.getTableConfig().getBaseFileFormat();
+
+            HdfsFileFormat format;
+            switch (hudiBaseFileFormat) {
+                case PARQUET:
+                    format = HdfsFileFormat.PARQUET;
+                    break;
+                case ORC:
+                    format = HdfsFileFormat.ORC;
+                    break;
+                default:
+                    throw new DdlException("unsupported file format [" + hudiBaseFileFormat.name() + "]");
             }
             String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
-            List<HdfsFileDesc> fileDescs = getHudiFileDescs(sd, basePath, partName);
+            List<HdfsFileDesc> fileDescs = getHudiFileDescs(sd, metaClient, partName);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
             throw new DdlException("Get hudi partition meta data failed: "
@@ -251,17 +266,19 @@ public class HiveMetaClient {
         }
     }
 
-    private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, String basePath, String partName) throws Exception {
+    private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, HoodieTableMetaClient metaClient,
+                                                String partName) throws Exception {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-
-        FileSystem fileSystem = getFileSystem(new URI(basePath));
-        Configuration conf = new Configuration();
-        HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+        FileSystem fileSystem = metaClient.getRawFs();
         HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
         HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().build();
         HoodieTableFileSystemView fileSystemView = FileSystemViewManager.createInMemoryFileSystemView(engineContext,
                 metaClient, metadataConfig);
-        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView.getLatestBaseFiles(partName).iterator();
+        HoodieTimeline activeInstants = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
+        Option<HoodieInstant> latestInstant = activeInstants.lastInstant();
+        String queryInstant = latestInstant.get().getTimestamp();
+        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView
+                .getLatestBaseFilesBeforeOrOn(partName, queryInstant).iterator();
         while (hoodieBaseFileIterator.hasNext()) {
             HoodieBaseFile baseFile = hoodieBaseFileIterator.next();
 
