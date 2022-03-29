@@ -42,6 +42,7 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
+    finish_init();
     return Status::OK();
 }
 

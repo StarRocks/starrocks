@@ -130,6 +130,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _runtime_profile->add_info_string("PredicatesPartition", hdfs_scan_node.partition_sql_predicates);
     }
 
+    finish_init();
     return Status::OK();
 }
 

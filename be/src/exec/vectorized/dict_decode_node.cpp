@@ -36,6 +36,7 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _decode_column_cids.emplace_back(decode_id);
     }
 
+    finish_init();
     return Status::OK();
 }
 

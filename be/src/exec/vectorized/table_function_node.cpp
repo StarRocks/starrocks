@@ -65,6 +65,7 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _table_function_result_eos = true;
     _outer_column_remain_repeat_times = 0;
 
+    finish_init();
     return Status::OK();
 }
 

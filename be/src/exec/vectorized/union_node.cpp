@@ -47,6 +47,7 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    finish_init();
     return Status::OK();
 }
 

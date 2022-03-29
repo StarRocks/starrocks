@@ -63,6 +63,7 @@ Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.schema_scan_node.__isset.thread_id) {
         _scanner_param.thread_id = tnode.schema_scan_node.thread_id;
     }
+    finish_init();
     return Status::OK();
 }
 

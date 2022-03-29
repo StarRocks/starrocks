@@ -51,6 +51,7 @@ Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _fields_context = es_scan_node.fields_context;
     }
 
+    finish_init();
     return Status::OK();
 }
 

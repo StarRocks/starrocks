@@ -69,6 +69,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _common_sub_expr_ctxs.emplace_back(context);
     }
 
+    finish_init();
     return Status::OK();
 }
 

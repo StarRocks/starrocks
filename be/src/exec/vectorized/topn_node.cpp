@@ -64,6 +64,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _runtime_profile->add_info_string("SortKeys", tnode.sort_node.sql_sort_keys);
     }
     _runtime_profile->add_info_string("SortType", tnode.sort_node.use_top_n ? "TopN" : "All");
+    finish_init();
     return Status::OK();
 }
 

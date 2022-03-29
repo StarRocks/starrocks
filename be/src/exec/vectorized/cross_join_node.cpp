@@ -23,6 +23,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
+    finish_init();
     return Status::OK();
 }
 

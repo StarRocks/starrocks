@@ -32,6 +32,7 @@ FileScanNode::~FileScanNode() {
 
 Status FileScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
+    finish_init();
     return Status::OK();
 }
 

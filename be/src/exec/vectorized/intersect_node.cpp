@@ -33,6 +33,7 @@ Status IntersectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs));
         _child_expr_lists.push_back(ctxs);
     }
+    finish_init();
     return Status::OK();
 }
 

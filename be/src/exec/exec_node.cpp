@@ -187,7 +187,6 @@ Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;
     }
-    _construct_state = INITIALIZED;
     return Status::OK();
 }
 

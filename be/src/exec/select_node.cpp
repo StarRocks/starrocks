@@ -40,6 +40,12 @@ SelectNode::~SelectNode() {
     }
 }
 
+Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    ExecNode::init(tnode, state);
+    finish_init();
+    return Status::OK();
+}
+
 Status SelectNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     if (use_vectorized()) {

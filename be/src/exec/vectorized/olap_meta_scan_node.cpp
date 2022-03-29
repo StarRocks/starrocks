@@ -19,6 +19,7 @@ OlapMetaScanNode::~OlapMetaScanNode() {
 
 Status OlapMetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    finish_init();
     return Status::OK();
 }
 

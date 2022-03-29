@@ -275,6 +275,8 @@ protected:
 
     bool is_closed() const { return _construct_state != INITIALIZED; }
 
+    void finish_init() { _construct_state = INITIALIZED; }
+
     // TODO(zc)
     /// Pointer to the containing SubplanNode or NULL if not inside a subplan.
     /// Set by SubplanNode::Init(). Not owned.

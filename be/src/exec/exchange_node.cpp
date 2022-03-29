@@ -60,6 +60,8 @@ Status ExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.exchange_node.sort_info, _pool));
     _is_asc_order = tnode.exchange_node.sort_info.is_asc_order;
     _nulls_first = tnode.exchange_node.sort_info.nulls_first;
+
+    finish_init();
     return Status::OK();
 }
 

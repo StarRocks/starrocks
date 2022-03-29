@@ -111,6 +111,8 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+
+    finish_init();
     return Status::OK();
 }
 

@@ -52,7 +52,7 @@ AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(_conjunct_ctxs.empty());
-
+    finish_init();
     return Status::OK();
 }
 
