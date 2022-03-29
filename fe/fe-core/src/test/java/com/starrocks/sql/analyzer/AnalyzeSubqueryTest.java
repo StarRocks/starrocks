@@ -48,6 +48,7 @@ public class AnalyzeSubqueryTest {
 
         analyzeSuccess(
                 "select v1 from t0 where v2 in (select v4 from t1 where v3 = v5) or v2 = (select v4 from t1 where v3 = v5)");
+        analyzeFail("select v1 from t0 order by (select v4 from t1)", "ORDER BY clause cannot contain subquery");
     }
 
     @Test
