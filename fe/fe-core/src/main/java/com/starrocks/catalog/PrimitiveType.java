@@ -357,6 +357,11 @@ public enum PrimitiveType {
                 // 1MB
                 typeSize = 1024 * 1024;
                 break;
+            case JSON:
+                typeSize = 1024;
+                break;
+            default:
+                Preconditions.checkState(false, "unreachable");
         }
         return typeSize;
     }
@@ -403,6 +408,10 @@ public enum PrimitiveType {
 
     public boolean isStringType() {
         return (this == VARCHAR || this == CHAR || this == HLL);
+    }
+
+    public boolean isJsonType() {
+        return this == JSON;
     }
 
     public boolean isCharFamily() {
