@@ -43,6 +43,11 @@ public:
     /**
      * This interface is used read a whole message, For example: read a message from kafka.
      *
+     * buf: provided buffer, which could be re-allocated if the capacity is not enough.
+     * capacity: the given buffer's capacity, which would be updated if the buffer is re-allocated.
+     * length: bytes read.
+     * padding: extra bytes allocated in the buffer.
+     * 
      * if read eof then return Status::OK and length is set 0 and buf is set NULL,
      *  other return readed bytes.
      */
