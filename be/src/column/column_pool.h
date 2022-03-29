@@ -172,7 +172,11 @@ class CACHELINE_ALIGNED ColumnPool {
                 freed_bytes += release_column_if_large(_curr_free.ptrs[i], limit);
                 ASAN_POISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
             }
-            _curr_free.bytes -= freed_bytes;
+            if (freed_bytes > 0) {
+                _curr_free.bytes -= freed_bytes;
+                tls_thread_status.mem_consume(freed_bytes);
+                _pool->mem_tracker()->release(freed_bytes);
+            }
         }
 
         static inline void delete_local_pool(void* arg) { delete (LocalPool*)arg; }
