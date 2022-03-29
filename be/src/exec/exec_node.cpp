@@ -89,7 +89,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
           _runtime_state(nullptr),
-          _is_closed(false) {
+          _construct_state(UNKNOWN) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
@@ -187,6 +187,7 @@ Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;
     }
+    _construct_state = INITIALIZED;
     return Status::OK();
 }
 
@@ -308,10 +309,10 @@ Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
 }
 
 Status ExecNode::close(RuntimeState* state) {
-    if (_is_closed) {
+    if (_construct_state != INITIALIZED) {
         return Status::OK();
     }
-    _is_closed = true;
+    _construct_state = CLOSED;
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
 
     if (_rows_returned_counter != nullptr) {

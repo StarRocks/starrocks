@@ -273,7 +273,7 @@ protected:
 
     ExecNode* child(int i) { return _children[i]; }
 
-    bool is_closed() const { return _is_closed; }
+    bool is_closed() const { return _construct_state != INITIALIZED; }
 
     // TODO(zc)
     /// Pointer to the containing SubplanNode or NULL if not inside a subplan.
@@ -301,7 +301,13 @@ protected:
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
+    enum ConstructState {
+        UNKNOWN,     // Uninitialized
+        INITIALIZED, // Already initialized
+        CLOSED       // Closed
+    };
+
     RuntimeState* _runtime_state;
-    bool _is_closed;
+    ConstructState _construct_state = UNKNOWN;
 };
 } // namespace starrocks

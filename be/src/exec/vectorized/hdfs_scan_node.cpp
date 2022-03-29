@@ -450,9 +450,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
         }
     } else {
         // sometimes state == ok but global_status was not ok
-        if (scanner != nullptr) {
             _release_scanner(scanner);
-        }
     }
 }
 
