@@ -201,13 +201,7 @@ LOGICAL_NOT: '!';
 ARROW: '->';
 AT: '@';
 
-SINGLE_QUOTED_TEXT
-    : '\'' ( ~'\'' | '\'\'' )* '\''
-    ;
 
-DOUBLE_QUOTED_TEXT
-    : '"' ( '\\'. | '""' | ~('"'| '\\') )* '"'
-    ;
 
 INTEGER_VALUE
     : DIGIT+
@@ -223,12 +217,20 @@ DOUBLE_VALUE
     | '.' DIGIT+ EXPONENT
     ;
 
+SINGLE_QUOTED_TEXT
+    : '\'' ( ~'\'' | '\'\'' )* '\''
+    ;
+
+DOUBLE_QUOTED_TEXT
+    : '"' ( '\\'. | '""' | ~('"'| '\\') )* '"'
+    ;
+
 IDENTIFIER
-    : (LETTER | '_') (LETTER | DIGIT | '_' | '@' | ':')*
+    : (LETTER | '_') (LETTER | DIGIT | '_')*
     ;
 
 DIGIT_IDENTIFIER
-    : DIGIT (LETTER | DIGIT | '_' | '@' | ':')+
+    : DIGIT (LETTER | DIGIT | '_')+
     ;
 
 QUOTED_IDENTIFIER
@@ -238,6 +240,7 @@ QUOTED_IDENTIFIER
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
+
 
 fragment EXPONENT
     : 'E' [+-]? DIGIT+

@@ -24,14 +24,15 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 public class ArraySliceExpr extends Expr {
-    public ArraySliceExpr(Expr expr, Expr lower_bound, Expr upper_bound) {
+    public ArraySliceExpr(Expr expr, Expr lowerBound, Expr upperBound) {
         this.children.add(expr);
-        this.children.add(lower_bound);
-        this.children.add(upper_bound);
+        this.children.add(lowerBound);
+        this.children.add(upperBound);
     }
 
     public ArraySliceExpr(ArraySliceExpr other) {
@@ -70,5 +71,10 @@ public class ArraySliceExpr extends Expr {
     @Override
     public Expr clone() {
         return new ArraySliceExpr(this);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitArraySliceExpr(this, context);
     }
 }
