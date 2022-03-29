@@ -27,6 +27,7 @@
 #include <set>
 
 #include "storage/data_dir.h"
+#include "storage/object_metastore.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
@@ -181,9 +182,20 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
     if (!is_recovery) {
+#ifdef STARROCKS_WITH_STAROS
+        auto metastore = new_object_metastore(rowset_ptr->rowset_path());
+        auto st = metastore->add_rowset_meta(*(rowset_ptr->rowset_meta()));
+        LOG(INFO) << "xxx add rowset meta. st: " << st.to_string();
+        auto meta_st = metastore->get_rowset_meta(tablet_uid, rowset_ptr->rowset_id());
+        std::string json_meta;
+        meta_st.value()->json_rowset_meta(&json_meta);
+        LOG(INFO) << "xxx get rowset meta: " << json_meta;
+#else
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+#endif
+
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -234,8 +246,20 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         // TODO(ygl): rowset is already set version here, memory is changed, if save failed
         // it maybe a fatal error
         rowset_ptr->make_visible(version);
+
+#ifdef STARROCKS_WITH_STAROS
+        auto metastore = new_object_metastore(rowset_ptr->rowset_path());
+        auto st = metastore->update_rowset_meta(*(rowset_ptr->rowset_meta()));
+        LOG(INFO) << "xxx update rowset meta. st: " << st.to_string();
+        auto meta_st = metastore->get_rowset_meta(tablet_uid, rowset_ptr->rowset_id());
+        std::string json_meta;
+        meta_st.value()->json_rowset_meta(&json_meta);
+        LOG(INFO) << "xxx get rowset meta: " << json_meta;
+#else
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+#endif
+
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id

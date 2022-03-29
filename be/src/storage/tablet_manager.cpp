@@ -37,6 +37,7 @@ DIAGNOSTIC_POP
 #include "runtime/current_thread.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/object_metastore.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -1356,7 +1357,12 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         return tablet->updates()->clear_meta();
     } else {
+#ifdef STARROCKS_WITH_STAROS
+        auto metastore = new_object_metastore(tablet->schema_hash_path());
+        return metastore->remove_tablet_meta(tablet->tablet_id(), tablet->schema_hash());
+#else
         return TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
+#endif
     }
 }
 

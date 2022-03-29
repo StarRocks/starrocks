@@ -35,6 +35,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
+#include "storage/object_metastore.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
@@ -115,7 +116,20 @@ Status Tablet::init() {
 // should save tablet meta to remote meta store
 // if it's a primary replica
 void Tablet::save_meta() {
+#ifdef STARROCKS_WITH_STAROS
+    auto metastore = new_object_metastore(schema_hash_path());
+    auto st = metastore->add_tablet_meta(*_tablet_meta);
+    LOG(INFO) << "xxx add tablet meta. st: " << st.to_string();
+    auto meta_st = metastore->get_tablet_meta(_tablet_meta->tablet_id(), _tablet_meta->schema_hash());
+    json2pb::Pb2JsonOptions json_options;
+    json_options.pretty_json = true;
+    std::string json_meta;
+    meta_st.value()->to_json(&json_meta, json_options);
+    LOG(INFO) << "xxx get tablet meta: " << json_meta;
+#else
     auto st = _tablet_meta->save_meta(_data_dir);
+#endif
+
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 

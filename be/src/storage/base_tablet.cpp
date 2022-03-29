@@ -45,6 +45,7 @@ Status BaseTablet::set_tablet_state(TabletState state) {
 }
 
 void BaseTablet::_gen_tablet_path() {
+    /*
     if (_data_dir != nullptr) {
         std::string path = _data_dir->path() + DATA_PREFIX;
         path = path_util::join_path_segments(path, std::to_string(_tablet_meta->shard_id()));
@@ -52,6 +53,8 @@ void BaseTablet::_gen_tablet_path() {
         path = path_util::join_path_segments(path, std::to_string(_tablet_meta->schema_hash()));
         _tablet_path = path;
     }
+     */
+    _tablet_path = "s3://wangyanbo-test/" + std::to_string(_tablet_meta->tablet_id());
 }
 
 std::string BaseTablet::tablet_id_path() const {

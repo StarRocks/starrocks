@@ -354,6 +354,9 @@ endif()
 # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 
+# use StarOS
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_STAROS")
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
@@ -638,7 +641,7 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
     if (${WITH_BENCH} STREQUAL "OFF")
         return()
     endif()
-    
+
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
     # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
     get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
