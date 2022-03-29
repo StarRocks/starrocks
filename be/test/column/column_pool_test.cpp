@@ -48,7 +48,7 @@ TEST_F(ColumnPoolTest, single_thread) {
     ASSERT_EQ(DEL_NOT_SATISFIED, c2->delete_state());
     ASSERT_EQ(3, c2->get_data().capacity());
 
-    auto c3 = get_column<Int32Column>()k
+    auto c3 = get_column<Int32Column>();
     ASSERT_NE(c2, c3);
 
     auto c4 = get_column<Int32Column>();
