@@ -312,7 +312,43 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
         }
         timer.start();
     }
+    if (_compare_strategy == Default || _compare_strategy == RowWise) {
+        return _partial_sort_row_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
+    } else {
+        return _partial_sort_col_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
+    }
+}
 
+Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                                DataSegments& segments, const size_t chunk_size, size_t rows_to_sort) {
+    std::vector<Columns> vertical_chunks;
+    for (auto& segment : segments) {
+        vertical_chunks.push_back(segment.order_by_columns);
+    }
+    auto do_sort = [&](Permutation& perm, size_t limit) {
+        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_order_flag, _null_first_flag, perm,
+                                    limit);
+    };
+
+    size_t first_size = std::min(permutations.first.size(), rows_to_sort);
+
+    // Sort the first, then the second
+    if (first_size > 0) {
+        RETURN_IF_CANCELLED(state);
+        RETURN_IF_ERROR(do_sort(permutations.first, first_size));
+    }
+
+    if (rows_to_sort > first_size) {
+        RETURN_IF_CANCELLED(state);
+        RETURN_IF_ERROR(do_sort(permutations.second, rows_to_sort - first_size));
+    }
+
+    return Status::OK();
+}
+
+Status ChunksSorterTopn::_partial_sort_row_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                                DataSegments& segments, const size_t chunk_size,
+                                                size_t number_of_rows_to_sort) {
     const DataSegments& data = segments;
     const std::vector<int>& sort_order_flag = _sort_order_flag;
     const std::vector<int>& null_first_flag = _null_first_flag;

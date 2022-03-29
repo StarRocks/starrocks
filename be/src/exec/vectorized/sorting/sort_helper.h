@@ -2,12 +2,15 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized//sorting//sort_permute.h"
 #include "exec/vectorized//sorting//sorting.h"
 #include "runtime/timestamp_value.h"
+#include "util/json.h"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
@@ -62,6 +65,9 @@ struct SorterComparator<TimestampValue> {
 
 template <class PermutationType>
 static std::string dubug_column(const Column* column, const PermutationType& permutation) {
+    if (column == nullptr) {
+        return "null";
+    }
     std::string res;
     for (auto p : permutation) {
         res += fmt::format("{:>5}, ", column->debug_item(p.index_in_chunk));
@@ -69,57 +75,104 @@ static std::string dubug_column(const Column* column, const PermutationType& per
     return res;
 }
 
+// TODO: reduce duplicate code
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
+                                                           const std::vector<ColumnPtr>& data_columns,
+                                                           NullPred null_pred, bool is_asc_order, bool is_null_first,
+                                                           Permutation& permutation, Tie& tie,
+                                                           std::pair<int, int> range, bool build_tie, size_t limit,
+                                                           size_t* limited) {
+    VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
+
+    TieIterator iterator(tie, range.first, range.second);
+    while (iterator.next()) {
+        if (UNLIKELY(cancel)) {
+            return Status::Cancelled("Sort cancelled");
+        }
+        int range_first = iterator.range_first;
+        int range_last = iterator.range_last;
+
+        if (UNLIKELY(limit > 0 && range_first > limit)) {
+            *limited = std::min(*limited, (size_t)range_first);
+            break;
+        }
+        if (LIKELY(range_last - range_first > 1)) {
+            auto pivot_iter =
+                    std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
+            int pivot_start = pivot_iter - permutation.begin();
+            std::pair<size_t, size_t> null_range = {range_first, pivot_start};
+            std::pair<size_t, size_t> notnull_range = {pivot_start, range_last};
+            if (!is_null_first) {
+                std::swap(null_range, notnull_range);
+            }
+
+            // For null values, limit could only be pruned to end of null
+            if (UNLIKELY(limit > 0 && null_range.first < limit && limit <= null_range.second)) {
+                *limited = std::min(*limited, null_range.second);
+            }
+
+            if (notnull_range.first < notnull_range.second) {
+                tie[notnull_range.first] = 0;
+                RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation,
+                                                      tie, notnull_range, build_tie, limit, limited));
+            }
+            if (range_first <= null_range.first && null_range.first < range_last) {
+                // Mark all null as 0, they don
+                std::fill(tie.begin() + null_range.first, tie.begin() + null_range.second, 1);
+
+                // Cut off null and non-null
+                tie[null_range.first] = 0;
+            }
+        }
+
+        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
+    }
+
+    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
+
+    return Status::OK();
+}
+
 // 1. Partition null and notnull values
 // 2. Sort by not-null values
-static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column, bool is_asc_order,
+template <class NullPred>
+static inline Status sort_and_tie_helper_nullable(const bool& cancel, const NullableColumn* column,
+                                                  const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
-    const NullData& null_data = column->immutable_null_column_data();
-    auto null_pred = [&](const SmallPermuteItem& item) -> bool {
-        if (is_null_first) {
-            return null_data[item.index_in_chunk] == 1;
-        } else {
-            return null_data[item.index_in_chunk] != 1;
-        }
-    };
-
     VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
     VLOG(2) << fmt::format("nullable column before sort: {}\n", dubug_column(column, permutation));
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
+        if (UNLIKELY(cancel)) {
+            return Status::Cancelled("Sort cancelled");
+        }
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
-        if (range_last - range_first > 1) {
+        if (LIKELY(range_last - range_first > 1)) {
             auto pivot_iter =
                     std::partition(permutation.begin() + range_first, permutation.begin() + range_last, null_pred);
             int pivot_start = pivot_iter - permutation.begin();
-            int notnull_start, notnull_end;
-            int null_start, null_end;
-            if (is_null_first) {
-                null_start = range_first;
-                null_end = pivot_start;
-                notnull_start = pivot_start;
-                notnull_end = range_last;
-            } else {
-                notnull_start = range_first;
-                notnull_end = pivot_start;
-                null_start = pivot_start;
-                null_end = range_last;
+            std::pair<int, int> null_range = {range_first, pivot_start};
+            std::pair<int, int> notnull_range = {pivot_start, range_last};
+            if (!is_null_first) {
+                std::swap(null_range, notnull_range);
             }
 
-            if (notnull_start < notnull_end) {
-                tie[notnull_start] = 0;
-                RETURN_IF_ERROR(sort_and_tie_column(cancel, column->data_column(), is_asc_order, is_null_first,
-                                                    permutation, tie, {notnull_start, notnull_end}, build_tie));
+            if (notnull_range.first < notnull_range.second) {
+                tie[notnull_range.first] = 0;
+                RETURN_IF_ERROR(sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie,
+                                                    notnull_range, build_tie));
             }
-            if (range_first <= null_start && null_start < range_last) {
+            if (range_first <= null_range.first && null_range.first < range_last) {
                 // Mark all null as 0, they don
-                std::fill(tie.begin() + null_start, tie.begin() + null_end, 1);
+                std::fill(tie.begin() + null_range.first, tie.begin() + null_range.second, 1);
 
                 // Cut off null and non-null
-                tie[null_start] = 0;
+                tie[null_range.first] = 0;
             }
         }
 
@@ -137,14 +190,39 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 template <class DataComparator, class PermutationType>
 static inline Status sort_and_tie_helper(const bool& cancel, const Column* column, bool is_asc_order,
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
-                                         std::pair<int, int> range, bool build_tie) {
+                                         std::pair<int, int> range, bool build_tie, size_t limit = 0,
+                                         size_t* limited = nullptr) {
     auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
-    auto do_sort = [&](auto begin, auto end) {
-        if (is_asc_order) {
-            ::pdqsort(cancel, begin, end, lesser);
+    auto do_sort = [&](size_t first_iter, size_t last_iter) {
+        auto begin = permutation.begin() + first_iter;
+        auto end = permutation.begin() + last_iter;
+
+        // If this range could be used to prune the limit, use partial sort and calculate the end of limit
+        if (UNLIKELY(limit > 0 && first_iter < limit && limit <= last_iter)) {
+            int n = limit - first_iter;
+            if (is_asc_order) {
+                std::partial_sort(begin, begin + n, end, lesser);
+            } else {
+                std::partial_sort(begin, begin + n, end, greater);
+            }
+
+            // Find if any element equal with the nth element, take it into account of this run
+            auto nth = permutation[limit - 1];
+            size_t equal_count = 0;
+            for (auto iter = begin + n; iter < end; iter++) {
+                if (cmp(*iter, nth) == 0) {
+                    std::iter_swap(iter, begin + n + equal_count);
+                    equal_count++;
+                }
+            }
+            *limited = limit + equal_count;
         } else {
-            ::pdqsort(cancel, begin, end, greater);
+            if (is_asc_order) {
+                ::pdqsort(cancel, begin, end, lesser);
+            } else {
+                ::pdqsort(cancel, begin, end, greater);
+            }
         }
     };
 
@@ -159,8 +237,12 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
         int range_first = iterator.range_first;
         int range_last = iterator.range_last;
 
-        if (range_last - range_first > 1) {
-            do_sort(permutation.begin() + range_first, permutation.begin() + range_last);
+        if (UNLIKELY(limit > 0 && range_first > limit)) {
+            break;
+        }
+
+        if (LIKELY(range_last - range_first > 1)) {
+            do_sort(range_first, range_last);
             if (build_tie) {
                 tie[range_first] = 0;
                 for (int i = range_first + 1; i < range_last; i++) {
