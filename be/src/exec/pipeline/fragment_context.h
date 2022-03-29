@@ -53,8 +53,8 @@ public:
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
-    ExecNode* plan() const { return _plan; }
-    void set_plan(ExecNode* plan) { _plan = plan; }
+    ExecNode*& plan() { return _plan; }
+
     Pipelines& pipelines() { return _pipelines; }
     void set_pipelines(Pipelines&& pipelines) { _pipelines = std::move(pipelines); }
     Drivers& drivers() { return _drivers; }
