@@ -438,7 +438,6 @@ Status CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
-    child(0)->close(state);
     return ExecNode::close(state);
 }
 
