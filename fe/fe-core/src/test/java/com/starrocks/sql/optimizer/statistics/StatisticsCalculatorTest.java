@@ -171,7 +171,8 @@ public class StatisticsCalculatorTest {
                 "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
                 "  `id_datetime` datetime NULL COMMENT \"\",\n" +
                 "  `id_date` date NULL COMMENT \"\", \n" +
-                "  `id_decimal` decimal(10,2) NULL COMMENT \"\"\n" +
+                "  `id_decimal` decimal(10,2) NULL COMMENT \"\", \n" +
+                "  `id_json` JSON NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`t1a`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -191,22 +192,39 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Maps.newHashMap(), Maps.newHashMap(),
-                null, -1, null,
-                ((OlapTable) table).getBaseIndexId(),
-                partitionIds,
-                null,
-                Lists.newArrayList(),
-                Lists.newArrayList());
+        List<Column> columns = table.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+            Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+            Column column = columns.get(i);
+            ColumnRefOperator ref = new ColumnRefOperator(i, column.getType(), column.getName(), true);
+            refToColumn.put(ref, column);
+            columnToRef.put(column, ref);
 
-        GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
-        groupExpression.setGroup(new Group(0));
-        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                columnRefFactory, optimizerContext);
-        statisticsCalculator.estimatorStats();
-        Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
+            LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
+                    refToColumn, columnToRef,
+                    null, -1, null,
+                    ((OlapTable) table).getBaseIndexId(),
+                    partitionIds,
+                    null,
+                    Lists.newArrayList(),
+                    Lists.newArrayList());
+
+            GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+            Statistics.Builder builder = Statistics.builder();
+            olapScanOperator.getOutputColumns().forEach(col ->
+                    builder.addColumnStatistic(col,
+                            new ColumnStatistic(-100, 100, 0.0, 5.0, 10))
+            );
+            expressionContext.setStatistics(builder.build());
+            StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                    columnRefFactory, optimizerContext);
+            statisticsCalculator.estimatorStats();
+            Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
+            Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getComputeSize(), 0.001);
+        }
         starRocksAssert.dropTable("test_all_type");
     }
 
