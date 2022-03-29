@@ -1199,17 +1199,22 @@ public class MasterImpl {
 
         // if current node is follower, forward it to leader
         if (!catalog.isMaster()) {
+            TNetworkAddress addr = masterAddr();
+            FrontendService.Client client = null;
             try {
-                TNetworkAddress addr = masterAddr();
                 LOG.info("beginRemoteTxn as follower, forward it to master. Label: {}, master: {}",
                          request.getLabel(), addr.toString());
-                FrontendService.Client client = ClientPool.frontendPool.borrowObject(addr, 1000);
+                client = ClientPool.frontendPool.borrowObject(addr, 1000);
                 response = client.beginRemoteTxn(request);
                 ClientPool.frontendPool.returnObject(addr, client);
-                return response;
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during beginRemoteTxn, label: {}, exception: {}", request.getLabel(), e);
-                throw new TException(e.getMessage());
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                response.setStatus(status);
+                ClientPool.frontendPool.invalidateObject(addr, client);
+            } finally {
+                return response;
             }
         }
 
@@ -1249,17 +1254,22 @@ public class MasterImpl {
 
         // if current node is follower, forward it to leader
         if (!catalog.isMaster()) {
+            TNetworkAddress addr = masterAddr();
+            FrontendService.Client client = null;
             try {
-                TNetworkAddress addr = masterAddr();
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                          request.getTxn_id(), addr.toString());
-                FrontendService.Client client = ClientPool.frontendPool.borrowObject(addr, 1000);
+                client = ClientPool.frontendPool.borrowObject(addr, 1000);
                 response = client.commitRemoteTxn(request);
                 ClientPool.frontendPool.returnObject(addr, client);
-                return response;
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during commitRemoteTxn, txn_id: {}, exception: {}", request.getTxn_id(), e);
-                throw new TException(e.getMessage());
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                response.setStatus(status);
+                ClientPool.frontendPool.invalidateObject(addr, client);
+            } finally {
+                return response;
             }
         }
 
@@ -1307,17 +1317,22 @@ public class MasterImpl {
 
         // if current node is follower, forward it to leader
         if (!catalog.isMaster()) {
+            TNetworkAddress addr = masterAddr();
+            FrontendService.Client client = null;
             try {
-                TNetworkAddress addr = masterAddr();
                 LOG.info("abortRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                          request.getTxn_id(), addr.toString());
-                FrontendService.Client client = ClientPool.frontendPool.borrowObject(addr, 1000);
+                client = ClientPool.frontendPool.borrowObject(addr, 1000);
                 response = client.abortRemoteTxn(request);
                 ClientPool.frontendPool.returnObject(addr, client);
-                return response;
             } catch (Exception e) {
                 LOG.warn("create thrift client failed during abortRemoteTxn, txn_id: {}, exception: {}", request.getTxn_id(), e);
-                throw new TException(e.getMessage());
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                response.setStatus(status);
+                ClientPool.frontendPool.invalidateObject(addr, client);
+            } finally {
+                return response;
             }
         }
 
