@@ -22,7 +22,7 @@ TEST_F(ColumnPoolTest, mem_statistics) {
         c1->append_string(str);
     }
 
-    pool->return_column(c1, config::vector_chunk_size);
+    pool->return_column(c1);
     size_t usage_1 = pool->mem_tracker()->consumption();
 
     pool->release_large_columns(config::vector_chunk_size * 10);
@@ -48,7 +48,7 @@ TEST_F(ColumnPoolTest, single_thread) {
     ASSERT_EQ(DEL_NOT_SATISFIED, c2->delete_state());
     ASSERT_EQ(3, c2->get_data().capacity());
 
-    auto c3 = get_column<Int32Column>();
+    auto c3 = get_column<Int32Column>()k
     ASSERT_NE(c2, c3);
 
     auto c4 = get_column<Int32Column>();
