@@ -39,6 +39,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -169,6 +170,10 @@ public class Table extends MetaObject implements Writable {
 
     public Column getColumn(String name) {
         return nameToColumn.get(name);
+    }
+
+    public List<Column> getColumns() {
+        return new ArrayList<>(nameToColumn.values());
     }
 
     public long getCreateTime() {

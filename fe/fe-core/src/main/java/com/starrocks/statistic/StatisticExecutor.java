@@ -548,7 +548,7 @@ public class StatisticExecutor {
     }
 
     private String getDataSize(Column column, boolean isSample) {
-        if (column.getPrimitiveType().isCharFamily()) {
+        if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
             if (isSample) {
                 return "IFNULL(SUM(CHAR_LENGTH(`" + column.getName() + "`) * t1.count), 0)";
             }
