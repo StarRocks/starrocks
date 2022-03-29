@@ -1201,7 +1201,7 @@ public class MasterImpl {
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
-            LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
+            LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1246,6 +1246,7 @@ public class MasterImpl {
                 return response;
             }
         } catch (UserException e) {
+            LOG.warn("commit remote txn failed, txn id {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1273,6 +1274,7 @@ public class MasterImpl {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
+            LOG.warn("abort remote txn failed, txn id {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
