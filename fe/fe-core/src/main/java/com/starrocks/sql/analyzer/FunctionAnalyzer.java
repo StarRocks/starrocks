@@ -50,10 +50,12 @@ public class FunctionAnalyzer {
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_DIFFERENCE)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() == 1);
-            Preconditions.checkState(functionCallExpr.getChild(0).getType().isArrayType());
-            ArrayType arrayType = (ArrayType) functionCallExpr.getChild(0).getType();
-            if (!arrayType.hasNumericItem()) {
-                throw new SemanticException("array_difference function only support numeric array types");
+            if (!functionCallExpr.getChild(0).getType().isNull()) {
+                Preconditions.checkState(functionCallExpr.getChild(0).getType().isArrayType());
+                ArrayType arrayType = (ArrayType) functionCallExpr.getChild(0).getType();
+                if (!arrayType.hasNumericItem() && !arrayType.isNullTypeItem()) {
+                    throw new SemanticException("array_difference function only support numeric array types");
+                }
             }
         }
 
