@@ -12,6 +12,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.AggregateFunction;
@@ -64,6 +65,14 @@ public class AnalyzerUtils {
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof GroupingFunctionCallExpr, calls);
         if (!calls.isEmpty()) {
             throw new SemanticException("%s clause cannot contain grouping", clause);
+        }
+    }
+
+    public static void verifyNoSubQuery(Expr expression, String clause) {
+        List<Subquery> calls = Lists.newArrayList();
+        expression.collectAll((Predicate<Expr>) arg -> arg instanceof Subquery, calls);
+        if (!calls.isEmpty()) {
+            throw new SemanticException("%s clause cannot contain subquery", clause);
         }
     }
 
