@@ -73,6 +73,9 @@ public class WorkGroup implements Writable {
         row.add("" + this.id);
         row.add("" + cpuCoreLimit);
         row.add("" + (memLimit * 100) + "%");
+        if (bigQueryLimit != null) {
+            row.add("" + (bigQueryLimit * 100) + "%");
+        }
         row.add("" + concurrencyLimit);
         row.add("" + workGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
