@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021 - present, StarRocks Limited.
 
 #pragma once
 
@@ -24,6 +24,16 @@ Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const st
 // Sort multiple columns, and stable
 Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
                                    const std::vector<int>& null_firsts, SmallPermutation* permutation);
+
+// Sort multiple columns in vertical
+Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+                             bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
+                             bool build_tie, size_t limit = 0, size_t* limited = nullptr);
+
+// Sort multiple chunks in column-wise style
+Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vertical_chunks,
+                            const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
+                            size_t limit);
 
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1
