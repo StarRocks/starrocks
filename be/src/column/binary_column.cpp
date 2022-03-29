@@ -231,7 +231,7 @@ Status BinaryColumn::update_rows(const Column& src, const uint32_t* indexes) {
             new_binary_column->append(src, i, 1);
             idx_begin = indexes[i] + 1;
         }
-        int32_t remain_count = _offsets.size() - idx_begin - 1;
+        int64_t remain_count = _offsets.size() - idx_begin - 1;
         if (remain_count > 0) {
             new_binary_column->append(*this, idx_begin, remain_count);
         }
