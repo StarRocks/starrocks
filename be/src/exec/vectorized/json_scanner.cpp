@@ -608,12 +608,14 @@ Status JsonReader::_read_and_parse_json() {
 
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
     // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-    RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
-    if (length == 0) {
+    RETURN_IF_ERROR(stream_file->read_one_message(&_parser_buffer, &_parser_buffer_cap, &_parser_buffer_sz,
+                                                  simdjson::SIMDJSON_PADDING));
+    if (_parser_buffer_sz == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
 
-    data = _json_binary_ptr.get();
+    data = _parser_buffer.get();
+    length = _parser_buffer_sz;
 
 #endif
 
@@ -641,23 +643,23 @@ Status JsonReader::_read_and_parse_json() {
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             } else {
-                _parser.reset(new ExpandedJsonArrayParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new ExpandedJsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             }
         } else {
             if (_is_ndjson) {
-                _parser.reset(new JsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new JsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             } else {
-                _parser.reset(new JsonArrayParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new JsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParser);
+            _parser.reset(new JsonArrayParser(&_simdjson_parser));
         } else {
-            _parser.reset(new JsonDocumentStreamParser);
+            _parser.reset(new JsonDocumentStreamParser(&_simdjson_parser));
         }
     }
 
@@ -673,7 +675,7 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
 
 Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
-        _doc_stream = _parser.iterate_many(data, len);
+        _doc_stream = _parser->iterate_many(data, len);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -725,7 +727,7 @@ Status JsonDocumentStreamParser::advance() noexcept {
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
-        _doc = _parser.iterate(data, len, allocated);
+        _doc = _parser->iterate(data, len, allocated);
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format("the value should be array type with strip_outer_array=true, value: {}",

@@ -86,7 +86,8 @@ public:
     // If _total_length == -1, this should be a Kafka routine load task,
     // just get the next buffer directly from the buffer queue, because one buffer contains a complete piece of data.
     // Otherwise, this should be a stream load task that needs to read the specified amount of data.
-    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length, size_t padding) override {
+    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* capacity, size_t* length,
+                            size_t padding) override {
         if (_total_length < -1) {
             std::stringstream ss;
             ss << "invalid, _total_length is: " << _total_length;
@@ -98,11 +99,16 @@ public:
         }
 
         if (_total_length == -1) {
-            return _read_next_buffer(data, length);
+            return _read_next_buffer(data, capacity, length, padding);
+        }
+
+        if (*capacity < _total_length + padding) {
+            // Expands provided buffer capacity.
+            data->reset(new uint8_t[_total_length + padding]);
+            *capacity = _total_length + padding;
         }
 
         // _total_length > 0, read the entire data
-        data->reset(new uint8_t[_total_length + padding]);
         *length = _total_length;
         bool eof = false;
         Status st = read(data->get(), length, &eof);
@@ -193,7 +199,7 @@ public:
 
 private:
     // read the next buffer from _buf_queue
-    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* data, size_t* length) {
+    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* data, size_t* capacity, size_t* length, size_t padding) {
         std::unique_lock<std::mutex> l(_lock);
         while (!_cancelled && !_finished && _buf_queue.empty()) {
             _get_cond.wait(l);
@@ -210,8 +216,15 @@ private:
             return Status::OK();
         }
         auto buf = _buf_queue.front();
-        *length = buf->remaining();
-        data->reset(new uint8_t[*length]);
+        auto len = buf->remaining();
+
+        if (*capacity < len + padding) {
+            // Expands provided buffer capacity.
+            data->reset(new uint8_t[len + padding]);
+            *capacity = len + padding;
+        }
+
+        *length = len;
         buf->get_bytes((char*)(data->get()), *length);
 
         _buf_queue.pop_front();

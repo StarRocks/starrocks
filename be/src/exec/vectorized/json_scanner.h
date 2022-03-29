@@ -102,8 +102,13 @@ private:
     int _total_lines;
     bool _closed;
 
-    std::unique_ptr<uint8_t[]> _json_binary_ptr;
+    std::unique_ptr<uint8_t[]> _parser_buffer;
+    size_t _parser_buffer_cap = 0;
+    size_t _parser_buffer_sz = 0;
+
     bool _is_ndjson = false;
+
+    simdjson::ondemand::parser _simdjson_parser;
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
@@ -130,13 +135,14 @@ public:
 
 class JsonDocumentStreamParser : public JsonParser {
 public:
+    JsonDocumentStreamParser(simdjson::ondemand::parser* const parser) : _parser(parser) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
 
 private:
+    simdjson::ondemand::parser* const _parser;
     uint8_t* _data;
-    simdjson::ondemand::parser _parser;
 
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
@@ -144,13 +150,14 @@ private:
 
 class JsonArrayParser : public JsonParser {
 public:
+    JsonArrayParser(simdjson::ondemand::parser* const parser) : _parser(parser) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
 
 private:
+    simdjson::ondemand::parser* const _parser;
     uint8_t* _data;
-    simdjson::ondemand::parser _parser;
 
     simdjson::ondemand::document _doc;
     simdjson::ondemand::array _array;
@@ -159,7 +166,9 @@ private:
 
 class JsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
 public:
-    JsonDocumentStreamParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    JsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* const parser,
+                                     const std::vector<SimpleJsonPath>& root_paths)
+            : JsonDocumentStreamParser(parser), _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) noexcept override;
 
 private:
@@ -168,7 +177,8 @@ private:
 
 class JsonArrayParserWithRoot : public JsonArrayParser {
 public:
-    JsonArrayParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    JsonArrayParserWithRoot(simdjson::ondemand::parser* const parser, const std::vector<SimpleJsonPath>& root_paths)
+            : JsonArrayParser(parser), _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) noexcept override;
 
 private:
@@ -177,7 +187,9 @@ private:
 
 class ExpandedJsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
 public:
-    ExpandedJsonDocumentStreamParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    ExpandedJsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* const parser,
+                                             const std::vector<SimpleJsonPath>& root_paths)
+            : JsonDocumentStreamParser(parser), _root_paths(root_paths) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
@@ -191,7 +203,9 @@ private:
 
 class ExpandedJsonArrayParserWithRoot : public JsonArrayParser {
 public:
-    ExpandedJsonArrayParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
+    ExpandedJsonArrayParserWithRoot(simdjson::ondemand::parser* const parser,
+                                    const std::vector<SimpleJsonPath>& root_paths)
+            : JsonArrayParser(parser), _root_paths(root_paths) {}
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
