@@ -140,9 +140,9 @@ public:
     void push_chunk(RuntimeState* state, ChunkPtr&& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
-    std::list<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
-    std::list<RuntimeFilterBuildDescriptor*>& get_runtime_bloom_filters() { return _build_runtime_filters; }
-    std::list<pipeline::RuntimeBloomFilterBuildParam>& get_runtime_bloom_filter_build_params() {
+    pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
+    pipeline::RuntimeBloomFilters& get_runtime_bloom_filters() { return _build_runtime_filters; }
+    pipeline::OptRuntimeBloomFilterBuildParams& get_runtime_bloom_filter_build_params() {
         return _runtime_bloom_filter_build_params;
     }
     size_t get_ht_row_count() { return _ht.get_row_count(); }
@@ -284,7 +284,10 @@ private:
                 builder.set_eq_null(_is_null_safes[i]);
                 builder.use_as_join_runtime_filter();
                 Status st = builder.create();
-                if (!st.ok()) continue;
+                if (!st.ok()) {
+                    _runtime_in_filters.push_back(nullptr);
+                    continue;
+                }
                 if (probe_expr->type().is_string_type()) {
                     _string_key_columns.emplace_back(column);
                 }
@@ -302,18 +305,18 @@ private:
             rf_desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!rf_desc->has_consumer()) {
-                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
+                _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
             if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) {
-                _runtime_bloom_filter_build_params.emplace_back(false, nullptr, -1);
+                _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
 
             int expr_order = rf_desc->build_expr_order();
             ColumnPtr column = _ht.get_key_columns()[expr_order];
             bool eq_null = _is_null_safes[expr_order];
-            _runtime_bloom_filter_build_params.emplace_back(eq_null, column, _ht.get_row_count());
+            _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(eq_null, column));
         }
         return Status::OK();
     }
@@ -347,9 +350,9 @@ private:
     const bool _build_conjunct_ctxs_is_empty;
     const std::set<SlotId>& _output_slots;
 
-    std::list<ExprContext*> _runtime_in_filters;
-    std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
-    std::list<pipeline::RuntimeBloomFilterBuildParam> _runtime_bloom_filter_build_params;
+    pipeline::RuntimeInFilters _runtime_in_filters;
+    pipeline::RuntimeBloomFilters _build_runtime_filters;
+    pipeline::OptRuntimeBloomFilterBuildParams _runtime_bloom_filter_build_params;
     bool _build_runtime_filters_from_planner;
 
     bool _is_push_down = false;
