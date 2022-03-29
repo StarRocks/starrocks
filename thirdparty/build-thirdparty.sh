@@ -362,6 +362,10 @@ build_snappy() {
 build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
+    
+    OLD_FLAGS=$CFLAGS
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+
     if [ ! -f configure ]; then
         ./autogen.sh
     fi
@@ -371,6 +375,8 @@ build_gperftools() {
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
+    
+    CFLAGS=$CFLAGS
 }
 
 # zlib
