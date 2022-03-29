@@ -220,7 +220,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
         _parent->_buffer->add_request(info);
-        COUNTER_UPDATE(_parent->_request_sent_counter, 1);
+        if (!info.attachment.empty()) {
+            COUNTER_UPDATE(_parent->_request_sent_counter, 1);
+        }
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -239,7 +241,9 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
-    COUNTER_UPDATE(_parent->_request_sent_counter, 1);
+    if (!info.attachment.empty()) {
+        COUNTER_UPDATE(_parent->_request_sent_counter, 1);
+    }
 
     return Status::OK();
 }
