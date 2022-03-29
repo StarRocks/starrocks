@@ -24,7 +24,7 @@ bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
         return false;
     }
 
-    for (size_t i = 0; schema_ptr->num_columns(); ++i) {
+    for (size_t i = 0; i < schema_ptr->num_columns(); ++i) {
         int32_t pb_unique_id = schema_pb.column(i).unique_id();
         int32_t unique_id = schema_ptr->column(i).unique_id();
         if (pb_unique_id != unique_id) {
