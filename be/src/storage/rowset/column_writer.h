@@ -33,6 +33,7 @@
 #include "storage/tablet_schema.h"       // for TabletColumn
 #include "util/bitmap.h"                 // for BitmapChange
 #include "util/slice.h"                  // for OwnedSlice
+#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 
@@ -45,7 +46,6 @@ class WritableBlock;
 
 namespace vectorized {
 class Column;
-class BinaryColumn;
 } // namespace vectorized
 
 struct ColumnWriterOptions {
