@@ -327,7 +327,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, boo
 
     for (size_t i = 0; i < batch_size && !can_finish; ++i) {
         ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+                ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
@@ -355,7 +355,7 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
             SCOPED_RAW_TIMER(&time_spent);
 
             ChunkUniquePtr chunk(
-                    ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), _runtime_state->chunk_size(), true));
+                    ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
             _status = _read_chunk_from_storage(_runtime_state, chunk.get());
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
