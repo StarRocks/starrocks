@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.hudi.common.util.Option;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -93,6 +94,8 @@ public class HudiTableTest {
         msTable.setTableType("MANAGED_TABLE");
         msTable.setParameters(new HashMap<>());
 
+        String[] hudiPartFields = new String[] {"col1"};
+
         new Expectations() {
             {
                 Catalog.getCurrentCatalog();
@@ -113,6 +116,9 @@ public class HudiTableTest {
 
                 schemaUtil.getTableAvroSchema();
                 result = hudiSchema;
+
+                metaClient.getTableConfig().getPartitionFields();
+                result = Option.of(hudiPartFields);
             }
         };
         HudiTable table = null;
