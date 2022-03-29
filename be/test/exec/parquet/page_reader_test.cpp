@@ -8,6 +8,7 @@
 
 #include "env/env_memory.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/string_input_stream.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -55,7 +56,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
     size_t total_size = buffer.size();
 
-    StringRandomAccessFile file(std::move(buffer));
+    RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
     PageReader reader(&file, 0, total_size);
 

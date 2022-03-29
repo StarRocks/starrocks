@@ -9,6 +9,7 @@ namespace starrocks::io {
 // A RandomAccessFile backed by an in-memory array of bytes.
 class ArrayInputStream : public SeekableInputStream {
 public:
+    explicit ArrayInputStream() : _data(nullptr), _size(0), _offset(0) {}
     // The input array must outlive the stream.
     explicit ArrayInputStream(const void* data, int64_t size) : _data(data), _size(size), _offset(0) {}
 
@@ -19,13 +20,13 @@ public:
     void operator=(const ArrayInputStream&) = delete;
     void operator=(ArrayInputStream&&) = delete;
 
+    void reset(const void* data, int64_t size) {
+        _data = data;
+        _size = size;
+        _offset = 0;
+    }
+
     StatusOr<int64_t> read(void* data, int64_t count) override;
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t count) override;
-
-    StatusOr<int64_t> seek(int64_t offset, int whence) override;
-
-    Status skip(int64_t count) override;
 
     bool allows_peak() const override { return true; }
 
@@ -34,6 +35,8 @@ public:
     StatusOr<int64_t> get_size() override { return _size; }
 
     StatusOr<int64_t> position() override { return _offset; }
+
+    Status seek(int64_t offset) override;
 
 private:
     const void* _data;

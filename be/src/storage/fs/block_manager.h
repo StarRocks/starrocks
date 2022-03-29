@@ -153,19 +153,13 @@ public:
     virtual BlockManager* block_manager() const = 0;
 
     // Returns the on-disk size of a written block.
-    virtual Status size(uint64_t* sz) const = 0;
+    virtual Status size(uint64_t* sz) = 0;
 
     // Reads exactly 'result.size' bytes beginning from 'offset' in the block,
     // returning an error if fewer bytes exist.
     // Sets "result" to the data that was read.
     // If an error was encountered, returns a non-OK status.
-    virtual Status read(uint64_t offset, Slice result) const = 0;
-
-    // Reads exactly the "results" aggregate bytes, based on each Slice's "size",
-    // beginning from 'offset' in the block, returning an error if fewer bytes exist.
-    // Sets each "result" to the data that was read.
-    // If an error was encountered, returns a non-OK status.
-    virtual Status readv(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
+    virtual Status read(uint64_t offset, Slice result) = 0;
 
     // Returns the memory usage of this object including the object itself.
     // virtual size_t memory_footprint() const = 0;

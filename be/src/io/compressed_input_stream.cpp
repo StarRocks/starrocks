@@ -1,17 +1,17 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/compressed_file.h"
+#include "io/compressed_input_stream.h"
 
 #include "exec/decompressor.h"
 
-namespace starrocks {
+namespace starrocks::io {
 
-StatusOr<int64_t> CompressedSequentialFile::read(void* data, int64_t size) {
+StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
     size_t output_len = size;
     size_t output_bytes = 0;
 
     while (output_bytes == 0) {
-        Status st = _compressed_buff.read(_input_file.get());
+        Status st = _compressed_buff.read(_source_stream.get());
         if (!st.ok() && !st.is_end_of_file()) {
             return st;
         } else if (st.is_end_of_file() && _stream_end) {
@@ -38,7 +38,7 @@ StatusOr<int64_t> CompressedSequentialFile::read(void* data, int64_t size) {
     return output_bytes;
 }
 
-Status CompressedSequentialFile::skip(uint64_t n) {
+Status CompressedInputStream::skip(int64_t n) {
     raw::RawVector<uint8_t> buff;
     buff.resize(n);
     while (n > 0) {
@@ -55,4 +55,4 @@ Status CompressedSequentialFile::skip(uint64_t n) {
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::io

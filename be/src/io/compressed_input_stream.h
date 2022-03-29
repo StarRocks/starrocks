@@ -2,31 +2,39 @@
 
 #pragma once
 
-#include "env/env.h"
+#include "common/status.h"
+#include "io/input_stream.h"
 #include "util/bit_util.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
-
 class Decompressor;
+} // namespace starrocks
 
-class CompressedSequentialFile final : public SequentialFile {
+namespace starrocks::io {
+
+class CompressedInputStream final : public InputStream {
 public:
-    CompressedSequentialFile(std::shared_ptr<SequentialFile> input_file, std::shared_ptr<Decompressor> decompressor,
-                             size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
-            : _filename("compressed-" + input_file->filename()),
-              _input_file(std::move(input_file)),
+    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<Decompressor> decompressor,
+                          size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
+            : _source_stream(std::move(source_stream)),
               _decompressor(std::move(decompressor)),
               _compressed_buff(BitUtil::round_up(compressed_data_cache_size, CACHELINE_SIZE)) {}
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
 
-    Status skip(uint64_t n) override;
+    Status skip(int64_t n) override;
 
-    const std::string& filename() const override { return _filename; }
+    // TODO: support peak
+    bool allows_peak() const override { return false; }
+
+    // TODO: add custom statistics
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+        return _source_stream->get_numeric_statistics();
+    }
 
 private:
-    // Used to store the compressed data read from |_input_file|.
+    // Used to store the compressed data read from |_source_stream|.
     class CompressedBuffer {
     public:
         explicit CompressedBuffer(size_t buff_size)
@@ -41,7 +49,7 @@ private:
             assert(_offset <= _limit);
         }
 
-        Status read(SequentialFile* f) {
+        Status read(InputStream* f) {
             if (_offset > 0) {
                 // Copy the bytes between the buffer's current offset and limit to the beginning of
                 // the buffer.
@@ -54,7 +62,7 @@ private:
             }
             Slice buff(write_buffer());
             ASSIGN_OR_RETURN(buff.size, f->read(buff.data, buff.size));
-            if (buff.size == 0) return Status::EndOfFile("read empty from " + f->filename());
+            if (buff.size == 0) return Status::EndOfFile("");
             _limit += buff.size;
             return Status::OK();
         }
@@ -67,11 +75,10 @@ private:
         size_t _limit;
     };
 
-    std::string _filename;
-    std::shared_ptr<SequentialFile> _input_file;
+    std::shared_ptr<InputStream> _source_stream;
     std::shared_ptr<Decompressor> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
 };
 
-} // namespace starrocks
+} // namespace starrocks::io

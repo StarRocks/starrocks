@@ -25,7 +25,7 @@ Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* bu
     return _file->read_one_message(buf, length, padding);
 }
 
-Status StreamPipeSequentialFile::skip(uint64_t n) {
+Status StreamPipeSequentialFile::skip(int64_t n) {
     return _file->seek(n);
 }
 

@@ -119,7 +119,7 @@ private:
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     ColumnChunkReaderOptions _opts;
-    std::unique_ptr<RandomAccessFile> _file;
+    RandomAccessFile _file;
 
     std::unique_ptr<PageReader> _page_reader;
 

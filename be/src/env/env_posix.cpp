@@ -25,6 +25,7 @@
 #include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
+#include "io/fd_input_stream.h"
 #include "util/errno.h"
 #include "util/slice.h"
 
@@ -206,94 +207,6 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
     *bytes_written = bytes_req;
     return Status::OK();
 }
-
-class PosixSequentialFile : public SequentialFile {
-public:
-    PosixSequentialFile(string fname, FILE* f) : _filename(std::move(fname)), _file(f) {}
-
-    ~PosixSequentialFile() override {
-        int err;
-        RETRY_ON_EINTR(err, fclose(_file));
-        if (PREDICT_FALSE(err != 0)) {
-            LOG(WARNING) << "Failed to close " << _filename << ", msg=" << errno_to_string(ferror(_file));
-        }
-    }
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        size_t r;
-        STREAM_RETRY_ON_EINTR(r, _file, fread_unlocked(data, 1, size, _file));
-        if (r < size) {
-            if (feof(_file)) {
-                return r;
-            } else {
-                // A partial read with an error: return a non-ok status.
-                return io_error(_filename, ferror(_file));
-            }
-        }
-        return r;
-    }
-
-    Status skip(uint64_t n) override {
-        if (fseek(_file, n, SEEK_CUR)) {
-            return io_error(_filename, errno);
-        }
-        return Status::OK();
-    }
-
-    const string& filename() const override { return _filename; }
-
-private:
-    const std::string _filename;
-    FILE* const _file;
-};
-
-class PosixRandomAccessFile : public RandomAccessFile {
-public:
-    PosixRandomAccessFile(std::string filename, int fd) : _filename(std::move(filename)), _fd(fd) {}
-    ~PosixRandomAccessFile() override {
-        int res;
-        RETRY_ON_EINTR(res, ::close(_fd));
-        if (res != 0) {
-            LOG(WARNING) << "close file failed, name=" << _filename << ", msg=" << errno_to_string(errno);
-        }
-    }
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
-        Slice buff(static_cast<uint8_t*>(data), size);
-        uint64_t read_bytes = 0;
-        auto st = do_readv_at(_fd, _filename, static_cast<uint64_t>(offset), &buff, 1, &read_bytes);
-        if (st.ok()) {
-            return size;
-        } else if (st.is_end_of_file()) {
-            return read_bytes;
-        }
-        return st;
-    }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
-        Slice buff(static_cast<uint8_t*>(data), size);
-        return do_readv_at(_fd, _filename, offset, &buff, 1, nullptr);
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        return do_readv_at(_fd, _filename, offset, res, res_cnt, nullptr);
-    }
-
-    StatusOr<uint64_t> get_size() const override {
-        struct stat st;
-        auto res = fstat(_fd, &st);
-        if (res != 0) {
-            return io_error(_filename, errno);
-        }
-        return st.st_size;
-    }
-
-    const std::string& filename() const override { return _filename; }
-
-private:
-    std::string _filename;
-    int _fd;
-};
 
 class PosixWritableFile : public WritableFile {
 public:
@@ -493,12 +406,14 @@ public:
     ~PosixEnv() override = default;
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
-        FILE* f;
-        POINTER_RETRY_ON_EINTR(f, fopen(fname.c_str(), "r"));
-        if (f == nullptr) {
+        int fd;
+        RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
+        if (fd < 0) {
             return io_error(fname, errno);
         }
-        return std::make_unique<PosixSequentialFile>(fname, f);
+        auto stream = std::make_shared<io::FdInputStream>(fd);
+        stream->set_close_on_delete(true);
+        return std::make_unique<SequentialFile>(std::move(stream), fname);
     }
 
     // get a RandomAccessFile pointer without file cache
@@ -509,11 +424,13 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
         int fd;
-        RETRY_ON_EINTR(fd, open(fname.c_str(), O_RDONLY));
+        RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        return std::make_unique<PosixRandomAccessFile>(fname, fd);
+        auto stream = std::make_shared<io::FdInputStream>(fd);
+        stream->set_close_on_delete(true);
+        return std::make_unique<RandomAccessFile>(std::move(stream), fname);
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {

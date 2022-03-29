@@ -17,7 +17,7 @@ namespace starrocks::io {
         if (UNLIKELY(is_closed)) return Status::InternalError("file has been close()d"); \
     } while (0)
 
-FdInputStream::FdInputStream(int fd) : _fd(fd), _errno(0), _close_on_delete(false), _is_closed(false) {}
+FdInputStream::FdInputStream(int fd) : _fd(fd), _errno(0), _offset(0), _close_on_delete(false), _is_closed(false) {}
 
 FdInputStream::~FdInputStream() {
     if (_close_on_delete) {
@@ -40,47 +40,13 @@ Status FdInputStream::close() {
 StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     ssize_t res;
-    RETRY_ON_EINTR(res, ::read(_fd, static_cast<char*>(data), count));
+    RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, _offset));
     if (UNLIKELY(res < 0)) {
         _errno = errno;
         return io_error("read", _errno);
     }
+    _offset += res;
     return res;
-}
-
-StatusOr<int64_t> FdInputStream::read_at(int64_t offset, void* data, int64_t count) {
-    CHECK_IS_CLOSED(_is_closed);
-    ssize_t res;
-    RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, offset));
-    if (UNLIKELY(res < 0)) {
-        _errno = errno;
-        return io_error("pread", _errno);
-    }
-    return res;
-}
-
-StatusOr<int64_t> FdInputStream::seek(int64_t offset, int whence) {
-    CHECK_IS_CLOSED(_is_closed);
-    off_t res = ::lseek(_fd, offset, whence);
-    if (res < 0) {
-        _errno = errno;
-        return io_error("lseek", _errno);
-    }
-    return res;
-}
-
-Status FdInputStream::skip(int64_t count) {
-    CHECK_IS_CLOSED(_is_closed);
-    off_t res = lseek(_fd, count, SEEK_CUR);
-    if (res < 0) {
-        _errno = errno;
-        return io_error("lseek", _errno);
-    }
-    return Status::OK();
-}
-
-StatusOr<std::string_view> FdInputStream::peak(int64_t nbytes) {
-    return Status::NotSupported("FdInputStream::peak()");
 }
 
 StatusOr<int64_t> FdInputStream::get_size() {
@@ -94,10 +60,10 @@ StatusOr<int64_t> FdInputStream::get_size() {
     return st.st_size;
 }
 
-StatusOr<int64_t> FdInputStream::position() {
-    CHECK_IS_CLOSED(_is_closed);
-    return seek(0, SEEK_CUR);
+Status FdInputStream::seek(int64_t offset) {
+    if (offset < 0) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
+    _offset = offset;
+    return Status::OK();
 }
-
 #undef CHECK_IS_CLOSED
 } // namespace starrocks::io

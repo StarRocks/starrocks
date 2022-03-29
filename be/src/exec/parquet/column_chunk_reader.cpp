@@ -16,49 +16,24 @@
 
 namespace starrocks::parquet {
 
-class RandomAccessFileWrapper : public RandomAccessFile {
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
-    RandomAccessFileWrapper(RandomAccessFile* file, vectorized::HdfsScanStats* stats) : _file(file), _stats(stats) {}
+    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
+                                        vectorized::HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
 
-    ~RandomAccessFileWrapper() override = default;
+    ~CountedSeekableInputStream() override = default;
 
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+    StatusOr<int64_t> read(void* data, int64_t size) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
         _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _file->read_at(offset, data, size));
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
         _stats->bytes_read += nread;
         return nread;
     }
 
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        RETURN_IF_ERROR(_file->read_at_fully(offset, data, size));
-        _stats->bytes_read += size;
-        return Status::OK();
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->readv_at(offset, res, res_cnt);
-            for (int i = 0; i < res_cnt; ++i) {
-                _stats->bytes_read += res[i].size;
-            }
-        }
-        return st;
-    }
-
-    // Return the size of this file.
-    StatusOr<uint64_t> get_size() const override { return _file->get_size(); }
-
-    // Return name of this file
-    const std::string& filename() const override { return _file->filename(); }
-
 private:
-    RandomAccessFile* _file;
+    std::shared_ptr<io::SeekableInputStream> _stream;
     vectorized::HdfsScanStats* _stats;
 };
 
@@ -70,7 +45,7 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _type_length(type_length),
           _chunk_metadata(column_chunk),
           _opts(opts),
-          _file(new RandomAccessFileWrapper(file, opts.stats)) {}
+          _file(std::make_shared<CountedSeekableInputStream>(file->stream(), opts.stats), file->filename()) {}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -82,7 +57,7 @@ Status ColumnChunkReader::init(int chunk_size) {
         start_offset = metadata().data_page_offset;
     }
 
-    _page_reader = std::make_unique<PageReader>(_file.get(), start_offset, metadata().total_compressed_size);
+    _page_reader = std::make_unique<PageReader>(&_file, start_offset, metadata().total_compressed_size);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);

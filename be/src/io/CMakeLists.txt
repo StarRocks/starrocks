@@ -8,6 +8,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 add_library(IO STATIC
         array_input_stream.cpp
+        compressed_input_stream.cpp
         fd_output_stream.cpp
         fd_input_stream.cpp
         seekable_input_stream.cpp
