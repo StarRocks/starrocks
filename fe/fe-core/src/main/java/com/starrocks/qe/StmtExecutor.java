@@ -193,6 +193,11 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         profile.addChild(summaryProfile);
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        profile.addChild(plannerProfile);
+        context.getPlannerProfile().build(plannerProfile);
+
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
             coord.endProfile();
