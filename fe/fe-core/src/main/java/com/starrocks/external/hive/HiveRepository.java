@@ -124,20 +124,14 @@ public class HiveRepository {
         return metaCache.getPartitionKeys(dbName, tableName, partColumns);
     }
 
-    public HivePartition getPartition(String resourceName, String dbName, String tableName,
-                                      PartitionKey partitionKey) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getPartition(dbName, tableName, partitionKey);
-    }
-
     public List<HivePartition> getPartitions(String resourceName, String dbName, String tableName,
-                                             List<PartitionKey> partitionKeys)
+                                             List<PartitionKey> partitionKeys, boolean isHudiTable)
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         List<Future<HivePartition>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {
             Future<HivePartition> future = partitionDaemonExecutor
-                    .submit(() -> metaCache.getPartition(dbName, tableName, partitionKey));
+                    .submit(() -> metaCache.getPartition(dbName, tableName, partitionKey, isHudiTable));
             futures.add(future);
         }
         List<HivePartition> result = Lists.newArrayList();
@@ -152,46 +146,19 @@ public class HiveRepository {
         return result;
     }
 
-    public List<HivePartition> getHudiPartitions(String resourceName, String dbName, String tableName,
-                                                 List<PartitionKey> partitionKeys)
-            throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        List<Future<HivePartition>> futures = Lists.newArrayList();
-        for (PartitionKey partitionKey : partitionKeys) {
-            Future<HivePartition> future = partitionDaemonExecutor
-                    .submit(() -> metaCache.getHudiPartition(dbName, tableName, partitionKey));
-            futures.add(future);
-        }
-        List<HivePartition> result = Lists.newArrayList();
-        for (Future<HivePartition> future : futures) {
-            try {
-                result.add(future.get());
-            } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("Get table {}.{} partition meta info failed.", dbName, tableName,  e);
-                throw new DdlException(e.getMessage());
-            }
-        }
-        return result;
-    }
-
     public HiveTableStats getTableStats(String resourceName, String dbName, String tableName) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         return metaCache.getTableStats(dbName, tableName);
     }
 
-    public HivePartitionStats getPartitionStats(String resourceName, String dbName,
-                                                String tableName, PartitionKey partitionKey) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getPartitionStats(dbName, tableName, partitionKey);
-    }
-
     public List<HivePartitionStats> getPartitionsStats(String resourceName, String dbName,
-                                                String tableName, List<PartitionKey> partitionKeys) throws DdlException {
+                                                       String tableName, List<PartitionKey> partitionKeys,
+                                                       boolean isHudiTable) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         List<Future<HivePartitionStats>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {
             Future<HivePartitionStats> future = partitionDaemonExecutor.
-                    submit(() -> metaCache.getPartitionStats(dbName, tableName, partitionKey));
+                    submit(() -> metaCache.getPartitionStats(dbName, tableName, partitionKey, isHudiTable));
             futures.add(future);
         }
         List<HivePartitionStats> result = Lists.newArrayList();
@@ -217,14 +184,25 @@ public class HiveRepository {
 
     public void refreshTableCache(String resourceName, String dbName, String tableName, List<Column> partColumns,
                                   List<String> columnNames) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        metaCache.refreshTable(dbName, tableName, partColumns, columnNames);
+        refreshTableCache(resourceName, dbName, tableName, partColumns, columnNames, false);
     }
 
-    public void refreshPartitionCache(String resourceName, String dbName, String tableName, List<String> partNames)
+    public void refreshTableCache(String resourceName, String dbName, String tableName, List<Column> partColumns,
+                                  List<String> columnNames, boolean isHudiTable) throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        metaCache.refreshTable(dbName, tableName, partColumns, columnNames, isHudiTable);
+    }
+
+    public void refreshPartitionCache(String resourceName, String dbName, String tableName,
+                                      List<String> partNames) throws DdlException {
+        refreshPartitionCache(resourceName, dbName, tableName, partNames, false);
+    }
+
+    public void refreshPartitionCache(String resourceName, String dbName, String tableName,
+                                      List<String> partNames, boolean isHudiTable)
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
-        metaCache.refreshPartition(dbName, tableName, partNames);
+        metaCache.refreshPartition(dbName, tableName, partNames, isHudiTable);
     }
 
     public void refreshTableColumnStats(String resourceName, String dbName, String tableName, List<Column> partColumns,
