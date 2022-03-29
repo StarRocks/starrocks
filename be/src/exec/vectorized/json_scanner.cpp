@@ -345,55 +345,68 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
-    if (_empty_parser) {
-        auto st = _read_and_parse_json();
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
+    bool is_reordered = false;
+    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
+
+    do {
+        if (_empty_parser) {
+            auto st = _read_and_parse_json();
+            if (!st.ok()) {
+                if (st.is_end_of_file()) {
+                    return st;
+                }
+                // Parse error.
+                _counter->num_rows_filtered++;
+                _state->append_error_msg_to_file("", st.to_string());
                 return st;
             }
-            // Parse error.
-            _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
-            return st;
         }
-    }
 
-    // Eliminates virtual function call.
-    if (!_scanner->_root_paths.empty()) {
-        // With json root set, expand the outer array automatically.
-        // The strip_outer_array determines whether to expand the sub-array of json root.
-        if (_scanner->_strip_outer_array) {
-            // Expand outer array automatically according to _is_ndjson.
-            if (_is_ndjson) {
-                return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+        // Eliminates virtual function call.
+        if (!_scanner->_root_paths.empty()) {
+            // With json root set, expand the outer array automatically.
+            // The strip_outer_array determines whether to expand the sub-array of json root.
+            if (_scanner->_strip_outer_array) {
+                // Expand outer array automatically according to _is_ndjson.
+                if (_is_ndjson) {
+                    RETURN_IF_ERROR(_read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(
+                            chunk, &rows_to_read, &reordered_slot_descs, &is_reordered));
+                } else {
+                    RETURN_IF_ERROR(_read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, &rows_to_read,
+                                                                                 &reordered_slot_descs, &is_reordered));
+                }
             } else {
-                return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+                if (_is_ndjson) {
+                    RETURN_IF_ERROR(_read_chunk<JsonDocumentStreamParserWithRoot>(
+                            chunk, &rows_to_read, &reordered_slot_descs, &is_reordered));
+                } else {
+                    RETURN_IF_ERROR(_read_chunk<JsonArrayParserWithRoot>(chunk, &rows_to_read, &reordered_slot_descs,
+                                                                         &is_reordered));
+                }
             }
         } else {
-            if (_is_ndjson) {
-                return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+            // Without json root set, the strip_outer_array determines whether to expand outer array.
+            if (_scanner->_strip_outer_array) {
+                RETURN_IF_ERROR(
+                        _read_chunk<JsonArrayParser>(chunk, &rows_to_read, &reordered_slot_descs, &is_reordered));
             } else {
-                return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+                RETURN_IF_ERROR(_read_chunk<JsonDocumentStreamParser>(chunk, &rows_to_read, &reordered_slot_descs,
+                                                                      &is_reordered));
             }
         }
-    } else {
-        // Without json root set, the strip_outer_array determines whether to expand outer array.
-        if (_scanner->_strip_outer_array) {
-            return _read_chunk<JsonArrayParser>(chunk, rows_to_read, slot_descs);
-        } else {
-            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
-        }
-    }
+    } while (rows_to_read > 0);
+    return Status::OK();
 }
 
 template <typename ParserType>
-Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
+Status JsonReader::_read_chunk(Chunk* chunk, int32_t* rows_to_read, std::vector<SlotDescriptor*>* slot_descs,
+                               bool* is_reordered) {
     simdjson::ondemand::object row;
 
     auto parser = down_cast<ParserType*>(_parser.get());
 
-    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
-    for (int32_t n = 0; n < rows_to_read; n++) {
+    size_t n = 0;
+    while ((*rows_to_read)-- > 0) {
         auto st = parser->get_current(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
@@ -406,15 +419,16 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::ve
             return st;
         }
 
-        if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
+        if (!(*is_reordered) && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
             // Try to reorder the column according to the column order of first json row.
             // It is much faster when we access the json field as the json key order.
-            _reorder_column(&reordered_slot_descs, row);
+            _reorder_column(slot_descs, row);
             // Resetting the row after for-range iterating in _reorder_column.
             row.reset();
+            *is_reordered = true;
         }
 
-        st = _construct_row(&row, chunk, reordered_slot_descs);
+        st = _construct_row(&row, chunk, *slot_descs);
         if (!st.ok()) {
             chunk->set_num_rows(n);
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -438,6 +452,7 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::ve
             _state->append_error_msg_to_file("", st.to_string());
             return st;
         }
+        ++n;
     }
     return Status::OK();
 }
@@ -708,7 +723,8 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
         if (e.error() == simdjson::CAPACITY) {
             // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.
             err_msg =
-                    "The input payload size is beyond parser limit. Please set strip_outer_array true if you want to "
+                    "The input payload size is beyond parser limit. Please set strip_outer_array true if you want "
+                    "to "
                     "load json array";
         } else {
             err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
@@ -926,7 +942,8 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
     try {
         if (val.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format(
-                    "the value under json root should be array type with strip_outer_array=true in json array, value: "
+                    "the value under json root should be array type with strip_outer_array=true in json array, "
+                    "value: "
                     "{}",
                     JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
             return Status::DataQualityError(err_msg);
@@ -982,7 +999,8 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
             try {
                 if (val.type() != simdjson::ondemand::json_type::array) {
                     auto err_msg = fmt::format(
-                            "the value under json root should be array type with strip_outer_array=true in json array, "
+                            "the value under json root should be array type with strip_outer_array=true in json "
+                            "array, "
                             "value: {}",
                             JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
                     return Status::DataQualityError(err_msg);

@@ -78,7 +78,8 @@ public:
 
 private:
     template <typename ParserType>
-    Status _read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+    Status _read_chunk(Chunk* chunk, int32_t* rows_to_read, std::vector<SlotDescriptor*>* slot_descs,
+                       bool* is_reordered);
 
     Status _read_and_parse_json();
 
