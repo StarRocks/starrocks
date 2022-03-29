@@ -752,6 +752,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Relation -------------------------------------------
 
     @Override
+    public ParseNode visitParenthesizedRelation(StarRocksParser.ParenthesizedRelationContext context) {
+        return visit(context.relation());
+    }
+
+    @Override
     public ParseNode visitTableName(StarRocksParser.TableNameContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
