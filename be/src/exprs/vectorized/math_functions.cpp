@@ -471,6 +471,7 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
     const bool c0_is_const = c0->is_constant();
     const bool c1_is_const = c1->is_constant();
 
+    const int size = c0->size();
     // Unpack const
     c0 = FunctionHelper::get_data_column_of_const(c0);
     c1 = FunctionHelper::get_data_column_of_const(c1);
@@ -480,7 +481,7 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
     c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
     ColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
-    res->resize_uninitialized(c0->size());
+    res->resize_uninitialized(size);
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
 
@@ -489,17 +490,15 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
     int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
     uint8_t* raw_null_flags = null_flags->get_data().data();
 
-    const int size = c0->size();
-
     // If c2 is not const, than we need to keep the originl scale
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
     if (c0_is_const && c1_is_const) {
         bool is_over_flow;
         MathFunctions::decimal_round<rule, false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
         if (is_over_flow) {
-            res = ColumnHelper::create_const_null_column(c0->size());
+            res = ColumnHelper::create_const_null_column(size);
         } else {
-            res = ConstColumn::create(res, c0->size());
+            res = ConstColumn::create(res, size);
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
