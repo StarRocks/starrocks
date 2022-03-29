@@ -181,17 +181,6 @@ public class UtFrameUtils {
     }
 
     // Parse an origin stmt and analyze it. Return a StatementBase instance.
-    // using new parser & analyzer
-    public static StatementBase parseAndAnalyzeStmtNew(String originStmt, ConnectContext ctx)
-            throws Exception {
-        List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode());
-        StatementBase statementBase = statements.get(0);
-        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
-        return statementBase;
-    }
-
-    // Parse an origin stmt and analyze it. Return a StatementBase instance.
     public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx)
             throws Exception {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
