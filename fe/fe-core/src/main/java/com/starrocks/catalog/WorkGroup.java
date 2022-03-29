@@ -33,8 +33,8 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("Name", ScalarType.createVarchar(100)))
                     .addColumn(new Column("Id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("BigQueryLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("MemLimit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("BigQueryLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("ConcurrencyLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Classifiers", ScalarType.createVarchar(1024)))
@@ -75,6 +75,8 @@ public class WorkGroup implements Writable {
         row.add("" + (memLimit * 100) + "%");
         if (bigQueryLimit != null) {
             row.add("" + (bigQueryLimit * 100) + "%");
+        } else {
+            row.add("" + (100) + "%");
         }
         row.add("" + concurrencyLimit);
         row.add("" + workGroupType.name().substring("WG_".length()));
