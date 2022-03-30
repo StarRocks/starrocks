@@ -119,10 +119,11 @@ bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
 // NOTE: this function should not be inlined. If this function is inlined,
 // the append_strings_overflow will be slower by 30%
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, Offsets* offsets) __attribute__((noinline));
+void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets)
+        __attribute__((noinline));
 
 template <typename T, size_t copy_length>
-void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, Offsets* offsets) {
+void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename BinaryColumnBase<T>::Offsets* offsets) {
     size_t size = bytes->size();
     for (const auto& s : strs) {
         size += s.size;
