@@ -1535,16 +1535,19 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    // write wal
-    const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
-    faststring fixed_buf;
-    fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
-    for (size_t i = 0; i < replace_idxes.size(); ++i) {
-        fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
-        put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+    _dump_snapshot |= _can_dump_directly();
+    if (!_dump_snapshot) {
+        // write wal
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+        }
+        RETURN_IF_ERROR(_index_block->append(fixed_buf));
+        _page_size += fixed_buf.size();
     }
-    RETURN_IF_ERROR(_index_block->append(fixed_buf));
-    _page_size += fixed_buf.size();
     return Status::OK();
 }
 

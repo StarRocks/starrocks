@@ -1027,7 +1027,6 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
 Status PrimaryIndex::_build_persistent_values(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                               uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* values) {
     uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-    LOG(INFO) << "idx_begin is " << idx_begin << ", idx_end is " << idx_end;
     for (uint32_t i = idx_begin; i < idx_end; i++) {
         values->emplace_back(base + i);
     }
@@ -1048,15 +1047,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    //values.reserve(pks.size());
-    //old_values.reserve(pks.size());
     _build_persistent_values(rssid, rowid_start, pks, 0, pks.size(), &values);
-    /*
-    for (size_t i = 0; i < values.size(); ++i) {
-        LOG(INFO) << i << ": value rssid is " << (uint32_t)(values[i] >> 32) << ", value row id is " << (uint32_t)(values[i] & ROWID_MASK);
-    }
-    */
-
     _persistent_index->upsert(pks.size(), pks.raw_data(), values.data(), old_values.data());
     for (uint32_t i = 0; i < old_values.size(); ++i) {
         uint64_t old = old_values[i];
@@ -1064,7 +1055,6 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
         }
         if (old != NullIndexValue) {
-            //LOG(INFO) << "old rssid is " << (uint32_t)(old >> 32) << ", old row id is " << (uint32_t)(old & ROWID_MASK);
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
     }
