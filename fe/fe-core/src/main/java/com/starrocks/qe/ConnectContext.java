@@ -164,6 +164,7 @@ public class ConnectContext {
         command = MysqlCommand.COM_SLEEP;
         dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public ConnectContext(SocketChannel channel) {
@@ -180,6 +181,8 @@ public class ConnectContext {
         }
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
+        plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public long getStmtId() {

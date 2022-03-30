@@ -94,6 +94,7 @@ import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -298,7 +299,7 @@ public class StmtExecutor {
 
             // Entrance to the new planner
             if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
-                try {
+                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
                         context.getDumpInfo().reset();

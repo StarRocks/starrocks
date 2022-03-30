@@ -12,6 +12,7 @@ import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.sql.PlannerProfile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,15 +29,17 @@ public class HiveMetaStoreTableUtils {
                                                                         Map<String, Column> nameToColumn,
                                                                         List<String> columnNames,
                                                                         List<Column> partColumns) throws DdlException {
-        // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
-        List<String> allColumnNames = new ArrayList<>(nameToColumn.keySet());
-        Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
-                .getTableLevelColumnStats(resourceName, db, table, partColumns, allColumnNames);
-        Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
-        for (String columnName : columnNames) {
-            result.put(columnName, allColumnStats.get(columnName));
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableColumnStats")) {
+            // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
+            List<String> allColumnNames = new ArrayList<>(nameToColumn.keySet());
+            Map<String, HiveColumnStats> allColumnStats = Catalog.getCurrentCatalog().getHiveRepository()
+                    .getTableLevelColumnStats(resourceName, db, table, partColumns, allColumnNames);
+            Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
+            for (String columnName : columnNames) {
+                result.put(columnName, allColumnStats.get(columnName));
+            }
+            return result;
         }
-        return result;
     }
 
     public static List<Column> getPartitionColumns(Map<String, Column> nameToColumn, List<String> partColumnNames) {
@@ -52,14 +55,18 @@ public class HiveMetaStoreTableUtils {
                                                               String table,
                                                               List<PartitionKey> partitionKeys,
                                                               boolean isHudiTable) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionsStats(resourceName, db, table, partitionKeys, isHudiTable);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
+            return Catalog.getCurrentCatalog().getHiveRepository()
+                    .getPartitionsStats(resourceName, db, table, partitionKeys, isHudiTable);
+        }
     }
 
     public static HiveTableStats getTableStats(String resourceName,
                                                String db,
                                                String table) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, db, table);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableStats")) {
+            return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, db, table);
+        }
     }
 
     public static List<HivePartition> getPartitions(String resourceName,
@@ -74,16 +81,21 @@ public class HiveMetaStoreTableUtils {
                                                     String table,
                                                     List<PartitionKey> partitionKeys,
                                                     boolean isHudiTable) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitions(resourceName, db, table, partitionKeys, isHudiTable);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitions")) {
+            return Catalog.getCurrentCatalog().getHiveRepository()
+                    .getPartitions(resourceName, db, table, partitionKeys, isHudiTable);
+        }
     }
 
     public static Map<PartitionKey, Long> getPartitionKeys(String resourceName,
                                                            String db,
                                                            String table,
                                                            List<Column> partColumns) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionKeys(resourceName, db, table, partColumns);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionKeys")) {
+            return Catalog.getCurrentCatalog().getHiveRepository()
+                    .getPartitionKeys(resourceName, db, table, partColumns);
+        }
+
     }
 
     public static long getPartitionStatsRowCount(String resourceName,
@@ -91,15 +103,17 @@ public class HiveMetaStoreTableUtils {
                                                  String table,
                                                  List<PartitionKey> partitions,
                                                  List<Column> partColumns) {
-        return getPartitionStatsRowCount(resourceName, db, table, partitions, partColumns, false);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionRowCount")) {
+            return doGetPartitionStatsRowCount(resourceName, db, table, partitions, partColumns, false);
+        }
     }
 
-    public static long getPartitionStatsRowCount(String resourceName,
-                                                 String db,
-                                                 String table,
-                                                 List<PartitionKey> partitions,
-                                                 List<Column> partColumns,
-                                                 boolean isHudiTable) {
+    public static long doGetPartitionStatsRowCount(String resourceName,
+                                                   String db,
+                                                   String table,
+                                                   List<PartitionKey> partitions,
+                                                   List<Column> partColumns,
+                                                   boolean isHudiTable) {
         if (partitions == null) {
             try {
                 partitions = Lists.newArrayList(getPartitionKeys(resourceName, db, table, partColumns).keySet());

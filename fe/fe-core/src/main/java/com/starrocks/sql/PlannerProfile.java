@@ -6,13 +6,18 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class PlannerProfile {
+    private ConnectContext ctx;
 
     public static class ScopedTimer implements AutoCloseable {
         private long startTime = 0;
-        private long currentThreadId = 0;
+        private volatile long currentThreadId = 0;
         private long totalTime = 0;
 
         public void start() {
@@ -32,10 +37,14 @@ public class PlannerProfile {
         }
     }
 
-    private HashMap<String, ScopedTimer> timers;
+    private final HashMap<String, ScopedTimer> timers;
 
     public PlannerProfile() {
         timers = new HashMap<>();
+    }
+
+    public void init(ConnectContext ctx) {
+        this.ctx = ctx;
     }
 
     private synchronized ScopedTimer getOrCreateScopedTimer(String name) {
@@ -47,7 +56,7 @@ public class PlannerProfile {
         return t;
     }
 
-    private static PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
+    private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
 
     public static ScopedTimer getScopedTimer(String name) {
         // to avoid null.
@@ -61,7 +70,49 @@ public class PlannerProfile {
         return t;
     }
 
-    public void build(RuntimeProfile p) {
+    private RuntimeProfile getRuntimeProfile(RuntimeProfile top, Map<String, RuntimeProfile> cache,
+                                             String prefix) {
+        if (cache.containsKey(prefix)) {
+            return cache.get(prefix);
+        }
+        String[] ss = prefix.split("\\.");
+        StringBuilder sb = new StringBuilder();
+        RuntimeProfile p = top;
+        for (String s : ss) {
+            sb.append(s);
+            sb.append('.');
+            String tmp = sb.toString();
+            if (!cache.containsKey(tmp)) {
+                RuntimeProfile sp = new RuntimeProfile(" - " + s);
+                top.addChild(sp);
+                cache.put(tmp, sp);
+            }
+            p = cache.get(tmp);
+        }
+        return p;
+    }
 
+    public void buildTimers(RuntimeProfile top) {
+        List<String> keys = new ArrayList<>(timers.keySet());
+        Collections.sort(keys);
+
+        Map<String, RuntimeProfile> profilers = new HashMap<>();
+        profilers.put("", top);
+        for (String key : keys) {
+            String name = key;
+            String prefix = "";
+            int index = key.lastIndexOf('.');
+            if (index != -1) {
+                name = key.substring(index + 1);
+                prefix = key.substring(0, index + 1);
+            }
+            RuntimeProfile p = getRuntimeProfile(top, profilers, prefix);
+            ScopedTimer t = timers.get(key);
+            p.addInfoString(name, String.format("%d ms", t.getTotalTime()));
+        }
+    }
+
+    public void build(RuntimeProfile top) {
+        buildTimers(top);
     }
 }
