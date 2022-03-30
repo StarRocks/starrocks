@@ -3,7 +3,6 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -16,9 +15,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
@@ -125,7 +127,7 @@ public class StatisticExecutor {
 
         try {
             ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, true);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan);
+            List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
             return deserializerStatisticData(sqlResult);
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
@@ -133,14 +135,11 @@ public class StatisticExecutor {
         }
     }
 
-    public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, String column) throws Exception {
-        return queryDictSync(dbId, tableId, ImmutableList.of(column));
-    }
 
     // If you call this function, you must ensure that the db lock is added
-    public static List<TStatisticData> queryDictSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
+    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column) throws Exception {
         if (dbId == -1) {
-            return Collections.emptyList();
+            return Pair.create(Collections.emptyList(), Status.OK);
         }
 
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
@@ -152,20 +151,13 @@ public class StatisticExecutor {
         String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
         String tableName = db.getTable(tableId).getName();
 
-        StringBuilder sqlBuilder = new StringBuilder("select cast(").append(STATISTIC_DICT_VERSION).append(" as Int), ").
-                append("cast(").append(version).append(" as bigint), ");
-        for (int i = 0; i < columnNames.size(); ++i) {
-            sqlBuilder.append("dict_merge(").append("`").append(columnNames.get(i))
-                    .append("`) as _dict_merge_")
-                    .append(columnNames.get(i));
-            if (i != columnNames.size() - 1) {
-                sqlBuilder.append(", ");
-            }
-        }
-        sqlBuilder.append(" from ").append(dbName).append(".").append(tableName).append(" [_META_]");
-        String sql = sqlBuilder.toString();
-        Map<String, Database> dbs = Maps.newHashMap();
+        String sql = "select cast(" + STATISTIC_DICT_VERSION + " as Int), " +
+                "cast(" + version + " as bigint), " +
+                "dict_merge(" + "`" + column +
+                "`) as _dict_merge_" + column +
+                " from " + dbName + "." + tableName + " [_META_]";
 
+        Map<String, Database> dbs = Maps.newHashMap();
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
@@ -181,9 +173,12 @@ public class StatisticExecutor {
 
         try {
             ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, false);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan);
-            LOG.warn("Parse success {}", sql);
-            return deserializerStatisticData(sqlResult);
+            Pair<List<TResultBatch>, Status> sqlResult = executeStmt(context, execPlan);
+            if (!sqlResult.second.ok()) {
+                return Pair.create(Collections.emptyList(), sqlResult.second);
+            } else {
+                return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+            }
         } catch (Exception e) {
             LOG.warn("Execute statistic dict query {} fail.", sql, e);
             throw e;
@@ -291,7 +286,7 @@ public class StatisticExecutor {
 
         try {
             ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false, true);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan);
+            List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
 
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
 
@@ -375,21 +370,26 @@ public class StatisticExecutor {
         return parsedStmt;
     }
 
-    private static List<TResultBatch> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
+    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
         Coordinator coord =
                 new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
-        coord.exec();
-
-        RowBatch batch;
+        QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
         List<TResultBatch> sqlResult = Lists.newArrayList();
-        do {
-            batch = coord.getNext();
-            if (batch.getBatch() != null) {
-                sqlResult.add(batch.getBatch());
-            }
-        } while (!batch.isEos());
-
-        return sqlResult;
+        try {
+            coord.exec();
+            RowBatch batch;
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+        } catch (Exception e) {
+            LOG.warn(e);
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+        }
+        return Pair.create(sqlResult, coord.getExecStatus());
     }
 
     private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
