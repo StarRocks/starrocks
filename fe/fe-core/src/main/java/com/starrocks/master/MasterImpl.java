@@ -1189,6 +1189,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
             response.setStatus(status);
+            LOG.warn("begin remote txn failed, db: {} not exist, label: {}",
+                    request.getDb_id(), request.getLabel());
             return response;
         }
 
@@ -1199,7 +1201,7 @@ public class MasterImpl {
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
-            LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
+            LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1223,6 +1225,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
+            LOG.warn("commit remote txn failed, db: {} not exist, txn id: {}",
+                    request.getDb_id(), request.getTxn_id());
             return response;
         }
 
@@ -1244,6 +1248,7 @@ public class MasterImpl {
                 return response;
             }
         } catch (UserException e) {
+            LOG.warn("commit remote txn failed, txn id {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1264,6 +1269,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
+            LOG.warn("abort remote txn failed, db: {} not exist, txn id: {}",
+                    request.getDb_id(), request.getTxn_id());
             return response;
         }
 
@@ -1271,6 +1278,7 @@ public class MasterImpl {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
+            LOG.warn("abort remote txn failed, txn id {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
