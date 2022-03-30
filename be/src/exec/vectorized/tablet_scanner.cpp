@@ -316,12 +316,11 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;
-    COUNTER_UPDATE(_parent->_vec_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
-    COUNTER_UPDATE(_parent->_branchless_pred_filter_timer, _reader->stats().branchless_cond_evaluate_ns);
     cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
-    COUNTER_UPDATE(_parent->_expr_pred_filter_timer, _reader->stats().expr_cond_evaluate_ns);
     cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+    // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
+    // When we support metric classification, we can disassemble it again.
     COUNTER_UPDATE(_parent->_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_parent->_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_parent->_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);

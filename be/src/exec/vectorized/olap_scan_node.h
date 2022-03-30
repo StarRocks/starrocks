@@ -172,9 +172,6 @@ private:
     RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
-    RuntimeProfile::Counter* _vec_pred_filter_timer = nullptr;
-    RuntimeProfile::Counter* _branchless_pred_filter_timer = nullptr;
-    RuntimeProfile::Counter* _expr_pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;

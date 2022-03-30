@@ -398,9 +398,6 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _block_seek_timer = ADD_CHILD_TIMER(_scan_profile, "BlockSeek", "SegmentRead");
     _block_seek_counter = ADD_CHILD_COUNTER(_scan_profile, "BlockSeekCount", TUnit::UNIT, "SegmentRead");
     _pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "PredFilter", "SegmentRead");
-    _vec_pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "VecPredFilter", "PredFilter");
-    _branchless_pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BranchlessPredFilter", "PredFilter");
-    _expr_pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "ExprPredFilter", "PredFilter");
     _pred_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "PredFilterRows", TUnit::UNIT, "SegmentRead");
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
