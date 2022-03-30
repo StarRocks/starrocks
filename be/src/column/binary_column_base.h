@@ -29,7 +29,7 @@ public:
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
-    };
+    }
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase<T>(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
