@@ -58,8 +58,6 @@ public:
     void close();
 
 private:
-    CompareFN _choose_comparator(const FieldPtr& field);
-
     bool _row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const;
 
     // chunk mate
@@ -72,8 +70,6 @@ private:
     uint32_t _reserve_rows;
 
     uint32_t _max_aggregate_rows;
-
-    std::vector<CompareFN> _comparator;
 
     uint32_t _source_row;
 
