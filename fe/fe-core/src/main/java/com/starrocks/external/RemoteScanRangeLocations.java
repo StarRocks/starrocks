@@ -12,6 +12,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -97,7 +99,7 @@ public class RemoteScanRangeLocations {
         if (blockDesc.getReplicaHostIds().length == 0) {
             String message = String.format("hdfs file block has no host. file = %s/%s",
                     partition.getFullPath(), fileDesc.getFileName());
-            throw new RuntimeException(message);
+            throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
 
         for (long hostId : blockDesc.getReplicaHostIds()) {
