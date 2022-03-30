@@ -31,7 +31,6 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicationGroup;
 import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.UnknownMasterException;
-import com.sleepycat.je.rep.impl.RepNodeImpl;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -198,7 +197,8 @@ public class BDBHA implements HAProtocol {
         }
         try {
             replicationGroupAdmin.removeMember(nodeName);
-        } catch (MemberNotFoundException e) { LOG.error("the deleting electable node is not found {}", nodeName, e);
+        } catch (MemberNotFoundException e) {
+            LOG.error("the deleting electable node is not found {}", nodeName, e);
             return false;
         } catch (MasterStateException e) {
             LOG.error("the deleting electable node is master {}", nodeName, e);
