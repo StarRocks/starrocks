@@ -59,7 +59,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     _offsets.resize(cur_row_count + size + 1);
     for (size_t i = 0; i < size; i++) {
         uint32_t row_idx = indexes[from + i];
-        Offset str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
         _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
         cur_byte_size += str_size;
     }
@@ -68,7 +68,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     auto* dest_bytes = _bytes.data();
     for (size_t i = 0; i < size; i++) {
         uint32_t row_idx = indexes[from + i];
-        Offset str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
         strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
                                 str_size);
     }
@@ -88,7 +88,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
     _offsets.resize(cur_row_count + size + 1);
     for (size_t i = 0; i < size; i++) {
         uint32_t row_idx = index;
-        Offset str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
         _offsets[cur_row_count + i + 1] = _offsets[cur_row_count + i] + str_size;
         cur_byte_size += str_size;
     }
@@ -97,7 +97,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
     auto* dest_bytes = _bytes.data();
     for (size_t i = 0; i < size; i++) {
         uint32_t row_idx = index;
-        Offset str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+        T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
         strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
                                 str_size);
     }
@@ -242,7 +242,7 @@ Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* index
             idx_begin = indexes[i] + 1;
         }
         if (size() > indexes[replace_num - 1] + 1) {
-            T remain_count = size() - indexes[replace_num - 1] - 1;
+            size_t remain_count = size() - indexes[replace_num - 1] - 1;
             new_binary_column->append(*this, indexes[replace_num - 1] + 1, remain_count);
         }
         swap_column(*new_binary_column);
@@ -403,6 +403,7 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
 
 template <typename T>
 uint32_t BinaryColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
+    // max size of one string is 2^32, so use uint32_t not T
     uint32_t binary_size = _offsets[idx + 1] - _offsets[idx];
     T offset = _offsets[idx];
 
