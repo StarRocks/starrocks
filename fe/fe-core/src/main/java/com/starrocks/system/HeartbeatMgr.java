@@ -70,7 +70,7 @@ public class HeartbeatMgr extends MasterDaemon {
     private final SystemInfoService nodeMgr;
     private final HeartbeatFlags heartbeatFlags;
 
-    private static volatile AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
+    private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
         super("heartbeat mgr", Config.heartbeat_timeout_second * 1000);

@@ -43,11 +43,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.Planner;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -312,18 +309,6 @@ public class UtFrameUtils {
         }
 
         throw new RuntimeException("can not find valid port");
-    }
-
-    public static String getSQLPlanOrErrorMsg(ConnectContext ctx, String queryStr) throws Exception {
-        ctx.getState().reset();
-        StmtExecutor stmtExecutor = new StmtExecutor(ctx, queryStr);
-        stmtExecutor.execute();
-        if (ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
-            Planner planner = stmtExecutor.planner();
-            return planner.getExplainString(planner.getFragments(), TExplainLevel.NORMAL);
-        } else {
-            return ctx.getState().getErrorMessage();
-        }
     }
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
