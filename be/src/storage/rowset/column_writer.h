@@ -23,6 +23,7 @@
 
 #include <memory> // for unique_ptr
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
@@ -33,7 +34,6 @@
 #include "storage/tablet_schema.h"       // for TabletColumn
 #include "util/bitmap.h"                 // for BitmapChange
 #include "util/slice.h"                  // for OwnedSlice
-#include "column/vectorized_fwd.h"
 
 namespace starrocks {
 
