@@ -655,6 +655,17 @@ public:
         return Status::OK();
     }
 
+    Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) {
+        const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            const auto& key = fkeys[replace_idxes[i]];
+            const auto v = values[replace_idxes[i]];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            _map.emplace_with_hash(hash, key, v);
+        }
+        return Status::OK();
+    }
+
     size_t dump_bound() { return _map.dump_bound(); }
 
     bool dump(phmap::BinaryOutputArchive& ar_out) { return _map.dump(ar_out); }
@@ -1506,6 +1517,34 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     if (!_dump_snapshot) {
         RETURN_IF_ERROR(_append_wal(n, keys, nullptr));
     }
+    return Status::OK();
+}
+
+Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
+                                    const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed) {
+    std::vector<IndexValue> found_values;
+    found_values.reserve(n);
+    RETURN_IF_ERROR(get(n, keys, found_values.data()));
+    uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
+    std::vector<size_t> replace_idxes;
+    for (size_t i = 0; i < n; ++i) {
+        if (values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+            replace_idxes.emplace_back(i);
+        } else {
+            failed->emplace_back(rowid_start + i);
+        }
+    }
+    RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
+    // write wal
+    const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+    faststring fixed_buf;
+    fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+    for (size_t i = 0; i < replace_idxes.size(); ++i) {
+        fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
+        put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+    }
+    RETURN_IF_ERROR(_index_block->append(fixed_buf));
+    _page_size += fixed_buf.size();
     return Status::OK();
 }
 

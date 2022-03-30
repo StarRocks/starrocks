@@ -101,6 +101,12 @@ public:
     virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
+    // batch replace
+    // |keys|: key array as raw buffer
+    // |values|: new value array
+    // |replace_idxes|: the idx array of the kv needed to be replaced
+    virtual Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
+
     // get dump size of hashmap
     virtual size_t dump_bound() = 0;
 
@@ -268,6 +274,15 @@ public:
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
+
+    // batch replace
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |src_rssid|: rssid array
+    // |failed|: return not match rowid
+    Status try_replace(size_t n, const void* keys, const IndexValue* values, const std::vector<uint32_t>& src_rssid,
+                       std::vector<uint32_t>* failed);
 
     size_t mutable_index_size();
 
