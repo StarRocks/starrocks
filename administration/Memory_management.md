@@ -47,23 +47,47 @@
 
 ## 查看内存使用
 
-* **mem\_tracker**
+当前有三种方法分析 BE 内存使用:
 
-~~~ bash
-// 看整体内存统计
-<http://be_ip:be_web_port/mem_tracker>
+* **通过 Metrics 接口分析内存使用**
 
-// 看更细粒度的内存统计
-<http://be_ip:be_web_port/mem_tracker?type=query_pool&upper_level=3>
-~~~
+Metrics 统计每 10 秒更新一次。
 
-* **tcmalloc**
+```bash
+# BE webserver_port 默认是 8040
+curl -XGET -s http://BE_IP:8040/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use" 
+```
 
-~~~ bash
-<http://be_ip:be_web_port/memz>
-~~~
+对应指标的含义参考章节: [内存分类](#内存分类)。
 
-~~~plain text
+* **通过 mem_tracker 接口分析 BE 内存使用**
+
+通过浏览器或是 curl 访问。
+
+```bash
+# BE webserver_port 默认是 8040
+http://be_ip:8040/mem_tracker
+```
+
+![MemTracker](!../assets/memory_management_1.png)
+
+* level: MemTracker 是一个树型结构，第一级是 BE 使用总内存，第二级是分类内存使用。
+* Label: 标识内存分类，对应指标的含义参考章节: [内存分类](#内存分类)。
+* Parent: 父结点 Label。
+* Limit: 内存使用限制，-1 表示没有限制。
+* Current Consumption: 当前内存使用。
+* Peak Consumption: 峰值内存使用。
+
+* **通过 tcmalloc 接口分析 BE 内存使用**
+
+通过浏览器或是 curl 访问。
+
+```bash
+# BE webserver_port 默认是 8040
+http://be_ip:8040/memz
+```
+
+```plain text
 ------------------------------------------------
 MALLOC:      777276768 (  741.3 MiB) Bytes in use by application
 MALLOC: +   8851890176 ( 8441.8 MiB) Bytes in page heap freelist
@@ -83,17 +107,11 @@ MALLOC:           8192              Tcmalloc page size
 ------------------------------------------------
 Call ReleaseFreeMemory() to release freelist memory to the OS (via madvise()).
 Bytes released to the OS take up virtual address space but no physical memory.
-~~~
+```
 
-通过这种方法，看到的内存是准确的，但是当前StarRocks，有些内存使用是**Reserve**的，但是并没有使用，TcMalloc统计的**实际上是Reserve的内存**，而不是实际使用的内存。
+各个指标的含义:
 
-这里Bytes in use by application 指的是当前使用的内存.
-
-* **metrics**
-
-~~~bash
-curl -XGET http://be_ip:be_web_port/metrics | grep 'mem'
-curl -XGET http://be_ip:be_web_port/metrics | grep 'column_pool'
-~~~
-
-metrics的值是10秒更新一次，老的版本，可以通过这种方法，监控部分内存统计。
+* Bytes in use by application: BE 实际使用的内存。
+* Bytes in page heap freelist: BE 已不再使用，但是还没有归还给操作系统的内存。
+* Actual memory used: 操作系统看到的 BE 的实际内存使用（BE 会预留一些空闲内存，不还给操作系统或是缓慢返还给操作系统）。
+* Bytes released to OS: BE 已设置为可回收状态，但是操作系统还没有回收的内存。
