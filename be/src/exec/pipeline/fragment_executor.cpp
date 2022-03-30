@@ -178,13 +178,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
-    ExecNode* plan = nullptr;
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &plan));
+    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &_fragment_ctx->plan()));
+    ExecNode* plan = _fragment_ctx->plan();
     plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());
-    _fragment_ctx->set_plan(plan);
 
     // Set up global dict
     if (request.fragment.__isset.query_global_dicts) {
