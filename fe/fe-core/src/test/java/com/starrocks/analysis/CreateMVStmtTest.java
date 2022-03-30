@@ -10,10 +10,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.UUID;
+
 
 public class CreateMVStmtTest {
 
     private static StarRocksAssert starRocksAssert;
+    private static String runningDir = "fe/mocked/CreateMVStmtTest/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -21,7 +24,7 @@ public class CreateMVStmtTest {
         // create connect context
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
