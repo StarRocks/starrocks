@@ -108,8 +108,8 @@ public class QueryAnalyzer {
             }
 
             for (CTERelation withQuery : stmt.getCteRelations()) {
-                QueryRelation query = withQuery.getCteQuery();
-                process(new QueryStatement(withQuery.getCteQuery()), cteScope);
+                QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
+                process(withQuery.getCteQueryStatement(), cteScope);
 
                 /*
                  *  Because the analysis of CTE is sensitive to order
@@ -204,7 +204,7 @@ public class QueryAnalyzer {
                         // cte used in outer query and subquery can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
                                 cteRelation.getColumnOutputNames(),
-                                cteRelation.getCteQuery());
+                                cteRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
@@ -217,8 +217,7 @@ public class QueryAnalyzer {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
-                    ViewRelation viewRelation =
-                            new ViewRelation(tableName, view, queryStatement.getQueryRelation());
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableName);
                     return viewRelation;
                 } else {
@@ -265,7 +264,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitCTE(CTERelation cteRelation, Scope context) {
-            QueryRelation query = cteRelation.getCteQuery();
+            QueryRelation query = cteRelation.getCteQueryStatement().getQueryRelation();
             TableName tableName = cteRelation.getAlias();
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
@@ -410,7 +409,7 @@ public class QueryAnalyzer {
                 throw new SemanticException("Every derived table must have its own alias");
             }
 
-            Scope queryOutputScope = process(new QueryStatement(subquery.getQuery()), context);
+            Scope queryOutputScope = process(subquery.getQueryStatement(), context);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
@@ -424,7 +423,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            Scope queryOutputScope = process(new QueryStatement(node.getQuery()), scope);
+            Scope queryOutputScope = process(node.getQueryStatement(), scope);
 
             View view = node.getView();
             TableName tableName = node.getName();

@@ -108,40 +108,40 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitQueryStatement(QueryStatement node, C context) {
-        return visitStatement(node, context);
+    public R visitQueryStatement(QueryStatement statement, C context) {
+        return visitStatement(statement, context);
     }
 
-    public R visitInsertStatement(InsertStmt node, C context) {
-        return visitStatement(node, context);
+    public R visitInsertStatement(InsertStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitShowStatement(ShowStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitShowTableStmt(ShowTableStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowTableStmt(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowDatabasesStmt(ShowDbStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowWorkGroupStmt(ShowWorkGroupStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowWorkGroupStmt(ShowWorkGroupStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowVariablesStmt(ShowVariablesStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowColumnStmt(ShowColumnStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowColumnStmt(ShowColumnStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowTableStatusStmt(ShowTableStatusStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowTableStatusStmt(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ----------------- Relation ---------------

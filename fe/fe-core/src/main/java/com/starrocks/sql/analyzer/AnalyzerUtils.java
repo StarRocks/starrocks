@@ -154,12 +154,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQuery());
+            return visit(node.getQueryStatement());
         }
 
         public Void visitView(ViewRelation node, Void context) {
             getDB(node.getName());
-            return visit(node.getQuery(), context);
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -180,7 +180,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQuery());
+            return visit(node.getCteQueryStatement());
         }
 
         @Override
@@ -231,12 +231,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQuery());
+            return visit(node.getQueryStatement());
         }
 
 
         public Void visitView(ViewRelation node, Void context) {
-            return visit(node.getQuery(), context);
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -266,7 +266,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQuery());
+            return visit(node.getCteQueryStatement());
         }
 
         @Override
