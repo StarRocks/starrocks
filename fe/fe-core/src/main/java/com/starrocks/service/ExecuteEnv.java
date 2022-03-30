@@ -26,20 +26,13 @@ import com.starrocks.qe.ConnectScheduler;
 
 // Execute environment, used to save other module, need to singleton
 public class ExecuteEnv {
-    private static volatile ExecuteEnv INSTANCE;
+    private static final ExecuteEnv INSTANCE = new ExecuteEnv();
     private ConnectScheduler scheduler;
 
     private ExecuteEnv() {
     }
 
     public static ExecuteEnv getInstance() {
-        if (INSTANCE == null) {
-            synchronized (ExecuteEnv.class) {
-                if (INSTANCE == null) {
-                    INSTANCE = new ExecuteEnv();
-                }
-            }
-        }
         return INSTANCE;
     }
 

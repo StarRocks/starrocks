@@ -99,7 +99,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
-import com.starrocks.planner.Planner;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -157,10 +156,9 @@ public class StmtExecutor {
     private StatementBase parsedStmt;
     private Analyzer analyzer;
     private RuntimeProfile profile;
-    private volatile Coordinator coord = null;
+    private Coordinator coord = null;
     private MasterOpExecutor masterOpExecutor = null;
     private RedirectStatus redirectStatus = null;
-    private Planner planner;
     private final boolean isProxy;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
@@ -213,10 +211,6 @@ public class StmtExecutor {
             profile.addChild(coord.getQueryProfile());
             coord = null;
         }
-    }
-
-    public Planner planner() {
-        return planner;
     }
 
     public boolean isForwardToMaster() {
