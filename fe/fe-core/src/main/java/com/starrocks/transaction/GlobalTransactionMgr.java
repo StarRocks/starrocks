@@ -152,12 +152,17 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}, error: {}", addr, label, errStr);
             throw new BeginTransactionException(errStr);
         } else {
+            if (response.getTxn_id() <= 0) {
+                LOG.warn("beginRemoteTransaction returns invalid txn id: {}, label: {}",
+                        response.getTxn_id(), label);
+                throw new BeginTransactionException("beginRemoteTransaction returns invalid txn id");
+            }
             LOG.info("begin remote txn, label: {}, txn id: {}", label, response.getTxn_id());
             return response.getTxn_id();
         }
     }
 
-    // commit transaction in remote DorisDB cluster
+    // commit transaction in remote StarRocks cluster
     public boolean commitRemoteTransaction(long dbId, long transactionId,
                                            String host, int port, List<TTabletCommitInfo> tabletCommitInfos)
             throws TransactionCommitFailedException {
@@ -191,7 +196,7 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    // abort transaction in remote DorisDB cluster
+    // abort transaction in remote StarRocks cluster
     public void abortRemoteTransaction(long dbId, long transactionId,
                                        String host, int port, String errorMsg)
             throws AbortTransactionException {

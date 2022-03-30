@@ -1191,6 +1191,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
             response.setStatus(status);
+            LOG.warn("begin remote txn failed, db: {} not exist, label: {}",
+                    request.getDb_id(), request.getLabel());
             return response;
         }
 
@@ -1225,6 +1227,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
+            LOG.warn("commit remote txn failed, db: {} not exist, txn id: {}",
+                    request.getDb_id(), request.getTxn_id());
             return response;
         }
 
@@ -1267,6 +1271,8 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
+            LOG.warn("abort remote txn failed, db: {} not exist, txn id: {}",
+                    request.getDb_id(), request.getTxn_id());
             return response;
         }
 
