@@ -239,9 +239,9 @@ int HeapChunkSorter::_filter_data(detail::ChunkHolder* chunk_holder, int row_sz)
     return chunk_holder->value()->chunk->filter(filter);
 }
 
-void HeapChunkSorter::setup_runtime(RuntimeProfile* profile, const std::string& parent_profile) {
-    ChunksSorter::setup_runtime(profile, parent_profile);
-    _sort_filter_costs = ADD_CHILD_TIMER(profile, "SortFilterCost", parent_profile);
+void HeapChunkSorter::setup_runtime(RuntimeProfile* profile) {
+    ChunksSorter::setup_runtime(profile);
+    _sort_filter_costs = ADD_TIMER(profile, "SortFilterCost");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }
 

@@ -550,7 +550,8 @@ public class Coordinator {
                         if (needCheckBackendState) {
                             needCheckBackendExecStates.add(execState);
                             if (LOG.isDebugEnabled()) {
-                                LOG.debug("add need check backend {} for fragment, {} job: {}", execState.backend.getId(),
+                                LOG.debug("add need check backend {} for fragment, {} job: {}",
+                                        execState.backend.getId(),
                                         fragment.getFragmentId().asInt(), jobId);
                             }
                         }
@@ -1669,7 +1670,7 @@ public class Coordinator {
             List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
-            Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, "");
+            Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
             counter.setValue(instanceProfiles.size());
 
             // After merge, all merged metrics will gather into the first profile
@@ -1685,6 +1686,20 @@ public class Coordinator {
                 RuntimeProfile pipelineProfile = pair.first;
                 fragmentProfile.addChild(pipelineProfile);
             });
+        }
+
+        // Set backend number
+        for (int i = 0; i < fragments.size(); i++) {
+            PlanFragment fragment = fragments.get(i);
+            RuntimeProfile profile = fragmentProfiles.get(i);
+
+            Set<TNetworkAddress> networkAddresses =
+                    fragmentExecParamsMap.get(fragment.getFragmentId()).instanceExecParams.stream()
+                            .map(param -> param.host)
+                            .collect(Collectors.toSet());
+
+            Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT);
+            backendNum.setValue(networkAddresses.size());
         }
     }
 
@@ -1813,7 +1828,8 @@ public class Coordinator {
             this.address = host;
             this.backend = idToBackend.get(addressToBackendID.get(address));
 
-            String name = "Instance " + DebugUtil.printId(rpcParams.params.fragment_instance_id) + " (host=" + address + ")";
+            String name =
+                    "Instance " + DebugUtil.printId(rpcParams.params.fragment_instance_id) + " (host=" + address + ")";
             this.profile = new RuntimeProfile(name);
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();

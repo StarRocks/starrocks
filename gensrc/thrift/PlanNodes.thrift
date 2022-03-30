@@ -649,6 +649,11 @@ struct TAnalyticNode {
   // should be evaluated over a row that is composed of the child tuple and the buffered
   // tuple
   9: optional Exprs.TExpr order_by_eq
+
+  // For profile attributes' printing: `Partition Keys` `Aggregate Functions`
+  10: optional string sql_partition_keys
+  11: optional string sql_aggregate_functions
+
   20: optional bool has_outer_join_child
 }
 
