@@ -119,6 +119,10 @@ public class ArrayType extends Type {
     public boolean hasNumericItem() {
         return itemType.isNumericType();
     }
+
+    public boolean isNullTypeItem() {
+        return itemType.isNull(); 
+    }
 }
 
 
