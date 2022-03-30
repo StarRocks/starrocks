@@ -17,9 +17,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -94,7 +93,8 @@ public class SubqueryTransformer {
         public boolean useSemiAnti;
         public Map<Integer, ExpressionMapping> cteContext;
 
-        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti, Map<Integer, ExpressionMapping> cteContext) {
+        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
+                               Map<Integer, ExpressionMapping> cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -110,18 +110,15 @@ public class SubqueryTransformer {
             this.session = session;
         }
 
-        private LogicalPlan getLogicalPlan(Relation relation, ConnectContext session, ExpressionMapping outer,
+        private LogicalPlan getLogicalPlan(QueryRelation relation, ConnectContext session, ExpressionMapping outer,
                                            Map<Integer, ExpressionMapping> cteContext) {
-            if (!(relation instanceof SelectRelation) && !(relation instanceof ValuesRelation)) {
-                throw new SemanticException("Unsupported subquery relation");
+            if (!(relation instanceof SelectRelation)) {
+                throw new SemanticException("Currently only subquery of the Select type are supported");
             }
 
-            if (relation instanceof SelectRelation) {
-                SelectRelation selectRelation = (SelectRelation) relation;
-                // For in subQuery, the order by is meaningless
-                if (!selectRelation.hasLimit()) {
-                    selectRelation.getOrderBy().clear();
-                }
+            // For in subQuery, the order by is meaningless
+            if (!relation.hasLimit()) {
+                relation.getOrderBy().clear();
             }
 
             return new RelationTransformer(columnRefFactory, session, outer, cteContext).transform(relation);
@@ -143,7 +140,8 @@ public class SubqueryTransformer {
                 return context.builder;
             }
 
-            QueryRelation qb = ((Subquery) inPredicate.getChild(1)).getQueryRelation();
+            QueryStatement queryStatement = ((Subquery) inPredicate.getChild(1)).getQueryStatement();
+            QueryRelation qb = queryStatement.getQueryRelation();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, session, context.builder.getExpressionMapping(),
                     context.cteContext);
             if (qb instanceof SelectRelation &&
@@ -181,7 +179,7 @@ public class SubqueryTransformer {
         public OptExprBuilder visitExistsPredicate(ExistsPredicate existsPredicate, SubqueryContext context) {
             Preconditions.checkState(existsPredicate.getChild(0) instanceof Subquery);
 
-            QueryRelation qb = ((Subquery) existsPredicate.getChild(0)).getQueryRelation();
+            QueryRelation qb = ((Subquery) existsPredicate.getChild(0)).getQueryStatement().getQueryRelation();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, session, context.builder.getExpressionMapping(),
                     context.cteContext);
 
@@ -243,11 +241,14 @@ public class SubqueryTransformer {
         // scalar subquery
         @Override
         public OptExprBuilder visitSubquery(Subquery subquery, SubqueryContext context) {
+            QueryStatement queryStatement = subquery.getQueryStatement();
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+
             LogicalPlan subqueryPlan =
-                    getLogicalPlan(subquery.getQueryRelation(), session, context.builder.getExpressionMapping(),
+                    getLogicalPlan(queryRelation, session, context.builder.getExpressionMapping(),
                             context.cteContext);
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryRelation() instanceof SelectRelation
-                    && !((SelectRelation) subquery.getQueryRelation()).hasAggregation()) {
+            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation
+                    && !((SelectRelation) queryRelation).hasAggregation()) {
                 throw new SemanticException("Correlated scalar subquery should aggregation query");
             }
 
@@ -263,9 +264,9 @@ public class SubqueryTransformer {
              * So we need to do special processing on count,
              * other aggregate functions do not need special processing because they return NULL
              */
-            if (!subqueryPlan.getCorrelation().isEmpty() && subquery.getQueryRelation() instanceof SelectRelation &&
-                    ((SelectRelation) subquery.getQueryRelation()).hasAggregation() &&
-                    ((SelectRelation) subquery.getQueryRelation()).getAggregate().get(0).getFnName().getFunction()
+            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation &&
+                    ((SelectRelation) queryRelation).hasAggregation() &&
+                    ((SelectRelation) queryRelation).getAggregate().get(0).getFnName().getFunction()
                             .equalsIgnoreCase(FunctionSet.COUNT)) {
 
                 subqueryOutput = new CallOperator("ifnull", Type.BIGINT,
