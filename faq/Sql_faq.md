@@ -90,7 +90,7 @@ show tablet from lineitem where State="ALTER";
 **问题描述：**
 
 查询hive外部表是具体报错信息为：
-`get partition detail failed: org.apache.doris.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest（具体hdfs-ha的名字）`
+`get partition detail failed: com.starrocks.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest（具体hdfs-ha的名字）`
 
 **解决方案:**
 
