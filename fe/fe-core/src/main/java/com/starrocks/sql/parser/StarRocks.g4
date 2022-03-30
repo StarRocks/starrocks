@@ -311,10 +311,19 @@ primaryExpression
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
+    | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | CAST '(' expression AS type ')'                                                     #cast
+    ;
+
+aggregationFunction
+    : AVG '(' DISTINCT? expression ')'
+    | COUNT '(' ASTERISK_SYMBOL ')'
+    | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
+    | MAX '(' DISTINCT? expression ')'
+    | MIN '(' DISTINCT? expression ')'
+    | SUM '(' DISTINCT? expression ')'
     ;
 
 variable
@@ -478,9 +487,9 @@ number
     ;
 
 nonReserved
-    : ARRAY
+    : ARRAY | AVG
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS | COMMIT
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
     | FILTER | FIRST | FOLLOWING | FORMAT
@@ -488,12 +497,12 @@ nonReserved
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MINUTE | MONTH | MERGE
+    | MAX | MIN | MINUTE | MONTH | MERGE
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
     | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START
+    | SECOND | SESSION | SETS | START | SUM
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE

@@ -102,6 +102,8 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -1176,8 +1178,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
-        boolean isStar = context.ASTERISK_SYMBOL() != null;
-        boolean distinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
 
         String functionName = getQualifiedName(context.qualifiedName()).toString();
 
@@ -1207,27 +1207,52 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
+                new FunctionParams(false, visit(context.expression(), Expr.class)));
+
+        if (context.over() != null) {
+            return buildOverClause(functionCallExpr, context.over());
+        }
+        return functionCallExpr;
+    }
+
+    @Override
+    public ParseNode visitAggregationFunctionCall(StarRocksParser.AggregationFunctionCallContext context) {
         FunctionCallExpr functionCallExpr;
-        if (isStar) {
-            functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
-                    FunctionParams.createStarParam());
+        if (context.aggregationFunction().COUNT() != null) {
+            if (context.aggregationFunction().ASTERISK_SYMBOL() != null) {
+                functionCallExpr = new FunctionCallExpr("count", FunctionParams.createStarParam());
+            } else {
+                List<Expr> params = visit(context.aggregationFunction().expression(), Expr.class);
+                if (params.isEmpty()) {
+                    throw new ParsingException("No matching function with signature: count().");
+                }
+
+                functionCallExpr = new FunctionCallExpr("count",
+                        new FunctionParams(context.aggregationFunction().DISTINCT() != null,
+                                visit(context.aggregationFunction().expression(), Expr.class)));
+            }
         } else {
-            functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
-                    new FunctionParams(distinct, visit(context.expression(), Expr.class)));
+            String functionName;
+            if (context.aggregationFunction().AVG() != null) {
+                functionName = "avg";
+            } else if (context.aggregationFunction().SUM() != null) {
+                functionName = "sum";
+            } else if (context.aggregationFunction().MIN() != null) {
+                functionName = "min";
+            } else if (context.aggregationFunction().MAX() != null) {
+                functionName = "max";
+            } else {
+                throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
+                        ErrorType.INTERNAL_ERROR);
+            }
+            functionCallExpr = new FunctionCallExpr(functionName,
+                    new FunctionParams(context.aggregationFunction().DISTINCT() != null,
+                            visit(context.aggregationFunction().expression(), Expr.class)));
         }
 
         if (context.over() != null) {
-            functionCallExpr.setIsAnalyticFnCall(true);
-            List<OrderByElement> orderByElements = new ArrayList<>();
-            if (context.over().ORDER() != null) {
-                orderByElements = visit(context.over().sortItem(), OrderByElement.class);
-            }
-            List<Expr> partitionExprs = visit(context.over().partition, Expr.class);
-
-            return new AnalyticExpr(functionCallExpr,
-                    partitionExprs,
-                    orderByElements,
-                    (AnalyticWindow) visitIfPresent(context.over().windowFrame()));
+            return buildOverClause(functionCallExpr, context.over());
         }
         return functionCallExpr;
     }
@@ -1235,18 +1260,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitWindowFunctionCall(StarRocksParser.WindowFunctionCallContext context) {
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.windowFunction());
-
-        functionCallExpr.setIsAnalyticFnCall(true);
-        List<OrderByElement> orderByElements = new ArrayList<>();
-        if (context.over().ORDER() != null) {
-            orderByElements = visit(context.over().sortItem(), OrderByElement.class);
-        }
-        List<Expr> partitionExprs = visit(context.over().partition, Expr.class);
-
-        return new AnalyticExpr(functionCallExpr,
-                partitionExprs,
-                orderByElements,
-                (AnalyticWindow) visitIfPresent(context.over().windowFrame()));
+        return buildOverClause(functionCallExpr, context.over());
     }
 
     public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
@@ -1259,6 +1273,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
+    }
+
+    private AnalyticExpr buildOverClause(FunctionCallExpr functionCallExpr, StarRocksParser.OverContext context) {
+        functionCallExpr.setIsAnalyticFnCall(true);
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.ORDER() != null) {
+            orderByElements = visit(context.sortItem(), OrderByElement.class);
+        }
+        List<Expr> partitionExprs = visit(context.partition, Expr.class);
+
+        return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
+                (AnalyticWindow) visitIfPresent(context.windowFrame()));
     }
 
     @Override
@@ -1320,7 +1346,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new TimestampArithmeticExpr(functionName, e3, e2, e1.getDescription());
         }
 
-        throw new SemanticException("No matching function with signature: %s(%s).", context.getText(),
+        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(),
                 visit(context.expression(), Expr.class));
     }
 
@@ -1541,7 +1567,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         qualifiedName.getParts().get(1),
                         qualifiedName.getParts().get(1));
             } else {
-                throw new SemanticException("Unqualified column reference " + qualifiedName);
+                throw new ParsingException("Unqualified column reference " + qualifiedName);
             }
         }
     }
