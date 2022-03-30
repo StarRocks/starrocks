@@ -52,8 +52,7 @@ static const std::string THREAD_VOLUNTARY_CONTEXT_SWITCHES = "VoluntaryContextSw
 // NOLINTNEXTLINE
 static const std::string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryContextSwitches";
 
-// The root counter name for all top level counters.
-static const std::string ROOT_COUNTER = ""; // NOLINT
+const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 
 // NOLINTNEXTLINE
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
@@ -393,6 +392,13 @@ const std::string* RuntimeProfile::get_info_string(const std::string& key) {
     return &it->second;
 }
 
+void RuntimeProfile::get_all_info_strings(std::map<std::string, std::string>* info_strings) {
+    std::lock_guard<std::mutex> l(_info_strings_lock);
+    for (auto& [key, value] : _info_strings) {
+        info_strings->insert(std::make_pair(key, value));
+    }
+}
+
 void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
     DCHECK(src_profile != nullptr);
     if (this == src_profile) {
@@ -540,6 +546,19 @@ void RuntimeProfile::get_counters(const std::string& name, std::vector<Counter*>
 
     for (auto& i : _children) {
         i.first->get_counters(name, counters);
+    }
+}
+
+void RuntimeProfile::get_all_counters(std::map<std::string, Counter*>* counters,
+                                      std::map<std::string, std::set<std::string>>* child_counter_map) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+
+    for (auto& [key, value] : _counter_map) {
+        counters->insert(std::make_pair(key, value));
+    }
+
+    for (auto& [parent_counter_name, names] : _child_counter_map) {
+        child_counter_map->insert(std::make_pair(parent_counter_name, names));
     }
 }
 

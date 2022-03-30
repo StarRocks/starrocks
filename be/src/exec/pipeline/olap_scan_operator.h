@@ -34,7 +34,7 @@ public:
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
-    ChunkSourcePtr create_chunk_source(MorselPtr morsel) override;
+    ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
 private:
     Status _capture_tablet_rowsets();

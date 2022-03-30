@@ -12,12 +12,14 @@
 
 namespace starrocks {
 class RuntimeState;
+class RuntimeProfile;
 
 namespace pipeline {
 
 class ChunkSource {
 public:
-    ChunkSource(MorselPtr&& morsel) : _morsel(std::move(morsel)) {}
+    ChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel)
+            : _runtime_profile(runtime_profile), _morsel(std::move(morsel)){};
 
     virtual ~ChunkSource() = default;
 
@@ -44,6 +46,7 @@ public:
 
 protected:
     // The morsel will own by pipeline driver
+    RuntimeProfile* _runtime_profile;
     MorselPtr _morsel;
 };
 
