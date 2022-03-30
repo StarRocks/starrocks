@@ -162,6 +162,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new AnalysisException("The limit clause is not supported in add materialized view clause, expr:"
                     + " limit " + selectStmt.getLimit());
         }
+        for (MVColumnItem mvColumnItem : mvColumnItemList) {
+            if (!this.isReplay && mvColumnItem.isKey() && mvColumnItem.getType().isFloatingPointType()) {
+                throw new AnalysisException(
+                        String.format("Invalid data type of materialized key column '%s': '%s'",
+                                mvColumnItem.getName(), mvColumnItem.getType()));
+            }
+        }
     }
 
     public void analyzeSelectClause(boolean ignoreCast) throws AnalysisException {
