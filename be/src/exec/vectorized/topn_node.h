@@ -32,6 +32,7 @@ public:
 private:
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
 
+    const TPlanNode& _tnode;
     int64_t _offset;
 
     // _sort_exec_exprs contains the ordering expressions
