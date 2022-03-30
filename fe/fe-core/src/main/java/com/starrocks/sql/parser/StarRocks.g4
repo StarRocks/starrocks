@@ -340,6 +340,7 @@ specialFunctionExpression
     | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
+    | PASSWORD '(' string ')'
     ;
 
 windowFunction
@@ -474,7 +475,7 @@ nonReserved
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
-    | PRECEDING | PROPERTIES
+    | PASSWORD | PRECEDING | PROPERTIES
     | ROLLUP
     | SECOND | SESSION | SETS | START
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
