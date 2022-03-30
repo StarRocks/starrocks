@@ -159,7 +159,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescrip
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
             const Expr* l = root_expr->get_child(0);
 
-            if ((l->is_slotref()) || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+            if ((!l->is_slotref()) || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
             }
             std::vector<SlotId> slot_ids;
