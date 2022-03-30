@@ -79,6 +79,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1276,6 +1277,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("second", visit(context.expression(), Expr.class));
         } else if (context.YEAR() != null) {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
+        } else if (context.PASSWORD() != null) {
+            return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(context.string().getText())));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
