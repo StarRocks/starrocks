@@ -16,7 +16,7 @@ Note: (The error of 32 indicates the current version is old, but the new version
 
 **Description of the problem:**
 
-When installing "be", the system reports a startup error: Doris Be http service did not start correctly,exiting
+When installing "be", the system reports a startup error: StarRocks Be http service did not start correctly,exiting
 
 **Solution:**
 
@@ -26,7 +26,7 @@ The problem is that 'be webservice' port is occupied. You can modify the port in
 
 Can be supported. No problem is identified in testing.
 
-ERROR 1064 (HY000): Could not initialize class org.apache.doris.rpc.BackendServiceProxy
+ERROR 1064 (HY000): Could not initialize class com.starrocks.rpc.BackendServiceProxy
 
 Check whether 'jre' is used. If so, change 'jre' to 'jdk'. Oraclejdk version 1.8 plus is recommended.
 
