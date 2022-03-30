@@ -11,6 +11,22 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * To timing a function or a piece of code, you could
+ * ```
+ * try(ScopedTimer _ = PlannerProfile.ScopedTimer("ComponentA.CompoenentB.FunctionC") {
+ * // function or code.
+ * }
+ * ```
+ * It's worth to note that, "." in `ComponentA.CompoenentB.FunctionC` is preserved for representing hierarchy,
+ * So better not put use "." in CompoentA or CompoentB or FunctionC. And in profile, the metric looks like
+ * - ComponentA
+ * - ComoennentB
+ * - FunctionC: 100ms / 10
+ * It means FunctionC has executed 10 times, and 100ms in total.
+ */
 
 public class PlannerProfile {
     private ConnectContext ctx;
@@ -44,23 +60,17 @@ public class PlannerProfile {
         }
     }
 
-    private final HashMap<String, ScopedTimer> timers;
+    private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
 
     public PlannerProfile() {
-        timers = new HashMap<>();
     }
 
     public void init(ConnectContext ctx) {
         this.ctx = ctx;
     }
 
-    private synchronized ScopedTimer getOrCreateScopedTimer(String name) {
-        if (timers.containsKey(name)) {
-            return timers.get(name);
-        }
-        ScopedTimer t = new ScopedTimer();
-        timers.put(name, t);
-        return t;
+    private ScopedTimer getOrCreateScopedTimer(String name) {
+        return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
     }
 
     private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
@@ -119,7 +129,7 @@ public class PlannerProfile {
             String name = key.substring(prefix.length());
             RuntimeProfile p = getRuntimeProfile(top, profilers, prefix);
             ScopedTimer t = timers.get(key);
-            p.addInfoString(name, String.format("%d ms / %d", t.getTotalTime(), t.getTotalCount()));
+            p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
         }
     }
 
