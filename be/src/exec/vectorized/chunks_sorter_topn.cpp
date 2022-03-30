@@ -3,6 +3,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
@@ -313,10 +314,10 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
         }
         timer.start();
     }
-    if (_compare_strategy == Default || _compare_strategy == RowWise) {
-        return _partial_sort_row_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
-    } else {
+    if (_compare_strategy == Default || _compare_strategy == ColumnWise || _compare_strategy == ColumnInc) {
         return _partial_sort_col_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
+    } else {
+        return _partial_sort_row_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
     }
 }
 
