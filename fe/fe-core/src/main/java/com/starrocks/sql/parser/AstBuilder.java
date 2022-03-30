@@ -1469,8 +1469,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitArraySubscript(StarRocksParser.ArraySubscriptContext context) {
         Expr value = (Expr) visit(context.value);
-        Expr index = (Expr) visit(context.index);
+        IntLiteral index = new IntLiteral(Long.parseLong(context.index.getText()));
         return new ArrayElementExpr(value, index);
+    }
+
+    @Override
+    public ParseNode visitArraySlice(StarRocksParser.ArraySliceContext context) {
+        throw new ParsingException("Array slice is not currently supported");
+        //TODO: support array slice in BE
+        /*
+        Expr expr = (Expr) visit(context.primaryExpression());
+
+        IntLiteral lowerBound;
+        if (context.start != null) {
+            lowerBound = new IntLiteral(Long.parseLong(context.start.getText()));
+        } else {
+            lowerBound = new IntLiteral(0);
+        }
+        IntLiteral upperBound;
+        if (context.end != null) {
+            upperBound = new IntLiteral(Long.parseLong(context.end.getText()));
+        } else {
+            upperBound = new IntLiteral(-1);
+        }
+
+        return new ArraySliceExpr(expr, lowerBound, upperBound);
+         */
     }
 
     @Override
