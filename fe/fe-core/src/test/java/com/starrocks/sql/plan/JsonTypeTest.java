@@ -4,7 +4,6 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -147,7 +146,7 @@ public class JsonTypeTest extends PlanTestBase {
             ExceptionChecker.expectThrowsWithMsg(
                     SemanticException.class,
                     String.format(
-                            "Invalid type cast from json to %s in sql ``default_cluster:test`.`tjson_test`.`v_json``",
+                            "Invalid type cast from json to %s in sql `v_json`",
                             notAllowType),
                     () -> getFragmentPlan(columnCastSql)
             );

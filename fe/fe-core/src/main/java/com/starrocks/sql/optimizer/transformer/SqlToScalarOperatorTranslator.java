@@ -33,6 +33,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -473,7 +474,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSubquery(Subquery node, Void context) {
-            throw unsupportedException("complex subquery on " + node.toSql());
+            throw unsupportedException("complex subquery on " + AST2SQL.toString(node));
         }
     }
 }
