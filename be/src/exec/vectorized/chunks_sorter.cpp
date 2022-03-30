@@ -17,8 +17,12 @@ namespace starrocks::vectorized {
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           size_t size_of_chunk_batch)
-        : _state(state), _sort_exprs(sort_exprs), _size_of_chunk_batch(size_of_chunk_batch) {
+                           const std::string& sort_keys, const bool is_topn, size_t size_of_chunk_batch)
+        : _state(state),
+          _sort_exprs(sort_exprs),
+          _sort_keys(sort_keys),
+          _is_topn(is_topn),
+          _size_of_chunk_batch(size_of_chunk_batch) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -40,11 +44,13 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
 
 ChunksSorter::~ChunksSorter() {}
 
-void ChunksSorter::setup_runtime(RuntimeProfile* profile, const std::string& parent_timer) {
-    _build_timer = ADD_CHILD_TIMER(profile, "1-BuildingTime", parent_timer);
-    _sort_timer = ADD_CHILD_TIMER(profile, "2-SortingTime", parent_timer);
-    _merge_timer = ADD_CHILD_TIMER(profile, "3-MergingTime", parent_timer);
-    _output_timer = ADD_CHILD_TIMER(profile, "4-OutputTime", parent_timer);
+void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
+    _build_timer = ADD_TIMER(profile, "BuildingTime");
+    _sort_timer = ADD_TIMER(profile, "SortingTime");
+    _merge_timer = ADD_TIMER(profile, "MergingTime");
+    _output_timer = ADD_TIMER(profile, "OutputTime");
+    profile->add_info_string("SortKeys", _sort_keys);
+    profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }
 
 Status ChunksSorter::finish(RuntimeState* state) {

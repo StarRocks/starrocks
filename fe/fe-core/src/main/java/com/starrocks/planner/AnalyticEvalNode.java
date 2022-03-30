@@ -30,6 +30,7 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
@@ -178,9 +179,33 @@ public class AnalyticEvalNode extends PlanNode {
         }
         msg.analytic_node.setOutput_tuple_id(outputTupleDesc.getId().asInt());
         msg.analytic_node.setPartition_exprs(Expr.treesToThrift(substitutedPartitionExprs));
+        StringBuilder sqlPartitionKeysBuilder = new StringBuilder();
+        for (Expr e : substitutedPartitionExprs) {
+            if (sqlPartitionKeysBuilder.length() > 0) {
+                sqlPartitionKeysBuilder.append(", ");
+            }
+            sqlPartitionKeysBuilder.append(e.toSql());
+        }
+        if (sqlPartitionKeysBuilder.length() > 0) {
+            msg.analytic_node.setSql_partition_keys(sqlPartitionKeysBuilder.toString());
+        }
         msg.analytic_node.setOrder_by_exprs(
                 Expr.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
         msg.analytic_node.setAnalytic_functions(Expr.treesToThrift(analyticFnCalls));
+        StringBuilder sqlAggFuncBuilder = new StringBuilder();
+        // only serialize agg exprs that are being materialized
+        for (Expr e : analyticFnCalls) {
+            if (!(e instanceof FunctionCallExpr)) {
+                continue;
+            }
+            if (sqlAggFuncBuilder.length() > 0) {
+                sqlAggFuncBuilder.append(", ");
+            }
+            sqlAggFuncBuilder.append(e.toSql());
+        }
+        if (sqlAggFuncBuilder.length() > 0) {
+            msg.analytic_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
+        }
 
         if (analyticWindow == null) {
             if (!orderByElements.isEmpty()) {

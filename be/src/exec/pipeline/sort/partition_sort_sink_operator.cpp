@@ -23,6 +23,7 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _chunks_sorter->setup_runtime(_unique_metrics.get());
     return Status::OK();
 }
 
@@ -70,16 +71,16 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             chunks_sorter = std::make_unique<HeapChunkSorter>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         }
     } else {
         chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(
                 runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                SIZE_OF_CHUNK_FOR_FULL_SORT);
+                _sort_keys, SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
     auto sort_context = _sort_context_factory->create(driver_sequence);
 

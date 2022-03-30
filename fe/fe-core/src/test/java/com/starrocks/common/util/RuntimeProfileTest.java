@@ -34,6 +34,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 
 public class RuntimeProfileTest {
@@ -103,7 +104,7 @@ public class RuntimeProfileTest {
     @Test
     public void testCounter() {
         RuntimeProfile profile = new RuntimeProfile();
-        profile.addCounter("key", TUnit.UNIT, "");
+        profile.addCounter("key", TUnit.UNIT);
         Assert.assertNotNull(profile.getCounterMap().get("key"));
         Assert.assertNull(profile.getCounterMap().get("key2"));
         profile.getCounterMap().get("key").setValue(1);
@@ -175,5 +176,35 @@ public class RuntimeProfileTest {
         StringBuilder builder = new StringBuilder();
         profile.computeTimeInProfile();
         profile.prettyPrint(builder, "");
+    }
+
+    @Test
+    public void testMergeIsomorphicProfiles() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile = new RuntimeProfile("profile1");
+        Counter counter = profile.addCounter("counter1", TUnit.TIME_NS);
+        counter.setValue(1000000000L);
+        Counter minCounter = profile.addCounter("__MIN_OF_counter1", TUnit.TIME_NS);
+        minCounter.setValue(100000000L);
+        Counter maxCounter = profile.addCounter("__MAX_OF_counter1", TUnit.TIME_NS);
+        maxCounter.setValue(2000000000L);
+        profiles.add(profile);
+
+        profile = new RuntimeProfile("profile2");
+        counter = profile.addCounter("counter1", TUnit.TIME_NS);
+        counter.setValue(3000000000L);
+        profiles.add(profile);
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        profile = profiles.get(0);
+        counter = profile.getCounter("counter1");
+        Assert.assertEquals(2000000000L, counter.getValue());
+        minCounter = profile.getCounter("__MIN_OF_counter1");
+        maxCounter = profile.getCounter("__MAX_OF_counter1");
+        Assert.assertNotNull(minCounter);
+        Assert.assertNotNull(maxCounter);
+        Assert.assertEquals(100000000L, minCounter.getValue());
+        Assert.assertEquals(3000000000L, maxCounter.getValue());
     }
 }

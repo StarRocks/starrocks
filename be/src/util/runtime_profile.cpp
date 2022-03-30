@@ -26,6 +26,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "common/config.h"
@@ -57,6 +58,8 @@ static const std::string ROOT_COUNTER = ""; // NOLINT
 
 // NOLINTNEXTLINE
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
+
+const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {"DegreeOfParallelism"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
@@ -924,6 +927,10 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
         for (auto* profile : profiles) {
             std::lock_guard<std::mutex> l(profile->_counter_lock);
             for (auto& [name, counter] : profile->_counter_map) {
+                if (NON_MERGE_COUNTER_NAMES.find(name) != NON_MERGE_COUNTER_NAMES.end()) {
+                    continue;
+                }
+
                 auto it = counter_types.find(name);
                 if (it == counter_types.end()) {
                     counter_types[name] = counter->type();
@@ -939,7 +946,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
         }
 
         for (auto& [name, type] : counter_types) {
-            std::vector<Counter*> counters;
+            std::vector<std::tuple<Counter*, Counter*, Counter*>> counters;
             for (auto j = 0; j < profiles.size(); j++) {
                 auto* profile = profiles[j];
                 auto* counter = profile->get_counter(name);
@@ -955,7 +962,10 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                                  << ", name=" << name;
                     return;
                 }
-                counters.push_back(counter);
+
+                auto* min_counter = profile->get_counter(strings::Substitute("__MIN_OF_$0", name));
+                auto* max_counter = profile->get_counter(strings::Substitute("__MAX_OF_$0", name));
+                counters.push_back(std::make_tuple(counter, min_counter, max_counter));
             }
             const auto merged_info = merge_isomorphic_counters(type, counters);
             const auto merged_value = std::get<0>(merged_info);
@@ -966,13 +976,13 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             // As memtioned before, some counters may only attach one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == nullptr) {
-                counter0 = profile0->add_counter(name, type, "");
+                counter0 = profile0->add_counter(name, type);
             }
             counter0->set(merged_value);
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-            // TODO(hcf) is there a better way to tell whether save extra info or not
-            if (is_average_type(counter0->type()) && max_value - min_value > 2 * merged_value) {
+            const auto diff = max_value - min_value;
+            if (is_average_type(counter0->type()) && (diff > 5'000'000L && diff > merged_value / 5)) {
                 auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
                 auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
                 min_counter->set(min_value);
@@ -1003,20 +1013,32 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
     }
 }
 
-RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(TUnit::type type,
-                                                                     std::vector<Counter*>& counters) {
+RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(
+        TUnit::type type, std::vector<std::tuple<Counter*, Counter*, Counter*>>& counters) {
     DCHECK_GE(counters.size(), 0);
     int64_t merged_value = 0;
     int64_t min_value = std::numeric_limits<int64_t>::max();
     int64_t max_value = std::numeric_limits<int64_t>::min();
 
-    for (auto* counter : counters) {
+    for (auto& triple : counters) {
+        Counter* counter = std::get<0>(triple);
+        Counter* min_counter = std::get<1>(triple);
+        Counter* max_counter = std::get<2>(triple);
+
+        if (min_counter != nullptr && min_counter->value() < min_value) {
+            min_value = min_counter->value();
+        }
         if (counter->value() < min_value) {
             min_value = counter->value();
+        }
+
+        if (max_counter != nullptr && max_counter->value() > max_value) {
+            max_value = max_counter->value();
         }
         if (counter->value() > max_value) {
             max_value = counter->value();
         }
+
         merged_value += counter->value();
     }
 
