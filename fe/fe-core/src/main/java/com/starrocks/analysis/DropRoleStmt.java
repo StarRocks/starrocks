@@ -32,10 +32,20 @@ import com.starrocks.qe.ConnectContext;
 
 public class DropRoleStmt extends DdlStmt {
 
+    private boolean ifExists;
     private String role;
 
     public DropRoleStmt(String role) {
         this.role = role;
+    }
+
+    public DropRoleStmt(boolean ifExists, String role) {
+        this.ifExists = ifExists;
+        this.role = role;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     public String getQualifiedRole() {

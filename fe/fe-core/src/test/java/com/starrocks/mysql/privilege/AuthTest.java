@@ -167,6 +167,43 @@ public class AuthTest {
             Assert.fail();
         }
 
+        // 1.1 create cmy@% again with IF NOT EXISTS
+        userIdentity = new UserIdentity("cmy", "%");
+        userDesc = new UserDesc(userIdentity, "54321", true);
+        createUserStmt = new CreateUserStmt(true, userDesc, null);
+        try {
+            createUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.createUser(createUserStmt);
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        // 1.2 create cmy@% again without IF NOT EXISTS
+        userIdentity = new UserIdentity("cmy", "%");
+        userDesc = new UserDesc(userIdentity, "54321", true);
+        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        try {
+            createUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        boolean hasException = false;
+        try {
+            auth.createUser(createUserStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":cmy", "192.168.0.1", "12345",
@@ -211,7 +248,7 @@ public class AuthTest {
             Assert.fail();
         }
 
-        boolean hasException = false;
+        hasException = false;
         try {
             auth.createUser(createUserStmt);
         } catch (DdlException e) {
@@ -780,6 +817,40 @@ public class AuthTest {
             Assert.fail();
         }
 
+        // 24.1 create role again with IF NOT EXISTS
+        roleStmt = new CreateRoleStmt(true, "role1");
+        try {
+            roleStmt.analyze(analyzer);
+        } catch (UserException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.createRole(roleStmt);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        // 24.2 create role again without IF NOT EXISTS
+        roleStmt = new CreateRoleStmt(false, "role1");
+        try {
+            roleStmt.analyze(analyzer);
+        } catch (UserException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        hasException = false;
+        try {
+            auth.createRole(roleStmt);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
         // 25. grant auth to non exist role, will create this new role
         privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV, AccessPrivilege.SELECT_PRIV);
         grantStmt = new GrantStmt(null, "role2", new TablePattern("*", "*"), privileges);
@@ -928,6 +999,40 @@ public class AuthTest {
         Assert.assertFalse(auth.checkDbPriv(currentUser2.get(0), SystemInfoService.DEFAULT_CLUSTER + ":db4",
                 PrivPredicate.DROP));
 
+        // 31.1 drop role again with IF EXISTS
+        dropRoleStmt = new DropRoleStmt(true, "role1");
+        try {
+            dropRoleStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.dropRole(dropRoleStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        // 31.2 drop role again without IF EXISTS
+        dropRoleStmt = new DropRoleStmt(false, "role1");
+        try {
+            dropRoleStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        hasException = false;
+        try {
+            auth.dropRole(dropRoleStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+
         // 32. drop user cmy@"%"
         DropUserStmt dropUserStmt = new DropUserStmt(new UserIdentity("cmy", "%"));
         try {
@@ -947,6 +1052,39 @@ public class AuthTest {
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":cmy", "192.168.0.1", "12345", null));
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.0.1",
                 "12345", null));
+
+        // 32.1 drop user cmy@"%" again with IF EXISTS
+        dropUserStmt = new DropUserStmt(true, new UserIdentity("cmy", "%"));
+        try {
+            dropUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.dropUser(dropUserStmt);
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        // 32.2 drop user cmy@"%" again without IF EXISTS
+        dropUserStmt = new DropUserStmt(false, new UserIdentity("cmy", "%"));
+        try {
+            dropUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        hasException = false;
+        try {
+            auth.dropUser(dropUserStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
 
         // 33. drop user zhangsan@"192.%"
         dropUserStmt = new DropUserStmt(new UserIdentity("zhangsan", "192.%"));
@@ -1696,5 +1834,43 @@ public class AuthTest {
         Assert.assertTrue(
                 auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", new byte[0], seed,
                         currentUser));
+
+        // alter non exists user wangmazi with IF EXISTS identified with mysql_native_password by '654321'
+        userIdentity = new UserIdentity("wangmazi", "%");
+        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "654321", true);
+        alterUserStmt = new AlterUserStmt(true, userDesc);
+        try {
+            alterUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            auth.alterUser(alterUserStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        // alter non exists user wangmazi without IF EXISTS identified with mysql_native_password by '654321'
+        userIdentity = new UserIdentity("wangmazi", "%");
+        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "654321", true);
+        alterUserStmt = new AlterUserStmt(false, userDesc);
+        try {
+            alterUserStmt.analyze(analyzer);
+        } catch (UserException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        boolean hasException = false;
+        try {
+            auth.alterUser(alterUserStmt);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
     }
 }
