@@ -972,7 +972,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             const auto max_value = std::get<2>(merged_info);
 
             auto* counter0 = profile0->get_counter(name);
-            // As memtioned before, some counters may only attach one of the isomorphic profiles
+            // As memtioned before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == nullptr) {
                 counter0 = profile0->add_counter(name, type);
@@ -981,11 +981,20 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
             const auto diff = max_value - min_value;
-            if (is_average_type(counter0->type()) && (diff > 5'000'000L && diff > merged_value / 5)) {
-                auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
-                auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
-                min_counter->set(min_value);
-                max_counter->set(max_value);
+            if (is_average_type(counter0->type())) {
+                if ((diff > 5'000'000L && diff > merged_value / 5)) {
+                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    min_counter->set(min_value);
+                    max_counter->set(max_value);
+                }
+            } else {
+                if (diff > min_value) {
+                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    min_counter->set(min_value);
+                    max_counter->set(max_value);
+                }
             }
         }
     }

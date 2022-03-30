@@ -240,9 +240,8 @@ void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx
 
             operator_profile->remove_childs();
 
-            if (common_metrics != nullptr) {
-                common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
-            }
+            DCHECK(common_metrics != nullptr);
+            common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
 
             common_metrics->reset_parent();
             operator_profile->add_child(common_metrics, true, nullptr);
