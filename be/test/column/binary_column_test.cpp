@@ -478,6 +478,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
     ASSERT_EQ(0, c2->size());
 }
 
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c1 = BinaryColumn::create();
     c1->append_datum("abc");
@@ -526,8 +527,28 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_EQ("ghi", slices[2]);
     ASSERT_EQ("cdef", slices[3]);
     ASSERT_EQ("mno", slices[4]);
+
+    // This case will alloc a lot of memory (16G) and run slowly,
+    // So i temp comment it and will open if i find one better solution
+    /*
+    size_t count = (1ul<<31ul) + 5;
+    auto c5 = BinaryColumn::create();
+    c5->get_bytes().resize(count);
+    c5->get_offset().resize(count + 1);
+    for (size_t i = 0; i < c5->get_offset().size(); i++) {
+        c5->get_offset()[i] = i;
+    }
+
+    auto c6 = BinaryColumn::create();
+    c6->append("22");
+
+    std::vector<uint32_t> c6_replace_idxes = {0};
+    ASSERT_TRUE(c5->update_rows(*c6, c6_replace_idxes.data()).ok());
+    ASSERT_EQ(c5->size(), count);
+    */
 }
 
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
     auto column = BinaryColumn::create();
     std::string str;
