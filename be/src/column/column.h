@@ -132,6 +132,7 @@ public:
     //      column data: [0, 1, 2, 3, 4]
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
+    // The values in indexes is incremented
     virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
