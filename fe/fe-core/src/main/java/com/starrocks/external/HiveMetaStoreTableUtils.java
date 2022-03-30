@@ -72,13 +72,6 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartition> getPartitions(String resourceName,
                                                     String db,
                                                     String table,
-                                                    List<PartitionKey> partitionKeys) throws DdlException {
-        return getPartitions(resourceName, db, table, partitionKeys, false);
-    }
-
-    public static List<HivePartition> getPartitions(String resourceName,
-                                                    String db,
-                                                    String table,
                                                     List<PartitionKey> partitionKeys,
                                                     boolean isHudiTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitions")) {
@@ -102,9 +95,10 @@ public class HiveMetaStoreTableUtils {
                                                  String db,
                                                  String table,
                                                  List<PartitionKey> partitions,
-                                                 List<Column> partColumns) {
+                                                 List<Column> partColumns,
+                                                 boolean isHudiTable) {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionRowCount")) {
-            return doGetPartitionStatsRowCount(resourceName, db, table, partitions, partColumns, false);
+            return doGetPartitionStatsRowCount(resourceName, db, table, partitions, partColumns, isHudiTable);
         }
     }
 
