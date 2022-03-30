@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
@@ -221,6 +222,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitArrayElementExpr(ArrayElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitArraySliceExpr(ArraySliceExpr node, C context) {
         return visitExpression(node, context);
     }
 

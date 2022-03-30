@@ -290,7 +290,8 @@ primaryExpression
     | variable                                                                            #var
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | value=primaryExpression '[' index=INTEGER_VALUE ']'                                 #arraySubscript
+    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | subquery                                                                            #subqueryExpression
     | EXISTS '(' query ')'                                                                #exists
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase

@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -174,6 +175,16 @@ public class ExpressionAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitArraySliceExpr(ArraySliceExpr node, Scope scope) {
+            if (!node.getChild(0).getType().isArrayType()) {
+                throw new SemanticException("cannot subscript type" +
+                        node.getChild(0).getType() + " because it is not an array");
+            }
+            node.setType(node.getChild(0).getType());
             return null;
         }
 
