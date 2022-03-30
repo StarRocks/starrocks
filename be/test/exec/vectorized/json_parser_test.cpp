@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exec/vectorized/json_parser.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <string>
 
-#include "exec/vectorized/json_scanner.h"
 #include "exprs/vectorized/json_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
