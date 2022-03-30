@@ -330,6 +330,14 @@ DEFINE_UNARY_FN_WITH_IMPL(yearV2Impl, v) {
 
 DEFINE_TIME_UNARY_FN(yearV2, TYPE_DATETIME, TYPE_SMALLINT);
 
+DEFINE_UNARY_FN_WITH_IMPL(yearV3Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return y;
+}
+
+DEFINE_TIME_UNARY_FN(yearV3, TYPE_DATE, TYPE_SMALLINT);
+
 // quarter
 DEFINE_UNARY_FN_WITH_IMPL(quarterImpl, v) {
     int y, m, d;
@@ -355,6 +363,13 @@ DEFINE_UNARY_FN_WITH_IMPL(monthV2Impl, v) {
 }
 DEFINE_TIME_UNARY_FN(monthV2, TYPE_DATETIME, TYPE_TINYINT);
 
+DEFINE_UNARY_FN_WITH_IMPL(monthV3Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return m;
+}
+DEFINE_TIME_UNARY_FN(monthV3, TYPE_DATE, TYPE_TINYINT);
+
 // day
 DEFINE_UNARY_FN_WITH_IMPL(dayImpl, v) {
     int y, m, d;
@@ -371,6 +386,13 @@ DEFINE_UNARY_FN_WITH_IMPL(dayV2Impl, v) {
     return d;
 }
 DEFINE_TIME_UNARY_FN(dayV2, TYPE_DATETIME, TYPE_TINYINT);
+
+DEFINE_UNARY_FN_WITH_IMPL(dayV3Impl, v) {
+    int y, m, d;
+    ((DateValue)v).to_date(&y, &m, &d);
+    return d;
+}
+DEFINE_TIME_UNARY_FN(dayV3, TYPE_DATE, TYPE_TINYINT);
 
 // hour of the day
 DEFINE_UNARY_FN_WITH_IMPL(hourImpl, v) {

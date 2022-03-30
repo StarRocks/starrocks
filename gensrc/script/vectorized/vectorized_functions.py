@@ -259,8 +259,10 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
 
     # 50xxx: timestamp functions
+    [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
     [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
     [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
+    [50018, 'month', 'TINYINT', ['DATE'], 'TimeFunctions::monthV3'],
     [50019, 'month', 'TINYINT', ['DATETIME'], 'TimeFunctions::monthV2'],
     [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
@@ -268,6 +270,7 @@ vectorized_functions = [
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
 
+    [50057, 'day', 'TINYINT', ['DATE'], 'TimeFunctions::dayV3'],
     [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
     [50059, 'dayofmonth', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
     [50060, 'dayofmonth', 'INT', ['DATETIME'], 'TimeFunctions::day'],
