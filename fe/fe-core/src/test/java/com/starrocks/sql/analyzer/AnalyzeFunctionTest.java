@@ -36,7 +36,7 @@ public class AnalyzeFunctionTest {
     @Test
     public void testSingle() {
         analyzeFail("select sum() from t0", "No matching function with signature: sum()");
-        analyzeFail("select now(*) from t0", "Cannot pass '*' to scalar function.");
+        analyzeFail("select now(*) from t0");
     }
 
     @Test

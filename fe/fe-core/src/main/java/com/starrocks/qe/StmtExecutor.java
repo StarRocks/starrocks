@@ -26,19 +26,14 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
@@ -49,13 +44,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
@@ -303,7 +292,7 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) || supportedByNewPlanner(parsedStmt, context)) {
+            if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
                 try {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
@@ -1023,24 +1012,6 @@ public class StmtExecutor {
         return (statement instanceof InsertStmt && context.getDatabase().equalsIgnoreCase(Constants.StatisticsDBName))
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt;
-    }
-
-    private boolean supportedByNewPlanner(StatementBase statement, ConnectContext context) {
-        return statement instanceof AlterViewStmt
-                || statement instanceof AlterWorkGroupStmt
-                || statement instanceof CreateTableAsSelectStmt
-                || statement instanceof CreateViewStmt
-                || statement instanceof CreateWorkGroupStmt
-                || statement instanceof DropWorkGroupStmt
-                || statement instanceof InsertStmt
-                || statement instanceof QueryStatement
-                || statement instanceof ShowColumnStmt
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof ShowTableStatusStmt
-                || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof UpdateStmt;
     }
 
     public void handleUpdateStmtWithNewPlanner(ExecPlan execPlan, UpdateStmt stmt) throws Exception {
