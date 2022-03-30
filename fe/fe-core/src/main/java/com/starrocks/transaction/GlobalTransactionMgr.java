@@ -26,7 +26,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
@@ -34,7 +33,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
-import com.starrocks.thrift.FrontendService;
+import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -111,7 +110,7 @@ public class GlobalTransactionMgr implements Writable {
     public long beginRemoteTransaction(long dbId, List<Long> tableIds, String label,
                                        String host, int port, TxnCoordinator coordinator,
                                        LoadJobSourceType sourceType, long timeoutSecond)
-            throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
+            throws AnalysisException, BeginTransactionException {
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
@@ -126,14 +125,6 @@ public class GlobalTransactionMgr implements Writable {
         }
 
         TNetworkAddress addr = new TNetworkAddress(host, port);
-        FrontendService.Client client = null;
-        try {
-            client = ClientPool.frontendPool.borrowObject(addr, 1000);
-        } catch (Exception e) {
-            LOG.warn("get frontend client from pool failed", e);
-            throw new BeginTransactionException(e.getMessage());
-        }
-
         TBeginRemoteTxnRequest request = new TBeginRemoteTxnRequest();
         request.setDb_id(dbId);
         for (Long tableId : tableIds) {
@@ -142,111 +133,100 @@ public class GlobalTransactionMgr implements Writable {
         request.setLabel(label);
         request.setSource_type(sourceType.ordinal());
         request.setTimeout_second(timeoutSecond);
-        boolean returnToPool = false;
         TBeginRemoteTxnResponse response;
         try {
-            response = client.beginRemoteTxn(request);
-            returnToPool = true;
-            List<String> errmsgs = response.status.getError_msgs();
-            if (response.status.getStatus_code() != TStatusCode.OK) {
-                LOG.info("errmsg: {}", errmsgs.get(0));
-            } else {
-                LOG.info("begin remote txn: {}", response);
-            }
+            response = FrontendServiceProxy
+                    .call(addr, 10000,
+                            client -> client.beginRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} beginRemoteTxn rpc method failed", addr, e);
+            LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}", addr, label, e);
             throw new BeginTransactionException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
+        if (response.status.getStatus_code() != TStatusCode.OK) {
+            String errStr;
+            if (response.status.getError_msgs() != null) {
+                errStr = String.join(",", response.status.getError_msgs());
+            } else {
+                errStr = "";
+            }
+            LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}, error: {}", addr, label, errStr);
+            throw new BeginTransactionException(errStr);
         } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
+            if (response.getTxn_id() <= 0) {
+                LOG.warn("beginRemoteTransaction returns invalid txn id: {}, label: {}",
+                        response.getTxn_id(), label);
+                throw new BeginTransactionException("beginRemoteTransaction returns invalid txn id");
+            }
+            LOG.info("begin remote txn, label: {}, txn id: {}", label, response.getTxn_id());
+            return response.getTxn_id();
         }
-        return response.getTxn_id();
     }
 
-    // commit transaction in remote DorisDB cluster
+    // commit transaction in remote StarRocks cluster
     public boolean commitRemoteTransaction(long dbId, long transactionId,
                                            String host, int port, List<TTabletCommitInfo> tabletCommitInfos)
-            throws AnalysisException, LabelAlreadyUsedException, TransactionCommitFailedException,
-            DuplicatedRequestException {
+            throws TransactionCommitFailedException {
 
         TNetworkAddress addr = new TNetworkAddress(host, port);
-        FrontendService.Client client = null;
-        boolean commitSuccess = true;
-        try {
-            client = ClientPool.frontendPool.borrowObject(addr, 1000);
-        } catch (Exception e) {
-            LOG.warn("get frontend client from pool failed", e);
-            throw new TransactionCommitFailedException(e.getMessage());
-        }
-
         TCommitRemoteTxnRequest request = new TCommitRemoteTxnRequest();
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setCommit_infos(tabletCommitInfos);
         // request.setLabel(label);
-        boolean returnToPool = false;
         TCommitRemoteTxnResponse response;
         try {
-            response = client.commitRemoteTxn(request);
-            returnToPool = true;
-            List<String> errmsgs = response.status.getError_msgs();
-            if (response.status.getStatus_code() != TStatusCode.OK) {
-                LOG.info("errmsg: {}", errmsgs.get(0));
-                commitSuccess = false;
-            } else {
-                LOG.info("commit remote txn: {}", response);
-            }
+            response = FrontendServiceProxy
+                    .call(addr, 10000,
+                            client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} commitRemoteTxn rpc method failed", addr, e);
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}", addr, transactionId, e);
             throw new TransactionCommitFailedException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
+        if (response.status.getStatus_code() != TStatusCode.OK) {
+            String errStr;
+            if (response.status.getError_msgs() != null) {
+                errStr = String.join(",", response.status.getError_msgs());
+            } else {
+                errStr = "";
+            }
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}, error: {}", addr, transactionId, errStr);
+            throw new TransactionCommitFailedException(errStr);
         } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
+            LOG.info("commit remote, txn id: {}", transactionId);
+            return true;
         }
-        return commitSuccess;
     }
 
-    // abort transaction in remote DorisDB cluster
+    // abort transaction in remote StarRocks cluster
     public void abortRemoteTransaction(long dbId, long transactionId,
                                        String host, int port, String errorMsg)
-            throws AnalysisException, LabelAlreadyUsedException, AbortTransactionException, DuplicatedRequestException {
+            throws AbortTransactionException {
 
         TNetworkAddress addr = new TNetworkAddress(host, port);
-        FrontendService.Client client = null;
-        try {
-            client = ClientPool.frontendPool.borrowObject(addr, 1000);
-        } catch (Exception e) {
-            LOG.warn("get frontend client from pool failed", e);
-            throw new AbortTransactionException(e.getMessage());
-        }
-
         TAbortRemoteTxnRequest request = new TAbortRemoteTxnRequest();
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setError_msg(errorMsg);
-        boolean returnToPool = false;
         TAbortRemoteTxnResponse response;
         try {
-            response = client.abortRemoteTxn(request);
-            returnToPool = true;
-            List<String> errmsgs = response.status.getError_msgs();
-            if (response.status.getStatus_code() != TStatusCode.OK) {
-                LOG.info("errmsg: {}", errmsgs.get(0));
-            } else {
-                LOG.info("abort remote txn: {}", response);
-            }
+            response = FrontendServiceProxy
+                    .call(addr, 10000,
+                            client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
-            LOG.warn("call fe {} abort RemoteTxn rpc method failed", addr, e);
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}", addr, transactionId, e);
             throw new AbortTransactionException(e.getMessage());
         }
-        if (returnToPool) {
-            ClientPool.frontendPool.returnObject(addr, client);
+        if (response.status.getStatus_code() != TStatusCode.OK) {
+            String errStr;
+            if (response.status.getError_msgs() != null) {
+                errStr = String.join(",", response.status.getError_msgs());
+            } else {
+                errStr = "";
+            }
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}, error: {}", addr, transactionId, errStr);
+            throw new AbortTransactionException(errStr);
         } else {
-            ClientPool.frontendPool.invalidateObject(addr, client);
+            LOG.info("abort remote, txn id: {}", transactionId);
         }
     }
 
