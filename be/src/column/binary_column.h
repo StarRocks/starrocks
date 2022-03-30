@@ -14,7 +14,7 @@ public:
     BinaryColumn() = default;
 
     BinaryColumn(BinaryColumn::Bytes bytes, BinaryColumn::Offsets offsets)
-            : SuperClass(std::move(bytes), std::move(offsets)) {}
+            : SuperClass(bytes, offsets) {}
 
     BinaryColumn(const BinaryColumn& rhs) : SuperClass(rhs) {}
 
