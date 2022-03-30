@@ -19,6 +19,8 @@ public class PlannerProfile {
         private long startTime = 0;
         private volatile long currentThreadId = 0;
         private long totalTime = 0;
+        private int totalCount = 0;
+        // possible to record p99?
 
         public void start() {
             Preconditions.checkState(currentThreadId == 0);
@@ -30,10 +32,15 @@ public class PlannerProfile {
             Preconditions.checkState(currentThreadId == Thread.currentThread().getId());
             currentThreadId = 0;
             totalTime += (System.currentTimeMillis() - startTime);
+            totalCount += 1;
         }
 
         public long getTotalTime() {
             return totalTime;
+        }
+
+        public int getTotalCount() {
+            return totalCount;
         }
     }
 
@@ -83,13 +90,22 @@ public class PlannerProfile {
             sb.append('.');
             String tmp = sb.toString();
             if (!cache.containsKey(tmp)) {
-                RuntimeProfile sp = new RuntimeProfile(" - " + s);
+                RuntimeProfile sp = new RuntimeProfile(s);
                 top.addChild(sp);
                 cache.put(tmp, sp);
             }
             p = cache.get(tmp);
         }
         return p;
+    }
+
+    private static String getKeyPrefix(String key) {
+        String prefix = "";
+        int index = key.lastIndexOf('.');
+        if (index != -1) {
+            prefix = key.substring(0, index + 1);
+        }
+        return prefix;
     }
 
     public void buildTimers(RuntimeProfile top) {
@@ -99,20 +115,19 @@ public class PlannerProfile {
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", top);
         for (String key : keys) {
-            String name = key;
-            String prefix = "";
-            int index = key.lastIndexOf('.');
-            if (index != -1) {
-                name = key.substring(index + 1);
-                prefix = key.substring(0, index + 1);
-            }
+            String prefix = getKeyPrefix(key);
+            String name = key.substring(prefix.length());
             RuntimeProfile p = getRuntimeProfile(top, profilers, prefix);
             ScopedTimer t = timers.get(key);
-            p.addInfoString(name, String.format("%d ms", t.getTotalTime()));
+            p.addInfoString(name, String.format("%d ms / %d", t.getTotalTime(), t.getTotalCount()));
         }
     }
 
     public void build(RuntimeProfile top) {
         buildTimers(top);
+    }
+
+    public void reset() {
+        timers.clear();
     }
 }
