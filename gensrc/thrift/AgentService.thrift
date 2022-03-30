@@ -74,6 +74,7 @@ struct TCreateTabletReq {
     12: optional bool is_eco_mode
     13: optional TStorageFormat storage_format
     14: optional TTabletType tablet_type
+    30: optional Types.TShardId shard_id
 }
 
 struct TDropTabletReq {

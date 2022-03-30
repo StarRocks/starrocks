@@ -412,6 +412,9 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion(visibleVersionStr);
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
+            if (useStarOS) {
+                internalRange.setShard_id(((StarOSTablet) tablet).getShardId());
+            }
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();

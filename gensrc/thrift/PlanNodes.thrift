@@ -102,6 +102,7 @@ struct TInternalScanRange {
   7: optional list<TKeyRange> partition_column_ranges
   8: optional string index_name
   9: optional string table_name
+  20: optional Types.TShardId shard_id
 }
 
 enum TFileFormatType {

@@ -37,6 +37,7 @@ typedef i64 TCount
 typedef i64 TSize
 typedef i32 TClusterId
 typedef i64 TEpoch
+typedef i64 TShardId
 
 // add for real time load, partitionid is not defined previously, define it here
 typedef i64 TTransactionId

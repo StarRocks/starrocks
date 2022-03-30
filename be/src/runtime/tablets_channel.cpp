@@ -325,6 +325,9 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
         options.tuple_desc = _tuple_desc;
         options.slots = index_slots;
         options.global_dicts = &_global_dicts;
+        if (tablet.has_shard_id()) {
+            options.shard_id = tablet.shard_id();
+        }
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());

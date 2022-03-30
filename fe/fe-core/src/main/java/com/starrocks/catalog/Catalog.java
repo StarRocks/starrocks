@@ -3792,8 +3792,9 @@ public class Catalog {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (useStarOS) {
+                StarOSTablet starOSTablet = (StarOSTablet) tablet;
                 CreateReplicaTask task = new CreateReplicaTask(
-                        ((StarOSTablet) tablet).getPrimaryBackendId(),
+                        starOSTablet.getPrimaryBackendId(),
                         dbId,
                         table.getId(),
                         partition.getId(),
@@ -3812,6 +3813,7 @@ public class Catalog {
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
                         table.getPartitionInfo().getTabletType(partition.getId()));
+                task.setShardId(starOSTablet.getShardId());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
@@ -6933,8 +6935,8 @@ public class Catalog {
                 TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
                 for (Partition partition : info.getPartitions()) {
                     long partitionId = partition.getId();
-                    TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
-                            partitionId).getStorageMedium();
+                    TStorageMedium medium =
+                            olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                     for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);

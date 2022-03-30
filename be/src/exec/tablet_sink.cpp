@@ -143,6 +143,9 @@ void NodeChannel::open() {
         auto ptablet = request.add_tablets();
         ptablet->set_partition_id(tablet.partition_id);
         ptablet->set_tablet_id(tablet.tablet_id);
+        if (tablet.__isset.shard_id) {
+            ptablet->set_shard_id(tablet.shard_id);
+        }
     }
     request.set_num_senders(_parent->_num_senders);
     request.set_need_gen_rollup(_parent->_need_gen_rollup);
@@ -668,10 +671,16 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         std::vector<TTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
         for (auto* part : partitions) {
-            for (auto tablet : part->indexes[i].tablets) {
+            const auto& tablet_ids = part->indexes[i].tablets;
+            const auto& shard_ids = part->indexes[i].shards;
+            bool is_set_shards = part->indexes[i].__isset.shards;
+            for (size_t j = 0, tablet_num = tablet_ids.size(); j < tablet_num; ++j) {
                 TTabletWithPartition tablet_with_partition;
                 tablet_with_partition.partition_id = part->id;
-                tablet_with_partition.tablet_id = tablet;
+                tablet_with_partition.tablet_id = tablet_ids[j];
+                if (is_set_shards) {
+                    tablet_with_partition.__set_shard_id(shard_ids[j]);
+                }
                 tablets.emplace_back(std::move(tablet_with_partition));
             }
         }

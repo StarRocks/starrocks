@@ -249,9 +249,17 @@ public class OlapTableSink extends DataSink {
                         }
                     }
 
+                    boolean useStarOS = partition.isUseStarOS();
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                        tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                                index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                        TOlapTableIndexTablets indexTablets = new TOlapTableIndexTablets(index.getId(),
+                                Lists.newArrayList(
+                                        index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList())));
+                        if (useStarOS) {
+                            indexTablets.setShards(
+                                    index.getTablets().stream().map(tablet -> ((StarOSTablet) tablet).getShardId())
+                                            .collect(Collectors.toList()));
+                        }
+                        tPartition.addToIndexes(indexTablets);
                         tPartition.setNum_buckets(index.getTablets().size());
                     }
                     partitionParam.addToPartitions(tPartition);
@@ -279,9 +287,17 @@ public class OlapTableSink extends DataSink {
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());
                 // No lowerBound and upperBound for this range
+                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                    tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                            index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                    TOlapTableIndexTablets indexTablets = new TOlapTableIndexTablets(index.getId(),
+                            Lists.newArrayList(
+                                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList())));
+                    if (useStarOS) {
+                        indexTablets.setShards(
+                                index.getTablets().stream().map(tablet -> ((StarOSTablet) tablet).getShardId())
+                                        .collect(Collectors.toList()));
+                    }
+                    tPartition.addToIndexes(indexTablets);
                     tPartition.setNum_buckets(index.getTablets().size());
                 }
                 partitionParam.addToPartitions(tPartition);
@@ -341,7 +357,7 @@ public class OlapTableSink extends DataSink {
 
     private TNodesInfo createStarrocksNodesInfo() {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);;
+        SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);
         for (Long id : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
