@@ -15,12 +15,20 @@ public class HiveTableColumnsKey {
     private final List<Column> partitionColumns;
     private final List<String> columnNames;
 
+    private final boolean isHudiTable;
+
     public HiveTableColumnsKey(String databaseName, String tableName, List<Column> partitionColumns,
-                               List<String> columnNames) {
+                               List<String> columnNames, boolean isHudiTable) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionColumns = partitionColumns;
         this.columnNames = columnNames;
+        this.isHudiTable = isHudiTable;
+    }
+
+    public HiveTableColumnsKey(String databaseName, String tableName, List<Column> partitionColumns,
+                               List<String> columnNames) {
+        this(databaseName, tableName, partitionColumns, columnNames, false);
     }
 
     public static HiveTableColumnsKey gen(String databaseName, String tableName, List<Column> partitionColumns,
@@ -44,6 +52,10 @@ public class HiveTableColumnsKey {
         return columnNames;
     }
 
+    public boolean isHudiTable() {
+        return isHudiTable;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -55,11 +67,12 @@ public class HiveTableColumnsKey {
 
         HiveTableColumnsKey other = (HiveTableColumnsKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
-                Objects.equals(tableName, other.tableName);
+                Objects.equals(tableName, other.tableName) &&
+                Objects.equals(isHudiTable, other.isHudiTable);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName);
+        return Objects.hash(databaseName, tableName, isHudiTable);
     }
 }

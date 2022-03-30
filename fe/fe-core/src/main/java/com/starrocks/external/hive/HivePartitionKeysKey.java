@@ -13,11 +13,18 @@ public class HivePartitionKeysKey {
 
     // does not participate in hashCode/equals
     private final List<Column> partitionColumns;
+    private final boolean isHudiTable;
 
-    public HivePartitionKeysKey(String databaseName, String tableName, List<Column> partitionColumns) {
+    public HivePartitionKeysKey(String databaseName, String tableName,
+                                List<Column> partitionColumns, boolean isHudiTable) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionColumns = partitionColumns;
+        this.isHudiTable = isHudiTable;
+    }
+
+    public HivePartitionKeysKey(String databaseName, String tableName, List<Column> partitionColumns) {
+        this(databaseName, tableName, partitionColumns, false);
     }
 
     public static HivePartitionKeysKey gen(String databaseName, String tableName, List<Column> partitionColumns) {
@@ -36,6 +43,10 @@ public class HivePartitionKeysKey {
         return partitionColumns;
     }
 
+    public boolean isHudiTable() {
+        return isHudiTable;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -47,11 +58,12 @@ public class HivePartitionKeysKey {
 
         HivePartitionKeysKey other = (HivePartitionKeysKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
-                Objects.equals(tableName, other.tableName);
+                Objects.equals(tableName, other.tableName) &&
+                Objects.equals(isHudiTable, other.isHudiTable);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName);
+        return Objects.hash(databaseName, tableName, isHudiTable);
     }
 }

@@ -202,7 +202,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(resourceName, hiveDb, hiveTable,
-                partitions, getPartitionColumns(), false);
+                partitions, getPartitionColumns());
     }
 
     private void validate(Map<String, String> properties) throws DdlException {

@@ -113,7 +113,8 @@ public class HiveMetaCache {
     private ImmutableMap<PartitionKey, Long> loadPartitionKeys(HivePartitionKeysKey key) throws DdlException {
         Map<PartitionKey, Long> partitionKeys = client.getPartitionKeys(key.getDatabaseName(),
                 key.getTableName(),
-                key.getPartitionColumns());
+                key.getPartitionColumns(),
+                key.isHudiTable());
         return ImmutableMap.copyOf(partitionKeys);
     }
 
@@ -144,14 +145,15 @@ public class HiveMetaCache {
     private ImmutableMap<String, HiveColumnStats> loadTableColumnStats(HiveTableColumnsKey key) throws Exception {
         if (key.getPartitionColumns().size() > 0) {
             List<PartitionKey> partitionKeys = new ArrayList<>(partitionKeysCache
-                    .get(HivePartitionKeysKey.gen(key.getDatabaseName(),
+                    .get(new HivePartitionKeysKey(key.getDatabaseName(),
                             key.getTableName(),
-                            key.getPartitionColumns())).keySet());
+                            key.getPartitionColumns(), key.isHudiTable())).keySet());
             return ImmutableMap.copyOf(client.getTableLevelColumnStatsForPartTable(key.getDatabaseName(),
                     key.getTableName(),
                     partitionKeys,
                     key.getPartitionColumns(),
-                    key.getColumnNames()));
+                    key.getColumnNames(),
+                    key.isHudiTable()));
         } else {
             return ImmutableMap.copyOf(client.getTableLevelColumnStatsForUnpartTable(key.getDatabaseName(),
                     key.getTableName(),
@@ -160,9 +162,10 @@ public class HiveMetaCache {
     }
 
     public ImmutableMap<PartitionKey, Long> getPartitionKeys(String dbName, String tableName,
-                                                             List<Column> partColumns) throws DdlException {
+                                                             List<Column> partColumns,
+                                                             boolean isHudiTable) throws DdlException {
         try {
-            return partitionKeysCache.get(HivePartitionKeysKey.gen(dbName, tableName, partColumns));
+            return partitionKeysCache.get(new HivePartitionKeysKey(dbName, tableName, partColumns, isHudiTable));
         } catch (ExecutionException e) {
             LOG.warn("get partition keys failed", e);
             throw new DdlException("get partition keys failed: " + e.getMessage());
@@ -171,7 +174,7 @@ public class HiveMetaCache {
 
     public HivePartition getPartition(String dbName, String tableName,
                                       PartitionKey partitionKey, boolean isHudiTable) throws DdlException {
-        List<String> partitionValues = Utils.getPartitionValues(partitionKey);
+        List<String> partitionValues = Utils.getPartitionValues(partitionKey, isHudiTable);
         try {
             return partitionsCache.get(new HivePartitionKey(dbName, tableName, partitionValues, isHudiTable));
         } catch (ExecutionException e) {
@@ -190,7 +193,7 @@ public class HiveMetaCache {
     public HivePartitionStats getPartitionStats(String dbName, String tableName,
                                                 PartitionKey partitionKey,
                                                 boolean isHudiTable) throws DdlException {
-        List<String> partValues = Utils.getPartitionValues(partitionKey);
+        List<String> partValues = Utils.getPartitionValues(partitionKey, isHudiTable);
         HivePartitionKey key = new HivePartitionKey(dbName, tableName, partValues, isHudiTable);
         try {
             return partitionStatsCache.get(key);
@@ -203,9 +206,10 @@ public class HiveMetaCache {
     // set all partitions keys to partitionKeys param, if table is partition table
     public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(String dbName, String tableName,
                                                                           List<Column> partitionColumns,
-                                                                          List<String> columnNames)
+                                                                          List<String> columnNames,
+                                                                          boolean isHudiTable)
             throws DdlException {
-        HiveTableColumnsKey key = HiveTableColumnsKey.gen(dbName, tableName, partitionColumns, columnNames);
+        HiveTableColumnsKey key = new HiveTableColumnsKey(dbName, tableName, partitionColumns, columnNames, isHudiTable);
         try {
             return tableColumnStatsCache.get(key);
         } catch (ExecutionException e) {
@@ -334,7 +338,7 @@ public class HiveMetaCache {
         }
     }
 
-    public void clearCache(String dbName, String tableName) {
+    public void clearCache(String dbName, String tableName, boolean isHudiTable) {
         HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, null);
         ImmutableMap<PartitionKey, Long> partitionKeys = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
         partitionKeysCache.invalidate(hivePartitionKeysKey);
@@ -343,7 +347,7 @@ public class HiveMetaCache {
         if (partitionKeys != null) {
             for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
                 HivePartitionKey pKey =
-                        HivePartitionKey.gen(dbName, tableName, Utils.getPartitionValues(entry.getKey()));
+                        HivePartitionKey.gen(dbName, tableName, Utils.getPartitionValues(entry.getKey(), isHudiTable));
                 partitionsCache.invalidate(pKey);
                 partitionStatsCache.invalidate(pKey);
             }

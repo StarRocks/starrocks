@@ -119,9 +119,10 @@ public class HiveRepository {
     }
 
     public ImmutableMap<PartitionKey, Long> getPartitionKeys(String resourceName, String dbName, String tableName,
-                                                             List<Column> partColumns) throws DdlException {
+                                                             List<Column> partColumns,
+                                                             boolean isHudiTable) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getPartitionKeys(dbName, tableName, partColumns);
+        return metaCache.getPartitionKeys(dbName, tableName, partColumns, isHudiTable);
     }
 
     public List<HivePartition> getPartitions(String resourceName, String dbName, String tableName,
@@ -176,10 +177,11 @@ public class HiveRepository {
     public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(String resourceName, String dbName,
                                                                           String tableName,
                                                                           List<Column> partitionColumns,
-                                                                          List<String> columnNames)
+                                                                          List<String> columnNames,
+                                                                          boolean isHudiTable)
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getTableLevelColumnStats(dbName, tableName, partitionColumns, columnNames);
+        return metaCache.getTableLevelColumnStats(dbName, tableName, partitionColumns, columnNames, isHudiTable);
     }
 
     public void refreshTableCache(String resourceName, String dbName, String tableName, List<Column> partColumns,
@@ -213,11 +215,15 @@ public class HiveRepository {
     }
 
     public void clearCache(String resourceName, String dbName, String tableName) {
+        clearCache(resourceName, dbName, tableName, false);
+    }
+
+    public void clearCache(String resourceName, String dbName, String tableName, boolean isHudiTable) {
         try {
             HiveMetaCache metaCache = getMetaCache(resourceName);
-            metaCache.clearCache(dbName, tableName);
+            metaCache.clearCache(dbName, tableName, isHudiTable);
         } catch (DdlException e) {
-
+            LOG.warn("clean table {}.{} cache failed.", dbName, tableName,  e);
         }
     }
 
