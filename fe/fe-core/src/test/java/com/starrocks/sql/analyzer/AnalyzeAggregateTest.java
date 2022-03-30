@@ -59,6 +59,8 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select v1 from t0 group by v1 having parse_json('{\"a\": 1}')->'a'=1");
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = @@sql_mode");
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
+
+        analyzeFail("select count() from t0", "No matching function with signature: count()");
     }
 
     @Test
@@ -137,6 +139,9 @@ public class AnalyzeAggregateTest {
 
         analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
                 "No matching function with signature: multi_distinct_count(ARRAY)");
+
+        analyzeFail("select abs(distinct v1) from t0");
+        analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
     }
 
     @Test
