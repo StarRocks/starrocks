@@ -38,7 +38,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters),
+          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _is_buildable(param._is_buildable),
           _read_only_join_probers(read_only_join_probers) {
     _is_push_down = param._hash_join_node.is_push_down;
