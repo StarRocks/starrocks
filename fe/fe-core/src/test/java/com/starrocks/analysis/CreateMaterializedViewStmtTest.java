@@ -35,24 +35,17 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class CreateMaterializedViewStmtTest {
 
@@ -66,46 +59,6 @@ public class CreateMaterializedViewStmtTest {
     private Config config;
     @Mocked
     private CatalogUtils catalogUtils;
-
-    private static String runningDir = "fe/mocked/CreateMaterializedViewStmtTest/" + UUID.randomUUID().toString() + "/";
-    private static ConnectContext connectContext2;
-    private static StarRocksAssert starRocksAssert;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        Deencapsulation.setField(Config.class, "enable_materialized_view", true);
-        FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
-
-        // create connect context
-        connectContext2 = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext2);
-
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values less than('2020-02-01'),\n" +
-                        "    PARTITION p2 values less than('2020-03-01')\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testCreateMaterializedViewWithStar() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "create materialized view star_view as select * from tbl1;";
-        UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-    }
 
     @Test
     public void testFunctionColumnInSelectClause(@Injectable ArithmeticExpr arithmeticExpr) throws UserException {
