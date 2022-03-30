@@ -9,6 +9,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 
 namespace starrocks::vectorized {
 
@@ -203,6 +204,54 @@ private:
     int _equal_count = 0; // Output equal count of compare
 };
 
+class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {
+public:
+    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie)
+            : ColumnVisitorAdapter(this), _column(column), _tie(tie) {}
+
+    Status do_visit(const vectorized::NullableColumn& column) {
+        // TODO: maybe could skip compare rows that contains null
+        // 1. Compare the null flag
+        // 2. Compare the value if both are not null. Since value for null is just default value,
+        //    which are equal, so just compare the value directly
+        const NullData& null_data = column.immutable_null_column_data();
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
+        }
+
+        build_tie_for_column(column.data_column(), _tie);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::BinaryColumn& column) {
+        auto& data = column.get_data();
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
+        }
+        return Status::OK();
+    }
+
+    template <typename T>
+    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+        auto& data = column.get_data();
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
+        }
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("not support"); }
+    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("not support"); }
+    template <typename T>
+    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+        return Status::NotSupported("not support");
+    }
+
+private:
+    const ColumnPtr _column;
+    Tie* _tie;
+};
+
 int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first) {
     ColumnCompare compare(cmp_vector, rhs_value, sort_order, null_first);
 
@@ -232,6 +281,15 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
             break;
         }
     }
+}
+
+void build_tie_for_column(const ColumnPtr column, Tie* tie) {
+    DCHECK(!!tie);
+    DCHECK_EQ(column->size(), tie->size());
+
+    ColumnTieBuilder tie_builder(column, tie);
+    [[maybe_unused]] Status st = column->accept(&tie_builder);
+    DCHECK(st.ok());
 }
 
 } // namespace starrocks::vectorized
