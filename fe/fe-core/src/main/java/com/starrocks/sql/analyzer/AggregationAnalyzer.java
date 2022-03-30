@@ -30,7 +30,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 import java.util.Objects;
@@ -266,8 +266,8 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitSubquery(Subquery node, Void context) {
-            QueryRelation qb = node.getQueryRelation();
-            List<FieldId> fieldIds = qb.getColumnReferences().values().stream()
+            QueryStatement queryStatement = node.getQueryStatement();
+            List<FieldId> fieldIds = queryStatement.getQueryRelation().getColumnReferences().values().stream()
                     .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
                     .collect(Collectors.toList());
 
