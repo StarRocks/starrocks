@@ -393,10 +393,11 @@ int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs
 template <typename T>
 uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
     uint32_t max_size = 0;
-    auto prev_offset = _offsets[0];
+    T prev_offset = _offsets[0];
     for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        auto curr_offset = _offsets[i + 1];
-        max_size = std::max(max_size, curr_offset - prev_offset);
+        T curr_offset = _offsets[i + 1];
+        // it's safe to cast, because max size of one string is 2^32
+        max_size = std::max(max_size, static_cast<uint32_t>(curr_offset - prev_offset));
         prev_offset = curr_offset;
     }
     return max_size + sizeof(uint32_t);
@@ -531,5 +532,6 @@ std::string BinaryColumnBase<T>::debug_item(uint32_t idx) const {
 }
 
 template class BinaryColumnBase<uint32_t>;
+template class BinaryColumnBase<uint64_t>;
 
 } // namespace starrocks::vectorized

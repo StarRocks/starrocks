@@ -42,6 +42,7 @@ public:
     enum { APPEND_OVERFLOW_MAX_SIZE = 128 };
 
     static const uint32_t MAX_CAPACITY_LIMIT = UINT32_MAX;
+    static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
@@ -64,6 +65,8 @@ public:
     virtual bool is_constant() const { return false; }
 
     virtual bool is_binary() const { return false; }
+
+    virtual bool is_large_binary() const { return false; }
 
     virtual bool is_decimal() const { return false; }
 
