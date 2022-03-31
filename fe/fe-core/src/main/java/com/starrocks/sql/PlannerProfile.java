@@ -87,21 +87,21 @@ public class PlannerProfile {
         return t;
     }
 
-    private RuntimeProfile getRuntimeProfile(RuntimeProfile top, Map<String, RuntimeProfile> cache,
+    private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
                                              String prefix) {
         if (cache.containsKey(prefix)) {
             return cache.get(prefix);
         }
         String[] ss = prefix.split("\\.");
         StringBuilder sb = new StringBuilder();
-        RuntimeProfile p = top;
+        RuntimeProfile p = parent;
         for (String s : ss) {
             sb.append(s);
             sb.append('.');
             String tmp = sb.toString();
             if (!cache.containsKey(tmp)) {
                 RuntimeProfile sp = new RuntimeProfile(s);
-                top.addChild(sp);
+                p.addChild(sp);
                 cache.put(tmp, sp);
             }
             p = cache.get(tmp);
@@ -118,23 +118,23 @@ public class PlannerProfile {
         return prefix;
     }
 
-    public void buildTimers(RuntimeProfile top) {
+    public void buildTimers(RuntimeProfile parent) {
         List<String> keys = new ArrayList<>(timers.keySet());
         Collections.sort(keys);
 
         Map<String, RuntimeProfile> profilers = new HashMap<>();
-        profilers.put("", top);
+        profilers.put("", parent);
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
-            RuntimeProfile p = getRuntimeProfile(top, profilers, prefix);
+            RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
             ScopedTimer t = timers.get(key);
             p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
         }
     }
 
-    public void build(RuntimeProfile top) {
-        buildTimers(top);
+    public void build(RuntimeProfile parent) {
+        buildTimers(parent);
     }
 
     public void reset() {
