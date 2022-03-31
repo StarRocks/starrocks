@@ -85,8 +85,3 @@ enum TStatusCode {
     UNKNOWN = 50
 }
 
-struct TStatus {
-  1: required TStatusCode status_code
-  2: optional list<string> error_msgs
-}
-
