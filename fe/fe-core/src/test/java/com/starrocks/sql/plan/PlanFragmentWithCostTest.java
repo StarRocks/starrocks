@@ -865,6 +865,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         Assert.assertFalse(execPlan.getScanNodes().isEmpty());
         Assert.assertEquals(1, ((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size());
+
+        sql = "select * from test_mv limit 10";
+        execPlan = getExecPlan(sql);
+        Assert.assertFalse(execPlan.getScanNodes().isEmpty());
+        Assert.assertTrue(((OlapScanNode) execPlan.getScanNodes().get(0)).getScanTabletIds().size() > 1);
     }
 
     @Test
