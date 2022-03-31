@@ -28,7 +28,6 @@ import com.starrocks.thrift.TStatusCode;
 public class Status {
     public static final Status OK = new Status();
     public static final Status CANCELLED = new Status(TStatusCode.CANCELLED, "Cancelled");
-    public static final Status THRIFT_RPC_ERROR = new Status(TStatusCode.THRIFT_RPC_ERROR, "Thrift RPC failed");
 
     public TStatusCode getErrorCode() {
         return errorCode;
@@ -72,6 +71,10 @@ public class Status {
 
     public boolean isRpcError() {
         return this.errorCode == TStatusCode.THRIFT_RPC_ERROR;
+    }
+
+    public boolean isGlobalDictError() {
+        return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }
 
     public void setStatus(Status status) {
