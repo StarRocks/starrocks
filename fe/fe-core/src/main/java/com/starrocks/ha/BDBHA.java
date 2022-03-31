@@ -232,7 +232,7 @@ public class BDBHA implements HAProtocol {
         }
 
         List<String> conflictNodes = Lists.newArrayList();
-        Set<ReplicationNode> nodes = replicationGroupAdmin.getGroup().getDataNodes();
+        Set<ReplicationNode> nodes = replicationGroupAdmin.getGroup().getElectableNodes();
         for (ReplicationNode node : nodes) {
             if (node.getHostName().equals(host) && node.getPort() == port) {
                 conflictNodes.add(node.getName());
@@ -240,7 +240,7 @@ public class BDBHA implements HAProtocol {
         }
 
         for (String nodeName : conflictNodes) {
-            replicationGroupAdmin.removeMember(nodeName);
+            removeElectableNode(nodeName);
         }
     }
 }
