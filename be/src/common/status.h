@@ -135,6 +135,8 @@ public:
         return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg, precise_code, msg2);
     }
 
+    static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
