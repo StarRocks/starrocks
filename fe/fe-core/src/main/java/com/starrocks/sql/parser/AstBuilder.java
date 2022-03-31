@@ -1188,38 +1188,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAggregationFunctionCall(StarRocksParser.AggregationFunctionCallContext context) {
-        FunctionCallExpr functionCallExpr;
-        if (context.aggregationFunction().COUNT() != null) {
-            if (context.aggregationFunction().ASTERISK_SYMBOL() != null) {
-                functionCallExpr = new FunctionCallExpr("count", FunctionParams.createStarParam());
-            } else {
-                List<Expr> params = visit(context.aggregationFunction().expression(), Expr.class);
-                if (params.isEmpty()) {
-                    throw new ParsingException("No matching function with signature: count().");
-                }
 
-                functionCallExpr = new FunctionCallExpr("count",
-                        new FunctionParams(context.aggregationFunction().DISTINCT() != null,
-                                visit(context.aggregationFunction().expression(), Expr.class)));
-            }
+        String functionName;
+        if (context.aggregationFunction().COUNT() != null) {
+            functionName = "count";
+        } else if (context.aggregationFunction().AVG() != null) {
+            functionName = "avg";
+        } else if (context.aggregationFunction().SUM() != null) {
+            functionName = "sum";
+        } else if (context.aggregationFunction().MIN() != null) {
+            functionName = "min";
+        } else if (context.aggregationFunction().MAX() != null) {
+            functionName = "max";
         } else {
-            String functionName;
-            if (context.aggregationFunction().AVG() != null) {
-                functionName = "avg";
-            } else if (context.aggregationFunction().SUM() != null) {
-                functionName = "sum";
-            } else if (context.aggregationFunction().MIN() != null) {
-                functionName = "min";
-            } else if (context.aggregationFunction().MAX() != null) {
-                functionName = "max";
-            } else {
-                throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
-                        ErrorType.INTERNAL_ERROR);
-            }
-            functionCallExpr = new FunctionCallExpr(functionName,
-                    new FunctionParams(context.aggregationFunction().DISTINCT() != null,
-                            visit(context.aggregationFunction().expression(), Expr.class)));
+            throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
+                    ErrorType.INTERNAL_ERROR);
         }
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
+                context.aggregationFunction().ASTERISK_SYMBOL() == null ?
+                        new FunctionParams(context.aggregationFunction().DISTINCT() != null,
+                                visit(context.aggregationFunction().expression(), Expr.class)) :
+                        FunctionParams.createStarParam());
 
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
@@ -1465,7 +1454,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitArraySubscript(StarRocksParser.ArraySubscriptContext context) {
         Expr value = (Expr) visit(context.value);
-        IntLiteral index = new IntLiteral(Long.parseLong(context.index.getText()));
+        Expr index = (Expr) visit(context.index);
         return new ArrayElementExpr(value, index);
     }
 

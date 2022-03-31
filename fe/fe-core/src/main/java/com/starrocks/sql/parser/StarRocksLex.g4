@@ -198,8 +198,6 @@ LOGICAL_NOT: '!';
 ARROW: '->';
 AT: '@';
 
-
-
 INTEGER_VALUE
     : DIGIT+
     ;
@@ -237,7 +235,6 @@ QUOTED_IDENTIFIER
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
-
 
 fragment EXPONENT
     : 'E' [+-]? DIGIT+
