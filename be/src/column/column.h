@@ -150,8 +150,8 @@ public:
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
 
-    // Append data from permutation
-    virtual void append_permutation(const Columns& columns, const Permutation& perm) { DCHECK(false) << "not support"; }
+    // Append rows from permutation
+    virtual void append_permutation(const Columns& columns, const Permutation& perm) = 0;
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;

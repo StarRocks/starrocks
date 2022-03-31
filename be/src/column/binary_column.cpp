@@ -78,6 +78,38 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 }
 
 template <typename T>
+void BinaryColumnBase<T>::append_permutation(const Columns& columns, const Permutation& perm) {
+    if (columns.empty() || perm.empty()) {
+        return;
+    }
+
+    // TODO: check overflow
+    std::vector<const Container*> srcs;
+    for (auto& column : columns) {
+        srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column.get())->get_data()));
+    }
+
+    size_t old_rows = _offsets.size();
+    size_t total_rows = _offsets.size();
+    size_t total_bytes = _bytes.size();
+    _offsets.resize(total_rows + perm.size());
+    for (auto& p : perm) {
+        Slice slice = (*srcs[p.chunk_index])[p.index_in_chunk];
+        _offsets[total_rows] = _offsets[total_rows - 1] + slice.get_size();
+        ++total_rows;
+        total_bytes += slice.get_size();
+    }
+
+    _bytes.resize(total_bytes);
+    for (size_t i = 0; i < perm.size(); i++) {
+        Slice slice = (*srcs[perm[i].chunk_index])[perm[i].index_in_chunk];
+        strings::memcpy_inlined(_bytes.data() + _offsets[old_rows + i], slice.get_data(), slice.get_size());
+    }
+
+    _slices_cache = false;
+}
+
+template <typename T>
 void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     auto& src_offsets = src_column.get_offset();

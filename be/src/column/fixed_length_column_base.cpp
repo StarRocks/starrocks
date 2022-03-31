@@ -34,7 +34,11 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
 template <typename T>
 void FixedLengthColumnBase<T>::append_permutation(const Columns& columns, const Permutation& perm) {
     using ColumnType = FixedLengthColumnBase<T>;
-    
+
+    if (columns.empty() || perm.empty()) {
+        return;
+    }
+
     size_t output = _data.size();
     _data.resize(output + perm.size());
     std::vector<const Container*> srcs;
