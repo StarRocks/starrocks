@@ -299,6 +299,14 @@ public class Partition extends MetaObject implements Writable {
         return dataSize;
     }
 
+    public long getRowCount() {
+        long rowCount = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            rowCount += mIndex.getRowCount();
+        }
+        return rowCount;
+    }
+
     public long getReplicaCount() {
         long replicaCount = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
