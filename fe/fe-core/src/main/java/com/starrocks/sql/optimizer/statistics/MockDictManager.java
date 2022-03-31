@@ -40,7 +40,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void forbitGlobalDict(long tableId) {
+    public void forbidGlobalDict(long tableId) {
     }
 
     @Override
