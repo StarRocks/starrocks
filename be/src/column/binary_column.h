@@ -8,14 +8,15 @@
 
 namespace starrocks::vectorized {
 
-class BinaryColumn final : public ColumnFactory<Column, BinaryColumn> {
-    friend class ColumnFactory<Column, BinaryColumn>;
+template <typename T>
+class BinaryColumnBase final : public ColumnFactory<Column, BinaryColumnBase<T>> {
+    friend class ColumnFactory<Column, BinaryColumnBase<T>>;
 
 public:
     using ValueType = Slice;
 
-    using Offset = uint32_t;
-    using Offsets = Buffer<uint32_t>;
+    using Offset = T;
+    using Offsets = Buffer<T>;
 
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t>;
 
@@ -23,32 +24,33 @@ public:
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumn() { _offsets.emplace_back(0); }
-    BinaryColumn(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    BinaryColumnBase<T>() { _offsets.emplace_back(0); }
+    BinaryColumnBase<T>(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
-    };
+    }
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumn(const BinaryColumn& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
+    BinaryColumnBase<T>(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumn(BinaryColumn&& rhs) noexcept : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
+    BinaryColumnBase<T>(BinaryColumnBase<T>&& rhs) noexcept
+            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
-    BinaryColumn& operator=(const BinaryColumn& rhs) {
-        BinaryColumn tmp(rhs);
+    BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
+        BinaryColumnBase<T> tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
-        BinaryColumn tmp(std::move(rhs));
+    BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
+        BinaryColumnBase<T> tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
     }
 
-    ~BinaryColumn() override {
+    ~BinaryColumnBase<T>() override {
         if (!_offsets.empty()) {
             DCHECK_EQ(_bytes.size(), _offsets.back());
         } else {
@@ -184,9 +186,12 @@ public:
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
-    uint32_t serialize_size(size_t idx) const override { return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]; }
+    uint32_t serialize_size(size_t idx) const override {
+        // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
+        return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx];
+    }
 
-    MutableColumnPtr clone_empty() const override { return create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Column::Filter& filter, size_t start, size_t to) override;
@@ -201,7 +206,10 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
-    std::string get_name() const override { return "binary"; }
+    std::string get_name() const override {
+        static_assert(std::is_same_v<T, uint32_t>);
+        return "binary";
+    }
 
     Container& get_data() {
         if (!_slices_cache) {
@@ -235,9 +243,9 @@ public:
     }
 
     void swap_column(Column& rhs) override {
-        auto& r = down_cast<BinaryColumn&>(rhs);
+        auto& r = down_cast<BinaryColumnBase<T>&>(rhs);
         using std::swap;
-        swap(_delete_state, r._delete_state);
+        swap(this->_delete_state, r._delete_state);
         swap(_bytes, r._bytes);
         swap(_offsets, r._offsets);
         swap(_slices, r._slices);
@@ -272,6 +280,10 @@ public:
     }
 
     bool reach_capacity_limit() const override {
+        static_assert(std::is_same_v<T, uint32_t>);
+        // The size limit of a single element is 2^32.
+        // The size limit of all elements is 2^32.
+        // The number limit of elements is 2^32.
         return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
                _slices.size() >= Column::MAX_CAPACITY_LIMIT;
     }
@@ -286,5 +298,6 @@ private:
     mutable bool _slices_cache = false;
 };
 
-using Offsets = BinaryColumn::Offsets;
+using Offsets = BinaryColumnBase<uint32_t>::Offsets;
+
 } // namespace starrocks::vectorized
