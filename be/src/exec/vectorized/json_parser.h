@@ -26,6 +26,8 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance() noexcept;
+
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
@@ -44,6 +46,8 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance() noexcept;
+
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
