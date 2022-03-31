@@ -5,9 +5,13 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/olap_common.h"
-#include "storage/tablet_meta.h"
 
 namespace starrocks {
+
+class RowsetMeta;
+class TabletMeta;
+using RowsetMetaSharedPtr = std::shared_ptr<RowsetMeta>;
+using TabletMetaSharedPtr = std::shared_ptr<TabletMeta>;
 
 // Metastore provides abstract interface for meta operations, such as tablet meta and rowset meta.
 class Metastore {

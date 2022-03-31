@@ -10,6 +10,7 @@
 
 #include "env/env_s3.h"
 #include "gutil/strings/util.h"
+#include "storage/tablet_meta.h"
 
 namespace starrocks {
 
