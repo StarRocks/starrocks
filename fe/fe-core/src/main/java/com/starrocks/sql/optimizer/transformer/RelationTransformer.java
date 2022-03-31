@@ -491,7 +491,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap);
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
-        return new LogicalPlan(consumeBuilder, null, null);
+
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
     }
 
     @Override
