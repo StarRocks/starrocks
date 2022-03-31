@@ -70,6 +70,9 @@ public class StatisticsMetaManager extends MasterDaemon {
 
     private static final List<ColumnDef> COLUMNS;
 
+    // If all replicas are lost more than 3 times in a row, rebuild the statistics table
+    private int lossTableCount = 0;
+
     public StatisticsMetaManager() {
         super("statistics meta manager", 60 * 1000);
     }
@@ -99,19 +102,36 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkReplicateNormal() {
+        int aliveSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int total = Catalog.getCurrentSystemInfo().getBackendIds(false).size();
+        // maybe cluster just shutdown, ignore
+        if (aliveSize <= total / 2) {
+            lossTableCount = 0;
+            return true;
+        }
+
         Database db = Catalog.getCurrentCatalog().getDb(Constants.StatisticsDBName);
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
         Preconditions.checkState(table != null);
 
+        boolean check = true;
         for (Partition partition : table.getPartitions()) {
             // check replicate miss
             if (partition.getBaseIndex().getTablets().stream()
                     .anyMatch(t -> t.getNormalReplicaBackendIds().isEmpty())) {
-                return false;
+                check = false;
+                break;
             }
         }
-        return true;
+
+        if (!check) {
+            lossTableCount++;
+        } else {
+            lossTableCount = 0;
+        }
+
+        return lossTableCount < 3;
     }
 
     private static final List<String> keyColumnNames = ImmutableList.of(
