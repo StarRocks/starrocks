@@ -127,27 +127,7 @@ Status JsonArrayParser::_advance() noexcept {
 Status JsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::parse(data, len, allocated));
 
-    RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_obj));
-
-    // json root filter.
-    simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_obj, _root_paths, val));
-
-    try {
-        if (val.type() != simdjson::ondemand::json_type::object) {
-            auto err_msg =
-                    fmt::format("the value should be object type in json document stream with json root, value: {}",
-                                JsonFunctions::to_json_string(val, kMaxRawJsonLen));
-            return Status::DataQualityError(err_msg);
-        }
-
-        _curr_obj = val.get_object();
-        return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to iterate document stream as object with json root. error: $0",
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
+    return _advance();
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
@@ -160,6 +140,10 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
 Status JsonDocumentStreamParserWithRoot::advance() noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
 
+    return _advance();
+}
+
+Status JsonDocumentStreamParserWithRoot::_advance() noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_obj));
 
     // json root filter.
@@ -186,26 +170,7 @@ Status JsonDocumentStreamParserWithRoot::advance() noexcept {
 Status JsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::parse(data, len, allocated));
 
-    RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_obj));
-
-    // json root filter.
-    simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_obj, _root_paths, val));
-
-    try {
-        if (val.type() != simdjson::ondemand::json_type::object) {
-            auto err_msg = fmt::format("the value should be object type in json array with json root, value: {}",
-                                       JsonFunctions::to_json_string(val, kMaxRawJsonLen));
-            return Status::DataQualityError(err_msg);
-        }
-
-        _curr_obj = val.get_object();
-        return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to iterate json array as object with json root. error: $0",
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
+    return _advance();
 }
 
 Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
@@ -217,6 +182,11 @@ Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noe
 
 Status JsonArrayParserWithRoot::advance() noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::advance());
+
+    return _advance();
+}
+
+Status JsonArrayParserWithRoot::_advance() noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_obj));
 
     // json root filter.

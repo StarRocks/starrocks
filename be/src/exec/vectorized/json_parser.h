@@ -69,6 +69,8 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance() noexcept;
+
     std::vector<SimpleJsonPath> _root_paths;
 
     // _need_reset is set true when the _curr_obj may be iterated.
@@ -84,6 +86,8 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance() noexcept;
+
     std::vector<SimpleJsonPath> _root_paths;
 
     // _need_reset is set true when the _curr_obj may be iterated.
