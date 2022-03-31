@@ -10,9 +10,7 @@
 
 namespace starrocks::vectorized {
 TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc)
-        : ExecNode(pool, tnode, desc), _tnode(tnode) {
-    _input_chunk_ptr = nullptr;
-}
+        : ExecNode(pool, tnode, desc), _tnode(tnode) {}
 
 TableFunctionNode::~TableFunctionNode() {
     if (runtime_state() != nullptr) {
@@ -63,8 +61,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    RETURN_IF_ERROR(_table_function->init(&_table_function_state));
-
     _input_chunk_seek_rows = 0;
     _table_function_result_eos = true;
     _outer_column_remain_repeat_times = 0;
@@ -75,6 +71,7 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
 Status TableFunctionNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     _table_function_exec_timer = ADD_TIMER(_runtime_profile, "TableFunctionTime");
+    RETURN_IF_ERROR(_table_function->init(&_table_function_state));
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
     return Status::OK();
 }
@@ -208,8 +205,8 @@ Status TableFunctionNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    if (_table_function != nullptr) {
-        RETURN_IF_ERROR(_table_function->close(_table_function_state));
+    if (_table_function != nullptr && _table_function_state != nullptr) {
+        _table_function->close(_table_function_state);
     }
     return ExecNode::close(state);
 }

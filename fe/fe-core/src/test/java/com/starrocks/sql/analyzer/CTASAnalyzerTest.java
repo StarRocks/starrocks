@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -16,6 +17,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -267,4 +269,52 @@ public class CTASAnalyzerTest {
                 "INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;";
         UtFrameUtils.parseStmtWithNewAnalyzer(CTASTPCH, ctx);
     }
+
+    @Test
+    public void testVariousDataTypes() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withTable("" +
+                "CREATE TABLE `t2` (\n" +
+                "  `c_2_0` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `c_2_1` datetime NOT NULL COMMENT \"\",\n" +
+                "  `c_2_2` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `c_2_3` varchar(1) NULL COMMENT \"\",\n" +
+                "  `c_2_4` decimal64(13, 2) NOT NULL COMMENT \"\",\n" +
+                "  `c_2_5` decimal128(28, 18) NULL COMMENT \"\",\n" +
+                "  `c_2_6` varchar(1) NOT NULL COMMENT \"\",\n" +
+                "  `c_2_7` date NOT NULL COMMENT \"\",\n" +
+                "  `c_2_8` boolean NOT NULL COMMENT \"\",\n" +
+                "  `c_2_9` smallint(6) NULL COMMENT \"\",\n" +
+                "  `c_2_10` char(21) NOT NULL COMMENT \"\",\n" +
+                "  `c_2_11` decimal128(30, 9) NULL COMMENT \"\",\n" +
+                "  `c_2_12` boolean NOT NULL COMMENT \"\",\n" +
+                "  `c_2_13` percentile PERCENTILE_UNION NOT NULL COMMENT \"\",\n" +
+                "  `c_2_14` varchar(31) MAX NULL COMMENT \"\",\n" +
+                "  `c_2_15` decimal128(25, 6) SUM NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`c_2_0`, `c_2_1`, `c_2_2`, `c_2_3`, `c_2_4`, `c_2_5`, `c_2_6`, `c_2_7`, `c_2_8`, `c_2_9`, `c_2_10`, `c_2_11`, `c_2_12`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_2_9`, `c_2_12`, `c_2_0`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        String ctasSql = "CREATE TABLE `decimal_ctas1` as " +
+                "SELECT  c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15 " +
+                "FROM     t2 WHERE     (NOT (false)) " +
+                "GROUP BY c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
+        CreateTableAsSelectStmt createTableStmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql, ctx);
+        createTableStmt.createTable(ctx);
+
+        String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
+        try {
+            CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewAnalyzer(ctasSql2, ctx);
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("Unsupported CTAS transform type: null"));
+        }
+
+    }
+
 }

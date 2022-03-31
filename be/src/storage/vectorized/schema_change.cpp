@@ -468,7 +468,7 @@ ChunkSorter::~ChunkSorter() {
 }
 
 bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
-    vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
         _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
         Status st = _chunk_allocator->allocate(_swap_chunk, chunk->num_rows(), new_schema);
@@ -588,7 +588,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
 
     _make_heap(chunk_arr);
     size_t nread = 0;
-    vectorized::Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
@@ -766,8 +766,8 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         }
     }
     std::vector<ChunkPtr> chunk_arr;
-    vectorized::Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
-    vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());

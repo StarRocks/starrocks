@@ -1379,6 +1379,10 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
 
 template <PrimitiveType Type>
 ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
+    if (fmt.size() <= 0) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
 
     size_t size = columns[0]->size();
@@ -1419,7 +1423,7 @@ ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
 template <PrimitiveType Type>
 void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VARCHAR>* viewer_format,
                            ColumnBuilder<TYPE_VARCHAR>* builder, int i) {
-    if (viewer_format->is_null(i)) {
+    if (viewer_format->is_null(i) || viewer_format->value(i).empty()) {
         builder->append_null();
         return;
     }
