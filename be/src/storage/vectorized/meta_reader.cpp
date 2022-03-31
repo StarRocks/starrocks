@@ -290,9 +290,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
 
     std::vector<Slice> words;
     if (!_column_iterators[cid]->all_page_dict_encoded()) {
-        // if all_page_dict_encoded if false, return fake dict word which cardinality exceed low cardinality base size
-        // so FE will not collect again and mark this column not a low cardinality
-        words = FAKE_DICT_SLICE_WORDS;
+        return Status::GlobalDictError("no global dict");
     } else {
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
