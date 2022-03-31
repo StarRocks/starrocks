@@ -214,7 +214,10 @@ Status JsonArrayParserWithRoot::_advance() noexcept {
 Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::parse(data, len, allocated));
 
-    return _advance();
+    // until array element is available of end of array.
+    while (_build().is_end_of_file()) {
+        RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
+    }
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
@@ -224,7 +227,19 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
     return Status::OK();
 }
 
-Status ExpandedJsonDocumentStreamParserWithRoot::_advance() noexcept {
+Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
+    if (++_array_itr == _array.end()) {
+        RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
+    }
+
+    // until array element is available of end of array.
+    while (_build().is_end_of_file()) {
+        RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
+    }
+    return Status::OK();
+}
+
+Status ExpandedJsonDocumentStreamParserWithRoot::_build() noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
@@ -240,6 +255,10 @@ Status ExpandedJsonDocumentStreamParserWithRoot::_advance() noexcept {
         }
 
         _array = val.get_array();
+
+        if (_array.is_empty()) {
+            return Status::EndOfFile("the array is empty");
+        }
 
         _array_itr = _array.begin();
 
@@ -260,13 +279,6 @@ Status ExpandedJsonDocumentStreamParserWithRoot::_advance() noexcept {
         return Status::DataQualityError(err_msg);
     }
 
-    return Status::OK();
-}
-
-Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
-    if (++_array_itr == _array.end()) {
-        return _advance();
-    }
     return Status::OK();
 }
 
