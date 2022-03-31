@@ -75,7 +75,7 @@ Status EngineChecksumTask::_compute_checksum() {
         // a fixed value, so these two types are ignored in calculating checksum.
         // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
         if (type == OLAP_FIELD_TYPE_FLOAT || type == OLAP_FIELD_TYPE_DOUBLE || type == OLAP_FIELD_TYPE_HLL ||
-            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE) {
+            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE || type == OLAP_FIELD_TYPE_JSON) {
             continue;
         }
         return_columns.push_back(i);
