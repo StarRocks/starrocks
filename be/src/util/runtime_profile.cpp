@@ -203,7 +203,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
             InfoStrings::iterator existing = _info_strings.find(key);
 
             if (existing == _info_strings.end()) {
-                _info_strings.insert(std::make_pair(key, it->second));
+                _info_strings.emplace(key, it->second);
                 _info_strings_display_order.push_back(key);
             } else {
                 _info_strings[key] = it->second;
@@ -374,7 +374,7 @@ void RuntimeProfile::add_info_string(const std::string& key, const std::string& 
     InfoStrings::iterator it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
-        _info_strings.insert(std::make_pair(key, value));
+        _info_strings.emplace(key, value);
         _info_strings_display_order.push_back(key);
     } else {
         it->second = value;
@@ -395,7 +395,7 @@ const std::string* RuntimeProfile::get_info_string(const std::string& key) {
 void RuntimeProfile::get_all_info_strings(std::map<std::string, std::string>* info_strings) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
     for (auto& [key, value] : _info_strings) {
-        info_strings->insert(std::make_pair(key, value));
+        info_strings->emplace(key, value);
     }
 }
 
@@ -554,11 +554,11 @@ void RuntimeProfile::get_all_counters(std::map<std::string, Counter*>* counters,
     std::lock_guard<std::mutex> l(_counter_lock);
 
     for (auto& [key, value] : _counter_map) {
-        counters->insert(std::make_pair(key, value));
+        counters->emplace(key, value);
     }
 
     for (auto& [parent_counter_name, names] : _child_counter_map) {
-        child_counter_map->insert(std::make_pair(parent_counter_name, names));
+        child_counter_map->emplace(parent_counter_name, names);
     }
 }
 
