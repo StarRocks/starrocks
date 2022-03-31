@@ -41,15 +41,19 @@ public class SqlModeHelper {
     // TODO(xuyang): these mode types are copy from MYSQL mode types, which are example
     //  of how they works and to be compatible with MySQL, so for now they are not
     //  really meaningful.
+
+    /* When a new session is create, its sql mode is set to MODE_DEFAULT */
+    public static final long MODE_DEFAULT = 0L;
     /* Bits for different SQL MODE modes, you can add custom SQL MODE here */
     public static final long MODE_REAL_AS_FLOAT = 1L;
-    public static final long MODE_PIPES_AS_CONCAT = 2L;
-    public static final long MODE_ANSI_QUOTES = 4L;
-    public static final long MODE_IGNORE_SPACE = 8L;
-    public static final long MODE_NOT_USED = 16L;
-    public static final long MODE_ONLY_FULL_GROUP_BY = 32L;
-    public static final long MODE_NO_UNSIGNED_SUBTRACTION = 64L;
-    public static final long MODE_NO_DIR_IN_CREATE = 128L;
+    public static final long MODE_PIPES_AS_CONCAT = 1L << 1;
+    public static final long MODE_ANSI_QUOTES = 1L << 2;
+    public static final long MODE_IGNORE_SPACE = 1L << 3;
+    public static final long MODE_NOT_USED = 1L << 4;
+    public static final long MODE_ONLY_FULL_GROUP_BY = 1L << 5;
+    public static final long MODE_NO_UNSIGNED_SUBTRACTION = 1L << 6;
+    public static final long MODE_NO_DIR_IN_CREATE = 1L << 7;
+    public static final long MODE_ANSI = 1L << 18;
     public static final long MODE_NO_AUTO_VALUE_ON_ZERO = 1L << 19;
     public static final long MODE_NO_BACKSLASH_ESCAPES = 1L << 20;
     public static final long MODE_STRICT_TRANS_TABLES = 1L << 21;
@@ -62,19 +66,14 @@ public class SqlModeHelper {
     public static final long MODE_NO_ZERO_DATE = 1L << 24;
     public static final long MODE_INVALID_DATES = 1L << 25;
     public static final long MODE_ERROR_FOR_DIVISION_BY_ZERO = 1L << 26;
+
+    public static final long MODE_TRADITIONAL = 1L << 27;
     public static final long MODE_HIGH_NOT_PRECEDENCE = 1L << 29;
     public static final long MODE_NO_ENGINE_SUBSTITUTION = 1L << 30;
     public static final long MODE_PAD_CHAR_TO_FULL_LENGTH = 1L << 31;
     public static final long MODE_TIME_TRUNCATE_FRACTIONAL = 1L << 32;
-
-    /* Bits for different COMBINE MODE modes, you can add custom COMBINE MODE here */
-    public static final long MODE_ANSI = 1L << 18;
-    public static final long MODE_TRADITIONAL = 1L << 27;
-
-    public static final long MODE_LAST = 1L << 33;
-
-    /* When a new session is create, its sql mode is set to MODE_DEFAULT */
-    public static final long MODE_DEFAULT = 0L;
+    public static final long MODE_SORT_NULLS_LAST = 1L << 33;
+    public static final long MODE_LAST = 1L << 34;
 
     public static final long MODE_ALLOWED_MASK =
             (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT | MODE_ANSI_QUOTES |
@@ -85,9 +84,7 @@ public class SqlModeHelper {
                     MODE_NO_ZERO_DATE | MODE_INVALID_DATES | MODE_ERROR_FOR_DIVISION_BY_ZERO |
                     MODE_HIGH_NOT_PRECEDENCE | MODE_NO_ENGINE_SUBSTITUTION |
                     MODE_PAD_CHAR_TO_FULL_LENGTH | MODE_TRADITIONAL | MODE_ANSI |
-                    MODE_TIME_TRUNCATE_FRACTIONAL);
-
-    public static final long MODE_COMBINE_MASK = (MODE_ANSI | MODE_TRADITIONAL);
+                    MODE_TIME_TRUNCATE_FRACTIONAL | MODE_SORT_NULLS_LAST);
 
     private static final Map<String, Long> sqlModeSet = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
@@ -116,6 +113,7 @@ public class SqlModeHelper {
         sqlModeSet.put("NO_ENGINE_SUBSTITUTION", MODE_NO_ENGINE_SUBSTITUTION);
         sqlModeSet.put("PAD_CHAR_TO_FULL_LENGTH", MODE_PAD_CHAR_TO_FULL_LENGTH);
         sqlModeSet.put("TIME_TRUNCATE_FRACTIONAL", MODE_TIME_TRUNCATE_FRACTIONAL);
+        sqlModeSet.put("SORT_NULLS_LAST", MODE_SORT_NULLS_LAST);
 
         combineModeSet.put("ANSI", (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT |
                 MODE_ANSI_QUOTES | MODE_IGNORE_SPACE | MODE_ONLY_FULL_GROUP_BY));
@@ -181,10 +179,7 @@ public class SqlModeHelper {
 
     // check if this SQL MODE is supported
     public static boolean isSupportedSqlMode(String sqlMode) {
-        if (sqlMode == null || !getSupportedSqlMode().containsKey(sqlMode)) {
-            return false;
-        }
-        return true;
+        return sqlMode != null && getSupportedSqlMode().containsKey(sqlMode);
     }
 
     // encode sqlMode from string to long
@@ -212,4 +207,7 @@ public class SqlModeHelper {
         return combineModeSet;
     }
 
+    public static boolean check(long mask, long mode) {
+        return (mask & mode) == mode;
+    }
 }

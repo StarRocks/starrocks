@@ -439,6 +439,28 @@ public class AnalyzeSingleTest {
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
+
+        connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_SORT_NULLS_LAST);
+        statementBase = SqlParser.parse("select * from  tall order by ta",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta ASC NULLS LAST ",
+                AST2SQL.toString(statementBase));
+
+        statementBase = SqlParser.parse("select * from  tall order by ta desc",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals(
+                "SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta DESC NULLS FIRST ",
+                AST2SQL.toString(statementBase));
+
+        connectContext.getSessionVariable().setSqlMode(0);
+        statementBase = SqlParser.parse("select * from  tall order by ta",
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statementBase, connectContext);
+        Assert.assertEquals(
+                "SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta ASC ",
+                AST2SQL.toString(statementBase));
     }
 
     @Test

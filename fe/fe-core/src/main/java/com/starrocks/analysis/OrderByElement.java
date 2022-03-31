@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -81,7 +82,7 @@ public class OrderByElement implements ParseNode {
             OrderByElement element = src.get(i);
             OrderByElement reverseElement =
                     new OrderByElement(element.getExpr().clone(), !element.isAsc,
-                            !nullsFirst(element.nullsFirstParam, element.isAsc));
+                            !nullsFirst(element.nullsFirstParam));
             result.add(reverseElement);
         }
 
@@ -196,12 +197,12 @@ public class OrderByElement implements ParseNode {
      *
      * @param nullsFirstParam True if "NULLS FIRST", false if "NULLS LAST", or null if
      *                        the NULLs order was not specified.
-     * @param isAsc
      * @return Returns true if nulls are ordered first or false if nulls are ordered last.
      * Independent of isAsc.
      */
-    public static boolean nullsFirst(Boolean nullsFirstParam, boolean isAsc) {
-        return nullsFirstParam == null ? isAsc : nullsFirstParam;
+    public static boolean nullsFirst(Boolean nullsFirstParam) {
+        Preconditions.checkNotNull(nullsFirstParam);
+        return nullsFirstParam;
     }
 
     @Override

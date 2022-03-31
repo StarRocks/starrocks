@@ -266,7 +266,7 @@ public class WindowTransformer {
                         (ColumnRefOperator) SqlToScalarOperatorTranslator
                                 .translate(orderByElement.getExpr(), subOpt.getExpressionMapping());
                 orderings.add(new Ordering(col, orderByElement.getIsAsc(),
-                        OrderByElement.nullsFirst(orderByElement.getNullsFirstParam(), orderByElement.getIsAsc())));
+                        OrderByElement.nullsFirst(orderByElement.getNullsFirstParam())));
             }
 
             // Each LogicalWindowOperator will belong to a SortGroup,

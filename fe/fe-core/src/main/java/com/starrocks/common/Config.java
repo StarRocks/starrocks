@@ -840,8 +840,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 60;
 
-
-
     // Configurations for backup and restore
     /**
      * Plugins' path for BACKUP and RESTORE operations. Currently deprecated.
@@ -1169,7 +1167,7 @@ public class Config extends ConfigBase {
     /**
      * If kerberos authentication is enabled, the configuration must be filled.
      * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
-     *
+     * <p>
      * Service principal name (SPN) is sent to clients that attempt to authenticate using Kerberos.
      * The SPN must be present in the database managed by the KDC server, and its key file
      * needs to be exported and configured. See authentication_kerberos_service_key_tab for details.
@@ -1180,7 +1178,7 @@ public class Config extends ConfigBase {
     /**
      * If kerberos authentication is enabled, the configuration must be filled.
      * like "$HOME/path/to/your/starrocks-fe.keytab"
-     *
+     * <p>
      * The keytab file for authenticating tickets received from clients.
      * This file must exist and contain a valid key for the SPN or authentication of clients will fail.
      * Export keytab file requires KDC administrator to operate.
@@ -1368,7 +1366,7 @@ public class Config extends ConfigBase {
      */
     @Deprecated
     @ConfField(mutable = true)
-    public static boolean vectorized_load_enable = true; 
+    public static boolean vectorized_load_enable = true;
 
     /**
      * Unused config field, leave it here for backward compatibility
