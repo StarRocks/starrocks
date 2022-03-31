@@ -135,7 +135,7 @@ public:
         return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg, precise_code, msg2);
     }
 
-    static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+    static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg, -1, Slice()); }
 
     bool ok() const { return _state == nullptr; }
 
