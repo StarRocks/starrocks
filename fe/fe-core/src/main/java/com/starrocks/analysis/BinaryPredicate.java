@@ -63,7 +63,7 @@ public class BinaryPredicate extends Predicate implements Writable {
     private boolean isInferred_ = false;
 
     public enum Operator {
-        EQ("=", "eq", TExprOpcode.EQ, false),
+        EQ("=", "eq", TExprOpcode.EQ, true),
         NE("!=", "ne", TExprOpcode.NE, false),
         LE("<=", "le", TExprOpcode.LE, true),
         GE(">=", "ge", TExprOpcode.GE, true),
