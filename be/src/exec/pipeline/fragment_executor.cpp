@@ -238,8 +238,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
-                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+        VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
+                 << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only OlapScanOperator need a MorselQueue attached.

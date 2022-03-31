@@ -181,7 +181,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public void clearProbeRuntimeFilters() {
-        probeRuntimeFilters.clear();
+        probeRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
     public void fillLocalRfWaitingSet(Set<Integer> hashJoinNodeIds) {
