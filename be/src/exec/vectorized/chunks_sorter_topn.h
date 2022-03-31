@@ -64,7 +64,7 @@ private:
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
     Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutation,
-                                            DataSegments& segments, size_t chunk_size);
+                                 DataSegments& segments, size_t chunk_size);
 
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);

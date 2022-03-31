@@ -240,9 +240,8 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
 //
 // then will obtain BEFORE and IN as permutations.first and permutations.second use filter_array.
 // at last we sort parts datas in permutations.first and permutations.second.
-Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state,
-                                                          std::pair<Permutation, Permutation>& permutations,
-                                                          DataSegments& segments, const size_t chunk_size) {
+Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                               DataSegments& segments, const size_t chunk_size) {
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
 
     DCHECK(_get_number_of_order_by_columns() > 0) << "order by columns can't be empty";
@@ -293,7 +292,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state,
         }
         timer.start();
     }
-    
+
     return _partial_sort_col_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
 }
 
