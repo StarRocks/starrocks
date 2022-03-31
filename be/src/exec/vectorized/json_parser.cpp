@@ -218,6 +218,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len
     while (_build().is_end_of_file()) {
         RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
     }
+    return Status::OK();
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
@@ -257,7 +258,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::_build() noexcept {
         _array = val.get_array();
 
         if (_array.is_empty()) {
-            return Status::EndOfFile("the array is empty");
+            return Status::EndOfFile("empty array");
         }
 
         _array_itr = _array.begin();
@@ -284,6 +285,34 @@ Status ExpandedJsonDocumentStreamParserWithRoot::_build() noexcept {
 
 Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::parse(data, len, allocated));
+
+    // until array element is available of end of array.
+    while (_build().is_end_of_file()) {
+        RETURN_IF_ERROR(this->JsonArrayParser::advance());
+    }
+    return Status::OK();
+}
+
+Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
+    if (_need_reset) _curr_obj.reset();
+    _need_reset = true;
+    *row = _curr_obj;
+    return Status::OK();
+}
+
+Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
+    if (++_array_itr == _array.end()) {
+        RETURN_IF_ERROR(this->JsonArrayParser::advance());
+    }
+
+    // until array element is available of end of array.
+    while (_build().is_end_of_file()) {
+        RETURN_IF_ERROR(this->JsonArrayParser::advance());
+    }
+    return Status::OK();
+}
+
+Status ExpandedJsonArrayParserWithRoot::_build() noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
@@ -293,30 +322,18 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
         if (val.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format(
                     "the value under json root should be array type with strip_outer_array=true in json array, "
-                    "value: "
-                    "{}",
+                    "value: {}",
                     JsonFunctions::to_json_string(val, kMaxRawJsonLen));
             return Status::DataQualityError(err_msg);
         }
 
         _array = val.get_array();
 
-        _array_itr = _array.begin();
-
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse json as expanded json array with json root. error: $0",
-                                           simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
-    }
-
-    return Status::OK();
-}
-
-Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
-    try {
-        if (_array_itr == _array.end()) {
-            return Status::EndOfFile("all documents of the stream are iterated");
+        if (_array.is_empty()) {
+            return Status::EndOfFile("empty array");
         }
+
+        _array_itr = _array.begin();
 
         simdjson::ondemand::value val = *_array_itr;
 
@@ -327,46 +344,14 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
-        return Status::OK();
+        _curr_obj = val.get_object();
+
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to iterate json array as object with json root. error: $0",
+        auto err_msg = strings::Substitute("Failed to parse json as expanded json array with json root. error: $0",
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
-}
 
-Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
-    if (++_array_itr == _array.end()) {
-        do {
-            // forward document stream parser.
-            RETURN_IF_ERROR(this->JsonArrayParser::advance());
-            RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
-
-            simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
-
-            try {
-                if (val.type() != simdjson::ondemand::json_type::array) {
-                    auto err_msg = fmt::format(
-                            "the value under json root should be array type with strip_outer_array=true in json "
-                            "array, "
-                            "value: {}",
-                            JsonFunctions::to_json_string(val, kMaxRawJsonLen));
-                    return Status::DataQualityError(err_msg);
-                }
-
-                _array = val.get_array();
-                _array_itr = _array.begin();
-            } catch (simdjson::simdjson_error& e) {
-                auto err_msg = strings::Substitute("Failed to iterate json array sub-array. error: $0",
-                                                   simdjson::error_message(e.error()));
-                return Status::DataQualityError(err_msg);
-            }
-
-            // until EOF or new elem is available.
-        } while (_array_itr == _array.end());
-    }
     return Status::OK();
 }
 

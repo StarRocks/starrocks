@@ -126,7 +126,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _build() noexcept ;
+    Status _build() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;
     // _curr_row denotes the current object that the json root points to.
