@@ -26,7 +26,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _advance() noexcept;
+    Status _build_current() noexcept;
 
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
@@ -46,7 +46,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _advance() noexcept;
+    Status _build_current() noexcept;
 
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
@@ -69,7 +69,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _advance() noexcept;
+    Status _build_current() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;
 
@@ -86,7 +86,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _advance() noexcept;
+    Status _build_current() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;
 
@@ -103,7 +103,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _build() noexcept;
+    Status _build_current() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;
     // _curr_row denotes the current object that the json root points to.
@@ -126,7 +126,7 @@ public:
     Status advance() noexcept override;
 
 private:
-    Status _build() noexcept;
+    Status _build_current() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;
     // _curr_row denotes the current object that the json root points to.
