@@ -646,6 +646,7 @@ public:
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets);
         offsets.resize(num_offsets + 1);
+        is_nulls.resize(num_offsets);
 
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
