@@ -689,8 +689,6 @@ CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
 
-//CONF_Bool(enable_persistent_index, "false");
-
 } // namespace config
 
 } // namespace starrocks
