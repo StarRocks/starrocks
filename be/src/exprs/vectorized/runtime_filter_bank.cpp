@@ -136,6 +136,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.sender_finst_id) {
         _sender_finst_id = desc.sender_finst_id;
     }
+    if (desc.__isset.broadcast_grf_senders) {
+        _broadcast_grf_senders.insert(desc.broadcast_grf_senders.begin(), desc.broadcast_grf_senders.end());
+    }
+    if (desc.__isset.broadcast_grf_destinations) {
+        _broadcast_grf_destinations = desc.broadcast_grf_destinations;
+    }
 
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
     return Status::OK();

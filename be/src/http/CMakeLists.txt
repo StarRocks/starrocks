@@ -51,6 +51,7 @@ add_library(Webserver STATIC
   action/compaction_action.cpp
   action/update_config_action.cpp
   action/list_workgroup_action.cpp
+  action/runtime_filter_cache_action.cpp
   #  action/multi_start.cpp
   #  action/multi_show.cpp
   #  action/multi_commit.cpp

@@ -210,6 +210,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _plugin_mgr = new PluginMgr();
     _runtime_filter_worker = new RuntimeFilterWorker(this);
+    _runtime_filter_cache = new RuntimeFilterCache(8);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -407,6 +408,10 @@ void ExecEnv::_destroy() {
     if (_hdfs_scan_executor) {
         delete _hdfs_scan_executor;
         _hdfs_scan_executor = nullptr;
+    }
+    if (_runtime_filter_cache) {
+        delete _runtime_filter_cache;
+        _runtime_filter_cache = nullptr;
     }
     if (_thread_pool) {
         delete _thread_pool;

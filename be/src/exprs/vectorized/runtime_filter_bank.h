@@ -14,6 +14,7 @@
 #include "exprs/vectorized/runtime_filter.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/primitive_type.h"
@@ -55,6 +56,10 @@ public:
     PrimitiveType build_expr_type() const { return _build_expr_ctx->root()->type().type; }
     int build_expr_order() const { return _build_expr_order; }
     const TUniqueId& sender_finst_id() const { return _sender_finst_id; }
+    const std::unordered_set<TUniqueId>& broadcast_grf_senders() const { return _broadcast_grf_senders; }
+    const std::vector<TRuntimeFilterDestination>& broadcast_grf_destinations() const {
+        return _broadcast_grf_destinations;
+    }
     bool has_remote_targets() const { return _has_remote_targets; }
     bool has_consumer() const { return _has_consumer; }
     int8_t join_mode() const { return _join_mode; }
@@ -75,6 +80,8 @@ private:
     bool _has_consumer;
     int8_t _join_mode;
     TUniqueId _sender_finst_id;
+    std::unordered_set<TUniqueId> _broadcast_grf_senders;
+    std::vector<TRuntimeFilterDestination> _broadcast_grf_destinations;
     std::vector<TNetworkAddress> _merge_nodes;
     JoinRuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
@@ -160,6 +167,8 @@ public:
 
     void set_wait_timeout_ms(int v) { _wait_timeout_ms = v; }
     int wait_timeout_ms() const { return _wait_timeout_ms; }
+    void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
+    long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
     // wait for all runtime filters are ready.
     void wait();
 
@@ -175,6 +184,7 @@ private:
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;
+    long _scan_wait_timeout_ms = 0L;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
 };

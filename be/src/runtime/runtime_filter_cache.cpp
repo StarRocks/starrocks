@@ -1,0 +1,188 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+#include "runtime/runtime_filter_cache.h"
+
+#include <chrono>
+
+#include "gutil/strings/substitute.h"
+
+namespace starrocks {
+
+using std::chrono::seconds;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
+using std::chrono::duration_cast;
+class RfCacheValue {
+public:
+    RfCacheValue() { _extend_lifetime(); }
+    ~RfCacheValue() = default;
+    void put_if_absent(int filter_id, const JoinRuntimeFilterPtr& filter) {
+        _extend_lifetime();
+        if (!_filters.count(filter_id)) {
+            _filters[filter_id] = filter;
+        }
+    }
+
+    JoinRuntimeFilterPtr get(int filter_id) const {
+        _extend_lifetime();
+        auto it = _filters.find(filter_id);
+        if (it != _filters.end()) {
+            return it->second;
+        } else {
+            return nullptr;
+        }
+    }
+
+    bool is_expired() const {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now > _deadline;
+    }
+
+private:
+    void _extend_lifetime() const {
+        _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + EXPIRE_SECONDS).count();
+    }
+    std::unordered_map<int, std::shared_ptr<vectorized::JoinRuntimeFilter>> _filters;
+    mutable int64_t _deadline;
+    static constexpr seconds EXPIRE_SECONDS = seconds(60);
+};
+
+class RfEvent {
+public:
+    RfEvent(const TUniqueId& query_id, int filter_id, std::string&& msg)
+            : query_id(query_id),
+              filter_id(filter_id),
+              ts(duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count()),
+              msg(std::move(msg)) {}
+    ~RfEvent() = default;
+    std::string& to_string() { return strings::Substitute("[{}][{}] {}: {}", print_id(query_id), filter_id, ts, msg); }
+
+private:
+    TUniqueId query_id;
+    int filter_id;
+    long ts;
+    std::string msg;
+};
+using RfEventPtr = std::shared_ptr<RfEvent>;
+using RfEvents = std::list<RfEventPtr>;
+class RfEventValue {
+public:
+    RfEventValue() = default;
+    ~RfEventValue() = default;
+    void add_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {
+        _extend_lifetime();
+        _events.push_back(std::make_shared<RfEvent>(query_id, filter_id, std::move(msg)));
+    }
+
+    std::list<std::string> get_events() {
+        _extend_lifetime();
+        std::list<std::string> event_strings;
+        for (auto it = _events.begin(); it != _events.end(); ++it) {
+            event_strings.push_back((*it)->to_string());
+        }
+        return event_strings;
+    }
+    bool is_expired() const {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now > _deadline;
+    }
+
+private:
+    void _extend_lifetime() const {
+        _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + EXPIRE_SECONDS).count();
+    }
+    RfEvents _events;
+    mutable int64_t _deadline;
+    static constexpr seconds EXPIRE_SECONDS = seconds(600)
+};
+
+RuntimeFilterCache::RuntimeFilterCache(size_t log2_num_slots)
+        : _num_slots(1L << log2_num_slots),
+          _slot_mask(_num_slots - 1),
+          _mutexes(_num_slots),
+          _maps(_num_slots),
+          _event_mutexes(_num_slots),
+          _event_maps(_num_slots) {}
+
+void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter) {
+    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    auto& mutex = _mutexes[slot_idx];
+    auto& map = _maps[slot_idx];
+    _cache_times.fetch_add(1);
+    std::unique_lock write_lock(mutex);
+    if (!map.count(query_id)) {
+        map[query_id] = std::make_shared<RfCacheValue>();
+    }
+    auto& cached = map[query_id];
+    cached->put_if_absent(filter_id, filter);
+}
+
+JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_id) {
+    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    auto& mutex = _mutexes[slot_idx];
+    auto& map = _maps[slot_idx];
+    std::shared_lock read_lock(mutex);
+    auto it = map.find(query_id);
+    if (it == map.end()) {
+        return nullptr;
+    } else {
+        auto filter = it->second->get(filter_id);
+        _use_times.fetch_add(filter != nullptr);
+        return filter;
+    }
+}
+
+void RuntimeFilterCache::add_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {
+    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    auto& mutex = _event_mutexes[slot_idx];
+    auto& map = _event_maps[slot_idx];
+    std::unique_lock write_lock(mutex);
+    if (!map.count(query_id)) {
+        map[query_id] = std::make_shared<RfEventValue>();
+    }
+    map[query_id]->add_event(query_id, filter_id, std::move(msg));
+}
+
+std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_events() {
+    std::unordered_map<std::string, std::list<std::string>> events;
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _event_mutexes[i];
+        auto& map = _event_maps[i];
+        std::shared_mutex read_lock(mutex);
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            events[it->first] = it->second->get_events();
+        }
+    }
+    return events;
+}
+
+void RuntimeFilterCache::remove(const TUniqueId& query_id) {
+    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    auto& mutex = _mutexes[slot_idx];
+    auto& map = _maps[slot_idx];
+    std::unique_lock write_lock(mutex);
+    map.erase(query_id);
+    auto it = map.begin();
+    while (it != map.end()) {
+        if (it->second->is_expired()) {
+            it = map.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _event_mutexes[i];
+        auto& map = _event_maps[i];
+        std::unique_lock write_lock(mutex);
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->second->is_expired()) {
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
+} // namespace starrocks
