@@ -21,18 +21,6 @@ namespace starrocks::vectorized {
 
 class Tablet;
 class SegmentMetaCollecter;
-static std::vector<std::string> FAKE_DICT_WORDS;
-static std::vector<Slice> generate_fake_dict_words() {
-    std::vector<Slice> result;
-    FAKE_DICT_WORDS.resize(DICT_DECODE_MAX_SIZE + 1);
-    result.resize(DICT_DECODE_MAX_SIZE + 1);
-    for (size_t i = 0; i < DICT_DECODE_MAX_SIZE + 1; i++) {
-        FAKE_DICT_WORDS[i] = std::to_string(i);
-        result[i] = FAKE_DICT_WORDS[i];
-    }
-    return result;
-}
-static std::vector<Slice> FAKE_DICT_SLICE_WORDS = generate_fake_dict_words();
 
 // Params for MetaReader
 // mainly include tablet
