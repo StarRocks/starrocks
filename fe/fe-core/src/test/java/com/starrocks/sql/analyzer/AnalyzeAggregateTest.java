@@ -60,7 +60,7 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = @@sql_mode");
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
 
-        analyzeFail("select count() from t0", "No matching function with signature: count()");
+        analyzeSuccess("select count() from t0");
     }
 
     @Test
