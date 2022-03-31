@@ -196,7 +196,7 @@ public class CacheDictManager implements IDictManager {
             try {
                 realResult = result.get();
             } catch (Exception e) {
-                LOG.warn(e);
+                LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
                 return false;
             }
             if (!realResult.isPresent()) {
@@ -222,7 +222,7 @@ public class CacheDictManager implements IDictManager {
         }
 
         if (forbiddenDictTableIds.contains(tableId)) {
-            LOG.debug("table {} forbit low cardinality global dict", tableId);
+            LOG.debug("table {} forbid low cardinality global dict", tableId);
             return false;
         }
 
@@ -237,7 +237,7 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public void forbitGlobalDict(long tableId) {
+    public void forbidGlobalDict(long tableId) {
         LOG.debug("remove dict for table {}", tableId);
         forbiddenDictTableIds.add(tableId);
     }
@@ -245,21 +245,37 @@ public class CacheDictManager implements IDictManager {
     @Override
     public void updateGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (!dictStatistics.synchronous().asMap().containsKey(columnIdentifier)) {
+        if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
             return;
         }
 
-        Optional<ColumnDict> columnDictOptional = dictStatistics.synchronous().get(columnIdentifier);
-        Preconditions.checkState(columnDictOptional != null && columnDictOptional.isPresent());
-        ColumnDict columnDict = columnDictOptional.get();
-        ColumnDict newColumnDict = new ColumnDict(columnDict.getDict(), versionTime);
-        dictStatistics.synchronous().put(columnIdentifier, Optional.of(newColumnDict));
-        LOG.debug("update dict for column {}, version {}", columnName, versionTime);
+        CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
+        if (columnFuture.isDone()) {
+            try {
+                Optional<ColumnDict> columnOptional = columnFuture.get();
+                if (columnOptional.isPresent()) {
+                    ColumnDict columnDict = columnOptional.get();
+                    ColumnDict newColumnDict = new ColumnDict(columnDict.getDict(), versionTime);
+                    dictStatistics.put(columnIdentifier, CompletableFuture.completedFuture(Optional.of(newColumnDict)));
+                    LOG.debug("update dict for column {}, version {}", columnName, versionTime);
+                }
+            } catch (Exception e) {
+                LOG.warn(String.format("update dict cache for %d: %s failed", tableId, columnName), e);
+            }
+        }
     }
 
     @Override
     public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        return dictStatistics.synchronous().get(columnIdentifier);
+        CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
+        if (columnFuture.isDone()) {
+            try {
+                return columnFuture.get();
+            } catch (Exception e) {
+                LOG.warn(String.format("get dict cache for %d: %s failed", tableId, columnName), e);
+            }
+        }
+        return Optional.empty();
     }
 }
