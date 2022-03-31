@@ -23,7 +23,7 @@ void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(_bytes.size(), _offsets.back());
     size_t size = size();
     for (size_t i = 0; i < size; i++) {
-        CHECK_GE(_offsets[i+1], _offsets[i]);
+        CHECK_GE(_offsets[i + 1], _offsets[i]);
     }
     if (_slices_cache) {
         for (size_t i = 0; i < size; i++) {
