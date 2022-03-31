@@ -103,6 +103,8 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance() noexcept;
+
     std::vector<SimpleJsonPath> _root_paths;
     // _curr_row denotes the current object that the json root points to.
     simdjson::ondemand::object _curr_row;
