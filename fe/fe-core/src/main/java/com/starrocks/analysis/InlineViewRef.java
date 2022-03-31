@@ -331,4 +331,28 @@ public class InlineViewRef extends TableRef {
 
         return sb.toString();
     }
+
+    @Override
+    public String tableRefToDigest() {
+        // Enclose the alias in quotes if Hive cannot parse it without quotes.
+        // This is needed for view compatibility between Impala and Hive.
+        String aliasSql = null;
+        String alias = getExplicitAlias();
+        if (alias != null) {
+            aliasSql = ToSqlUtils.getIdentSql(alias);
+        }
+        if (view != null) {
+            // TODO(zc):
+            // return view_.toSql() + (aliasSql == null ? "" : " " + aliasSql);
+            return name.toSql() + (aliasSql == null ? "" : " " + aliasSql);
+        }
+
+        StringBuilder sb = new StringBuilder()
+                .append("(")
+                .append(queryStmt.toDigest())
+                .append(") ")
+                .append(aliasSql);
+
+        return sb.toString();
+    }
 }

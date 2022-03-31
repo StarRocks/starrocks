@@ -102,4 +102,15 @@ public class DigestTest extends PlanTestBase {
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
         Assert.assertEquals(digest1, digest2);
     }
+
+
+    @Test
+    public void testWindowSubQuery() throws Exception {
+        String sql1 = "select max(a) from (select sum(l_partkey) as a from lineitem where L_SHIPDATE < DATE'2020-12-31') t";
+        String sql2 = "select max(a) from (select sum(l_partkey) as a from lineitem where L_SHIPDATE < DATE'2020-12-30') t";
+
+        String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
+        String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
+        Assert.assertEquals(digest1, digest2);
+    }
 }
