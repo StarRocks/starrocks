@@ -403,6 +403,17 @@ static size_t hash_bytes(void const* ptr, size_t const len) noexcept {
     return static_cast<size_t>(h);
 }
 
+// Xorshift is a pseudorandom number generator, which is an implementation of
+// linear-feedback shift registers (LFSRs). It generates next pseudorandom state from
+// the current state, which can be easily repurposed as hash functions.
+// The original paper: https://www.jstatsoft.org/article/view/v008i14
+static uint32_t xorshift32(uint32_t x) {
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
 };
 
 }
