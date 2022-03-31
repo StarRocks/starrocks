@@ -6,6 +6,7 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "runtime/global_dicts.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -299,6 +300,10 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
+    if (words.size() > DICT_DECODE_MAX_SIZE) {
+        return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+    }
+
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
 
@@ -310,7 +315,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
 
     // add elements
     auto dst = array_column->elements_column().get();
-    dst->append_strings(words);
+    CHECK(dst->append_strings(words));
 
     return Status::OK();
 }
