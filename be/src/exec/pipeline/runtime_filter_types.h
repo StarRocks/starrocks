@@ -315,6 +315,7 @@ public:
         }
 
         const auto& num_bloom_filters = _bloom_filter_descriptors.size();
+<<<<<<< HEAD
 
         // remove empty params that generated in two cases:
         // 1. the corresponding HashJoinProbeOperator is finished in short-circuit style because HashJoinBuildOperator
@@ -340,6 +341,11 @@ public:
         for (auto i = 0; i < num_bloom_filters; ++i) {
             auto& desc = _bloom_filter_descriptors[i];
             if (desc->runtime_filter() == nullptr) {
+=======
+        for (auto i = 0; i < num_bloom_filters; ++i) {
+            auto& desc = _bloom_filter_descriptors[i];
+            if (desc == nullptr) {
+>>>>>>> 00b8b042 (Branch 2.2 fixup local runtime bloom filter (#4617))
                 continue;
             }
             auto can_merge =
