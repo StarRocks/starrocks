@@ -290,7 +290,7 @@ primaryExpression
     | variable                                                                            #var
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=INTEGER_VALUE ']'                                 #arraySubscript
+    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | subquery                                                                            #subqueryExpression
     | EXISTS '(' query ')'                                                                #exists
@@ -312,7 +312,7 @@ primaryExpression
 
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
-    | COUNT '(' ASTERISK_SYMBOL ')'
+    | COUNT '(' ASTERISK_SYMBOL? ')'
     | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
