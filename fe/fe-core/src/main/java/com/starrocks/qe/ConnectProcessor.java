@@ -252,6 +252,7 @@ public class ConnectProcessor {
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
+        ctx.getPlannerProfile().reset();
 
         // execute this query.
         StatementBase parsedStmt = null;

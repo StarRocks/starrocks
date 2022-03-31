@@ -161,7 +161,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitions(resourceName, hiveDb, hiveTable, partitionKeys);
+        return HiveMetaStoreTableUtils.getPartitions(resourceName, hiveDb, hiveTable, partitionKeys, false);
     }
 
     @Override
@@ -202,7 +202,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(resourceName, hiveDb, hiveTable,
-                partitions, getPartitionColumns());
+                partitions, getPartitionColumns(), false);
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
