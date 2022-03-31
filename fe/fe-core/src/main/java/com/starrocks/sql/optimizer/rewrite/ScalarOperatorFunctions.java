@@ -179,17 +179,26 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().minusSeconds(second.getInt()));
     }
 
-    @FEFunction(name = "year", argTypes = {"DATETIME"}, returnType = "SMALLINT")
+    @FEFunction.List(list = {
+            @FEFunction(name = "year", argTypes = {"DATETIME"}, returnType = "SMALLINT"),
+            @FEFunction(name = "year", argTypes = {"DATE"}, returnType = "SMALLINT")
+    })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
     }
 
-    @FEFunction(name = "month", argTypes = {"DATETIME"}, returnType = "TINYINT")
+    @FEFunction.List(list = {
+            @FEFunction(name = "month", argTypes = {"DATETIME"}, returnType = "TINYINT"),
+            @FEFunction(name = "month", argTypes = {"DATE"}, returnType = "TINYINT")
+    })
     public static ConstantOperator month(ConstantOperator arg) {
         return ConstantOperator.createTinyInt((byte) arg.getDatetime().getMonthValue());
     }
 
-    @FEFunction(name = "day", argTypes = {"DATETIME"}, returnType = "TINYINT")
+    @FEFunction.List(list = {
+            @FEFunction(name = "day", argTypes = {"DATETIME"}, returnType = "TINYINT"),
+            @FEFunction(name = "day", argTypes = {"DATE"}, returnType = "TINYINT")
+    })
     public static ConstantOperator day(ConstantOperator arg) {
         return ConstantOperator.createTinyInt((byte) arg.getDatetime().getDayOfMonth());
     }

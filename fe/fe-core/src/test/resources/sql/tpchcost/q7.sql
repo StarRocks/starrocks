@@ -59,7 +59,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 25
 
 24:SORT
-|  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, true] ASC
+|  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, false] ASC
 |  offset: 0
 |  cardinality: 250
 |  column statistics:
@@ -70,7 +70,7 @@ OutPut Exchange Id: 25
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
-|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, true]
+|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
 |  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -90,7 +90,7 @@ OutPut Exchange Id: 22
 21:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
-|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, true]
+|  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
 |  cardinality: 297
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -102,7 +102,7 @@ OutPut Exchange Id: 22
 |  output columns:
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  51 <-> [51: N_NAME, CHAR, false]
-|  55 <-> year[(cast([19: L_SHIPDATE, DATE, false] as DATETIME)); args: DATETIME; result: SMALLINT; args nullable: true; result nullable: true]
+|  55 <-> year[([19: L_SHIPDATE, DATE, false]); args: DATE; result: SMALLINT; args nullable: false; result nullable: false]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 554645
 |  column statistics:
