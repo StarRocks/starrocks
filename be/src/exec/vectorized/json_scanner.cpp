@@ -14,7 +14,11 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "env/env.h"
+<<<<<<< HEAD
 #include "exec/broker_reader.h"
+=======
+#include "exec/vectorized/json_parser.h"
+>>>>>>> 175fdea8 (Refactor: move JsonParser to separate file (#4586))
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/decimal_cast_expr.h"
@@ -702,6 +706,7 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
     return add_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
+<<<<<<< HEAD
 Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) {
     try {
         _doc_stream = _parser.iterate_many(data, len);
@@ -812,4 +817,6 @@ Status JsonArrayParser::advance() {
     }
 }
 
+=======
+>>>>>>> 175fdea8 (Refactor: move JsonParser to separate file (#4586))
 } // namespace starrocks::vectorized

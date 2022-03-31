@@ -121,6 +121,7 @@ private:
 #endif
 };
 
+<<<<<<< HEAD
 class JsonParser {
 public:
     JsonParser() = default;
@@ -162,4 +163,6 @@ private:
     simdjson::ondemand::array_iterator _array_itr;
 };
 
+=======
+>>>>>>> 175fdea8 (Refactor: move JsonParser to separate file (#4586))
 } // namespace starrocks::vectorized
