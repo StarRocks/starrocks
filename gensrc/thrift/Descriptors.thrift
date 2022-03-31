@@ -151,7 +151,7 @@ struct TColumn {
 struct TOlapTableIndexTablets {
     1: required i64 index_id
     2: required list<Types.TTabletId> tablets
-    20: optional list<Types.TShardId> shards
+    3: optional list<Types.TShardId> shards
 }
 
 // its a closed-open range
