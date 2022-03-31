@@ -31,6 +31,11 @@ public:
               _build_tie(build_tie) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
+        // Fastpath
+        if (!column.has_null()) {
+            return column.data_column_ref().accept(this);
+        }
+
         const NullData& null_data = column.immutable_null_column_data();
         auto null_pred = [&](const SmallPermuteItem& item) -> bool {
             if (_is_null_first) {
@@ -133,6 +138,11 @@ public:
     size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const vectorized::NullableColumn& column) {
+        // Fastpath
+        if (!column.has_null()) {
+            return column.data_column_ref().accept(this);
+        }
+
         std::vector<const NullData*> null_datas;
         std::vector<ColumnPtr> data_columns;
         for (auto& col : _vertical_columns) {
