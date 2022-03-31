@@ -31,6 +31,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TResourceInfo;
@@ -135,6 +136,8 @@ public class ConnectContext {
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
+    protected PlannerProfile plannerProfile;
+
     public static ConnectContext get() {
         return threadLocalInfo.get();
     }
@@ -160,6 +163,8 @@ public class ConnectContext {
         sessionVariable = VariableMgr.newSessionVariable();
         command = MysqlCommand.COM_SLEEP;
         dumpInfo = new QueryDumpInfo(sessionVariable);
+        plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public ConnectContext(SocketChannel channel) {
@@ -176,6 +181,8 @@ public class ConnectContext {
         }
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
+        plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public long getStmtId() {
@@ -436,6 +443,10 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
+    }
+
+    public PlannerProfile getPlannerProfile() {
+        return plannerProfile;
     }
 
     // kill operation with no protect.

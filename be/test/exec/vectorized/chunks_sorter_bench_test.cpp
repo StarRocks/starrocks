@@ -31,10 +31,10 @@ public:
     void TearDown() { _runtime_state.reset(); }
 
     static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index,
-                                                                        bool low_card) {
+                                                                        bool low_card, bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<SlotRef>(type_desc, 0, slot_index);
 
         std::random_device dev;
@@ -59,8 +59,16 @@ public:
         };
 
         for (int i = 0; i < config::vector_chunk_size; i++) {
+            if (nullable) {
+                int32_t x = uniform_int(rng);
+                if (x % 1000 == 0) {
+                    column->append_nulls(1);
+                    continue;
+                }
+            }
             if (type_desc.type == TYPE_INT) {
-                column->append_datum(Datum(int32_t(uniform_int(rng))));
+                int32_t x = uniform_int(rng);
+                column->append_datum(Datum(x));
             } else if (type_desc.type == TYPE_VARCHAR) {
                 column->append_datum(Datum(gen_rand_str()));
             } else {
@@ -91,7 +99,8 @@ enum SortAlgorithm : int {
 };
 
 static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, CompareStrategy strategy,
-                     PrimitiveType data_type, int num_chunks, int num_columns, int limit = -1, bool low_card = false) {
+                     PrimitiveType data_type, int num_chunks, int num_columns, int limit = -1, bool low_card = false,
+                     bool nullable = false) {
     // state.PauseTiming();
     ChunkSorterBase suite;
     suite.SetUp();
@@ -113,7 +122,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     Chunk::SlotHashMap map;
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_column(type_desc, i, low_card);
+        auto [column, expr] = suite.build_column(type_desc, i, low_card, nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -216,6 +225,10 @@ static void BM_fullsort_varchar_column_wise(benchmark::State& state) {
 static void BM_fullsort_varchar_column_incr(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_VARCHAR, state.range(0), state.range(1));
 }
+static void BM_fullsort_column_incr_nullable(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), -1, false, true);
+}
+
 // Low cardinality
 static void BM_fullsort_low_card_rowwise(benchmark::State& state) {
     do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1), -1, true);
@@ -225,6 +238,9 @@ static void BM_fullsort_low_card_colwise(benchmark::State& state) {
 }
 static void BM_fullsort_low_card_colinc(benchmark::State& state) {
     do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), -1, true);
+}
+static void BM_fullsort_low_card_nullable(benchmark::State& state) {
+    do_bench(state, FullSort, ColumnInc, TYPE_INT, state.range(0), state.range(1), -1, true, true);
 }
 
 static void BM_heapsort_row_wise(benchmark::State& state) {
@@ -243,6 +259,9 @@ static void BM_topn_limit_mergesort_rowwise(benchmark::State& state) {
 }
 static void BM_topn_limit_mergesort_colwise(benchmark::State& state) {
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), state.range(2));
+}
+static void BM_topn_limit_mergesort_colwise_nullable(benchmark::State& state) {
+    do_bench(state, MergeSort, ColumnWise, TYPE_INT, state.range(0), state.range(1), state.range(2), false, true);
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -271,6 +290,7 @@ static void CustomArgsLimit(benchmark::internal::Benchmark* b) {
 BENCHMARK(BM_fullsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_column_incr)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_column_incr_nullable)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 
@@ -278,6 +298,7 @@ BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_rowwise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_colwise)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_colinc)->Apply(CustomArgsFull);
+BENCHMARK(BM_fullsort_low_card_nullable)->Apply(CustomArgsFull);
 
 BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
@@ -285,6 +306,7 @@ BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_rowwise)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_colwise)->Apply(CustomArgsLimit);
+BENCHMARK(BM_topn_limit_mergesort_colwise_nullable)->Apply(CustomArgsLimit);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {

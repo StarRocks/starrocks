@@ -78,7 +78,8 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     _remain_repeat_times = 0;
 
     _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionTime");
-    return _table_function->prepare(_table_function_state);
+    RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
+    return _table_function->open(state, _table_function_state);
 }
 
 StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {

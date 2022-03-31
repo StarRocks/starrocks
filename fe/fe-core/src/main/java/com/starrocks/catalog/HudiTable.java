@@ -218,7 +218,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         Configuration conf = new Configuration();
-        HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+        HoodieTableMetaClient metaClient =
+                HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
         HoodieTableType hudiTableType = hudiTableConfig.getTableType();

@@ -464,7 +464,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
             for (size_t i = 0; i < num_rows; ++i) {
                 auto channel_id = _hash_values[i] % num_channels;
-                auto driver_sequence = _hash_values[i] % _num_shuffles;
+                // Note that xorshift32 rehash must be applied for both local shuffle and exchange sink here.
+                auto driver_sequence = HashUtil::xorshift32(_hash_values[i]) % _num_shuffles;
                 _channel_ids[i] = channel_id;
                 _driver_sequences[i] = driver_sequence;
                 _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]++;

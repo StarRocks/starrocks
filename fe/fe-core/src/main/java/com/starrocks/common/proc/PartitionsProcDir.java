@@ -78,6 +78,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         if (Config.use_staros) {
             builder.add("UseStarOS");
         }
+        builder.add("RowCount");
         TITLE_NAMES = builder.build();
     }
 
@@ -298,6 +299,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 if (Config.use_staros) {
                     partitionInfo.add(partition.isUseStarOS());
                 }
+                partitionInfo.add(partition.getRowCount());
 
                 partitionInfos.add(partitionInfo);
             }
