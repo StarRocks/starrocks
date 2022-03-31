@@ -3811,6 +3811,7 @@ public class Catalog {
                         null,
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
+                        table.usePersistentIndex(),
                         table.getPartitionInfo().getTabletType(partition.getId()));
                 tasks.add(task);
             } else {
@@ -3834,6 +3835,7 @@ public class Catalog {
                             null,
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
+                            table.usePersistentIndex(),
                             table.getPartitionInfo().getTabletType(partition.getId()));
                     tasks.add(task);
                 }
@@ -4012,6 +4014,10 @@ public class Catalog {
         boolean isInMemory =
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         olapTable.setIsInMemory(isInMemory);
+
+        boolean usePersistentIndex =
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX, false);
+        olapTable.setUsePersistentIndex(usePersistentIndex && (olapTable.getKeysType() == KeysType.PRIMARY_KEYS));
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {

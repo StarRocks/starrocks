@@ -317,33 +317,33 @@ public:
         return tablet_manager->get_tablet(new_tablet_id, false);
     }
 
-    void test_writeread();
-    void test_writeread_with_delete();
-    void test_noncontinous_commit();
-    void test_noncontinous_meta_save_load();
-    void test_save_meta();
-    void test_remove_expired_versions();
-    void test_apply();
-    void test_concurrent_write_read_and_gc();
-    void test_compaction_score_not_enough();
-    void test_compaction_score_enough_duplicate();
-    void test_compaction_score_enough_normal();
-    void test_horizontal_compaction();
-    void test_vertical_compaction();
-    void test_link_from();
-    void test_convert_from();
-    void test_load_snapshot_incremental();
-    void test_load_snapshot_incremental_ignore_already_committed_version();
-    void test_load_snapshot_incremental_mismatched_tablet_id();
-    void test_load_snapshot_incremental_data_file_not_exist();
-    void test_load_snapshot_incremental_incorrect_version();
-    void test_load_snapshot_full();
-    void test_load_snapshot_full_file_not_exist();
-    void test_load_snapshot_full_mismatched_tablet_id();
-    void test_issue_4193();
-    void test_issue_4181();
-    void test_snapshot_with_empty_rowset();
-    void test_get_column_values();
+    void test_writeread(bool use_persistent_index);
+    void test_writeread_with_delete(bool use_persistent_index);
+    void test_noncontinous_commit(bool use_persistent_index);
+    void test_noncontinous_meta_save_load(bool use_persistent_index);
+    void test_save_meta(bool use_persistent_index);
+    void test_remove_expired_versions(bool use_persistent_index);
+    void test_apply(bool use_persistent_index);
+    void test_concurrent_write_read_and_gc(bool use_persistent_index);
+    void test_compaction_score_not_enough(bool use_persistent_index);
+    void test_compaction_score_enough_duplicate(bool use_persistent_index);
+    void test_compaction_score_enough_normal(bool use_persistent_index);
+    void test_horizontal_compaction(bool use_persistent_index);
+    void test_vertical_compaction(bool use_persistent_index);
+    void test_link_from(bool use_persistent_index);
+    void test_convert_from(bool use_persistent_index);
+    void test_load_snapshot_incremental(bool use_persistent_index);
+    void test_load_snapshot_incremental_ignore_already_committed_version(bool use_persistent_index);
+    void test_load_snapshot_incremental_mismatched_tablet_id(bool use_persistent_index);
+    void test_load_snapshot_incremental_data_file_not_exist(bool use_persistent_index);
+    void test_load_snapshot_incremental_incorrect_version(bool use_persistent_index);
+    void test_load_snapshot_full(bool use_persistent_index);
+    void test_load_snapshot_full_file_not_exist(bool use_persistent_index);
+    void test_load_snapshot_full_mismatched_tablet_id(bool use_persistent_index);
+    void test_issue_4193(bool use_persistent_index);
+    void test_issue_4181(bool use_persistent_index);
+    void test_snapshot_with_empty_rowset(bool use_persistent_index);
+    void test_get_column_values(bool use_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;
@@ -489,9 +489,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     return count;
 }
 
-void TabletUpdatesTest::test_writeread() {
+void TabletUpdatesTest::test_writeread(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -510,17 +511,16 @@ void TabletUpdatesTest::test_writeread() {
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
-    config::enable_persistent_index = false;
-    test_writeread();
+    test_writeread(false);
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_writeread();
+    test_writeread(true);
 }
 
-void TabletUpdatesTest::test_writeread_with_delete() {
+void TabletUpdatesTest::test_writeread_with_delete(bool use_persistent_index) {
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -550,17 +550,16 @@ void TabletUpdatesTest::test_writeread_with_delete() {
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_delete) {
-    config::enable_persistent_index = false;
-    test_writeread_with_delete();
+    test_writeread_with_delete(false);
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_writeread_with_delete();
+    test_writeread_with_delete(true);
 }
 
-void TabletUpdatesTest::test_noncontinous_commit() {
+void TabletUpdatesTest::test_noncontinous_commit(bool use_persistent_index) {
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     const int N = 100;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -580,17 +579,16 @@ void TabletUpdatesTest::test_noncontinous_commit() {
 }
 
 TEST_F(TabletUpdatesTest, noncontinous_commit) {
-    config::enable_persistent_index = false;
-    test_noncontinous_commit();
+    test_noncontinous_commit(false);
 }
 
 TEST_F(TabletUpdatesTest, noncontinous_commit_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_noncontinous_commit();
+    test_noncontinous_commit(true);
 }
 
-void TabletUpdatesTest::test_noncontinous_meta_save_load() {
+void TabletUpdatesTest::test_noncontinous_meta_save_load(bool use_persistent_index) {
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     const int N = 100;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -615,17 +613,16 @@ void TabletUpdatesTest::test_noncontinous_meta_save_load() {
 }
 
 TEST_F(TabletUpdatesTest, noncontinous_meta_save_load) {
-    config::enable_persistent_index = false;
-    test_noncontinous_meta_save_load();
+    test_noncontinous_meta_save_load(false);
 }
 
 TEST_F(TabletUpdatesTest, noncontinous_meta_save_load_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_noncontinous_commit();
+    test_noncontinous_commit(true);
 }
 
-void TabletUpdatesTest::test_save_meta() {
+void TabletUpdatesTest::test_save_meta(bool use_persistent_index) {
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
 
     // Prepare records for test.
     const int N = 10;
@@ -669,17 +666,16 @@ void TabletUpdatesTest::test_save_meta() {
 }
 
 TEST_F(TabletUpdatesTest, save_meta) {
-    config::enable_persistent_index = false;
-    test_save_meta();
+    test_save_meta(false);
 }
 
 TEST_F(TabletUpdatesTest, save_meta_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_save_meta();
+    test_save_meta(true);
 }
 
-void TabletUpdatesTest::test_remove_expired_versions() {
+void TabletUpdatesTest::test_remove_expired_versions(bool use_persistent_index) {
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
 
     // Prepare records for test.
     const int N = 100;
@@ -731,19 +727,18 @@ void TabletUpdatesTest::test_remove_expired_versions() {
 }
 
 TEST_F(TabletUpdatesTest, remove_expired_versions) {
-    config::enable_persistent_index = false;
-    test_remove_expired_versions();
+    test_remove_expired_versions(false);
 }
 
 TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_remove_expired_versions();
+    test_remove_expired_versions(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_apply() {
+void TabletUpdatesTest::test_apply(bool use_persistent_index) {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
 
     std::vector<int64_t> keys(N);
@@ -778,22 +773,21 @@ void TabletUpdatesTest::test_apply() {
 }
 
 TEST_F(TabletUpdatesTest, apply) {
-    config::enable_persistent_index = false;
-    test_apply();
+    test_apply(false);
 }
 
 TEST_F(TabletUpdatesTest, apply_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_apply();
+    test_apply(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_concurrent_write_read_and_gc() {
+void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool use_persistent_index) {
     const int N = 2000;
     std::atomic<bool> started{false};
     std::atomic<bool> stopped{false};
     std::atomic<int64_t> version{1};
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
 
     auto wait_start = [&]() {
         while (!started) {
@@ -858,19 +852,18 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc() {
 }
 
 TEST_F(TabletUpdatesTest, concurrent_write_read_and_gc) {
-    config::enable_persistent_index = false;
-    test_concurrent_write_read_and_gc();
+    test_concurrent_write_read_and_gc(false);
 }
 
 TEST_F(TabletUpdatesTest, concurrent_write_read_and_gc_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_concurrent_write_read_and_gc();
+    test_concurrent_write_read_and_gc(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_compaction_score_not_enough() {
+void TabletUpdatesTest::test_compaction_score_not_enough(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -885,19 +878,18 @@ void TabletUpdatesTest::test_compaction_score_not_enough() {
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_not_enough) {
-    config::enable_persistent_index = false;
-    test_compaction_score_not_enough();
+    test_compaction_score_not_enough(false);
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_not_enough_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_compaction_score_not_enough();
+    test_compaction_score_not_enough(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_compaction_score_enough_duplicate() {
+void TabletUpdatesTest::test_compaction_score_enough_duplicate(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -917,18 +909,17 @@ void TabletUpdatesTest::test_compaction_score_enough_duplicate() {
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_enough_duplicate) {
-    config::enable_persistent_index = false;
-    test_compaction_score_enough_duplicate();
+    test_compaction_score_enough_duplicate(false);
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_enough_duplicate_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_compaction_score_enough_duplicate();
+    test_compaction_score_enough_duplicate(true);
 }
 
-void TabletUpdatesTest::test_compaction_score_enough_normal() {
+void TabletUpdatesTest::test_compaction_score_enough_normal(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -947,21 +938,20 @@ void TabletUpdatesTest::test_compaction_score_enough_normal() {
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
-    config::enable_persistent_index = false;
-    test_compaction_score_enough_normal();
+    test_compaction_score_enough_normal(false);
 }
 
 TEST_F(TabletUpdatesTest, compaction_score_enough_normal_persistent_index) {
-    config::enable_persistent_index = true;
-    test_compaction_score_enough_normal();
+    test_compaction_score_enough_normal(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_horizontal_compaction() {
+void TabletUpdatesTest::test_horizontal_compaction(bool use_persistent_index) {
     config::vertical_compaction_max_columns_per_group = 5;
 
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -987,20 +977,19 @@ void TabletUpdatesTest::test_horizontal_compaction() {
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction) {
-    config::enable_persistent_index = false;
-    test_horizontal_compaction();
+    test_horizontal_compaction(false);
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_horizontal_compaction();
+    test_horizontal_compaction(true);
 }
 
-void TabletUpdatesTest::test_vertical_compaction() {
+void TabletUpdatesTest::test_vertical_compaction(bool use_persistent_index) {
     config::vertical_compaction_max_columns_per_group = 1;
 
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     for (int i = 0; i < 100; i++) {
         keys.push_back(i);
@@ -1026,20 +1015,19 @@ void TabletUpdatesTest::test_vertical_compaction() {
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction) {
-    config::enable_persistent_index = false;
-    test_vertical_compaction();
+    test_vertical_compaction(false);
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_vertical_compaction();
+    test_vertical_compaction(true);
 }
 
-void TabletUpdatesTest::test_link_from() {
-    config::enable_persistent_index = true;
+void TabletUpdatesTest::test_link_from(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet2 = create_tablet2(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
+    _tablet2->set_use_persistent_index(use_persistent_index);
     std::vector<int64_t> keys;
     int N = 100;
     for (int i = 0; i < N; i++) {
@@ -1059,18 +1047,17 @@ void TabletUpdatesTest::test_link_from() {
 }
 
 TEST_F(TabletUpdatesTest, link_from) {
-    config::enable_persistent_index = false;
-    test_link_from();
+    test_link_from(false);
 }
 
 TEST_F(TabletUpdatesTest, link_from_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_link_from();
+    test_link_from(true);
 }
 
-void TabletUpdatesTest::test_convert_from() {
+void TabletUpdatesTest::test_convert_from(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
     std::vector<int64_t> keys;
     int N = 100;
@@ -1107,20 +1094,20 @@ void TabletUpdatesTest::test_convert_from() {
 }
 
 TEST_F(TabletUpdatesTest, convert_from) {
-    config::enable_persistent_index = false;
-    test_convert_from();
+    test_convert_from(false);
 }
 
 TEST_F(TabletUpdatesTest, convert_from_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_convert_from();
+    test_convert_from(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_incremental() {
+void TabletUpdatesTest::test_load_snapshot_incremental(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1181,20 +1168,20 @@ void TabletUpdatesTest::test_load_snapshot_incremental() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental();
+    test_load_snapshot_incremental(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_incremental();
+    test_load_snapshot_incremental(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_version() {
+void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_version(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1255,20 +1242,20 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_version) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_ignore_already_committed_version();
+    test_load_snapshot_incremental_ignore_already_committed_version(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_version_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_incremental_ignore_already_committed_version();
+    test_load_snapshot_incremental_ignore_already_committed_version(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id() {
+void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1316,20 +1303,20 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_mismatched_tablet_id();
+    test_load_snapshot_incremental_mismatched_tablet_id(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id_with_persistent_index) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_mismatched_tablet_id();
+    test_load_snapshot_incremental_mismatched_tablet_id(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist() {
+void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1379,20 +1366,20 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_data_file_not_exist();
+    test_load_snapshot_incremental_data_file_not_exist(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist_with_persistent_index) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_data_file_not_exist();
+    test_load_snapshot_incremental_data_file_not_exist(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version() {
+void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1445,20 +1432,20 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_incremental_incorrect_version();
+    test_load_snapshot_incremental_incorrect_version(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_incremental_incorrect_version();
+    test_load_snapshot_incremental_incorrect_version(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_full() {
+void TabletUpdatesTest::test_load_snapshot_full(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1492,20 +1479,20 @@ void TabletUpdatesTest::test_load_snapshot_full() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_full();
+    test_load_snapshot_full(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_full();
+    test_load_snapshot_full(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_full_file_not_exist() {
+void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1562,20 +1549,20 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_full_file_not_exist();
+    test_load_snapshot_full_file_not_exist(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_full_file_not_exist();
+    test_load_snapshot_full_file_not_exist(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id() {
+void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1624,20 +1611,20 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id() {
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
-    config::enable_persistent_index = false;
-    test_load_snapshot_full_mismatched_tablet_id();
+    test_load_snapshot_full_mismatched_tablet_id(false);
 }
 
 TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_load_snapshot_full_mismatched_tablet_id();
+    test_load_snapshot_full_mismatched_tablet_id(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_issue_4193() {
+void TabletUpdatesTest::test_issue_4193(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1675,20 +1662,20 @@ void TabletUpdatesTest::test_issue_4193() {
 }
 
 TEST_F(TabletUpdatesTest, test_issue_4193) {
-    config::enable_persistent_index = false;
-    test_issue_4193();
+    test_issue_4193(false);
 }
 
 TEST_F(TabletUpdatesTest, test_issue_4193_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_issue_4193();
+    test_issue_4193(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_issue_4181() {
+void TabletUpdatesTest::test_issue_4181(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
     auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
+    tablet1->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1728,19 +1715,18 @@ void TabletUpdatesTest::test_issue_4181() {
 }
 
 TEST_F(TabletUpdatesTest, test_issue_4181) {
-    config::enable_persistent_index = false;
-    test_issue_4181();
+    test_issue_4181(false);
 }
 
 TEST_F(TabletUpdatesTest, test_issue_4181_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_issue_4181();
+    test_issue_4181(true);
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_snapshot_with_empty_rowset() {
+void TabletUpdatesTest::test_snapshot_with_empty_rowset(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     auto tablet0 = create_tablet(rand(), rand());
+    tablet0->set_use_persistent_index(use_persistent_index);
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -1789,18 +1775,17 @@ void TabletUpdatesTest::test_snapshot_with_empty_rowset() {
 }
 
 TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
-    config::enable_persistent_index = false;
-    test_snapshot_with_empty_rowset();
+    test_snapshot_with_empty_rowset(false);
 }
 
 TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_snapshot_with_empty_rowset();
+    test_snapshot_with_empty_rowset(true);
 }
 
-void TabletUpdatesTest::test_get_column_values() {
+void TabletUpdatesTest::test_get_column_values(bool use_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
+    _tablet->set_use_persistent_index(use_persistent_index);
     const int N = 8000;
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
@@ -1856,13 +1841,11 @@ void TabletUpdatesTest::test_get_column_values() {
 }
 
 TEST_F(TabletUpdatesTest, get_column_values) {
-    config::enable_persistent_index = false;
-    test_get_column_values();
+    test_get_column_values(false);
 }
 
 TEST_F(TabletUpdatesTest, get_column_values_with_persistent_index) {
-    config::enable_persistent_index = true;
-    test_get_column_values();
+    test_get_column_values(true);
 }
 
 } // namespace starrocks

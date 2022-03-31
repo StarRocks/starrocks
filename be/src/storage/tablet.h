@@ -269,6 +269,12 @@ public:
 
     void reset_compaction(CompactionType type);
 
+    bool use_persistent_index() { return _tablet_meta->use_persistent_index(); }
+
+    void set_use_persistent_index(bool use_persistent_index) {
+        return _tablet_meta->set_use_persistent_index(use_persistent_index);
+    }
+
 protected:
     void on_shutdown() override;
 
