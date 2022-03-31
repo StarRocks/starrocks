@@ -143,23 +143,24 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
 
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
+    const std::string sql_sort_keys = _tnode.sort_node.__isset.sql_sort_keys ? _tnode.sort_node.sql_sort_keys : "";
     if (_limit > 0) {
         // HeapChunkSorter has higher performance when sorting fewer elements,
         // after testing we think 1024 is a good threshold
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            _chunks_sorter = std::make_unique<HeapChunkSorter>(
-                    state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _tnode.sort_node.sql_sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter = std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                               &_is_asc_order, &_is_null_first, sql_sort_keys, _offset,
+                                                               _limit, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
-            _chunks_sorter = std::make_unique<ChunksSorterTopn>(
-                    state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _tnode.sort_node.sql_sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                &_is_asc_order, &_is_null_first, sql_sort_keys, _offset,
+                                                                _limit, SIZE_OF_CHUNK_FOR_TOPN);
         }
 
     } else {
-        _chunks_sorter = std::make_unique<ChunksSorterFullSort>(
-                state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                _tnode.sort_node.sql_sort_keys, SIZE_OF_CHUNK_FOR_FULL_SORT);
+        _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                &_is_asc_order, &_is_null_first, sql_sort_keys,
+                                                                SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
     bool eos = false;
@@ -203,10 +204,11 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+    const std::string sql_sort_keys = _tnode.sort_node.__isset.sql_sort_keys ? _tnode.sort_node.sql_sort_keys : "";
     auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
             context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
-            _tnode.sort_node.sql_sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc,
-            child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
+            sql_sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
+            _row_descriptor, _analytic_partition_exprs);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
 
