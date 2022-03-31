@@ -25,7 +25,6 @@
 namespace starrocks::vectorized {
 
 const int64_t MAX_ERROR_LINES_IN_FILE = 50;
-const size_t MAX_RAW_JSON_LEN = 64;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -77,7 +76,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         RETURN_IF_ERROR(_open_next_reader());
         _cur_file_eof = false;
     }
-    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size, _src_slot_descriptors);
+    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
     if (status.is_end_of_file()) {
         _cur_file_eof = true;
     }
@@ -267,7 +266,8 @@ Status JsonScanner::_open_next_reader() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
-    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode);
+    _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors);
+    RETURN_IF_ERROR(_cur_file_reader->open());
     _next_range++;
     return Status::OK();
 }
@@ -292,19 +292,32 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
 }
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::ScannerCounter* counter,
-                       JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode)
+                       JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode,
+                       const std::vector<SlotDescriptor*>& slot_descs)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
-          _next_line(0),
-          _total_lines(0),
-          _closed(false) {
+          _slot_descs(slot_descs) {
 #if BE_TEST
     raw::RawVector<char> buf(_buf_size);
     std::swap(buf, _buf);
 #endif
+}
+
+Status JsonReader::open() {
+    RETURN_IF_ERROR(_read_and_parse_json());
+    _empty_parser = false;
+
+    if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
+        // Since the iterating order may be different with json field when the json path/root is set,
+        // reorder the column descriptor as json field, when the json path and json root is empty.
+        _reorder_column();
+    }
+
+    _closed = false;
+    return Status::OK();
 }
 
 JsonReader::~JsonReader() {
@@ -345,7 +358,7 @@ Status JsonReader::close() {
  *      value1     10
  *      value2     30
  */
-Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
+Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
     if (_empty_parser) {
         auto st = _read_and_parse_json();
         if (!st.ok()) {
@@ -366,34 +379,33 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+                return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read);
             } else {
-                return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+                return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read);
             }
         } else {
             if (_is_ndjson) {
-                return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, slot_descs);
+                return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read);
             } else {
-                return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read, slot_descs);
+                return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read);
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            return _read_chunk<JsonArrayParser>(chunk, rows_to_read, slot_descs);
+            return _read_chunk<JsonArrayParser>(chunk, rows_to_read);
         } else {
-            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read, slot_descs);
+            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read);
         }
     }
 }
 
 template <typename ParserType>
-Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
+Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read) {
     simdjson::ondemand::object row;
 
     auto parser = down_cast<ParserType*>(_parser.get());
 
-    std::vector<SlotDescriptor*> reordered_slot_descs(slot_descs);
     for (int32_t n = 0; n < rows_to_read; n++) {
         auto st = parser->get_current(&row);
         if (!st.ok()) {
@@ -407,15 +419,7 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read, const std::ve
             return st;
         }
 
-        if (n == 0 && _scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-            // Try to reorder the column according to the column order of first json row.
-            // It is much faster when we access the json field as the json key order.
-            _reorder_column(&reordered_slot_descs, row);
-            // Resetting the row after for-range iterating in _reorder_column.
-            row.reset();
-        }
-
-        st = _construct_row(&row, chunk, reordered_slot_descs);
+        st = _construct_row(&row, chunk, _slot_descs);
         if (!st.ok()) {
             chunk->set_num_rows(n);
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -538,10 +542,10 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
 
 // Try to reorder the slot_descs as the key order in json document.
 // Nothing would be done if got any error.
-void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::object& obj) {
+void JsonReader::_reorder_column() {
     // Build slot_desc_dict.
     std::unordered_map<std::string, SlotDescriptor*> slot_desc_dict;
-    for (const auto& desc : *slot_descs) {
+    for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
             continue;
         }
@@ -549,7 +553,11 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdj
     }
 
     std::vector<SlotDescriptor*> ordered_slot_descs;
-    ordered_slot_descs.reserve(slot_descs->size());
+    ordered_slot_descs.reserve(_slot_descs.size());
+
+    // get the first row of json.
+    simdjson::ondemand::object obj;
+    if (!_parser->get_current(&obj).ok()) return;
 
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
@@ -584,7 +592,7 @@ void JsonReader::_reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdj
         ordered_slot_descs.push_back(kv.second);
     }
 
-    std::swap(ordered_slot_descs, *slot_descs);
+    std::swap(ordered_slot_descs, _slot_descs);
 
     return;
 }
