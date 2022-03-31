@@ -94,6 +94,7 @@ import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -193,6 +194,11 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         profile.addChild(summaryProfile);
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        profile.addChild(plannerProfile);
+        context.getPlannerProfile().build(plannerProfile);
+
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
             coord.endProfile();
@@ -293,7 +299,7 @@ public class StmtExecutor {
 
             // Entrance to the new planner
             if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
-                try {
+                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
                         context.getDumpInfo().reset();
