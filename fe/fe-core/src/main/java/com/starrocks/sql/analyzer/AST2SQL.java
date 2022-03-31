@@ -194,6 +194,9 @@ public class AST2SQL {
                 sqlBuilder.append(" [").append(relation.getJoinHint()).append("]");
             }
             sqlBuilder.append(" ");
+            if (relation.isLateral()) {
+                sqlBuilder.append("LATERAL ");
+            }
             sqlBuilder.append(visit(relation.getRight())).append(" ");
 
             if (relation.getUsingColNames() != null) {
@@ -290,7 +293,10 @@ public class AST2SQL {
 
             sqlBuilder.append(node.getFunctionName());
             sqlBuilder.append("(");
-            sqlBuilder.append(node.getFunctionParams());
+
+            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            sqlBuilder.append(Joiner.on(",").join(childSql));
+
             sqlBuilder.append(")");
             return sqlBuilder.toString();
         }

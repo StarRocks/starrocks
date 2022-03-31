@@ -1538,6 +1538,12 @@ public class ViewPlanTest extends PlanTestBase {
 
         sql = "select array_sum(v3) from tarray";
         testView(sql);
+
+        sql = "select v1,unnest from tarray,unnest(v3)";
+        testView(sql);
+
+        sql = "select * from tarray,unnest(v3)";
+        testView(sql);
     }
 
     @Test

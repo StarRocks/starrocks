@@ -12,7 +12,7 @@ public class JoinRelation extends Relation {
     private Relation right;
     private Expr onPredicate;
     private String joinHint = "";
-    private final boolean lateral;
+    private boolean lateral;
 
     /**
      * usingColNames is created by parser
@@ -66,6 +66,10 @@ public class JoinRelation extends Relation {
 
     public boolean isLateral() {
         return lateral;
+    }
+
+    public void setLateral(boolean lateral) {
+        this.lateral = lateral;
     }
 
     public List<String> getUsingColNames() {

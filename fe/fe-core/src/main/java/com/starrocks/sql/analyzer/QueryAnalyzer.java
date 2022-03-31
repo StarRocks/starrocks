@@ -177,7 +177,11 @@ public class QueryAnalyzer {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
                 join.setLeft(resolveTableRef(join.getLeft(), scope));
-                join.setRight(resolveTableRef(join.getRight(), scope));
+                Relation rightRelation = resolveTableRef(join.getRight(), scope);
+                join.setRight(rightRelation);
+                if (rightRelation instanceof TableFunctionRelation) {
+                    join.setLateral(true);
+                }
                 return join;
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
