@@ -210,7 +210,7 @@ public:
         if constexpr (std::is_same_v<T, uint32_t>) {
             return "binary";
         } else {
-            assert(false);
+            static_assert(false);
         }
     }
 
@@ -290,7 +290,7 @@ public:
             return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
                    _slices.size() >= Column::MAX_CAPACITY_LIMIT;
         } else {
-            assert(false);
+            static_assert(false);
         }
     }
 
