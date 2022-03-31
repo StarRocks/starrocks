@@ -2,8 +2,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <type_traits>
 
 #include "column/array_column.h"
@@ -19,6 +21,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
+#include "udf/udf.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -451,11 +454,24 @@ class DecimalDistinctAggregateFunction
 // now we only support String
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultPT<TYPE_VARCHAR>> {
     DictMergeState() = default;
+
+    bool over_limit = false;
 };
 
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
+    static constexpr int DICT_DECODE_MAX_SIZE = 256;
+    static constexpr int FAKE_DICT_SIZE = DICT_DECODE_MAX_SIZE + 1;
+
+    DictMergeState fake_dict_state(FunctionContext* ctx) const {
+        DictMergeState fake_state;
+        for (int i = 0; i < FAKE_DICT_SIZE; ++i) {
+            fake_state.update(ctx->impl()->mem_pool(), std::to_string(i));
+        }
+        return fake_state;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK(false) << "this method shouldn't be called";
@@ -468,6 +484,11 @@ public:
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->impl()->mem_pool();
 
+        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
+        if (agg_state.over_limit) {
+            return;
+        }
+
         const auto& elements_column = column->elements();
         if (column->elements().is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(elements_column);
@@ -479,30 +500,51 @@ public:
                     mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
                 }
             }
+            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
         } else {
             const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
             for (size_t i = 0; i < binary_column.size(); ++i) {
                 mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
             }
+            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
         }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        auto& agg_state = this->data(state);
+
+        if (agg_state.over_limit) {
+            return;
+        }
+
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
+
         size_t mem_usage = 0;
         mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
                                                              slice.size);
         ctx->impl()->add_mem_usage(mem_usage);
+
+        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto* column = down_cast<BinaryColumn*>(to);
-        size_t old_size = column->get_bytes().size();
-        size_t new_size = old_size + this->data(state).serialize_size();
-        column->get_bytes().resize(new_size);
-        this->data(state).serialize(column->get_bytes().data() + old_size);
-        column->get_offset().emplace_back(new_size);
+        auto& agg_state = this->data(state);
+
+        auto serialize = [=](const DictMergeState& dict_state) {
+            auto* column = down_cast<BinaryColumn*>(to);
+            size_t old_size = column->get_bytes().size();
+            size_t new_size = old_size + dict_state.serialize_size();
+            column->get_bytes().resize(new_size);
+            dict_state.serialize(column->get_bytes().data() + old_size);
+            column->get_offset().emplace_back(new_size);
+        };
+
+        if (agg_state.over_limit) {
+            serialize(fake_dict_state(ctx));
+        } else {
+            serialize(this->data(state));
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -511,47 +553,57 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if (this->data(state).set.size() == 0) {
-            to->append_default();
-            return;
+        auto& agg_state = this->data(state);
+
+        auto finalize = [](const DictMergeState& agg_state, Column* to) {
+            if (agg_state.set.size() == 0) {
+                to->append_default();
+                return;
+            }
+            std::vector<int32_t> dict_ids;
+            dict_ids.resize(agg_state.set.size());
+
+            auto* binary_column = down_cast<BinaryColumn*>(to);
+
+            // set dict_ids as [1...n]
+            for (int i = 0; i < dict_ids.size(); ++i) {
+                dict_ids[i] = i + 1;
+            }
+
+            TGlobalDict tglobal_dict;
+            tglobal_dict.__isset.ids = true;
+            tglobal_dict.ids = std::move(dict_ids);
+            tglobal_dict.__isset.strings = true;
+            tglobal_dict.strings.reserve(dict_ids.size());
+
+            for (const auto& v : agg_state.set) {
+                tglobal_dict.strings.emplace_back(v.data, v.size);
+            }
+
+            // Since the id in global dictionary may be used for sorting,
+            // we also need to ensure that the dictionary is ordered when we build it
+
+            Slice::Comparator comparator;
+            std::sort(tglobal_dict.strings.begin(), tglobal_dict.strings.end(), comparator);
+
+            std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
+
+            size_t old_size = binary_column->get_bytes().size();
+            size_t new_size = old_size + result_value.size();
+
+            auto& data = binary_column->get_bytes();
+            data.resize(old_size + new_size);
+
+            memcpy(data.data() + old_size, result_value.data(), result_value.size());
+
+            binary_column->get_offset().emplace_back(new_size);
+        };
+
+        if (agg_state.over_limit) {
+            finalize(fake_dict_state(ctx), to);
+        } else {
+            finalize(agg_state, to);
         }
-        std::vector<int32_t> dict_ids;
-        dict_ids.resize(this->data(state).set.size());
-
-        auto* binary_column = down_cast<BinaryColumn*>(to);
-
-        // set dict_ids as [1...n]
-        for (int i = 0; i < dict_ids.size(); ++i) {
-            dict_ids[i] = i + 1;
-        }
-
-        TGlobalDict tglobal_dict;
-        tglobal_dict.__isset.ids = true;
-        tglobal_dict.ids = std::move(dict_ids);
-        tglobal_dict.__isset.strings = true;
-        tglobal_dict.strings.reserve(dict_ids.size());
-
-        for (const auto& v : this->data(state).set) {
-            tglobal_dict.strings.emplace_back(v.data, v.size);
-        }
-
-        // Since the id in global dictionary may be used for sorting,
-        // we also need to ensure that the dictionary is ordered when we build it
-
-        Slice::Comparator comparator;
-        std::sort(tglobal_dict.strings.begin(), tglobal_dict.strings.end(), comparator);
-
-        std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
-
-        size_t old_size = binary_column->get_bytes().size();
-        size_t new_size = old_size + result_value.size();
-
-        auto& data = binary_column->get_bytes();
-        data.resize(old_size + new_size);
-
-        memcpy(data.data() + old_size, result_value.data(), result_value.size());
-
-        binary_column->get_offset().emplace_back(new_size);
     }
 
     std::string get_name() const override { return "dict_merge"; }
