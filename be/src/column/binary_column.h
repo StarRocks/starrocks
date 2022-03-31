@@ -207,11 +207,8 @@ public:
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
     std::string get_name() const override {
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            return "binary";
-        } else {
-            static_assert(false);
-        }
+        static_assert(std::is_same_v<T, uint32_t>);
+        return "binary";
     }
 
     Container& get_data() {
@@ -283,15 +280,12 @@ public:
     }
 
     bool reach_capacity_limit() const override {
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            // The size limit of a single element is 2^32.
-            // The size limit of all elements is 2^32.
-            // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
-                   _slices.size() >= Column::MAX_CAPACITY_LIMIT;
-        } else {
-            static_assert(false);
-        }
+        static_assert(std::is_same_v<T, uint32_t>);
+        // The size limit of a single element is 2^32.
+        // The size limit of all elements is 2^32.
+        // The number limit of elements is 2^32.
+        return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT;
     }
 
 private:
