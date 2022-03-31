@@ -547,7 +547,13 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         // Get tablet.
         TTabletId tablet_id = scan_range->tablet_id;
         std::string err;
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+#ifdef  USE_STAROS
+        TabletSharedPtr tablet =
+                StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err, scan_range->shard_id);
+#else
+        TabletSharedPtr tablet =
+                StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+#endif
         if (!tablet) {
             std::stringstream ss;
             SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);

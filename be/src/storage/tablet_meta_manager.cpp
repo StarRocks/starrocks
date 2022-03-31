@@ -433,6 +433,21 @@ Status TabletMetaManager::walk(
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
 }
 
+Status TabletMetaManager::traverse_for_tablet(KVStore* meta,
+                                           std::function<bool(long, long, const std::string&)> const& func,int64_t tabletid) {
+    auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
+      std::string value_str(value);
+      TTabletId tablet_id;
+      TSchemaHash schema_hash;
+      if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
+          LOG(WARNING) << "invalid tablet_meta key:" << key;
+          return true;
+      }
+      return func(tablet_id, schema_hash, value_str);
+    };
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, strings::Substitute("$0$1_", HEADER_PREFIX, tabletid), traverse_header_func);
+}
+
 std::string json_to_string(const rapidjson::Value& val_obj) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);

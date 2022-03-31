@@ -45,6 +45,9 @@ public:
 
     static Status traverse_rowset_metas(
             KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func);
+
+    static Status traverse_rowset_metas_for_tabletuid(
+            KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func,TabletUid tabletuid);
 };
 
 } // namespace starrocks

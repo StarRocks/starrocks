@@ -39,6 +39,7 @@ add_library(Storage STATIC
     null_predicate.cpp
     kv_store.cpp
     olap_common.cpp
+    tablet_meta_cache.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp
