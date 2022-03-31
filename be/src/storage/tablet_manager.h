@@ -40,6 +40,8 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
+#include "storage/tablet_meta_cache.h"
+#include "storage_engine.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -53,12 +55,14 @@ enum TabletDropFlag {
     kKeepMetaAndFiles = 2,
 };
 
+class StorageEngine;
 // TabletManager provides get, add, delete tablet method for storage engine
 // NOTE: If you want to add a method that needs to hold meta-lock before you can call it,
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size, MetaCache_Type type,
+                           starrocks::StorageEngine* storage_engine);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -79,10 +83,11 @@ public:
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
-    TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+    TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr,
+                               int64_t staros_shardid = 0);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
-                               std::string* err = nullptr);
+                               std::string* err = nullptr, int64_t staros_shardid = 0);
 
     // Extract tablet_id and schema_hash from given path.
     //
@@ -150,8 +155,14 @@ private:
     using TabletSet = std::unordered_set<int64_t>;
 
     struct TabletsShard {
+        TabletsShard(MetaCache_Type type) {
+            if (type == MetaCache_Type::METACACHE_LRU) {
+                tablet_cache = std::make_shared<LRUTabletMetaCache>();
+            }
+        }
         mutable std::shared_mutex lock;
-        TabletMap tablet_map;
+        TabletSet id_set;
+        std::shared_ptr<TabletMetaCache> tablet_cache;
         TabletSet tablets_under_clone;
     };
 
@@ -199,6 +210,7 @@ private:
     TabletSharedPtr _create_tablet_meta_and_dir_unlocked(const TCreateTabletReq& request, bool is_schema_change,
                                                          const Tablet* base_tablet,
                                                          const std::vector<DataDir*>& data_dirs);
+    StatusOr<TabletSharedPtr> _load_tablet(int64_t staros_shardid, TTabletId tablet_id);
     Status _create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, bool is_schema_change_tablet,
                                         const Tablet* base_tablet, TabletMetaSharedPtr* tablet_meta);
 
@@ -210,9 +222,7 @@ private:
 
     std::shared_mutex& _get_tablets_shard_lock(TTabletId tabletId);
 
-    TabletMap& _get_tablet_map(TTabletId tablet_id);
-
-    TabletsShard& _get_tablets_shard(TTabletId tabletId);
+    std::shared_ptr<TabletsShard> _get_tablets_shard(TTabletId tabletId);
 
     Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     Status _remove_tablet_directories(const TabletSharedPtr& tablet);
@@ -220,7 +230,8 @@ private:
 
     MemTracker* _mem_tracker = nullptr;
 
-    std::vector<TabletsShard> _tablets_shards;
+    std::vector<std::shared_ptr<TabletsShard>> _tablets_shards;
+
     const int32_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
@@ -238,6 +249,7 @@ private:
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
     // last update time of tablet stat cache
     int64_t _last_update_stat_ms;
+    StorageEngine* _storage_engine;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {
