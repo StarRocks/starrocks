@@ -70,7 +70,7 @@ public:
 
     struct CollectContext {
         SegmentMetaCollecterParams seg_collecter_params;
-        std::vector<SegmentMetaCollecter*> seg_collecters;
+        std::vector<std::unique_ptr<SegmentMetaCollecter>> seg_collecters;
         size_t cursor_idx = 0;
 
         std::vector<int32_t> result_slot_ids;
@@ -79,7 +79,6 @@ public:
 private:
     TabletSharedPtr _tablet;
     Version _version;
-    ObjectPool _obj_pool;
 
     bool _is_init;
     bool _has_more;
