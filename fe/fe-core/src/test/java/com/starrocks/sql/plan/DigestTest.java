@@ -101,4 +101,17 @@ public class DigestTest extends PlanTestBase {
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
         Assert.assertEquals(digest1, digest2);
     }
+
+    @Test
+    public void testWindowSubQuery() throws Exception {
+        String sql1 = "select max(a) from (select ROW_NUMBER() OVER (PARTITION BY l_partkey ORDER BY l_quantity DESC " +
+                "NULLS LAST ) as a from lineitem where L_SHIPDATE BETWEEN DATE'2020-01-01' AND DATE'2020-12-31') t";
+        String sql2 = "select max(a) from (select ROW_NUMBER() OVER (PARTITION BY l_partkey ORDER BY l_quantity DESC " +
+                "NULLS LAST ) as a from lineitem where L_SHIPDATE BETWEEN DATE'2020-10-01' AND DATE'2020-12-31') t";
+
+        String digest1 = UtFrameUtils.getStmtDigest(connectContext, sql1);
+        String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
+
+        Assert.assertEquals(digest1, digest2);
+    }
 }
