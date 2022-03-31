@@ -191,6 +191,8 @@ public class SelectAnalyzer {
 
             } else {
                 String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+                name = name.replace("`", "``");
+
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 

@@ -1,15 +1,21 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class AnalyzeTestUtil {
+
+    private final static AtomicInteger INDEX = new AtomicInteger(0);
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -165,6 +171,31 @@ public class AnalyzeTestUtil {
     }
 
     public static StatementBase analyzeSuccess(String originStmt) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+
+            if (statementBase instanceof QueryStatement) {
+                String viewName = "view" + INDEX.getAndIncrement();
+                String createView = "create view " + DB_NAME + "." + viewName + " as " + originStmt;
+                CreateViewStmt createTableStmt =
+                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                StatementBase viewStatement =
+                        com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                connectContext.getSessionVariable().getSqlMode()).get(0);
+                Analyzer.analyze(viewStatement, connectContext);
+            }
+
+            return statementBase;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Assert.fail();
+            return null;
+        }
+    }
+
+    public static StatementBase analyzeWithoutTestView(String originStmt) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                     connectContext.getSessionVariable().getSqlMode()).get(0);

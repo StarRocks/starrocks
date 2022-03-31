@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
@@ -52,8 +53,8 @@ public class AnalyzeSingleTest {
          *  Test ambiguous reference
          */
         analyzeSuccess("select v1, v1 from t0");
-        analyzeSuccess("select * from (select v1, v1 from t0) a");
-        analyzeSuccess("select * from (select v1 as v, v2 as v from t0) a");
+        analyzeWithoutTestView("select * from (select v1, v1 from t0) a");
+        analyzeWithoutTestView("select * from (select v1 as v, v2 as v from t0) a");
 
         /**
          * Test invalid reference

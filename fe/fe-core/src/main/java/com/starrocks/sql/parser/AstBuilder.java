@@ -1085,7 +1085,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleCase(StarRocksParser.SimpleCaseContext context) {
         return new CaseExpr(
-                (Expr) visit(context.valueExpression()),
+                (Expr) visit(context.caseExpr),
                 visit(context.whenClause(), CaseWhenClause.class),
                 (Expr) visitIfPresent(context.elseExpression));
     }
@@ -1610,6 +1610,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitBackQuotedIdentifier(StarRocksParser.BackQuotedIdentifierContext context) {
         return new Identifier(context.getText().replace("`", ""));
+    }
+
+    @Override
+    public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
+        return new Identifier(context.getText());
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

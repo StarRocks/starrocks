@@ -30,7 +30,7 @@ public class ViewDefBuilder {
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
             if (selectList.isDistinct()) {
-                sqlBuilder.append("DISTINCT");
+                sqlBuilder.append("DISTINCT ");
             }
 
             List<String> selectListString = new ArrayList<>();
@@ -40,8 +40,9 @@ public class ViewDefBuilder {
 
                 if (expr instanceof FieldReference) {
                     Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
-                    selectListString.add(field.getRelationAlias().toSql() + "." + "`" + field.getName() + "`"
-                            + " AS `" + columnName + "`");;
+                    selectListString.add(
+                            (field.getRelationAlias() == null ? "" : field.getRelationAlias().toSql() + ".")
+                                    + "`" + field.getName() + "`" + " AS `" + columnName + "`");
                 } else {
                     selectListString.add(visit(expr) + " AS `" + columnName + "`");
                 }
@@ -62,7 +63,7 @@ public class ViewDefBuilder {
 
             if (stmt.hasGroupByClause()) {
                 sqlBuilder.append(" GROUP BY ");
-                sqlBuilder.append(stmt.getGroupByClause().toSql());
+                sqlBuilder.append(visit(stmt.getGroupByClause()));
             }
 
             if (stmt.hasHavingClause()) {

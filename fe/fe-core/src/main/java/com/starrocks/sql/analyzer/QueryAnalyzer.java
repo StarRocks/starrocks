@@ -294,7 +294,7 @@ public class QueryAnalyzer {
                     throw new SemanticException("Only support lateral join with UDTF");
                 }
 
-                if (!join.getType().isInnerJoin() && !join.getType().isCrossJoin()) {
+                if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
                     throw new SemanticException("Not support lateral join except inner or cross");
                 }
                 rightScope = process(join.getRight(), leftScope);
@@ -342,8 +342,8 @@ public class QueryAnalyzer {
                     throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
                 }
             } else {
-                if (join.getType().isOuterJoin() || join.getType().isSemiAntiJoin()) {
-                    throw new SemanticException(join.getType() + " requires an ON or USING clause.");
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                    throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
 
@@ -351,9 +351,9 @@ public class QueryAnalyzer {
              * New Scope needs to be constructed for select in semi/anti join
              */
             Scope scope;
-            if (join.getType().isLeftSemiAntiJoin()) {
+            if (join.getJoinOp().isLeftSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
-            } else if (join.getType().isRightSemiAntiJoin()) {
+            } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
             } else {
                 scope = new Scope(RelationId.of(join),
@@ -386,20 +386,20 @@ public class QueryAnalyzer {
 
         private void analyzeJoinHints(JoinRelation join) {
             if (join.getJoinHint().equalsIgnoreCase("BROADCAST")) {
-                if (join.getType() == JoinOperator.RIGHT_OUTER_JOIN
-                        || join.getType() == JoinOperator.FULL_OUTER_JOIN
-                        || join.getType() == JoinOperator.RIGHT_SEMI_JOIN
-                        || join.getType() == JoinOperator.RIGHT_ANTI_JOIN) {
-                    throw new SemanticException(join.getType().toString() + " does not support BROADCAST.");
+                if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
+                        || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
+                        || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
+                        || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
+                    throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
             } else if (join.getJoinHint().equalsIgnoreCase("SHUFFLE")) {
-                if (join.getType() == JoinOperator.CROSS_JOIN ||
-                        (join.getType() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
+                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
             } else if ("BUCKET".equalsIgnoreCase(join.getJoinHint()) ||
                     "COLOCATE".equalsIgnoreCase(join.getJoinHint())) {
-                if (join.getType() == JoinOperator.CROSS_JOIN) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
             } else {
