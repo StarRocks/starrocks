@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
+#include "storage/tablet_meta.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
