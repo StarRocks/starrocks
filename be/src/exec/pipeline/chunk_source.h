@@ -45,8 +45,8 @@ public:
     virtual int64_t last_spent_cpu_time_ns() { return 0; }
 
 protected:
-    // The morsel will own by pipeline driver
     RuntimeProfile* _runtime_profile;
+    // The morsel will own by pipeline driver
     MorselPtr _morsel;
 };
 

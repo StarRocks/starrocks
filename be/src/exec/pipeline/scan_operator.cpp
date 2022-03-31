@@ -281,7 +281,7 @@ void ScanOperator::_merge_chunk_source_profiles() {
     std::queue<std::string> parent_queue;
     parent_queue.push(RuntimeProfile::ROOT_COUNTER);
     while (!parent_queue.empty()) {
-        std::string parent_counter_name = parent_queue.front();
+        std::string parent_counter_name = std::move(parent_queue.front());
         parent_queue.pop();
         for (auto& name : child_counter_map[parent_counter_name]) {
             parent_queue.push(name);
