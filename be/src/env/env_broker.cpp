@@ -454,8 +454,16 @@ Status EnvBroker::create_dir_if_missing(const std::string& dirname, bool* create
     return Status::NotSupported("BrokerEnv::create_dir_if_missing");
 }
 
+Status EnvBroker::create_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("BrokerEnv::create_dir_recursive");
+}
+
 Status EnvBroker::delete_dir(const std::string& dirname) {
     return Status::NotSupported("BrokerEnv::delete_dir");
+}
+
+Status EnvBroker::delete_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("EnvBroker::delete_dir_recursive");
 }
 
 Status EnvBroker::sync_dir(const std::string& dirname) {

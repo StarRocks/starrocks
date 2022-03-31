@@ -3,6 +3,7 @@
 #include "env/env_memory.h"
 
 #include <butil/files/file_path.h>
+#include <fmt/format.h>
 
 #include "util/raw_container.h"
 
@@ -322,6 +323,24 @@ public:
         }
     }
 
+    Status create_dir_recursive(const butil::FilePath& dirname) {
+        std::vector<std::string> components;
+        dirname.GetComponents(&components);
+        std::string path;
+        bool created;
+        for (auto&& e : components) {
+            if (path.empty()) {
+                path = e;
+            } else if (path.back() == '/') {
+                path = fmt::format("{}{}", path, e);
+            } else {
+                path = fmt::format("{}/{}", path, e);
+            }
+            RETURN_IF_ERROR(create_dir_if_missing(butil::FilePath(path), &created));
+        }
+        return Status::OK();
+    }
+
     Status delete_dir(const butil::FilePath& dirname) {
         bool empty_dir = true;
         RETURN_IF_ERROR(iterate_dir(dirname, [&](std::string_view) -> bool {
@@ -537,6 +556,12 @@ Status EnvMemory::create_dir_if_missing(const std::string& dirname, bool* create
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->create_dir_if_missing(butil::FilePath(new_path), created);
+}
+
+Status EnvMemory::create_dir_recursive(const std::string& dirname) {
+    std::string new_path;
+    RETURN_IF_ERROR(canonicalize(dirname, &new_path));
+    return _impl->create_dir_recursive(butil::FilePath(new_path));
 }
 
 Status EnvMemory::delete_dir(const std::string& dirname) {

@@ -141,6 +141,10 @@ public:
     // Return OK if it exists, or successful in Creating.
     virtual Status create_dir_if_missing(const std::string& dirname, bool* created = nullptr) = 0;
 
+    // Create directory for every element of 'dirname' that does not already exist.
+    // If 'dirname' already exists, the function does nothing (this condition is not treated as an error).
+    virtual Status create_dir_recursive(const std::string& dirname) = 0;
+
     // Delete the specified directory.
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;

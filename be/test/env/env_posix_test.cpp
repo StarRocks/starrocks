@@ -262,4 +262,24 @@ TEST_F(EnvPosixTest, iterate_dir) {
     ASSERT_TRUE(Env::Default()->path_exists(dir_path).is_not_found());
 }
 
+TEST_F(EnvPosixTest, create_dir_recursive) {
+    const std::string dir_path = "./ut_dir/env_posix/a/b/c/d";
+
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a").status().is_not_found());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b").status().is_not_found());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c").status().is_not_found());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c/d").status().is_not_found());
+
+    ASSERT_OK(Env::Default()->create_dir_recursive(dir_path));
+
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir").value());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a").value());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b").value());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c").value());
+    ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c/d").value());
+
+    ASSERT_OK(Env::Default()->delete_dir_recursive(dir_path));
+    ASSERT_TRUE(Env::Default()->path_exists(dir_path).is_not_found());
+}
+
 } // namespace starrocks
