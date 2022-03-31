@@ -302,6 +302,8 @@ public class AST2SQL {
             return sqlBuilder.toString();
         }
 
+        // ---------------------------------- Expression --------------------------------
+
         @Override
         public String visitExpression(Expr node, Void context) {
             return node.toSql();
@@ -309,11 +311,36 @@ public class AST2SQL {
 
         @Override
         public String visitArithmeticExpr(ArithmeticExpr node, Void context) {
+            StringBuilder stringBuilder = new StringBuilder();
+
             if (node.getChildren().size() == 1) {
-                return node.getOp() + " " + visit(node.getChild(0));
+                stringBuilder.append(node.getOp());
+                if (node.getChild(0) instanceof SlotRef || node.getChild(0) instanceof LiteralExpr) {
+                    stringBuilder.append(visit(node.getChild(0)));
+                } else {
+                    stringBuilder.append("(");
+                    stringBuilder.append(visit(node.getChild(0)));
+                    stringBuilder.append(")");
+                }
             } else {
-                return visit(node.getChild(0)) + " " + node.getOp() + " " + visit(node.getChild(1));
+                if (node.getChild(0) instanceof SlotRef || node.getChild(0) instanceof LiteralExpr) {
+                    stringBuilder.append(visit(node.getChild(0)));
+                } else {
+                    stringBuilder.append("(");
+                    stringBuilder.append(visit(node.getChild(0)));
+                    stringBuilder.append(")");
+                }
+
+                stringBuilder.append(" ").append(node.getOp()).append(" ");
+                if (node.getChild(1) instanceof SlotRef || node.getChild(1) instanceof LiteralExpr) {
+                    stringBuilder.append(visit(node.getChild(1)));
+                } else {
+                    stringBuilder.append("(");
+                    stringBuilder.append(visit(node.getChild(1)));
+                    stringBuilder.append(")");
+                }
             }
+            return stringBuilder.toString();
         }
 
         @Override
@@ -363,13 +390,14 @@ public class AST2SQL {
         @Override
         public String visitBetweenPredicate(BetweenPredicate node, Void context) {
             String notStr = (node.isNotBetween()) ? "NOT " : "";
-            return visit(node.getChild(0)) + " " + notStr + "BETWEEN " +
+            return '(' + visit(node.getChild(0)) + ") " + notStr + "BETWEEN " +
                     visit(node.getChild(1)) + " AND " + visit(node.getChild(2));
         }
 
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
-            return visit(node.getChild(0)) + " " + node.getOp().toString() + " " + visit(node.getChild(1));
+            return "(" + visit(node.getChild(0)) + ") " + node.getOp().toString()
+                    + " (" + visit(node.getChild(1)) + ")";
         }
 
         @Override
@@ -479,7 +507,11 @@ public class AST2SQL {
 
         public String visitLiteral(LiteralExpr node, Void context) {
             if (node instanceof DecimalLiteral) {
-                return ((DecimalLiteral) node).getValue().toString() + "E0";
+                if ((((DecimalLiteral) node).getValue().scale() == 0)) {
+                    return ((DecimalLiteral) node).getValue().toString() + "E0";
+                } else {
+                    return visitExpression(node, context);
+                }
             } else {
                 return visitExpression(node, context);
             }

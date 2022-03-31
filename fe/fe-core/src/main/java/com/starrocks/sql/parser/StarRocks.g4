@@ -252,8 +252,8 @@ expressionOrDefault
 
 expression
     : booleanExpression                                                                   #expressionDefault
-    | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
-    | left=expression operator=AND right=expression                                       #logicalBinary
+    | NOT expression                                                                      #logicalNot
+    | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
@@ -277,49 +277,57 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) valueExpression                    #arithmeticUnary
-    | left = valueExpression operator = (ASTERISK_SYMBOL | SLASH_SYMBOL |
-        PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
+    | left = valueExpression BITXOR right = valueExpression                               #arithmeticBinary
+    | left = valueExpression operator = (
+              ASTERISK_SYMBOL
+            | SLASH_SYMBOL
+            | PERCENT_SYMBOL
+            | INT_DIV
+            | MOD)
       right = valueExpression                                                             #arithmeticBinary
-    | left = valueExpression operator =
-        (PLUS_SYMBOL | MINUS_SYMBOL) right = valueExpression                              #arithmeticBinary
-    | left = valueExpression CONCAT right = valueExpression                               #concat
+    | left = valueExpression operator = (PLUS_SYMBOL | MINUS_SYMBOL)
+        right = valueExpression                                                           #arithmeticBinary
+    | left = valueExpression BITAND right = valueExpression                               #arithmeticBinary
+    | left = valueExpression BITOR right = valueExpression                                #arithmeticBinary
     ;
 
 primaryExpression
-    : NULL                                                                                #nullLiteral
+    : variable                                                                            #var
+    | columnReference                                                                     #columnRef
+    | specialFunctionExpression                                                           #specialFunction
+    | informationFunctionExpression                                                       #informationFunction
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
+    | primaryExpression COLLATE (identifier | string)                                     #collate
+    | NULL                                                                                #nullLiteral
     | interval                                                                            #intervalLiteral
     | DATE string                                                                         #typeConstructor
     | DATETIME string                                                                     #typeConstructor
     | number                                                                              #numericLiteral
     | booleanValue                                                                        #booleanLiteral
     | string                                                                              #stringLiteral
-    | variable                                                                            #var
-    | primaryExpression COLLATE (identifier | string)                                     #collate
-    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=INTEGER_VALUE ']'                                 #arraySubscript
-    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
-    | subquery                                                                            #subqueryExpression
-    | EXISTS '(' query ')'                                                                #exists
-    | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | columnReference                                                                     #columnRef
-    | primaryExpression ARROW string                                                      #arrowExpression
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
-    | '(' expression ')'                                                                  #parenthesizedExpression
+    | aggregationFunction over?                                                           #aggregationFunctionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
-    | informationFunctionExpression                                                       #informationFunction
-    | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
-    | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
+    | left = primaryExpression CONCAT right = primaryExpression                           #concat
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
+    | LOGICAL_NOT primaryExpression                                                       #arithmeticUnary
+    | '(' expression ')'                                                                  #parenthesizedExpression
+    | EXISTS '(' query ')'                                                                #exists
+    | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
+    | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
+    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
+    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
+    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
+    | primaryExpression ARROW string                                                      #arrowExpression
     ;
 
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
-    | COUNT '(' ASTERISK_SYMBOL ')'
+    | COUNT '(' ASTERISK_SYMBOL? ')'
     | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'

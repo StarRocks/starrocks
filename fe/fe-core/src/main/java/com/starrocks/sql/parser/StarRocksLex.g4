@@ -107,12 +107,13 @@ LIKE: 'LIKE';
 LIMIT: 'LIMIT';
 LOCAL: 'LOCAL';
 LOGICAL: 'LOGICAL';
+MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
 MERGE: 'MERGE';
 MIN: 'MIN';
-MAX: 'MAX';
 MINUTE: 'MINUTE';
 MINUS: 'MINUS';
+MOD: 'MOD';
 MONTH: 'MONTH';
 NONE: 'NONE';
 NOT: 'NOT';
@@ -196,18 +197,19 @@ MINUS_SYMBOL: '-';
 ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
+
 LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_AND: '&&';
+LOGICAL_NOT: '!';
 
 INT_DIV: 'DIV';
 BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
-LOGICAL_NOT: '!';
+
 ARROW: '->';
 AT: '@';
-
-
 
 INTEGER_VALUE
     : DIGIT+
@@ -246,7 +248,6 @@ QUOTED_IDENTIFIER
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
-
 
 fragment EXPONENT
     : 'E' [+-]? DIGIT+

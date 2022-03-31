@@ -1107,7 +1107,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitArithmeticUnary(StarRocksParser.ArithmeticUnaryContext context) {
-        Expr child = (Expr) visit(context.valueExpression());
+        Expr child = (Expr) visit(context.primaryExpression());
         switch (context.operator.getType()) {
             case StarRocksLexer.MINUS_SYMBOL:
                 if (child.isLiteral() && child.getType().isNumericType()) {
@@ -1124,6 +1124,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return child;
             case StarRocksLexer.BITNOT:
                 return new ArithmeticExpr(ArithmeticExpr.Operator.BITNOT, child, null);
+            case StarRocksLexer.LOGICAL_NOT:
+                return new CompoundPredicate(CompoundPredicate.Operator.NOT, child, null);
             default:
                 throw new UnsupportedOperationException("Unsupported sign: " + context.operator.getText());
         }

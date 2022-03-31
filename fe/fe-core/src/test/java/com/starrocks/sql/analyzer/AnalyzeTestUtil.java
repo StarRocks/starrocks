@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
@@ -11,12 +10,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 public class AnalyzeTestUtil {
-
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
@@ -177,12 +171,8 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
 
             if (statementBase instanceof QueryStatement) {
-                String viewName = "view" + INDEX.getAndIncrement();
-                String createView = "create view " + DB_NAME + "." + viewName + " as " + originStmt;
-                CreateViewStmt createTableStmt =
-                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
                 StatementBase viewStatement =
-                        com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                        com.starrocks.sql.parser.SqlParser.parse(ViewDefBuilder.build(statementBase),
                                 connectContext.getSessionVariable().getSqlMode()).get(0);
                 Analyzer.analyze(viewStatement, connectContext);
             }
