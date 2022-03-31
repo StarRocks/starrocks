@@ -205,6 +205,11 @@ public class HiveTable extends Table {
                     needRefreshColumn = true;
                     break;
                 }
+                PrimitiveType type = toPrimitiveType(fieldSchema.getType());
+                if (!type.name().equalsIgnoreCase(column.getType().toString())) {
+                    needRefreshColumn = true;
+                    break;
+                }
             }
         }
         if (!needRefreshColumn) {
@@ -227,9 +232,6 @@ public class HiveTable extends Table {
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
             PrimitiveType type = toPrimitiveType(fieldSchema.getType());
-            if (type == null) {
-                throw new DdlException("hive table column type cast failed:" + fieldSchema.getType());
-            }
             Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, true,
                     NULL_DEFAULT_VALUE, fieldSchema.getComment());
             fullSchema.add(column);
@@ -432,7 +434,7 @@ public class HiveTable extends Table {
         }
     }
 
-    private PrimitiveType toPrimitiveType(String hiveType) {
+    private PrimitiveType toPrimitiveType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         switch (typeUpperCase) {
             case "TINYINT":
@@ -465,7 +467,7 @@ public class HiveTable extends Table {
             case "BOOLEAN":
                 return PrimitiveType.BOOLEAN;
             default:
-                return null;
+                throw new DdlException("hive table column type [" + typeUpperCase + "] cast failed.");
         }
     }
 
