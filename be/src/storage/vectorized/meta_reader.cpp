@@ -108,11 +108,10 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
     RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
 
     for (auto& segment : segments) {
-        SegmentMetaCollecter* seg_collecter = new SegmentMetaCollecter(segment);
-        _obj_pool.add(seg_collecter);
+        auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 
         RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
-        _collect_context.seg_collecters.emplace_back(seg_collecter);
+        _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
     }
 
     return Status::OK();
@@ -192,9 +191,6 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
 }
 
 Status MetaReader::open() {
-    for (auto collector : _collect_context.seg_collecters) {
-        RETURN_IF_ERROR(collector->open());
-    }
     return Status::OK();
 }
 
@@ -211,7 +207,9 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
             _has_more = false;
             return Status::OK();
         }
+        RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->open());
         RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->collect(&columns));
+        _collect_context.seg_collecters[_collect_context.cursor_idx].reset();
         remaining--;
         _collect_context.cursor_idx++;
     }
