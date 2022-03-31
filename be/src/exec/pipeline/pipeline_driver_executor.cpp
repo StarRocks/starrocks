@@ -237,14 +237,12 @@ void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx
 
         for (auto* operator_profile : operator_profiles) {
             RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
-
-            operator_profile->remove_childs();
-
             DCHECK(common_metrics != nullptr);
             common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
 
-            common_metrics->reset_parent();
-            operator_profile->add_child(common_metrics, true, nullptr);
+            RuntimeProfile* unique_metrics = operator_profile->get_child("UniqueMetrics");
+            DCHECK(unique_metrics != nullptr);
+            unique_metrics->remove_counters(std::set<std::string>{"ScanTime", "NetworkTime", "WaitTime"});
         }
     }
 }
