@@ -73,7 +73,7 @@ HASH_PARTITIONED: 53: N_NAME, 57: year
 |
 22:Project
 |  <slot 53> : 53: N_NAME
-|  <slot 57> : year(CAST(46: O_ORDERDATE AS DATETIME))
+|  <slot 57> : year(46: O_ORDERDATE)
 |  <slot 58> : 24: L_EXTENDEDPRICE * 1.0 - 25: L_DISCOUNT - 39: PS_SUPPLYCOST * 23: L_QUANTITY
 |
 21:HASH JOIN

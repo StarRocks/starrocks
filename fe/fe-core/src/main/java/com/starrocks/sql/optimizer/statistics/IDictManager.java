@@ -15,7 +15,7 @@ public interface IDictManager {
 
     void removeGlobalDict(long tableId, String columnName);
 
-    void forbitGlobalDict(long tableId);
+    void forbidGlobalDict(long tableId);
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     Optional<ColumnDict> getGlobalDict(long tableId, String columnName);

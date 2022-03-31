@@ -709,8 +709,8 @@ void HdfsScanNode::_init_counter() {
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IoTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 }
