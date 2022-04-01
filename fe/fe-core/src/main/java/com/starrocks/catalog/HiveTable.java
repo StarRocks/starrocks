@@ -101,6 +101,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
+    private HiveMetaStoreTableInfo hmsTableInfo;
+
     public HiveTable() {
         super(TableType.HIVE);
     }
@@ -128,7 +130,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return HiveMetaStoreTableUtils.getPartitionColumns(this.nameToColumn, partColumnNames);
+        return HiveMetaStoreTableUtils.getPartitionColumns(getHmsTableInfo());
     }
 
     public List<String> getPartitionColumnNames() {
@@ -154,45 +156,48 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties;
     }
 
+    public HiveMetaStoreTableInfo getHmsTableInfo() {
+        if (hmsTableInfo == null) {
+            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable, partColumnNames, dataColumnNames, nameToColumn, type);
+        }
+        return hmsTableInfo;
+    }
+
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
-        List<Column> partColumns = getPartitionColumns();
-        return HiveMetaStoreTableUtils.getPartitionKeys(resourceName, hiveDb, hiveTable, partColumns);
+        return HiveMetaStoreTableUtils.getPartitionKeys(getHmsTableInfo());
     }
 
     @Override
     public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitions(resourceName, hiveDb, hiveTable, partitionKeys, false);
+        return HiveMetaStoreTableUtils.getPartitions(hmsTableInfo, partitionKeys);
     }
 
     @Override
     public HiveTableStats getTableStats() throws DdlException {
-        return HiveMetaStoreTableUtils.getTableStats(resourceName, hiveDb, hiveTable);
+        return HiveMetaStoreTableUtils.getTableStats(getHmsTableInfo());
     }
 
     @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
-        return HiveMetaStoreTableUtils.getTableLevelColumnStats(resourceName, hiveDb, hiveTable,
-                this.nameToColumn, columnNames, getPartitionColumns());
+        return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
     }
 
     @Override
     public void refreshTableCache() throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                        new ArrayList<>(nameToColumn.keySet()));
+                .refreshTableCache(getHmsTableInfo());
     }
 
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshPartitionCache(resourceName, hiveDb, hiveTable, partNames);
+                .refreshPartitionCache(getHmsTableInfo(), partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshTableColumnStats(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                        new ArrayList<>(nameToColumn.keySet()));
+                .refreshTableColumnStats(getHmsTableInfo());
     }
 
     /**
@@ -201,8 +206,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
      */
     @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
-        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(resourceName, hiveDb, hiveTable,
-                partitions, getPartitionColumns());
+        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(getHmsTableInfo(), partitions);
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
