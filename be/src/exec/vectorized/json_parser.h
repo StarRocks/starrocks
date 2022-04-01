@@ -127,6 +127,7 @@ public:
     Status advance() noexcept override;
 
 private:
+    Status _advance_2_valid_array() noexcept;
     Status _build_current() noexcept;
 
     std::vector<SimpleJsonPath> _root_paths;

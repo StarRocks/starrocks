@@ -296,12 +296,9 @@ Status ExpandedJsonDocumentStreamParserWithRoot::_build_current() noexcept {
 
 Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::parse(data, len, allocated));
+    RETURN_IF_ERROR(_advance_2_valid_array());
 
-    // until array element is available of end of array.
-    while (_build_current().is_end_of_file()) {
-        RETURN_IF_ERROR(this->JsonArrayParser::advance());
-    }
-    return Status::OK();
+    return _build_current();
 }
 
 Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
@@ -312,53 +309,67 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
 }
 
 Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
-    if (++_array_itr == _array.end()) {
-        RETURN_IF_ERROR(this->JsonArrayParser::advance());
+    _need_reset = false;
+    if (++_array_itr != _array.end()) {
+        return _build_current();
     }
 
-    // until array element is available of end of array.
-    while (_build_current().is_end_of_file()) {
-        RETURN_IF_ERROR(this->JsonArrayParser::advance());
-    }
-    return Status::OK();
+    RETURN_IF_ERROR(this->JsonArrayParser::advance());
+
+    RETURN_IF_ERROR(_advance_2_valid_array());
+    return _build_current();
 }
 
-Status ExpandedJsonArrayParserWithRoot::_build_current() noexcept {
-    RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
+Status ExpandedJsonArrayParserWithRoot::_advance_2_valid_array() noexcept {
+    while (true) {
+        RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
-    simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
+        simdjson::ondemand::value val;
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
 
-    try {
-        if (val.type() != simdjson::ondemand::json_type::array) {
-            auto err_msg = fmt::format(
-                    "the value under json root should be array type with strip_outer_array=true in json array, "
-                    "value: {}",
-                    JsonFunctions::to_json_string(val, kMaxRawJsonLen));
+        try {
+            if (val.type() != simdjson::ondemand::json_type::array) {
+                auto err_msg = fmt::format(
+                        "the value should be array type with strip_outer_array=true in json document stream with root, "
+                        "value: {}",
+                        JsonFunctions::to_json_string(val, kMaxRawJsonLen));
+                return Status::DataQualityError(err_msg);
+            }
+
+            _array = val.get_array();
+
+            if (_array.is_empty()) {
+                continue;
+            }
+
+            _array_itr = _array.begin();
+
+        } catch (simdjson::simdjson_error& e) {
+            auto err_msg =
+                    strings::Substitute("Failed to parse json as expanded document stream with json root. error: $0",
+                                        simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
 
-        _array = val.get_array();
+        return Status::OK();
+    }
+}
 
-        if (_array.is_empty()) {
-            return Status::EndOfFile("empty array");
-        }
-
-        _array_itr = _array.begin();
-
+Status ExpandedJsonArrayParserWithRoot::_build_current() noexcept {
+    try {
         simdjson::ondemand::value val = *_array_itr;
 
         if (val.type() != simdjson::ondemand::json_type::object) {
-            auto err_msg =
-                    fmt::format("the value should be object type in expanded json array with json root, value: {}",
-                                JsonFunctions::to_json_string(val, kMaxRawJsonLen));
+            auto err_msg = fmt::format(
+                    "the value should be object type in expanded json document stream with json root, value: {}",
+                    JsonFunctions::to_json_string(val, kMaxRawJsonLen));
             return Status::DataQualityError(err_msg);
         }
 
         _curr_obj = val.get_object();
 
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = strings::Substitute("Failed to parse json as expanded json array with json root. error: $0",
+        auto err_msg = strings::Substitute("Failed to parse json as expanded document stream with json root. error: $0",
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
