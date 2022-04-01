@@ -59,9 +59,9 @@ Status MysqlResultWriter::init(RuntimeState* state) {
 }
 
 void MysqlResultWriter::_init_profile() {
-    _append_row_batch_timer = ADD_TIMER(_parent_profile, "AppendBatchTime");
-    _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendBatchTime");
-    _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendBatchTime");
+    _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
+    _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
+    _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
@@ -98,7 +98,7 @@ Status MysqlResultWriter::close() {
 }
 
 StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
-    SCOPED_TIMER(_append_row_batch_timer);
+    SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     auto result = std::make_unique<TFetchDataResult>();
     auto& result_rows = result->result_batch.rows;

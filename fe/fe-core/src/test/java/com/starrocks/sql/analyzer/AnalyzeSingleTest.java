@@ -74,8 +74,6 @@ public class AnalyzeSingleTest {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
-
-        analyzeFail("select [1,2,3][1:2]", "Array slice is not currently supported");
     }
 
     @Test

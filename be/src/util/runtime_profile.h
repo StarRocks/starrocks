@@ -309,7 +309,7 @@ public:
     // parent_counter_name.
     // If the counter already exists, the existing counter object is returned.
     Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
-    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ""); }
+    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
@@ -334,6 +334,9 @@ public:
 
     // Copy all but the bucket counters from src profile
     void copy_all_counters_from(RuntimeProfile* src_profile);
+
+    // Remove the counter object with 'name', and it will remove all the child counters recursively
+    void remove_counter(const std::string& name);
 
     // Clean all the counters except saved_counter_names
     void remove_counters(const std::set<std::string>& saved_counter_names);
@@ -458,6 +461,10 @@ public:
     // its children.
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
+
+public:
+    // The root counter name for all top level counters.
+    const static std::string ROOT_COUNTER;
 
 private:
     // vector of (profile, indentation flag)

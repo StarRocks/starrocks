@@ -13,15 +13,18 @@
 #include "runtime/exec_env.h"
 namespace starrocks::pipeline {
 
-using starrocks::workgroup::WorkGroupManager;
-
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
           _scan_node(scan_node),
+          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {}
+          _chunk_sources(MAX_IO_TASKS_PER_OP) {
+    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
+        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
+    }
+}
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -55,6 +58,7 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
+    _merge_chunk_source_profiles();
     do_close(state);
     Operator::close(state);
 }
@@ -241,7 +245,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (maybe_morsel.has_value()) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel));
+        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
@@ -252,6 +256,19 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     }
 
     return Status::OK();
+}
+
+void ScanOperator::_merge_chunk_source_profiles() {
+    std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
+    for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
+        profiles[i] = _chunk_source_profiles[i].get();
+    }
+    RuntimeProfile::merge_isomorphic_profiles(profiles);
+
+    RuntimeProfile* merged_profile = profiles[0];
+
+    _unique_metrics->copy_all_info_strings_from(merged_profile);
+    _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
 // ========== ScanOperatorFactory ==========
@@ -306,5 +323,4 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     }
     return operators;
 }
-
 } // namespace starrocks::pipeline

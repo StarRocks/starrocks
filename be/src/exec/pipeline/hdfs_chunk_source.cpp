@@ -19,13 +19,13 @@
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-HdfsChunkSource::HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::HdfsScanNode* scan_node)
-        : ChunkSource(std::move(morsel)),
+HdfsChunkSource::HdfsChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                                 vectorized::HdfsScanNode* scan_node)
+        : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
-          _runtime_profile(op->unique_metrics()) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
