@@ -357,7 +357,7 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     src_col->append_datum(src_datum);
 
     auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
-    Status st = converter->convert_materialized(src_col, dst_col, f.type().get(), src_tablet_schema.column(0));
+    Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -386,7 +386,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     src_col->append_datum(src_datum);
 
     auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
-    Status st = converter->convert_materialized(src_col, dst_col, f.type().get(), src_tablet_schema.column(0));
+    Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -413,7 +413,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     src_col->append_datum(src_datum);
 
     auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
-    Status st = converter->convert_materialized(src_col, dst_col, f.type().get(), src_tablet_schema.column(0));
+    Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -529,6 +529,117 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1003);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1004);
+}
+
+TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
+    CreateSrcTablet(1101);
+    StorageEngine* engine = StorageEngine::instance();
+    TCreateTabletReq create_tablet_req;
+    SetCreateTabletReq(&create_tablet_req, 1102);
+    AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "v1", TPrimitiveType::BIGINT, false);
+    AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
+    Status res = engine->create_tablet(create_tablet_req);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1101);
+
+    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    for (size_t i = 0; i < 4; ++i) {
+        ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
+        column_mapping->ref_column = i;
+    }
+    _sc_procedure = new (std::nothrow) SchemaChangeDirectly(&chunk_changer);
+    Version version(3, 3);
+    RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
+    ASSERT_TRUE(rowset != nullptr);
+
+    TabletReaderParams read_params;
+    read_params.reader_type = ReaderType::READER_ALTER_TABLE;
+    read_params.skip_aggregation = false;
+    read_params.chunk_size = config::vector_chunk_size;
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    ASSERT_TRUE(tablet_rowset_reader != nullptr);
+    ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
+    ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
+
+    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    writer_context.rowset_id = engine->next_rowset_id();
+    writer_context.tablet_uid = new_tablet->tablet_uid();
+    writer_context.tablet_id = new_tablet->tablet_id();
+    writer_context.tablet_schema_hash = new_tablet->schema_hash();
+    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
+    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.rowset_state = VISIBLE;
+    writer_context.version = Version(3, 3);
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    delete tablet_rowset_reader;
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1101);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1102);
+}
+
+TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
+    CreateSrcTablet(1103);
+    StorageEngine* engine = StorageEngine::instance();
+    TCreateTabletReq create_tablet_req;
+    SetCreateTabletReq(&create_tablet_req, 1104);
+    AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
+    AddColumn(&create_tablet_req, "v1", TPrimitiveType::BIGINT, false);
+    AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
+    Status res = engine->create_tablet(create_tablet_req);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
+                                                                      create_tablet_req.tablet_schema.schema_hash);
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1103);
+
+    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
+    column_mapping->ref_column = 1;
+    column_mapping = chunk_changer.get_mutable_column_mapping(1);
+    column_mapping->ref_column = 0;
+    column_mapping = chunk_changer.get_mutable_column_mapping(2);
+    column_mapping->ref_column = 2;
+    column_mapping = chunk_changer.get_mutable_column_mapping(3);
+    column_mapping->ref_column = 3;
+
+    _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
+            &chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
+    Version version(3, 3);
+    RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
+    ASSERT_TRUE(rowset != nullptr);
+
+    TabletReaderParams read_params;
+    read_params.reader_type = ReaderType::READER_ALTER_TABLE;
+    read_params.skip_aggregation = false;
+    read_params.chunk_size = config::vector_chunk_size;
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    ASSERT_TRUE(tablet_rowset_reader != nullptr);
+    ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
+    ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
+
+    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    writer_context.rowset_id = engine->next_rowset_id();
+    writer_context.tablet_uid = new_tablet->tablet_uid();
+    writer_context.tablet_id = new_tablet->tablet_id();
+    writer_context.tablet_schema_hash = new_tablet->schema_hash();
+    writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
+    writer_context.tablet_schema = &(new_tablet->tablet_schema());
+    writer_context.rowset_state = VISIBLE;
+    writer_context.version = Version(3, 3);
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    delete tablet_rowset_reader;
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1103);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1104);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_json) {
