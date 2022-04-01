@@ -571,8 +571,9 @@ vectorized::ColumnPtr ScalarColumnReader::_create_column(tparquet::Type::type ty
     }
 }
 
+template <typename TOffset, typename TIsNull>
 static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_levels, const level_t* rep_levels,
-                              size_t num_levels, int32_t* offsets, int8_t* is_nulls, size_t* num_offsets) {
+                              size_t num_levels, TOffset* offsets, TIsNull* is_nulls, size_t* num_offsets) {
     size_t offset_pos = 0;
     for (int i = 0; i < num_levels; ++i) {
         // when def_level is less than immediate_repeated_ancestor_def_level, it means that level
@@ -638,20 +639,20 @@ public:
         size_t num_levels = 0;
         _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
 
-        std::vector<int32_t> offsets(num_levels + 1);
-        std::vector<int8_t> is_nulls(num_levels);
+        auto& offsets = array_column->offsets_column()->get_data();
+        offsets.resize(num_levels + 1);
+        vectorized::NullColumn null_column(num_levels);
+        auto& is_nulls = null_column.get_data();
         size_t num_offsets = 0;
-        offsets[0] = 0;
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets);
-        if (num_offsets > 0) {
-            array_column->offsets_column()->append_numbers(&offsets[1], num_offsets);
-        }
+        offsets.resize(num_offsets + 1);
+        is_nulls.resize(num_offsets);
 
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
             DCHECK(nullable_column != nullptr);
-            nullable_column->mutable_null_column()->append_numbers(&is_nulls[0], num_offsets);
+            nullable_column->mutable_null_column()->swap_column(null_column);
         }
 
         return st;
