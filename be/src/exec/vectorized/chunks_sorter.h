@@ -83,6 +83,9 @@ using DataSegments = std::vector<DataSegment>;
 class ChunksSorter {
 public:
     static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
+    static constexpr size_t MAX_BUFFERED_CHUNKS_TOPN = 1024;
+    static constexpr size_t MIN_BUFFERED_CHUNKS_TOPN = 128;
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -91,8 +94,7 @@ public:
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn,
-                 size_t size_of_chunk_batch = 1000);
+                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn);
     virtual ~ChunksSorter();
 
     static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
@@ -143,8 +145,6 @@ protected:
     const bool _is_topn;
 
     size_t _next_output_row = 0;
-
-    const size_t _size_of_chunk_batch;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;
