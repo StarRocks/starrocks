@@ -151,7 +151,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    _conjuncts_manager.get_column_predicates(&parser, &preds);
+    RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(&parser, &preds));
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
