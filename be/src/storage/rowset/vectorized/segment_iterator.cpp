@@ -1228,14 +1228,13 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    _bitmap_index_iterators.reserve(ChunkHelper::max_column_id(_schema) + 1);
     for (const auto& pair : _opts.predicates) {
         const ColumnId cid = pair.first;
         if (!ContainsKey(_bitmap_index_iterators, cid)) {
             ASSIGN_OR_RETURN(std::unique_ptr<BitmapIndexIterator> bitmap_index_iterator,
                              _segment->new_bitmap_index_iterator(cid));
             _bitmap_index_iterators[cid] = std::move(bitmap_index_iterator);
-            _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
+            _has_bitmap_index = true;
         }
     }
     return Status::OK();
