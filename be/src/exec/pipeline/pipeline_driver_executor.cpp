@@ -242,7 +242,7 @@ void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx
 
             RuntimeProfile* unique_metrics = operator_profile->get_child("UniqueMetrics");
             DCHECK(unique_metrics != nullptr);
-            unique_metrics->remove_counters(std::set<std::string>{"ScanTime", "NetworkTime", "WaitTime"});
+            unique_metrics->remove_counters(std::set<std::string>{"ScanTime", "WaitTime"});
         }
     }
 }

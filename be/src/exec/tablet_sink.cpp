@@ -648,11 +648,11 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
     _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
     _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _convert_batch_timer = ADD_TIMER(_profile, "ConvertBatchTime");
+    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _serialize_batch_timer = ADD_TIMER(_profile, "SerializeBatchTime");
+    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
     _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
     _compress_timer = ADD_TIMER(_profile, "CompressTime");
     _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
@@ -910,9 +910,9 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
         COUNTER_SET(_send_data_timer, _send_data_ns);
-        COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
+        COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
-        COUNTER_SET(_serialize_batch_timer, serialize_batch_ns);
+        COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total =
                 _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
@@ -933,7 +933,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
         COUNTER_SET(_send_data_timer, _send_data_ns);
-        COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
+        COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
 
         for (auto& channel : _channels) {
