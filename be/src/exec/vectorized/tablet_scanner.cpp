@@ -90,7 +90,9 @@ Status TabletScanner::close(RuntimeState* state) {
     if (_is_closed) {
         return Status::OK();
     }
-    _prj_iter->close();
+    if (_prj_iter) {
+        _prj_iter->close();
+    }
     update_counter();
     _reader.reset();
     _predicate_free_pool.clear();
@@ -109,11 +111,8 @@ Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
     std::string err;
     _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
-        std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-           << ", reason=" << err;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        auto msg = strings::Substitute("Not found tablet. tablet_id: $0, error: $1", tablet_id, err);
+        RETURN_WITH_WARN(Status::InternalError(msg));
     }
     return Status::OK();
 }
@@ -137,7 +136,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    _parent->_conjuncts_manager.get_column_predicates(&parser, &preds);
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(&parser, &preds));
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -293,6 +292,9 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
 
 void TabletScanner::update_counter() {
     if (_has_update_counter) {
+        return;
+    }
+    if (!_reader) {
         return;
     }
     COUNTER_UPDATE(_parent->_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);

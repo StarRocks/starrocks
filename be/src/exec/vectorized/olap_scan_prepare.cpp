@@ -728,15 +728,17 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
-                                                     std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
+Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
+                                                       std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
     for (auto& f : olap_filters) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+        RETURN_IF(!p, Status::RuntimeError("invalid filter"));
         p->set_index_filter_only(f.is_index_filter_only);
         preds->emplace_back(std::move(p));
     }
     for (auto& f : is_null_vector) {
         std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+        RETURN_IF(!p, Status::RuntimeError("invalid filter"));
         preds->emplace_back(std::move(p));
     }
 
@@ -750,6 +752,7 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
             preds->emplace_back(std::move(p));
         }
     }
+    return Status::OK();
 }
 
 void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
