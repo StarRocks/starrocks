@@ -265,6 +265,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
 
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
+
     val = row.find_field("key3").get_int64();
     ASSERT_EQ(val, 3);
 
