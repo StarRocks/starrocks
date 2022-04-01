@@ -4,13 +4,10 @@
 
 + [StarRocks介绍](/introduction/StarRocks_intro.md)
 + 快速开始
-  + [StarRocks基本概念](/quick_start/Concepts.md)
-  + [StarRocks系统架构](/quick_start/Architecture.md)
+  + [StarRocks基本概念及系统架构](/quick_start/Architecture.md)
   + [StarRocks手动部署](/quick_start/Deploy.md)
-  + [数据流和控制流](/quick_start/Data_flow_and_control_flow.md)
+  + [表创建](/quick_start/Create_table.md)
   + [数据导入和查询](/quick_start/Import_and_query.md)
-  + [测试常见问题](/quick_start/Test_faq.md)
-  + [下一步](/quick_start/Next_step.md)
 + 表设计
   + [理解StarRocks表设计](/table_design/StarRocks_table_design.md)
   + [数据模型介绍](/table_design/Data_model.md)

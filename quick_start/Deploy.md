@@ -1,132 +1,148 @@
 # 手动部署
 
-手动部署可以让用户快速体验StarRocks, 积累StarRocks的系统运维经验.  生产环境部署, 请使用管理平台和自动部署。
+## 环境准备
 
-## 获取二进制产品包
+集群节点需要以下环境支持：
 
-请您联系StarRocks的技术支持或者销售人员获取最新稳定版的StarRocks二进制产品包。
+* Linux (Centos 7+)
+* 推荐 Oracle Java 1.8+
+* CPU 需要支持 AVX2 指令集
+* ulimit -n 配置 65535，启动脚本会自动设置，需要启动的用户有设置 ulimit -n 权限
+* 集群时钟需同步
+* 网络需要万兆网卡和万兆交换机
 
-比如您获得的产品包为starrocks-1.0.0.tar.gz, 解压(tar -xzvf starrocks-1.0.0.tar.gz)后内容如下:
+通过 `cat /proc/cpuinfo |grep avx2` 命令查看节点配置，有结果则 cpu 支持 AVX2 指令集。
+
+测试集群建议节点配置：BE 推荐 16 核 64GB 以上，FE 推荐 8 核 16GB 以上。建议 FE，BE 独立部署。
+
+系统参数配置建议：
+
+关闭交换区，消除交换内存到虚拟内存时对性能的扰动。
+
+```shell
+echo 0 | sudo tee /proc/sys/vm/swappiness
+```
+
+建议使用 Overcommit，把 cat /proc/sys/vm/overcommit_memory 设成  1。
+
+```shell
+echo 1 | sudo tee /proc/sys/vm/overcommit_memory
+```
+
+## 下载 StarRocks
+
+可以通过 [StarRocks 官网下载](https://www.starrocks.com/zh-CN/download) 获取二进制产品包。
+
+下载的安装包可直接解压后进行安装部署，如有 [下载源码](https://github.com/StarRocks/starrocks) 并编译安装包的需求，可以使用 [Docker 进行编译](../administration/Build_in_docker.md)。
+
+将 StarRocks 的二进制产品包分发到目标主机的部署路径并解压，可以考虑使用新建的 StarRocks 用户来管理。
+
+以下载产品包为 starrocks-1.0.0.tar.gz 为例， 解压(tar -xzvf starrocks-1.0.0.tar.gz)后文件目录结构如下:
 
 ```Plain Text
 StarRocks-XX-1.0.0
 ├── be  # BE目录
 │   ├── bin
-│   │   ├── start_be.sh # BE启动命令
-│   │   └── stop_be.sh  # BE关闭命令
+│   │   ├── start_be.sh     # BE启动脚本
+│   │   └── stop_be.sh      # BE关闭脚本
 │   ├── conf
-│   │   └── be.conf     # BE配置文件
+│   │   └── be.conf         # BE配置文件
 │   ├── lib
-│   │   ├── starrocks_be  # BE可执行文件
+│   │   ├── starrocks_be    # BE可执行文件
 │   │   └── meta_tool
 │   └── www
 ├── fe  # FE目录
 │   ├── bin
-│   │   ├── start_fe.sh # FE启动命令
-│   │   └── stop_fe.sh  # FE关闭命令
+│   │   ├── start_fe.sh       # FE启动脚本
+│   │   └── stop_fe.sh        # FE关闭脚本
 │   ├── conf
-│   │   └── fe.conf     # FE配置文件
+│   │   └── fe.conf           # FE配置文件
 │   ├── lib
 │   │   ├── starrocks-fe.jar  # FE jar包
-│   │   └── *.jar           # FE 依赖的jar包
+│   │   └── *.jar             # FE 依赖的jar包
 │   └── webroot
 └── udf
 ```
 
-## 环境准备
+## 部署 FE
 
-准备三台物理机, 需要以下环境支持：
+### FE 的基本配置
 
-* Linux (Centos 7+)
-* Java 1.8+
+FE 的配置文件为 StarRocks-XX-1.0.0/fe/conf/fe.conf， 此处仅列出其中 JVM 配置和元数据目录配置，生产环境可参考 [FE 参数配置](../administration/Configuration.md#FE配置项) 对集群进行详细优化配置。
 
-CPU需要支持AVX2指令集，cat /proc/cpuinfo |grep avx2有结果输出表明CPU支持，如果没有支持，建议更换机器，StarRocks使用向量化技术需要一定的指令集支持才能发挥效果。
-
-将StarRocks的二进制产品包分发到目标主机的部署路径并解压，可以考虑使用新建的StarRocks用户来管理。
-
-## 部署FE
-
-### FE的基本配置
-
-FE的配置文件为StarRocks-XX-1.0.0/fe/conf/fe.conf, 默认配置已经足以启动集群, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置，为了让用户更好的理解集群的工作原理, 此处只列出基础配置。
-
-### FE单实例部署
+### FE 单实例部署
 
 ```bash
 cd StarRocks-XX-1.0.0/fe
 ```
 
-第一步: 定制配置文件conf/fe.conf：
+第一步: 配置文件 conf/fe.conf：
 
 ```bash
-JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log"
+# 元数据目录
+meta_dir = ${STARROCKS_HOME}/meta
+# JVM配置
+JAVA_OPTS = "-Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log"
 ```
 
-可以根据FE内存大小调整 -Xmx4096m，为了避免GC建议16G以上，StarRocks的元数据都在内存中保存。
+可以根据 FE 内存大小调整-Xmx8192m，为了避免 GC 建议 16G 以上，StarRocks 的元数据都在内存中保存。
 <br/>
 
-第二步: 创建元数据目录:
+第二步: 创建元数据目录，需要与 fe.conf 中配置路径保持一致:
 
 ```bash
-mkdir -p meta (1.19.x及以前的版本需要使用mkdir -p doris-meta)
+mkdir -p meta 
 ```
 
-<br/>
-
-第三步: 启动FE进程:
+第三步: 启动 FE 进程:
 
 ```bash
 bin/start_fe.sh --daemon
 ```
 
-<br/>
+第四步: 确认启动 FE 启动成功。
 
-第四步: 确认启动FE启动成功。
-
-* 查看日志log/fe.log确认。
+* 查看日志 log/fe.log 确认。
 
 ```Plain Text
 2020-03-16 20:32:14,686 INFO 1 [FeServer.start():46] thrift server started.
-
 2020-03-16 20:32:14,696 INFO 1 [NMysqlServer.start():71] Open mysql server success on 9030
-
 2020-03-16 20:32:14,696 INFO 1 [QeService.start():60] QE service start.
-
 2020-03-16 20:32:14,825 INFO 76 [HttpServer$HttpServerThread.run():210] HttpServer started with port 8030
-
 ...
 ```
 
-* 如果FE启动失败，可能是由于端口号被占用，修改配置文件conf/fe.conf中的端口号http_port。
-* 使用jps命令查看java进程确认"StarRocksFe"存在。
-* 使用浏览器访问8030端口, 打开StarRocks的WebUI, 用户名为root, 密码为空。
+* 如果 FE 启动失败，可能是由于端口号被占用，可修改配置文件 conf/fe.conf 中的端口号 http_port。
+* 使用 jps 命令查看 java 进程确认 "StarRocksFe" 存在。
+* 使用浏览器访问 `FE ip:http_port`（默认8030），打开 StarRocks 的 WebUI， 用户名为 root， 密码为空。
 
-### 使用MySQL客户端访问FE
+### 使用 MySQL 客户端访问 FE
 
-第一步: 安装mysql客户端(如果已经安装，可忽略此步)：
+StarRocks 可通过 [Mysql 客户端进行连接](#%E4%BD%BF%E7%94%A8mysql%E5%AE%A2%E6%88%B7%E7%AB%AF%E8%AE%BF%E9%97%AEstarrocks)，使用 Add/Drop 命令添加/删除 fe/be 节点，实现对集群的 [扩容/缩容](../administration/Scale_up_down.md) 操作。
 
+第一步: 安装 mysql 客户端，版本建议 5.5+(如果已经安装，可忽略此步)：
+
+```shell
 Ubuntu：sudo apt-get install mysql-client
-
 Centos：sudo yum install mysql-client
-<br/>
+```
 
-第二步: 使用mysql客户端连接：
+第二步: FE 进程启动后，使用 mysql 客户端连接 FE 实例：
 
 ```sql
 mysql -h 127.0.0.1 -P9030 -uroot
 ```
 
-注意：这里默认root用户密码为空，端口为fe/conf/fe.conf中的query\_port配置项，默认为9030
-<br/>
+注意：这里默认 root 用户密码为空，端口为 fe/conf/fe.conf 中的 query\_port 配置项，默认为 9030
 
-第三步: 查看FE状态：
+第三步: 查看 FE 状态：
 
 ```Plain Text
 mysql> SHOW PROC '/frontends'\G
 
 ************************* 1. row ************************
-             Name: 172.16.139.24_9010_1594200991015
-               IP: 172.16.139.24
+             Name: 172.16.139.11_9010_1594200991015
+               IP: 172.16.139.11
          HostName: starrocks-sandbox01
       EditLogPort: 9010
          HttpPort: 8030
@@ -144,165 +160,55 @@ ReplayedJournalId: 64
 1 row in set (0.03 sec)
 ```
 
+**Role** 为 **FOLLOWER** 说明这是一个能参与选主的 FE；
+
+**IsMaster** 为 **true**，说明该 FE 当前为主节点。
+
+如果 MySQL 客户端连接不成功，请查看 log/fe.warn.log 日志文件，确认问题。由于是初次启动，如果在操作过程中遇到任何意外问题，都可以删除并重新创建 FE 的元数据目录，再从头开始操作。
 <br/>
 
-Role为FOLLOWER说明这是一个能参与选主的FE；IsMaster为true，说明该FE当前为主节点。
-<br/>
+## 部署 BE
 
-如果MySQL客户端连接不成功，请查看log/fe.warn.log日志文件，确认问题。由于是初次启动，如果在操作过程中遇到任何意外问题，都可以删除并重新创建FE的元数据目录，再从头开始操作。
-<br/>
+### BE 的基本配置
 
-### FE的高可用集群部署
+BE 的配置文件为 StarRocks-XX-1.0.0/be/conf/be.conf，默认配置即可启动集群，生产环境可参考 [BE 参数配置](../administration/Configuration.md#be-%E9%85%8D%E7%BD%AE%E9%A1%B9) 对集群进行详细优化配置。
 
-FE的高可用集群采用主从复制架构, 可避免FE单点故障. FE采用了类raft的bdbje协议完成选主, 日志复制和故障切换. 在FE集群中, 多实例分为两种角色: follower和observer; 前者为复制协议的可投票成员, 参与选主和提交日志, 一般数量为奇数(2n+1), 使用多数派(n+1)确认, 可容忍少数派(n)故障; 而后者属于非投票成员, 用于异步订阅复制日志, observer的状态落后于follower, 类似其他复制协议中的learner角色。
-<br/>
+### BE 部署
 
-FE集群从follower中自动选出master节点, 所有更改状态操作都由master节点执行, 从FE的master节点可以读到最新的状态. 更改操作可以从非master节点发起, 继而转发给master节点执行,  非master节点记录最近一次更改操作在复制日志中的LSN, 读操作可以直接在非master节点上执行, 但需要等待非master节点的状态已经同步到最近一次更改操作的LSN, 因此读写非Master节点满足顺序一致性. Observer节点能够增加FE集群的读负载能力, 时效性要求放宽的非紧要用户可以读observer节点。
-<br/>
+通过以下命令启动 be 并添加 be 到 StarRocks 集群， 一般至少在三个节点部署 3 个 BE 实例， 每个实例的添加步骤相同。
 
-FE节点之间的时钟相差不能超过5s, 使用NTP协议校准时间。
-
-一台机器上只可以部署单个FE节点。所有FE节点的http\_port需要相同。
-<br/>
-
-集群部署按照下列步骤逐个增加FE实例。
-
-第一步: 分发二进制和配置文件, 配置文件和单实例情形相同。
-<br/>
-
-第二步: 使用MySQL客户端连接已有的FE,  添加新实例的信息，信息包括角色、ip、port：
-
-```sql
-mysql> ALTER SYSTEM ADD FOLLOWER "host:port";
-```
-
-或
-
-```sql
-mysql> ALTER SYSTEM ADD OBSERVER "host:port";
-```
-
-host为机器的IP，如果机器存在多个IP，需要选取priority\_networks里的IP，例如priority\_networks=192.168.1.0/24 可以设置使用192.168.1.x 这个子网进行通信。port为edit\_log\_port，默认为9010。
-
-> StarRocks的FE和BE因为安全考虑都只会监听一个IP来进行通信，如果一台机器有多块网卡，可能StarRocks无法自动找到正确的IP，例如 ifconfig 命令能看到  eth0 ip为 192.168.1.1, docker0:  172.17.0.1 ，我们可以设置 192.168.1.0/24 这一个子网来指定使用eth0作为通信的IP，这里采用是[CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)的表示方法来指定IP所在子网范围，这样可以在所有的BE，FE上使用相同的配置。
-> priority\_networks 是 FE 和 BE 相同的配置项，写在 fe.conf 和 be.conf 中。该配置项用于在 FE 或 BE 启动时，告诉进程应该绑定哪个IP。示例如下：
-> `priority_networks=10.1.3.0/24`
-
-如出现错误，需要删除FE，应用下列命令：
-
-```sql
-alter system drop follower "fe_host:edit_log_port";
-alter system drop observer "fe_host:edit_log_port";
-```
-
-具体参考[扩容缩容](../administration/Scale_up_down.md)。
-<br/>
-
-第三步: FE节点之间需要两两互联才能完成复制协议选主, 投票，日志提交和复制等功能。 FE节点首次启动时，需要指定现有集群中的一个节点作为helper节点, 从该节点获得集群的所有FE节点的配置信息，才能建立通信连接，因此首次启动需要指定--helper参数：
+第一步: 创建数据目录（当前设置为 be.conf 中默认 storage_root_path 配置项路径）：
 
 ```shell
-./bin/start_fe.sh --helper host:port --daemon
-```
-
-host为helper节点的IP，如果有多个IP，需要选取priority\_networks里的IP。port为edit\_log\_port，默认为9010。
-
-当FE再次启动时，无须指定--helper参数，因为FE已经将其他FE的配置信息存储于本地目录, 因此可直接启动：
-
-```shell
-./bin/start_fe.sh --daemon
-```
-
-<br/>
-
-第四步: 查看集群状态, 确认部署成功：
-
-```Plain Text
-mysql> SHOW PROC '/frontends'\G
-
-********************* 1. row **********************
-    Name: 172.26.108.172_9010_1584965098874
-      IP: 172.26.108.172
-HostName: starrocks-sandbox01
-......
-    Role: FOLLOWER
-IsMaster: true
-......
-   Alive: true
-......
-********************* 2. row **********************
-    Name: 172.26.108.174_9010_1584965098874
-      IP: 172.26.108.174
-HostName: starrocks-sandbox02
-......
-    Role: FOLLOWER
-IsMaster: false
-......
-   Alive: true
-......
-********************* 3. row **********************
-    Name: 172.26.108.175_9010_1584965098874
-      IP: 172.26.108.175
-HostName: starrocks-sandbox03
-......
-    Role: FOLLOWER
-IsMaster: false
-......
-   Alive: true
-......
-3 rows in set (0.05 sec)
-```
-
-节点的Alive显示为true则说明添加节点成功。以上例子中，
-
-172.26.108.172\_9010\_1584965098874 为主FE节点。
-
-## 部署BE
-
-### BE的基本配置
-
-BE的配置文件为StarRocks-XX-1.0.0/be/conf/be.conf, 默认配置已经足以启动集群, 不建议初尝用户修改配置, 有经验的用户可以查看手册的系统配置章节, 为生产环境定制配置. 为了让用户更好的理解集群的工作原理, 此处只列出基础配置。
-
-### BE部署
-
-用户可使用下面命令添加BE到StarRocks集群, 一般至少部署3个BE实例, 每个实例的添加步骤相同。
-
-```shell
+# 进入be的安装目录
 cd StarRocks-XX-1.0.0/be
-```
-
-第一步: 创建数据目录：
-
-```shell
+# 创建数据存储目录
 mkdir -p storage
 ```
 
-<br/>
+第二步: 通过 mysql 客户端添加 BE 节点：
 
-第二步: 通过mysql客户端添加BE节点：
+* host 为与 priority_networks 设置相匹配的 IP，port 为 BE 配置文件中的 heartbeat_service_port，默认为 9050。
 
 ```sql
 mysql> ALTER SYSTEM ADD BACKEND "host:port";
 ```
 
-这里host为与priority_networks设置相匹配的IP，port为BE配置文件中的heartbeat_service_port，默认为9050。
-<br/>
+如出现错误，需要删除 BE 节点，可通过以下命令将 BE 节点从集群移除，host 和 port 与添加时一致：
 
-如出现错误，需要删除BE节点，应用下列命令：
+```sql
+mysql> ALTER SYSTEM decommission BACKEND "host:port";
+```
 
-* `alter system decommission backend "be_host:be_heartbeat_service_port";`
+具体参考 [扩容缩容](../administration/Scale_up_down.md#be%E6%89%A9%E7%BC%A9%E5%AE%B9)。
 
-具体参考[扩容缩容](../administration/Scale_up_down.md)。
-<br/>
-
-第三步: 启动BE：
+第三步: 启动 BE：
 
 ```shell
 bin/start_be.sh --daemon
 ```
 
-<br/>
-
-第四步: 查看BE状态, 确认BE就绪:
+第四步: 查看 BE 状态, 确认 BE 就绪:
 
 ```Plain Text
 mysql> SHOW PROC '/backends'\G
@@ -310,7 +216,7 @@ mysql> SHOW PROC '/backends'\G
 ********************* 1. row **********************
             BackendId: 10002
               Cluster: default_cluster
-                   IP: 172.16.139.24
+                   IP: 172.16.139.11
              HostName: starrocks-sandbox01
         HeartbeatPort: 9050
                BePort: 9060
@@ -334,54 +240,49 @@ ClusterDecommissioned: false
 
 <br/>
 
-如果isAlive为true，则说明BE正常接入集群。如果BE没有正常接入集群，请查看log目录下的be.WARNING日志文件确定原因。
-<br/>
+如果 isAlive 为 true，则说明 BE 正常接入集群。如果 BE 没有正常接入集群，请查看 log 目录下的 be.WARNING 日志文件确定原因。
 
-如果日志中出现类似以下的信息，说明priority\_networks的配置存在问题。
+如果日志中出现类似以下的信息，说明 priority_networks 的配置存在问题。
 
 ```Plain Text
-W0708 17:16:27.308156 11473 heartbeat\_server.cpp:82\] backend ip saved in master does not equal to backend local ip127.0.0.1 vs. 172.16.179.26
+W0708 17:16:27.308156 11473 heartbeat_server.cpp:82\] backend ip saved in master does not equal to backend local ip127.0.0.1 vs. 172.16.179.26
 ```
 
-<br/>
-
-此时需要，先用以下命令drop掉原来加进去的be，然后重新以正确的IP添加BE。
+此时需要，先用以下命令 drop 掉原来加进去的 be，然后重新以正确的 IP 添加 BE。
 
 ```sql
-mysql> ALTER SYSTEM DROPP BACKEND "172.16.139.24:9050";
+MySQL> ALTER SYSTEM DROPP BACKEND "172.16.139.11:9050";
 ```
 
-<br/>
+由于是初次启动，如果在操作过程中遇到任何意外问题，都可以删除并重新创建 storage 目录，再从头开始操作。
 
-由于是初次启动，如果在操作过程中遇到任何意外问题，都可以删除并重新创建storage目录，再从头开始操作。
+## 部署 Broker
 
-## 部署Broker
+配置文件为 apache_hdfs_broker/conf/apache_hdfs_broker.conf
 
-配置文件为apache\_hdfs\_broker/conf/apache\_hdfs\_broker.conf
+> 注意：Broker 没有也不需要 priority_networks 参数，Broker 的服务默认绑定在 0.0.0.0 上，只需要在 ADD BROKER 时，填写正确可访问的 Broker IP 即可。
 
-> 注意：Broker没有也不需要priority\_networks参数，Broker的服务默认绑定在0.0.0.0上，只需要在ADD BROKER时，填写正确可访问的Broker IP即可。
+如果有特殊的 hdfs 配置，复制线上的 hdfs-site.xml 到 conf 目录下
 
-如果有特殊的hdfs配置，复制线上的hdfs-site.xml到conf目录下
-
-启动：
+启动 broker：
 
 ```shell
 ./apache_hdfs_broker/bin/start_broker.sh --daemon
 ```
 
-添加broker节点到集群中：
+添加 broker 节点到集群中：
 
 ```sql
-MySQL> ALTER SYSTEM ADD BROKER broker1 "172.16.139.24:8000";
+MySQL> ALTER SYSTEM ADD BROKER broker1 "172.16.139.11:8000";
 ```
 
-查看broker状态：
+查看 broker 状态：
 
 ```plain text
 MySQL> SHOW PROC "/brokers"\G
 *************************** 1. row ***************************
           Name: broker1
-            IP: 172.16.139.24
+            IP: 172.16.139.11
           Port: 8000
          Alive: true
  LastStartTime: 2020-04-01 19:08:35
@@ -390,242 +291,16 @@ LastUpdateTime: 2020-04-01 19:08:45
 1 row in set (0.00 sec)
 ```
 
-Alive为true代表状态正常。
+Alive 为 true 代表状态正常。
 
-## 参数设置
+</br>
 
-* **Swappiness**
+## 扩展内容
 
-关闭交换区，消除交换内存到虚拟内存时对性能的扰动。
+### FE 的高可用集群部署
 
-```shell
-echo 0 | sudo tee /proc/sys/vm/swappiness
-```
+StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md#FE高可用部署)。
 
-* **Compaction相关**
+### 集群升级
 
-当使用聚合表或更新模型，导入数据比较快的时候，可在配置文件 `be.conf` 中修改下列参数以加速compaction。
-
-```shell
-cumulative_compaction_num_threads_per_disk = 4
-base_compaction_num_threads_per_disk = 2
-cumulative_compaction_check_interval_seconds = 2
-```
-
-* **并行度**
-
-在客户端执行命令，修改StarRocks的并行度(类似clickhouse set max_threads= 8)。并行度可以设置为当前机器CPU核数的一半。
-
-```sql
-set global parallel_fragment_exec_instance_num =  8;
-```
-
-## 使用MySQL客户端访问StarRocks
-
-### Root用户登录
-
-使用MySQL客户端连接某一个FE实例的query_port(9030), StarRocks内置root用户，密码默认为空：
-
-```shell
-mysql -h fe_host -P9030 -u root
-```
-
-<br/>
-
-清理环境：
-
-```sql
-mysql > drop database if exists example_db;
-
-mysql > drop user test;
-```
-
-### 创建新用户
-
-通过下面的命令创建一个普通用户：
-
-```sql
-mysql > create user 'test' identified by '123456';
-```
-
-### 创建数据库
-
-StarRocks中root账户才有权建立数据库，使用root用户登录，建立example\_db数据库:
-
-```sql
-mysql > create database example_db;
-```
-
-  <br/>
-
-数据库创建完成之后，可以通过show databases查看数据库信息：
-
-```Plain Text
-mysql > show databases;
-
-+--------------------+
-| Database           |
-+--------------------+
-| example_db         |
-| information_schema |
-+--------------------+
-2 rows in set (0.00 sec)
-```
-
-information_schema是为了兼容mysql协议而存在，实际中信息可能不是很准确，所以关于具体数据库的信息建议通过直接查询相应数据库而获得。
-
-### 账户授权
-
-example_db创建完成之后，可以通过root账户example_db读写权限授权给test账户，授权之后采用test账户登录就可以操作example\_db数据库了：
-
-```sql
-mysql > grant all on example_db to test;
-```
-
-<br/>
-
-退出root账户，使用test登录StarRocks集群：
-
-```sql
-mysql > exit
-
-mysql -h 127.0.0.1 -P9030 -utest -p123456
-```
-
-### 建表
-
-StarRocks支持支持单分区和复合分区两种建表方式。
-
-<br/>
-
-在复合分区中：
-
-* 第一级称为Partition，即分区。用户可以指定某一维度列作为分区列（当前只支持整型和时间类型的列），并指定每个分区的取值范围。
-* 第二级称为Distribution，即分桶。用户可以指定某几个维度列（或不指定，即所有KEY列）以及桶数对数据进行HASH分布。
-
-以下场景推荐使用复合分区：
-
-* 有时间维度或类似带有有序值的维度：可以以这类维度列作为分区列。分区粒度可以根据导入频次、分区数据量等进行评估。
-* 历史数据删除需求：如有删除历史数据的需求（比如仅保留最近N 天的数据）。使用复合分区，可以通过删除历史分区来达到目的。也可以通过在指定分区内发送DELETE语句进行数据删除。
-* 解决数据倾斜问题：每个分区可以单独指定分桶数量。如按天分区，当每天的数据量差异很大时，可以通过指定分区的分桶数，合理划分不同分区的数据,分桶列建议选择区分度大的列。
-
-用户也可以不使用复合分区，即使用单分区。则数据只做HASH分布。
-
-<br/>  
-
-下面分别演示两种分区的建表语句：
-
-1. 首先切换数据库：mysql > use example_db;
-2. 建立单分区表建立一个名字为table1的逻辑表。使用全hash分桶，分桶列为siteid，桶数为10。这个表的schema如下：
-
-* siteid：类型是INT（4字节）, 默认值为10
-* city_code：类型是SMALLINT（2字节）
-* username：类型是VARCHAR, 最大长度为32, 默认值为空字符串
-* pv：类型是BIGINT（8字节）, 默认值是0; 这是一个指标列, StarRocks内部会对指标列做聚合操作, 这个列的聚合方法是求和（SUM）。这里采用了聚合模型，除此之外StarRocks还支持明细模型和更新模型，具体参考[数据模型介绍](../table_design/Data_model.md)。
-
-建表语句如下:
-
-```sql
-mysql >
-CREATE TABLE table1
-(
-    siteid INT DEFAULT '10',
-    citycode SMALLINT,
-    username VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(siteid, citycode, username)
-DISTRIBUTED BY HASH(siteid) BUCKETS 10
-PROPERTIES("replication_num" = "1");
-```
-
-1. 建立复合分区表
-
-建立一个名字为table2的逻辑表。这个表的 schema 如下：
-
-* event_day：类型是DATE，无默认值
-* siteid：类型是INT（4字节）, 默认值为10
-* city_code：类型是SMALLINT（2字节）
-* username：类型是VARCHAR, 最大长度为32, 默认值为空字符串
-* pv：类型是BIGINT（8字节）, 默认值是0; 这是一个指标列, StarRocks 内部会对指标列做聚合操作, 这个列的聚合方法是求和（SUM）
-
-我们使用event_day列作为分区列，建立3个分区: p1, p2, p3
-
-* p1：范围为 \[最小值, 2017-06-30)
-* p2：范围为 \[2017-06-30, 2017-07-31)
-* p3：范围为 \[2017-07-31, 2017-08-31)
-
-每个分区使用siteid进行哈希分桶，桶数为10。
-
-<br/>  
-
-建表语句如下:
-
-```sql
-CREATE TABLE table2
-(
-event_day DATE,
-siteid INT DEFAULT '10',
-citycode SMALLINT,
-username VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(event_day, siteid, citycode, username)
-PARTITION BY RANGE(event_day)
-(
-PARTITION p1 VALUES LESS THAN ('2017-06-30'),
-PARTITION p2 VALUES LESS THAN ('2017-07-31'),
-PARTITION p3 VALUES LESS THAN ('2017-08-31')
-)
-DISTRIBUTED BY HASH(siteid) BUCKETS 10
-PROPERTIES("replication_num" = "1");
-```
-
-  <br/>
-
-表建完之后，可以查看example\_db中表的信息:
-
-```Plain Text
-mysql> show tables;
-
-+-------------------------+
-| Tables_in_example_db    |
-+-------------------------+
-| table1                  |
-| table2                  |
-+-------------------------+
-2 rows in set (0.01 sec)
-
-  <br/>
-
-mysql> desc table1;
-
-+----------+-------------+------+-------+---------+-------+
-| Field    | Type        | Null | Key   | Default | Extra |
-+----------+-------------+------+-------+---------+-------+
-| siteid   | int(11)     | Yes  | true  | 10      |       |
-| citycode | smallint(6) | Yes  | true  | N/A     |       |
-| username | varchar(32) | Yes  | true  |         |       |
-| pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+----------+-------------+------+-------+---------+-------+
-4 rows in set (0.00 sec)
-
-  <br/>
-
-mysql> desc table2;
-
-+-----------+-------------+------+-------+---------+-------+
-| Field     | Type        | Null | Key   | Default | Extra |
-+-----------+-------------+------+-------+---------+-------+
-| event_day | date        | Yes  | true  | N/A     |       |
-| siteid    | int(11)     | Yes  | true  | 10      |       |
-| citycode  | smallint(6) | Yes  | true  | N/A     |       |
-| username  | varchar(32) | Yes  | true  |         |       |
-| pv        | bigint(20)  | Yes  | false | 0       | SUM   |
-+-----------+-------------+------+-------+---------+-------+
-5 rows in set (0.00 sec)
-```
-
-## 使用Docker进行编译
-
-具体参考[在容器内编译](../administration/Build_in_docker.md)。
+StarRocks 支持平滑升级，并支持回滚（1.18.2 及以后的版本无法回滚到其之前的版本），详细操作步骤请参考 [集群升级](../administration/Cluster_administration.md#集群升级)。

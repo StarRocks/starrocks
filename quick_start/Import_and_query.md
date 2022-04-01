@@ -1,301 +1,111 @@
 # 数据导入和查询
 
-## 本地文件导入
+## 数据导入
 
-为适配不同的数据导入需求，StarRocks 系统提供了5种不同的导入方式，以支持不同的数据源（如HDFS、Kafka、本地文件等），或者按不同的方式（异步或同步）导入数据。
+为适配不同的数据导入需求，StarRocks 系统提供了 5 种不同的导入方式，以支持不同的数据源（如 HDFS、Kafka、本地文件等），或者按不同的方式（异步或同步）导入数据。
 
 ### Broker Load
 
-Broker Load 通过 Broker 进程访问并读取外部数据源，然后采用 MySQL 协议向 StarRocks 创建导入作业。
+[Broker Load](/loading/BrokerLoad.md) 通过 Broker 进程访问并读取外部数据源，然后采用 MySQL 协议向 StarRocks 创建导入作业。
 
-Broker Load适用于源数据在Broker进程可访问的存储系统（如HDFS）中，数据量为几十GB到上百GB。数据源有Hive等。
+Broker Load 适用于源数据在 Broker 进程可访问的存储系统（如 HDFS，HDFS，S3 等）中，数据量为几十 GB 到上百 GB。数据源有 Hive 等。
 
 ### Spark Load
 
-Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提高 StarRocks 大数据量的导入性能并且节省 StarRocks 集群的计算资源。
+[Spark Load](/loading/SparkLoad.md) 通过外部的 Spark 资源实现对导入数据的预处理，提高 StarRocks 大数据量的导入性能并且节省 StarRocks 集群的计算资源。
 
-Spark Load适用于初次迁移大数据量（可到TB级别）到StarRocks的场景，且源数据在Spark可访问的存储系统（如HDFS）中。
+Spark Load 适用于初次迁移大数据量（可到 TB 级别）到 StarRocks 的场景，且源数据在 Spark 可访问的存储系统（如 HDFS）中。
+
+通过 Spark load 可以基于 Hive 表实现[全局字典](/loading/SparkLoad.md#全局字典)的数据结构，对输入数据进行类型转换，保存原始值到编码值的映射。例如将字符串类型映射成整型。
 
 ### Stream Load
 
-Stream Load是一种同步执行的导入方式。用户通过 HTTP 协议发送请求将本地文件或数据流导入到 StarRocks中，并等待系统返回导入的结果状态，从而判断导入是否成功。
+[Stream Load](/loading/StreamLoad.md) 是一种同步执行的导入方式。用户通过 HTTP 协议发送请求将本地文件或数据流导入到 StarRocks 中，并等待系统返回导入的结果状态，从而判断导入是否成功。
 
-Stream Load适用于导入本地文件，或通过程序导入数据流中的数据。数据源有Flink、CSV等。
+Stream Load 适用于导入本地文件，或通过程序导入数据流中的数据。数据源有 Flink、CSV 等。
 
 ### Routine Load
 
-Routine Load（例行导入）提供了一种自动从指定数据源进行数据导入的功能。用户通过 MySQL 协议提交例行导入作业，生成一个常驻线程，不间断的从数据源（如 Kafka）中读取数据并导入到 StarRocks 中。
+[Routine Load](/loading/RoutineLoad.md)（例行导入）提供了一种自动从指定数据源进行数据导入的功能。用户通过 MySQL 协议提交例行导入作业，生成一个常驻线程，不间断的从数据源（如 Kafka）中读取数据并导入到 StarRocks 中。
 
 ### Insert Into
 
-类似 MySQL 中的 Insert 语句，StarRocks 提供 INSERT INTO tbl SELECT ...; 的方式从 StarRocks 的表中读取数据并导入到另一张表。或者通过 INSERT INTO tbl VALUES(...); 插入单条数据。数据源有DataX/DTS、Kettle/Informatic、StarRocks本身。
+[Insert into](/loading/InsertInto.md) 的导入方式类似 MySQL 中的 Insert 语句，StarRocks 提供 `INSERT INTO tbl SELECT ...;` 的方式从 StarRocks 的表中读取数据并导入到另一张表。或者通过 `INSERT INTO tbl VALUES(...);` 插入单条数据。数据源有 DataX/DTS、Kettle/Informatic、StarRocks 本身。
 
-<br/>
-
-StarRocks数据导入整体生态图如下。
+StarRocks 数据导入整体生态图如下。
 
 ![starrocks_ecology](../assets/screenshot_1615530614737.png)
-<br/>
 
-具体导入方式详情请参考[数据导入](../loading/Loading_intro.md)。这里为了尽快导入测试数据，我们只介绍利用HTTP协议的Stream load方式导入。
+具体导入方式详情请参考 [数据导入](../loading/Loading_intro.md)。
 
-* **示例1**：以 "table1\_20170707"为Label，使用本地文件table1\_data导入table1表。
-* 在本地创建数据文件able1\_data，以逗号作为数据之间的分隔符，具体内容如下：
+### Stream Load 导入 Demo
 
-```Plain Text
-1,1,jim,2
-2,1,grace,2
-3,2,tom,2
-4,3,bush,3
-5,3,helen,3
-```
+以 Stream load 导入方式为例，将文件中的数据导入到 [建表](/quick_start/Create_table.md) 章节中创建的 detailDemo 表中。
 
-利用curl命令封装HTTP请求，完成数据的导入
-
-```bash
-curl --location-trusted -u test:123456 -T table1_data -H "label: table1_20170707" \
-    -H "column_separator:," \
-    http://127.0.0.1:8030/api/example_db/table1/_stream_load
-```
-
-> 注意：这里test是fe的用户名，端口8030是fe.conf中配置的http port。
-
-* **示例2**: 以"table2\_20170707"为Label，使用本地文件table2\_data导入table2表。
-
-在本地创建数据文件table2\_data，以逗号作为数据之间的分隔，具体内容如下：
+* 在本地创建数据文件 detailDemo_data，以逗号作为数据之间的分隔符，插入两条数据，具体内容如下：
 
 ```Plain Text
-2017-07-03,1,1,jim,2
-2017-07-05,2,1,grace,2
-2017-07-12,3,2,tom,2
-2017-07-15,4,3,bush,3
+2022-03-13,1,1212,1231231231,123412341234,123452342342343324,hello,welcome,starrocks,2022-03-15 12:21:32,123.04,21.12345,123456.123456,true
+2022-03-14,2,1212,1231231231,123412341234,123452342342343324,hello,welcome,starrocks,2022-03-15 12:21:32,123.04,21.12345,123456.123456,false
 ```
 
-利用curl命令封装HTTP请求，完成数据的导入
+* 以 "streamDemo" 为 Label，使用本地文件 detailDemo_data 导入 detailDemo 表。
+利用 curl 命令封装 HTTP 请求，完成数据的导入：
 
 ```bash
-curl --location-trusted -u test:123456 -T table2_data -H "label:table2_20170707" \
-    -H "column_separator:," \
-    http://127.0.0.1:8030/api/example_db/table2/_stream_load
+curl --location-trusted -u root: -T detailDemo_data -H "label: streamDemo" \
+-H "column_separator:," \
+http://127.0.0.1:8030/api/example_db/detailDemo_stream_load
 ```
 
-  <br/>
+> 注意：这里 root 是 fe 的用户名，默认密码为空，使用用户有密码时需在冒号后面补充密码；http 中 ip 为 fe 节点 ip，端口 8030 是 fe.conf 中配置的 http port。
 
 ## 查询
 
+StarRocks 兼容 Mysql 协议，查询语句基本符合 SQL92 标准。
+
 ### 简单查询
 
-示例:
-
-```Plain Text
-mysql> select * from table1;
-
-+--------+----------+----------+----+
-| siteid | citycode | username | pv |
-+--------+----------+----------+----+
-|      5 |        3 | helen    |  3 |
-|      2 |        1 | grace    |  2 |
-|      1 |        1 | jim      |  2 |
-|      4 |        3 | bush     |  3 |
-|      3 |        2 | tom      |  2 |
-+--------+----------+----------+----+
-```
-
-### order by查询
-
-示例:
-
-```Plain Text
-mysql> select * from table1 order by citycode;
-
-+--------+----------+----------+----+
-| siteid | citycode | username | pv |
-+--------+----------+----------+----+
-|      2 |        1 | grace    |  2 |
-|      1 |        1 | jim      |  2 |
-|      3 |        2 | tom      |  2 |
-|      4 |        3 | bush     |  3 |
-|      5 |        3 | helen    |  3 |
-+--------+----------+----------+----+
-5 rows in set (0.07 sec)
-```
-
-### 带有join的查询
-
-示例:
-
-```Plain Text
-mysql> select sum(table1.pv) from table1 join table2 on table1.siteid = table2.siteid;
-
-+--------------------+
-| sum(`table1`.`pv`) |
-+--------------------+
-| 12                 |
-+--------------------+
-1 row in set (0.20 sec)
-```
-
-### 带有子查询的查询
-
-示例:
-
-```Plain Text
-mysql> select sum(pv) from table2 where siteid in (select siteid from table1 where siteid > 2);
-
-+-----------+
-| sum(`pv`) |
-+-----------+
-| 8         |
-+-----------+
-1 row in set (0.13 sec)
-```
-
-<br/>
-
-如果在StarRocksManager的编辑器中执行查询语句，可以查看Profile，Profile是BE执行后的结果，包含了每一个步骤的耗时和数据处理量等数据，可以通过StarRocksManager的图形界面看到可视化的Profile执行树。在StarRocksManager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示。详情见[查询分析](../administration/Query_planning.md)。
-
-## Schema修改
-
-### 修改Schema
-
-使用ALTER TABLE命令可以修改表的Schema，包括如下修改：
-
-* 增加列
-
-* 删除列
-
-* 修改列类型
-
-* 改变列顺序
-
-以下举例说明。
-
-  <br/>
-
-原表table1的Schema如下:
-
-```Plain Text
-+----------+-------------+------+-------+---------+-------+
-| Field    | Type        | Null | Key   | Default | Extra |
-+----------+-------------+------+-------+---------+-------+
-| siteid   | int(11)     | Yes  | true  | 10      |       |
-| citycode | smallint(6) | Yes  | true  | N/A     |       |
-| username | varchar(32) | Yes  | true  |         |       |
-| pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+----------+-------------+------+-------+---------+-------+
-```
-
-  <br/>
-
-我们新增一列uv，类型为BIGINT，聚合类型为SUM，默认值为0:
+示例: 查询表中全部数据
 
 ```sql
-ALTER TABLE table1 ADD COLUMN uv BIGINT SUM DEFAULT '0' after pv;
+select * from detailDemo;
 ```
 
-  <br/>
+### order by 查询
 
-提交成功后，可以通过以下命令查看:
+示例: 查询结果以 mache_verson 字段降序排列
 
 ```sql
-SHOW ALTER TABLE COLUMN\G
+select * from detailDemo order by mache_verson desc;
 ```
 
-当作业状态为FINISHED，则表示作业完成。新的Schema 已生效。
+StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子表](/sql-reference/sql-statements/data-manipulation/SELECT.md#with%E5%AD%90%E5%8F%A5) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
-  <br/>
+## 扩展内容
 
-ALTER TABLE完成之后, 可以通过desc table查看最新的schema：
+### 函数支持
 
-```Plain Text
-mysql> desc table1;
+StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/)，[地理位置函数](/sql-reference/sql-functions/spatial-functions)，[字符串函数](/sql-reference/sql-functions/string-functions/)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/)，[数组函数](/sql-reference/sql-functions/array-functions/)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/)，[加密函数](/sql-reference/sql-functions/encryption-functions/)，[开窗函数](/using_starrocks/Window_function.md) 等。
 
-+----------+-------------+------+-------+---------+-------+
-| Field    | Type        | Null | Key   | Default | Extra |
-+----------+-------------+------+-------+---------+-------+
-| siteid   | int(11)     | Yes  | true  | 10      |       |
-| citycode | smallint(6) | Yes  | true  | N/A     |       |
-| username | varchar(32) | Yes  | true  |         |       |
-| pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-| uv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+----------+-------------+------+-------+---------+-------+
-5 rows in set (0.00 sec)
-```
+### 视图，物化视图
 
-  <br/>
+StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE%20VIEW.md#description) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体应用及原理详见对应章节。
 
-可以使用以下命令取消当前正在执行的作业:
+### 外部表
 
-```sql
-CANCEL ALTER TABLE COLUMN FROM table1\G
-```
+StarRocks 支持多种外部表：[MySQL 外部表](/using_starrocks/External_table.md#MySQL外部表)，[ElasticSearch 外部表](/using_starrocks/External_table.md#ElasticSearch外部表)，[Hive 外表](/using_starrocks/External_table.md#Hive外表)，[StarRocks 外部表](/using_starrocks/External_table.md#StarRocks外部表)，[Apache Iceberg 外表](/using_starrocks/External_table.md#apache-iceberg%E5%A4%96%E8%A1%A8)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
-  <br/>
+## 慢查询分析
 
-### 创建Rollup
+### 通过调整并行度优化查询效率
 
-Rollup是StarRocks使用的一种新型预计算加速技术，可以理解为基于基础表构建的一个物化索引结构。**物化**是因为其数据在物理上独立存储，而**索引**的意思是，Rollup可以调整列顺序以增加前缀索引的命中率，也可以减少key列以增加数据的聚合度。这里仅简单举例介绍，更多相关内容请参考相关章节。
+您可以通过设置 Pipeline 执行引擎变量（推荐），或者调整一个 Fragment 实例的并行数量`set  parallel_fragment_exec_instance_num = 8;`，来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，请参见 [查询并行度相关参数](/administration/Query_management.md/#查询相关的session变量)。
 
-  <br/>
+### 如何查看 Profile 并分析查询瓶颈
 
-原表table1的Schema如下:
-
-```Plain Text
-+----------+-------------+------+-------+---------+-------+
-| Field    | Type        | Null | Key   | Default | Extra |
-+----------+-------------+------+-------+---------+-------+
-| siteid   | int(11)     | Yes  | true  | 10      |       |
-| citycode | smallint(6) | Yes  | true  | N/A     |       |
-| username | varchar(32) | Yes  | true  |         |       |
-| pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-| uv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+----------+-------------+------+-------+---------+-------+
-```
-
-  <br/>
-
-对于table1明细数据是siteid, citycode, username三者构成一个key，从而对pv字段进行聚合；如果业务方经常有看城市pv总量的需求，可以建立一个只有citycode, pv的rollup：
-
-```sql
-ALTER TABLE table1 ADD ROLLUP rollup_city(citycode, pv);
-```
-
-  <br/>
-
-提交成功后，可以通过以下命令查看:
-
-```sql
-SHOW ALTER TABLE ROLLUP\G
-```
-
-当作业状态为 FINISHED，则表示作业完成。
-
-  <br/>
-
-Rollup建立完成之后可以使用desc table1 all查看表的rollup信息：
-
-```Plain Text
-mysql> desc table1 all;
-
-+-------------+----------+-------------+------+-------+---------+-------+
-| IndexName   | Field    | Type        | Null | Key   | Default | Extra |
-+-------------+----------+-------------+------+-------+---------+-------+
-| table1      | siteid   | int(11)     | Yes  | true  | 10      |       |
-|             | citycode | smallint(6) | Yes  | true  | N/A     |       |
-|             | username | varchar(32) | Yes  | true  |         |       |
-|             | pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-|             | uv       | bigint(20)  | Yes  | false | 0       | SUM   |
-|             |          |             |      |       |         |       |
-| rollup_city | citycode | smallint(6) | Yes  | true  | N/A     |       |
-|             | pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+-------------+----------+-------------+------+-------+---------+-------+
-8 rows in set (0.01 sec)
-```
-
-  <br/>
-
-可以使用以下命令取消当前正在执行的作业:
-
-```sql
-CANCEL ALTER TABLE ROLLUP FROM table1;
-```
+* 通过 `explain costs sql` 命令可以查看查询计划，1.19版本以前使用 `explain sql`。
+* 通过 `set is_report_success = true` 可以打开 profile 的上报。
+* 社区版用户在 `http:FE_IP:FE_HTTP_PORT/query` 可以看到当前的查询和 Profile 信息
+* 企业版用户在 StarRocksManager 的查询页面可以看到图形化的 Profile 展示，点击查询链接可以在**执行时间**页面看到树状展示，可以在**执行详情**页面看到完整的 Profile 详细信息。如果达不到预期可以发送执行详情页面的文本到社区或者技术支持的群里寻求帮助
+* Plan 和 Profile 参考 [查询分析](../administration/Query_planning.md) 和 [性能优化](../administration/Profiling.md) 章节
