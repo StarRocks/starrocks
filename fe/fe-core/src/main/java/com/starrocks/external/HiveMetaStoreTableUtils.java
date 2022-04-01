@@ -52,7 +52,6 @@ public class HiveMetaStoreTableUtils {
     public static List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
                                                               List<PartitionKey> partitionKeys) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
-            // TODO: getPartitionsStats
             return Catalog.getCurrentCatalog().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
         }
     }
