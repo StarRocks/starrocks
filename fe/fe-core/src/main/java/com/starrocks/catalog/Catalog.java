@@ -4017,7 +4017,7 @@ public class Catalog {
 
         boolean usePersistentIndex =
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX, false);
-        olapTable.setUsePersistentIndex(usePersistentIndex && (olapTable.getKeysType() == KeysType.PRIMARY_KEYS));
+        olapTable.setUsePersistentIndex(usePersistentIndex);
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -4623,6 +4623,10 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
+
+            // use_persistent_index
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX).append("\" = \"");
+            sb.append(olapTable.usePersistentIndex()).append("\"");            
 
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
