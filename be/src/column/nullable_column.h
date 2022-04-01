@@ -223,10 +223,6 @@ public:
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
     }
 
-    size_t shrink_memory_usage() const override {
-        return _data_column->shrink_memory_usage() + _null_column->shrink_memory_usage() + sizeof(bool);
-    }
-
     size_t container_memory_usage() const override {
         return _data_column->container_memory_usage() + _null_column->container_memory_usage();
     }

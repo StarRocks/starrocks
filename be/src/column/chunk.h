@@ -186,9 +186,6 @@ public:
     // 2. other columns: column container capacity * type size
     size_t memory_usage() const;
 
-    // memory usage after shrink
-    size_t shrink_memory_usage() const;
-
     // Column container memory usage
     size_t container_memory_usage() const;
     // Element memory usage that is not in the container, such as memory referenced by pointer.
