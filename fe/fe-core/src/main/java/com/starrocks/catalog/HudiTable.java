@@ -95,6 +95,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     public HudiTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.HUDI, schema);
         validate(properties);
+        initHmsTableInfo();
     }
 
     public String getDb() {
@@ -119,7 +120,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return HiveMetaStoreTableUtils.getPartitionColumns(getHmsTableInfo());
+        return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
     }
 
     public List<String> getPartitionColumnNames() {
@@ -130,7 +131,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
-    public HiveMetaStoreTableInfo getHmsTableInfo() {
+    public HiveMetaStoreTableInfo initHmsTableInfo() {
         if (hmsTableInfo == null) {
             hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, db, table,
                     partColumnNames, dataColumnNames, nameToColumn, type);
@@ -139,39 +140,39 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitionKeys(getHmsTableInfo());
+        return HiveMetaStoreTableUtils.getPartitionKeys(hmsTableInfo);
     }
 
     @Override
     public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
-        return HiveMetaStoreTableUtils.getPartitions(getHmsTableInfo(), partitionKeys);
+        return HiveMetaStoreTableUtils.getPartitions(hmsTableInfo, partitionKeys);
     }
 
     @Override
     public HiveTableStats getTableStats() throws DdlException {
-        return HiveMetaStoreTableUtils.getTableStats(getHmsTableInfo());
+        return HiveMetaStoreTableUtils.getTableStats(hmsTableInfo);
     }
 
     @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
-        return HiveMetaStoreTableUtils.getTableLevelColumnStats(getHmsTableInfo(), columnNames);
+        return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
     }
 
     @Override
     public void refreshTableCache() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository().refreshTableCache(getHmsTableInfo());
+        Catalog.getCurrentCatalog().getHiveRepository().refreshTableCache(hmsTableInfo);
     }
 
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshPartitionCache(getHmsTableInfo(), partNames);
+                .refreshPartitionCache(hmsTableInfo, partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshTableColumnStats(getHmsTableInfo());
+                .refreshTableColumnStats(hmsTableInfo);
     }
 
     /**
@@ -180,7 +181,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
      */
     @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
-        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(getHmsTableInfo(), partitions);
+        return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -495,6 +496,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 }
             }
         }
+        initHmsTableInfo();
     }
 
     @Override
