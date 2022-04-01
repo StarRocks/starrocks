@@ -327,6 +327,9 @@ public:
 
         // there is no non-empty params, set all runtime filter to nullptr
         if (_partial_bloom_filter_build_params.empty()) {
+            for (auto& desc : _bloom_filter_descriptors) {
+                desc->set_runtime_filter(nullptr);
+            }
             return Status::OK();
         }
 
@@ -336,6 +339,9 @@ public:
 
         for (auto i = 0; i < num_bloom_filters; ++i) {
             auto& desc = _bloom_filter_descriptors[i];
+            if (desc->runtime_filter() == nullptr) {
+                continue;
+            }
             auto can_merge =
                     std::all_of(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
                                 [i](auto& opt_params) { return opt_params[i].has_value(); });
