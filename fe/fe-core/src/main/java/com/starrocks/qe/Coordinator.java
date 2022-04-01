@@ -1703,6 +1703,29 @@ public class Coordinator {
             Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT);
             backendNum.setValue(networkAddresses.size());
         }
+
+        // Calculate Fe time and Be time
+        boolean found = false;
+        for (int i = 0; !found && i < fragments.size(); i++) {
+            PlanFragment fragment = fragments.get(i);
+            DataSink sink = fragment.getSink();
+            if (!(sink instanceof ResultSink)) {
+                continue;
+            }
+            RuntimeProfile profile = fragmentProfiles.get(i);
+
+            for (int j = 0; !found && j < profile.getChildList().size(); j++) {
+                RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
+                RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
+                if (operatorProfile.getName().contains("RESULT_SINK")) {
+                    long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
+                    Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
+                    queryProfile.getCounterTotalTime().setValue(0);
+                    executionTotalTime.setValue(beTotalTime);
+                    found = true;
+                }
+            }
+        }
     }
 
     /*
