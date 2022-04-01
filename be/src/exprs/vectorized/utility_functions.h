@@ -27,6 +27,7 @@ public:
      * returns uuid.
      */
     DEFINE_VECTORIZED_FN(uuid);
+    DEFINE_VECTORIZED_FN(uuid_numeric);
 };
 
 } // namespace vectorized
