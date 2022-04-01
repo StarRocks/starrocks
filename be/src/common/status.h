@@ -311,6 +311,12 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
         }                                                                      \
     } while (0);
 
+#define RETURN_WITH_WARN(status)            \
+    do {                                    \
+        LOG(WARNING) << status.to_string(); \
+        return status;                      \
+    } while (0);
+
 #define DCHECK_IF_ERROR(stmt)       \
     do {                            \
         const Status& _st = (stmt); \

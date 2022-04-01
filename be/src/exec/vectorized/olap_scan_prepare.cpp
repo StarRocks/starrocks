@@ -716,14 +716,16 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds) {
+Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds) {
     for (auto& f : olap_filters) {
         ColumnPredicate* p = parser->parse_thrift_cond(f);
+        RETURN_IF(!p, Status::InternalError("invalid filter"));
         p->set_index_filter_only(f.is_index_filter_only);
         preds->push_back(p);
     }
     for (auto& f : is_null_vector) {
         ColumnPredicate* p = parser->parse_thrift_cond(f);
+        RETURN_IF(!p, Status::InternalError("invalid null vector"));
         preds->push_back(p);
     }
 
@@ -734,9 +736,11 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
             ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, runtime_state, ctx);
+            RETURN_IF(!p, Status::InternalError("invalid filter"));
             preds->push_back(p);
         }
     }
+    return Status::OK();
 }
 
 void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
