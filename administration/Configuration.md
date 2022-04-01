@@ -62,7 +62,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_query_retry_time|2|FE 上查询重试的次数|
 |max_create_table_timeout_second|60|建表最大超时时间|
 |max_running_rollup_job_num_per_table|1|每个 Table 执行 Rollup 任务的最大并发度|
-|max_planner_scalar_rewrite_num|10_0000|优化器重写 ScalarOperator 允许的最大次数
+|max_planner_scalar_rewrite_num|10_0000|优化器重写 ScalarOperator 允许的最大次数|
 |statistics_manager_sleep_time_sec|60*10|自动创建统计信息表的周期，默认 10min|
 |statistic_collect_interval_sec|120*60|统计信息功能执行周期，默认 2h|
 |statistic_update_interval_sec|24 *60\* 60|统计信息 Job 的默认收集间隔时间，默认为 1 天|
@@ -81,7 +81,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_load_timeout_second|259200|适用于所有导入，最大超时，3 天|
 |min_load_timeout_second|1|适用于所有导入，最小超时，1 秒|
 |load_parallel_instance_num|1|单个 BE 上并发实例数，默认 1 个|
-|vectorized_load_enable|TRUE|开启向量化 Broker 导出和导入
+|vectorized_load_enable|TRUE|开启向量化 Broker 导出和导入|
 |enable_vectorized_file_load|TRUE|开启向量化导入 CSV/JSON/Parquet 和 Spark 导入|
 |disable_hadoop_load|FALSE|禁用从 Hadoop 导入|
 |disable_load_job|FALSE|不接收任何导入任务，集群出问题时的止损措施|
@@ -118,7 +118,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_strict_storage_medium_check|FALSE|在创建表时，FE 是否检查 BE 的可用的存储介质空间|
 |capacity_used_percent_high_water|0.75|Backend 上磁盘使用容量的度量值，超过 0.75 之后，尽量不在往这个 tablet 上发送建表，克隆的任务，直到恢复正常|
 |storage_high_watermark_usage_percent|85|BE 存储目录下空间使用率的最大值|
-|storage_min_left_capacity_bytes|2 *1024\* 1024\*1024|BE 存储目录下剩余空间的最小值，默认 2GB
+|storage_min_left_capacity_bytes|2 *1024\* 1024\*1024|BE 存储目录下剩余空间的最小值，默认 2GB|
 |storage_flood_stage_left_capacity_bytes|1 *1024\* 1024\*1024|如果剩余空间小于该值，会拒绝 Load Restore 作业。默认 1GB|
 |storage_flood_stage_usage_percent|95|如果空间使用率超过该值，会拒绝 Load 和 Restore 作业|
 |catalog_trash_expire_second|86400|删表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复|
@@ -210,7 +210,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |配置项|默认值|作用|
 |---|---|---|
 |meta_dir|StarRocksFe.STARROCKS_HOME_DIR/meta|元数据保留目录|
-|heartbeat_mgr_threads_num|8|HeartbeatMgr 中发送心跳任务的线程数。
+|heartbeat_mgr_threads_num|8|HeartbeatMgr 中发送心跳任务的线程数|
 |heartbeat_mgr_blocking_queue_size|1024|HeartbeatMgr 中发送心跳任务的线程池的队列长度。
 |metadata_failure_recovery|FALSE|强制重置 FE 的元数据，慎用|
 |edit_log_port|9010|FE Group(Master, Follower, Observer)之间通信用的端口|
