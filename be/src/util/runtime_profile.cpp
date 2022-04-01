@@ -26,6 +26,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <unordered_set>
 #include <utility>
 
@@ -392,13 +393,6 @@ const std::string* RuntimeProfile::get_info_string(const std::string& key) {
     return &it->second;
 }
 
-void RuntimeProfile::get_all_info_strings(std::map<std::string, std::string>* info_strings) {
-    std::lock_guard<std::mutex> l(_info_strings_lock);
-    for (auto& [key, value] : _info_strings) {
-        info_strings->emplace(key, value);
-    }
-}
-
 void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
     DCHECK(src_profile != nullptr);
     if (this == src_profile) {
@@ -488,9 +482,67 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
     }
     std::lock_guard<std::mutex> l(src_profile->_counter_lock);
 
-    for (auto& [key, src_counter] : src_profile->_counter_map) {
-        add_counter(key, src_counter->type());
-        get_counter(key)->set(src_counter->value());
+    std::queue<std::string> name_queue;
+    name_queue.push(ROOT_COUNTER);
+    while (!name_queue.empty()) {
+        std::string counter_name = std::move(name_queue.front());
+        name_queue.pop();
+        auto names_it = src_profile->_child_counter_map.find(counter_name);
+        if (names_it == src_profile->_child_counter_map.end()) {
+            continue;
+        }
+        for (auto& child_counter_name : names_it->second) {
+            name_queue.push(child_counter_name);
+            auto* src_child_counter = src_profile->_counter_map[child_counter_name];
+            DCHECK(src_child_counter != nullptr);
+            add_counter(child_counter_name, src_child_counter->type(), counter_name);
+            get_counter(child_counter_name)->set(src_child_counter->value());
+        }
+    }
+}
+
+void RuntimeProfile::remove_counter(const std::string& name) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+    if (_counter_map.find(name) == _counter_map.end()) {
+        return;
+    }
+
+    // Find parent counter to which name belongs
+    std::queue<std::string> name_queue;
+    name_queue.push(ROOT_COUNTER);
+    bool found = false;
+    while (!name_queue.empty() && !found) {
+        std::string counter_name = std::move(name_queue.front());
+        name_queue.pop();
+        auto names_it = _child_counter_map.find(counter_name);
+        if (names_it == _child_counter_map.end()) {
+            continue;
+        }
+        auto& child_names = names_it->second;
+        for (auto& child_name : child_names) {
+            if (child_name == name) {
+                found = true;
+                break;
+            }
+            name_queue.push(child_name);
+        }
+    }
+
+    // Remove child counter recursively
+    name_queue = std::queue<std::string>();
+    name_queue.push(name);
+    while (!name_queue.empty()) {
+        std::string counter_name = std::move(name_queue.front());
+        name_queue.pop();
+        auto names_it = _child_counter_map.find(counter_name);
+        if (names_it == _child_counter_map.end()) {
+            continue;
+        }
+        for (auto& child_name : names_it->second) {
+            name_queue.push(child_name);
+        }
+        _counter_map.erase(_counter_map.find(counter_name));
+        _child_counter_map.erase(names_it);
     }
 }
 
@@ -546,19 +598,6 @@ void RuntimeProfile::get_counters(const std::string& name, std::vector<Counter*>
 
     for (auto& i : _children) {
         i.first->get_counters(name, counters);
-    }
-}
-
-void RuntimeProfile::get_all_counters(std::map<std::string, Counter*>* counters,
-                                      std::map<std::string, std::set<std::string>>* child_counter_map) {
-    std::lock_guard<std::mutex> l(_counter_lock);
-
-    for (auto& [key, value] : _counter_map) {
-        counters->emplace(key, value);
-    }
-
-    for (auto& [parent_counter_name, names] : _child_counter_map) {
-        child_counter_map->emplace(parent_counter_name, names);
     }
 }
 

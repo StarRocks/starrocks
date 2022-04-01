@@ -34,12 +34,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
     _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
-
-    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
-    _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
-    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
-    _schedule_accumulated_chunks_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -64,7 +58,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
         }
     }
-    _local_rf_waiting_set_counter->set((int64_t)all_local_rf_set.size());
+    if (!all_local_rf_set.empty()) {
+        _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
+    }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
     source_operator()->add_morsel_queue(_morsel_queue.get());
@@ -304,10 +300,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
-    COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
-    COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
-    COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
-    COUNTER_UPDATE(_schedule_accumulated_chunks_moved, driver_acct().get_accumulated_chunks_moved());
     _update_overhead_timer();
 
     // last root driver cancel the all drivers' execution and notify FE the
