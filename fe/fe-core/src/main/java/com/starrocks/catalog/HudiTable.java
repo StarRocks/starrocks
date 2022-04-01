@@ -43,7 +43,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -133,7 +132,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public HiveMetaStoreTableInfo getHmsTableInfo() {
         if (hmsTableInfo == null) {
-            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, db, table, partColumnNames, dataColumnNames, nameToColumn, type);
+            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, db, table,
+                    partColumnNames, dataColumnNames, nameToColumn, type);
         }
         return hmsTableInfo;
     }

@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -150,7 +149,8 @@ public class HiveRepository {
         return metaCache.getTableStats(dbName, tableName);
     }
 
-    public List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable, List<PartitionKey> partitionKeys) throws DdlException {
+    public List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
+                                                       List<PartitionKey> partitionKeys) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
         List<Future<HivePartitionStats>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {

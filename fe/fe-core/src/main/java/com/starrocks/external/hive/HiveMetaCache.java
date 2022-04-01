@@ -169,7 +169,8 @@ public class HiveMetaCache {
     public ImmutableMap<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         List<Column> partColumns = getPartitionColumns(hmsTable);
         try {
-            return partitionKeysCache.get(new HivePartitionKeysKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partColumns));
+            return partitionKeysCache.get(new HivePartitionKeysKey(hmsTable.getDb(),
+                    hmsTable.getTable(), hmsTable.getTableType(), partColumns));
         } catch (ExecutionException e) {
             LOG.warn("get partition keys failed", e);
             throw new DdlException("get partition keys failed: " + e.getMessage());
@@ -178,9 +179,11 @@ public class HiveMetaCache {
 
     public HivePartition getPartition(HiveMetaStoreTableInfo hmsTable,
                                       PartitionKey partitionKey) throws DdlException {
-        List<String> partitionValues = Utils.getPartitionValues(partitionKey, hmsTable.getTableType() == Table.TableType.HUDI);
+        List<String> partitionValues = Utils.getPartitionValues(partitionKey,
+                hmsTable.getTableType() == Table.TableType.HUDI);
         try {
-            return partitionsCache.get(new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partitionValues));
+            return partitionsCache.get(new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                    hmsTable.getTableType(), partitionValues));
         } catch (ExecutionException e) {
             throw new DdlException("get partition detail failed: " + e.getMessage());
         }
@@ -212,7 +215,8 @@ public class HiveMetaCache {
         List<Column> partColumns = getPartitionColumns(hmsTable);
         // NOTE: Using allColumns as param to get column stats, we will get the best cache effect.
         List<String> allColumnNames = new ArrayList<>(hmsTable.getNameToColumn().keySet());
-        HiveTableColumnsKey key = new HiveTableColumnsKey(hmsTable.getDb(), hmsTable.getTable(), partColumns, allColumnNames, hmsTable.getTableType());
+        HiveTableColumnsKey key = new HiveTableColumnsKey(hmsTable.getDb(),
+                hmsTable.getTable(), partColumns, allColumnNames, hmsTable.getTableType());
         try {
             return tableColumnStatsCache.get(key);
         } catch (ExecutionException e) {
@@ -303,7 +307,8 @@ public class HiveMetaCache {
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
-                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName, hmsTable.getTableType(), new ArrayList<>());
+                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName,
+                        hmsTable.getTableType(), new ArrayList<>());
                 partitionsCache.put(hivePartitionKey, loadPartition(hivePartitionKey));
                 partitionStatsCache.put(hivePartitionKey, loadPartitionStats(hivePartitionKey));
             }
@@ -320,7 +325,8 @@ public class HiveMetaCache {
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
-                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
+                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                        hmsTable.getTableType(), partValues);
                 partitionsCache.put(key, loadPartition(key));
                 partitionStatsCache.put(key, loadPartitionStats(key));
             }

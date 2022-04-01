@@ -59,7 +59,8 @@ public class HiveMetaStoreTableUtils {
 
     public static HiveTableStats getTableStats(HiveMetaStoreTableInfo hmsTable) throws DdlException {
         try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableStats")) {
-            return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(hmsTable.getResourceName(), hmsTable.getDb(), hmsTable.getTable());
+            return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(hmsTable.getResourceName(),
+                    hmsTable.getDb(), hmsTable.getTable());
         }
     }
 
