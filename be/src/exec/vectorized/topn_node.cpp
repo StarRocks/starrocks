@@ -147,9 +147,9 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
                     std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
                                                       &_is_asc_order, &_is_null_first, _sort_keys, _offset, _limit);
         } else {
-            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys, _offset,
-                                                                _limit, ChunksSorter::MAX_BUFFERED_CHUNKS_TOPN);
+            _chunks_sorter = std::make_unique<ChunksSorterTopn>(
+                    state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
+                    _offset, _limit, ChunksSorterTopn::tunning_buffered_chunks(_limit));
         }
 
     } else {

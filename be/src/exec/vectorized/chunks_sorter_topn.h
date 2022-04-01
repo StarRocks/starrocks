@@ -11,6 +11,21 @@ namespace starrocks::vectorized {
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorterTopn : public ChunksSorter {
 public:
+    static constexpr size_t kMaxBufferedChunks = 512;
+    static constexpr size_t kMinBufferedChunks = 16;
+    static constexpr size_t kDefaultBufferedChunks = 64;
+
+    // Tunning the max_buffer_chunks according to requested limit
+    static constexpr size_t tunning_buffered_chunks(int limit) {
+        if (limit <= 1024) {
+            return 16;
+        }
+        if (limit <= 65536) {
+            return 64;
+        }
+        return 256;
+    }
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -22,7 +37,7 @@ public:
      */
     ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                      const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset = 0,
-                     size_t limit = 0, size_t max_buffered_chunks = ChunksSorter::MAX_BUFFERED_CHUNKS_TOPN);
+                     size_t limit = 0, size_t max_buffered_chunks = kDefaultBufferedChunks);
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.

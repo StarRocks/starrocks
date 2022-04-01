@@ -102,7 +102,7 @@ struct SortParameters {
     int limit = -1;
     bool low_card = false;
     bool nullable = false;
-    int max_buffered_chunks = ChunksSorter::MAX_BUFFERED_CHUNKS_TOPN;
+    int max_buffered_chunks = ChunksSorterTopn::kDefaultBufferedChunks;
 
     SortParameters() {}
 
@@ -305,6 +305,12 @@ static void BM_topn_buffered_chunks(benchmark::State& state) {
     params.limit = state.range(1);
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
 }
+static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
+    SortParameters params;
+    params.limit = state.range(1);
+    params.max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(params.limit);
+    do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
+}
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
@@ -351,6 +357,7 @@ BENCHMARK(BM_topn_limit_mergesort_rowwise)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_colwise)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_colwise_nullable)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
+BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {

@@ -83,8 +83,6 @@ using DataSegments = std::vector<DataSegment>;
 class ChunksSorter {
 public:
     static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
-    static constexpr size_t MAX_BUFFERED_CHUNKS_TOPN = 1024;
-    static constexpr size_t MIN_BUFFERED_CHUNKS_TOPN = 128;
 
     /**
      * Constructor.

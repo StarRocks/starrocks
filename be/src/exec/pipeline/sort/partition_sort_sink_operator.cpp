@@ -70,9 +70,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                     std::make_unique<HeapChunkSorter>(runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
                                                       &_is_asc_order, &_is_null_first, _sort_keys, _offset, _limit);
         } else {
-            dop = std::max(1, dop);
-            size_t max_buffered_chunks =
-                    std::max(ChunksSorter::MIN_BUFFERED_CHUNKS_TOPN, ChunksSorter::MAX_BUFFERED_CHUNKS_TOPN / dop);
+            size_t max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(_limit);
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
                     _sort_keys, _offset, _limit, max_buffered_chunks);
