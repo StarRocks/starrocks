@@ -416,12 +416,6 @@ private:
     RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _output_full_timer = nullptr;
-    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
-
-    RuntimeProfile::Counter* _schedule_counter = nullptr;
-    RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
-    RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
-    RuntimeProfile::Counter* _schedule_accumulated_chunks_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;

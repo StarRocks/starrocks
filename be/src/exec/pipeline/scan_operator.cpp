@@ -263,30 +263,8 @@ void ScanOperator::_merge_chunk_source_profiles() {
 
     RuntimeProfile* merged_profile = profiles[0];
 
-    // Copy info strings
-    std::map<std::string, std::string> info_strings;
-    merged_profile->get_all_info_strings(&info_strings);
-    for (auto& [key, value] : info_strings) {
-        _unique_metrics->add_info_string(key, value);
-    }
-
-    // Copy counters
-    std::map<std::string, RuntimeProfile::Counter*> counters;
-    std::map<std::string, std::set<std::string>> child_counter_map;
-    merged_profile->get_all_counters(&counters, &child_counter_map);
-    std::queue<std::string> parent_queue;
-    parent_queue.push(RuntimeProfile::ROOT_COUNTER);
-    while (!parent_queue.empty()) {
-        std::string parent_counter_name = std::move(parent_queue.front());
-        parent_queue.pop();
-        for (auto& name : child_counter_map[parent_counter_name]) {
-            parent_queue.push(name);
-            auto* counter = counters[name];
-            DCHECK(counter != nullptr);
-            auto* new_counter = _unique_metrics->add_counter(name, counter->type(), parent_counter_name);
-            COUNTER_SET(new_counter, counter->value());
-        }
-    }
+    _unique_metrics->copy_all_info_strings_from(merged_profile);
+    _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
 // ========== ScanOperatorFactory ==========
