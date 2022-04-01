@@ -125,7 +125,7 @@ public:
 
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
-    void _send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params, RuntimeFilterRpcClosure* rpc_closure,
+    void _send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                         std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms);
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;

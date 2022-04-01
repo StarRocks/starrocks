@@ -2,6 +2,11 @@
 
 #pragma once
 
+#include <rapidjson/document.h>
+#include <rapidjson/prettywriter.h>
+#include <rapidjson/rapidjson.h>
+#include <rapidjson/stringbuffer.h>
+
 #include <functional>
 #include <mutex>
 #include <unordered_map>
@@ -20,6 +25,11 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
+    void _handle(HttpRequest* req, std::function<void(rapidjson::Document& root)> func);
+    void _handle_stat(HttpRequest* req);
+    void _handle_trace(HttpRequest* req);
+    void _handle_trace_switch(HttpRequest* req, bool on);
+    void _handle_error(HttpRequest* req, const std::string& error_msg);
     ExecEnv* _exec_env;
     std::once_flag _once_flag;
     std::unordered_map<std::string, std::function<void()>> _config_callback;

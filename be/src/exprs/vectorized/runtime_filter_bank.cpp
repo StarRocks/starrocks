@@ -446,8 +446,10 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* r
     }
 }
 void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf) {
-    _shared_runtime_filter = rf;
-    set_runtime_filter(_shared_runtime_filter.get());
+    std::shared_ptr<const JoinRuntimeFilter> old_value = nullptr;
+    if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
+        set_runtime_filter(_shared_runtime_filter.get());
+    }
 }
 
 } // namespace starrocks::vectorized

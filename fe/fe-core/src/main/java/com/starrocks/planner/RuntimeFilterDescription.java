@@ -223,7 +223,7 @@ public class RuntimeFilterDescription {
         if (broadcastGRFSenders != null && !broadcastGRFSenders.isEmpty()) {
             t.setBroadcast_grf_senders(broadcastGRFSenders.stream().collect(Collectors.toList()));
         }
-        if (broadcastGRFDestinations != null && broadcastGRFDestinations.isEmpty()) {
+        if (broadcastGRFDestinations != null && !broadcastGRFDestinations.isEmpty()) {
             t.setBroadcast_grf_destinations(broadcastGRFDestinations);
         }
 

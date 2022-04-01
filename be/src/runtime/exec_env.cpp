@@ -34,6 +34,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/substitute.h"
 #include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -211,6 +212,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _plugin_mgr = new PluginMgr();
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
+    RETURN_IF_ERROR(_runtime_filter_cache->init());
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -232,6 +234,25 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
 const std::string& ExecEnv::token() const {
     return _master_info->token;
+}
+
+void ExecEnv::add_rf_event(const TUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg) {
+    _runtime_filter_cache->add_event(query_id, filter_id, strings::Substitute("$0($1)", msg, network));
+}
+void ExecEnv::add_rf_event(const PUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg) {
+    TUniqueId tquery_id;
+    tquery_id.hi = query_id.hi();
+    tquery_id.lo = query_id.lo();
+    _runtime_filter_cache->add_event(tquery_id, filter_id, strings::Substitute("$0($1)", msg, network));
+}
+void ExecEnv::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {
+    _runtime_filter_cache->add_event(query_id, filter_id, std::move(msg));
+}
+void ExecEnv::add_rf_event(const PUniqueId& query_id, int filter_id, std::string&& msg) {
+    TUniqueId tquery_id;
+    tquery_id.hi = query_id.hi();
+    tquery_id.lo = query_id.lo();
+    _runtime_filter_cache->add_event(tquery_id, filter_id, std::move(msg));
 }
 
 class SetMemTrackerForColumnPool {

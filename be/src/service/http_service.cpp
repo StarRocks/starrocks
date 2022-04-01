@@ -178,7 +178,10 @@ Status HttpService::start() {
     _http_handlers.emplace_back(list_workgroup_action);
 
     RuntimeFilterCacheAction* runtime_filter_cache_action = new RuntimeFilterCacheAction(_env);
-    _ev_http_server->register_handler(HttpMethod::GET, "/api/runtime_filter_cache", runtime_filter_cache_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/runtime_filter_cache/{action}",
+                                      runtime_filter_cache_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/runtime_filter_cache/{action}",
+                                      runtime_filter_cache_action);
     _http_handlers.emplace_back(runtime_filter_cache_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());

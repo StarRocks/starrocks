@@ -119,6 +119,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
 }
 
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const vectorized::JoinRuntimeFilter* rf) {
+    _state->exec_env()->add_rf_event(_state->query_id(), filter_id, "LOCAL_PUBLISH");
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
@@ -346,6 +347,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
         }
 
         index += (1 + half);
+        _exec_env->add_rf_event(request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC");
         send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     }
 
@@ -417,6 +419,7 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
 
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms) {
+    _exec_env->add_rf_event(params.query_id(), params.filter_id(), "SEND_PART_RF");
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
     ev.transmit_timeout_ms = timeout_ms;
@@ -428,6 +431,7 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms) {
+    _exec_env->add_rf_event(params.query_id(), params.filter_id(), "SEND_BROADCAST_RF");
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
     ev.transmit_timeout_ms = timeout_ms;
@@ -443,8 +447,10 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
 
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
+        _exec_env->add_rf_event(params.query_id(), params.filter_id(), "RECV_PART_RF");
         ev.type = RECEIVE_PART_RF;
     } else {
+        _exec_env->add_rf_event(params.query_id(), params.filter_id(), "RECV_TOTAL_RF");
         ev.type = RECEIVE_TOTAL_RF;
     }
     ev.query_id.hi = params.query_id().hi();
@@ -459,12 +465,14 @@ static inline Status receive_total_runtime_filter_pipeline(
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
     query_id.lo = pb_query_id.lo();
-
+    ExecEnv::GetInstance()->add_rf_event(params.query_id(), params.filter_id(), BackendOptions::get_localhost(),
+                                         "RECV_TOTAL_RF_RPC_PIPELINE");
     auto query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
     // query_ctx is absent means that the query is finished or any fragments have not arrived, so
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
     if (!query_ctx) {
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+        return Status::OK();
     }
     // QueryContext is already destructed or invalid, so do nothing.
     if (query_ctx->is_finished() || query_ctx->is_expired()) {
@@ -482,9 +490,10 @@ static inline Status receive_total_runtime_filter_pipeline(
         // we conservatively consider that global rf arrives in advance, so cache it for later use.
         if (!fragment_ctx) {
             ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+            continue;
         }
         // FragmentContext is already destructed or invalid, so do nothing.
-        if (!fragment_ctx || fragment_ctx->is_canceled()) {
+        if (fragment_ctx->is_canceled()) {
             continue;
         }
         fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);
@@ -547,18 +556,20 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         }
 
         index += (1 + half);
+        _exec_env->add_rf_event(request.query_id(), request.filter_id(), addr.hostname, "FORWARD");
         send_rpc_runtime_filter(stub, rpc_closure, default_send_rpc_runtime_filter_timeout_ms, request);
     }
 }
 
 void RuntimeFilterWorker::_send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
-                                                         RuntimeFilterRpcClosure* rpc_closure,
                                                          std::vector<TRuntimeFilterDestination>&& destinations,
                                                          int timeout_ms) {
     DCHECK(!destinations.empty());
     std::random_device rd;
     std::mt19937 rand(rd());
     std::shuffle(destinations.begin(), destinations.end(), rand);
+    _exec_env->add_rf_event(params.query_id(), params.filter_id(),
+                            strings::Substitute("SEND_BROADCAST_RF_RPC: num_dest=$0", destinations.size()));
     params.set_is_partial(false);
     TNetworkAddress local;
     local.hostname = BackendOptions::get_localhost();
@@ -570,14 +581,14 @@ void RuntimeFilterWorker::_send_broadcast_runtime_filter(PTransmitRuntimeFilterP
         }
     }
 
-    std::vector<PTransmitRuntimeFilterParams> requests(destinations.size(), params);
-    std::vector<std::unique_ptr<RuntimeFilterRpcClosure>> rpc_closures(destinations.size());
+    std::vector<RuntimeFilterRpcClosure*> rpc_closures(destinations.size());
 
     for (int i = 0; i < destinations.size(); ++i) {
-        rpc_closures[i] = std::make_unique<RuntimeFilterRpcClosure>();
-        auto& request = requests[i];
+        rpc_closures[i] = new RuntimeFilterRpcClosure();
+        auto request = params;
         auto& rpc_closure = rpc_closures[i];
         auto& dest = destinations[i];
+        rpc_closure->ref();
         doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
@@ -586,11 +597,14 @@ void RuntimeFilterWorker::_send_broadcast_runtime_filter(PTransmitRuntimeFilterP
             finst_id->set_hi(id.hi);
             finst_id->set_lo(id.lo);
         }
-        send_rpc_runtime_filter(stub, rpc_closure.get(), timeout_ms, request);
+        _exec_env->add_rf_event(request.query_id(), request.filter_id(), dest.address.hostname,
+                                "SEND_BROADCAST_RF_RPC");
+        send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     }
 
     for (auto& rpc_closure : rpc_closures) {
         brpc::Join(rpc_closure->cntl.call_id());
+        rpc_closure->unref();
     }
 }
 
@@ -642,6 +656,8 @@ void RuntimeFilterWorker::execute() {
                 break;
             }
             RuntimeFilterMerger& merger = it->second;
+            _exec_env->add_rf_event(ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
+                                    "RECV_PART_RF_RPC");
             merger.merge_runtime_filter(ev.transmit_rf_request, rpc_closure);
             break;
         }
@@ -649,12 +665,14 @@ void RuntimeFilterWorker::execute() {
         case SEND_PART_RF: {
             for (const auto& addr : ev.transmit_addrs) {
                 doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+                _exec_env->add_rf_event(ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
+                                        addr.hostname, "SEND_PART_RF_RPC");
                 send_rpc_runtime_filter(stub, rpc_closure, ev.transmit_timeout_ms, ev.transmit_rf_request);
             }
             break;
         }
         case SEND_BROADCAST_GRF: {
-            _send_broadcast_runtime_filter(std::move(ev.transmit_rf_request), rpc_closure, std::move(ev.destinations),
+            _send_broadcast_runtime_filter(std::move(ev.transmit_rf_request), std::move(ev.destinations),
                                            ev.transmit_timeout_ms);
             break;
         }

@@ -684,8 +684,9 @@ public class Coordinator {
                 }
             }
 
-            List<FInstanceExecParam> sendFInstances = pickupAlienFInstances(params.instanceExecParams, 3);
-
+            Set<TUniqueId> broadcastGRfSenders =
+                    pickupAlienFInstances(params.instanceExecParams, 3).stream().
+                            map(instance -> instance.instanceId).collect(Collectors.toSet());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getBuildRuntimeFilters().entrySet()) {
                 int rid = kv.getKey();
                 RuntimeFilterDescription rf = kv.getValue();
@@ -694,8 +695,7 @@ public class Coordinator {
                         // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
                         topParams.runtimeFilterParams.putToRuntime_filter_builder_number(rid, 1);
                         if (usePipeline) {
-                            rf.setBroadcastGRFSenders(
-                                    sendFInstances.stream().map(instance -> instance.instanceId).collect(Collectors.toSet()));
+                            rf.setBroadcastGRFSenders(broadcastGRfSenders);
                             broadcastGRFList.add(rf);
                         } else {
                             rf.setSenderFragmentInstanceId(params.instanceExecParams.get(0).instanceId);

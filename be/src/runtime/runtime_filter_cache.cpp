@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "gutil/strings/substitute.h"
+#include "util/thread.h"
 
 namespace starrocks {
 
@@ -55,7 +56,7 @@ public:
               ts(duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count()),
               msg(std::move(msg)) {}
     ~RfEvent() = default;
-    std::string& to_string() { return strings::Substitute("[{}][{}] {}: {}", print_id(query_id), filter_id, ts, msg); }
+    std::string to_string() { return strings::Substitute("[$0][$1] $2: $3", print_id(query_id), filter_id, ts, msg); }
 
 private:
     TUniqueId query_id;
@@ -93,21 +94,70 @@ private:
     }
     RfEvents _events;
     mutable int64_t _deadline;
-    static constexpr seconds EXPIRE_SECONDS = seconds(600)
+    static constexpr seconds EXPIRE_SECONDS = seconds(600);
 };
 
 RuntimeFilterCache::RuntimeFilterCache(size_t log2_num_slots)
         : _num_slots(1L << log2_num_slots),
           _slot_mask(_num_slots - 1),
           _mutexes(_num_slots),
-          _maps(_num_slots),
+          _filter_maps(_num_slots),
           _event_mutexes(_num_slots),
           _event_maps(_num_slots) {}
-
+RuntimeFilterCache::~RuntimeFilterCache() {
+    if (_clean_thread) {
+        this->stop_clean_thread();
+        _clean_thread->join();
+    }
+}
+Status RuntimeFilterCache::init() {
+    try {
+        _clean_thread = std::make_shared<std::thread>(_clean_thread_func, this);
+        return Status::OK();
+    } catch (...) {
+        return Status::InternalError("Fail to create clean_thread of RuntimeFilterCache");
+    }
+}
+void RuntimeFilterCache::_clean_thread_func(RuntimeFilterCache* cache) {
+    Thread::set_thread_name(cache->clean_thread(), "rf_cache_clr");
+    while (!cache->is_stopped()) {
+        cache->_clean_filters();
+        cache->_clean_events();
+        std::this_thread::sleep_for(milliseconds(100));
+    }
+}
+void RuntimeFilterCache::_clean_events() {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _event_mutexes[i];
+        auto& map = _event_maps[i];
+        std::unique_lock write_lock(mutex);
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->second->is_expired()) {
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+void RuntimeFilterCache::_clean_filters() {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _mutexes[i];
+        auto& map = _filter_maps[i];
+        std::unique_lock write_lock(mutex);
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->second->is_expired()) {
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
 void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter) {
     const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
     auto& mutex = _mutexes[slot_idx];
-    auto& map = _maps[slot_idx];
+    auto& map = _filter_maps[slot_idx];
     _cache_times.fetch_add(1);
     std::unique_lock write_lock(mutex);
     if (!map.count(query_id)) {
@@ -120,7 +170,7 @@ void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id,
 JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_id) {
     const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
     auto& mutex = _mutexes[slot_idx];
-    auto& map = _maps[slot_idx];
+    auto& map = _filter_maps[slot_idx];
     std::shared_lock read_lock(mutex);
     auto it = map.find(query_id);
     if (it == map.end()) {
@@ -148,9 +198,9 @@ std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _event_mutexes[i];
         auto& map = _event_maps[i];
-        std::shared_mutex read_lock(mutex);
+        std::shared_lock read_lock(mutex);
         for (auto it = map.begin(); it != map.end(); ++it) {
-            events[it->first] = it->second->get_events();
+            events[print_id(it->first)] = it->second->get_events();
         }
     }
     return events;
@@ -159,30 +209,9 @@ std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_
 void RuntimeFilterCache::remove(const TUniqueId& query_id) {
     const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
     auto& mutex = _mutexes[slot_idx];
-    auto& map = _maps[slot_idx];
+    auto& map = _filter_maps[slot_idx];
     std::unique_lock write_lock(mutex);
     map.erase(query_id);
-    auto it = map.begin();
-    while (it != map.end()) {
-        if (it->second->is_expired()) {
-            it = map.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    for (auto i = 0; i < _num_slots; ++i) {
-        auto& mutex = _event_mutexes[i];
-        auto& map = _event_maps[i];
-        std::unique_lock write_lock(mutex);
-        for (auto it = map.begin(); it != map.end();) {
-            if (it->second->is_expired()) {
-                it = map.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
 }
 
 } // namespace starrocks
