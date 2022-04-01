@@ -132,6 +132,9 @@ public class RemoteScanRangeLocations {
         for (int i = 0; i < partitions.size(); i++) {
             descTbl.addReferencedPartitions(table, partitionInfos.get(i));
             for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
+                if (fileDesc.getLength() == 0) {
+                    continue;
+                }
                 for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
                     addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc);
                     LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
