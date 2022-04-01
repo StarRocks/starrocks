@@ -4469,6 +4469,7 @@ public class Catalog {
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
+                || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG
                 || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
             sb.append("EXTERNAL ");
         }
@@ -4686,6 +4687,30 @@ public class Catalog {
             sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.HUDI) {
+            HudiTable hudiTable = (HudiTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(hudiTable.getDb()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == TableType.ICEBERG) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
+            sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;
