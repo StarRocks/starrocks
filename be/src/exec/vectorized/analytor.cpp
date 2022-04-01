@@ -21,7 +21,7 @@
 
 namespace starrocks {
 namespace vectorized {
-Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+Status window_init_jvm_context(int id, const std::string& url, const std::string& checksum, const std::string& symbol,
                                starrocks_udf::FunctionContext* context);
 } // namespace vectorized
 

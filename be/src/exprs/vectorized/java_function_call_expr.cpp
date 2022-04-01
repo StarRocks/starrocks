@@ -136,7 +136,6 @@ struct UDFFunctionCallHelper {
             for (int i = 0; i < num_rows; ++i) {
                 auto data = env->GetObjectArrayElement((jobjectArray)result, i);
                 if (data != nullptr) {
-                    LOG(WARNING) << "result:" << helper.to_string(data);
                     slices[i] = helper.sliceVal((jstring)data, &_data_buffer[i]);
                 } else {
                     null_data[i] = true;
@@ -180,7 +179,7 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     // init Expr::prepare
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
-    if (!_fn.__isset.fid) {
+    if (!_fn.__isset.id) {
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
     }
 
