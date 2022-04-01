@@ -332,11 +332,11 @@ public:
     // in any of the child profiles to 'counters'.
     void get_counters(const std::string& name, std::vector<Counter*>* counters);
 
-    void get_all_counters(std::map<std::string, Counter*>* counters,
-                          std::map<std::string, std::set<std::string>>* child_counter_map);
-
     // Copy all but the bucket counters from src profile
     void copy_all_counters_from(RuntimeProfile* src_profile);
+
+    // Remove the counter object with 'name', and it will remove all the child counters recursively
+    void remove_counter(const std::string& name);
 
     // Clean all the counters except saved_counter_names
     void remove_counters(const std::set<std::string>& saved_counter_names);
@@ -357,7 +357,6 @@ public:
     // Returns a pointer to the info string value for 'key'.  Returns NULL if
     // the key does not exist.
     const std::string* get_info_string(const std::string& key);
-    void get_all_info_strings(std::map<std::string, std::string>* info_strings);
 
     // Copy all the string infos from src profile
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
