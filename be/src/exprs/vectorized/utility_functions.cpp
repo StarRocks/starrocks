@@ -93,7 +93,6 @@ inline int128_t next_uuid(int64_t timestamp, int16_t backendId, int16_t rand, in
     return v.res;
 }
 
-static std::mutex uid_mutex;
 // thread ids
 // The number of executor threads is fixed.
 static std::atomic<int16_t> inc{};
