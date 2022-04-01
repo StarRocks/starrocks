@@ -40,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,6 +48,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -691,7 +693,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             Table table = tableInfo.getTable();
             long tableId = table.getId();
             if (table.getType() == TableType.OLAP) {
-                Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
+                HashMap<Long, AgentBatchTask> batchTaskMap =
+                        Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }
