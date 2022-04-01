@@ -59,7 +59,8 @@ public:
     }
 
     bool low_cardinality() const override { return false; }
-    bool is_binary() const override { return true; }
+    bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
+    bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
     const uint8_t* raw_data() const override {
         if (!_slices_cache) {
@@ -207,8 +208,12 @@ public:
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
     std::string get_name() const override {
-        static_assert(std::is_same_v<T, uint32_t>);
-        return "binary";
+        static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
+        if (std::is_same_v<T, uint32_t>) {
+            return "binary";
+        } else {
+            return "large-binary";
+        }
     }
 
     Container& get_data() {
@@ -275,12 +280,20 @@ public:
     }
 
     bool reach_capacity_limit() const override {
-        static_assert(std::is_same_v<T, uint32_t>);
-        // The size limit of a single element is 2^32.
-        // The size limit of all elements is 2^32.
-        // The number limit of elements is 2^32.
-        return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
-               _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+        static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            // The size limit of a single element is 2^32.
+            // The size limit of all elements is 2^32.
+            // The number limit of elements is 2^32.
+            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+                   _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+        } else {
+            // The size limit of a single element is 2^32.
+            // The size limit of all elements is 2^64.
+            // The number limit of elements is 2^32.
+            return _bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+                   _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+        }
     }
 
 private:
@@ -294,5 +307,6 @@ private:
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
+using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
 
 } // namespace starrocks::vectorized
