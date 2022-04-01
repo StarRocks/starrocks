@@ -499,6 +499,11 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         // take sort_row_number rows from permutations.second merge-sort with _merged_segment.
         _merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, permutation_size, new_permutation.second);
 
+        if (big_chunk->reach_capacity_limit()) {
+            LOG(WARNING) << "TopN sort exceed single chunk memory limit";
+            return Status::InternalError(fmt::format("TopN sort exceed single chunk memory limit"));
+        }
+
         DataSegment merged_segment;
         merged_segment.init(_sort_exprs, big_chunk);
 
@@ -529,6 +534,11 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         auto& permutation = new_permutation[index_of_merging];
         big_chunk->append_safe(*segments[permutation.chunk_index].chunk, permutation.index_in_chunk, 1);
         ++index_of_merging;
+    }
+
+    if (big_chunk->reach_capacity_limit()) {
+        LOG(WARNING) << "TopN sort exceed single chunk memory limit";
+        return Status::InternalError(fmt::format("TopN sort exceed single chunk memory limit"));
     }
 
     _merged_segment.init(_sort_exprs, big_chunk);
