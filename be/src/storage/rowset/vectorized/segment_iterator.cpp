@@ -1309,7 +1309,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 
     for (size_t i = 0; i < bitmap_columns.size(); i++) {
         Roaring roaring;
-        auto bitmap_iter_ptr = FindOrNull(_bitmap_index_iterators, i);
+        auto bitmap_iter_ptr = FindOrNull(_bitmap_index_iterators, bitmap_columns[i]);
         if (bitmap_iter_ptr == nullptr) {
             continue;
         }
