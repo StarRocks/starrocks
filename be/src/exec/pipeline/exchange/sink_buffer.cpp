@@ -119,19 +119,20 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
-
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(wait_timer, _wait_time());
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
-    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
-    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
+
+    if (_bytes_enqueued - _bytes_sent > 0) {
+        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
+    }
 
     profile->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,

@@ -53,8 +53,7 @@ static const std::string THREAD_VOLUNTARY_CONTEXT_SWITCHES = "VoluntaryContextSw
 // NOLINTNEXTLINE
 static const std::string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryContextSwitches";
 
-// The root counter name for all top level counters.
-static const std::string ROOT_COUNTER = ""; // NOLINT
+const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 
 // NOLINTNEXTLINE
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
@@ -205,7 +204,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
             InfoStrings::iterator existing = _info_strings.find(key);
 
             if (existing == _info_strings.end()) {
-                _info_strings.insert(std::make_pair(key, it->second));
+                _info_strings.emplace(key, it->second);
                 _info_strings_display_order.push_back(key);
             } else {
                 _info_strings[key] = it->second;
@@ -376,7 +375,7 @@ void RuntimeProfile::add_info_string(const std::string& key, const std::string& 
     InfoStrings::iterator it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
-        _info_strings.insert(std::make_pair(key, value));
+        _info_strings.emplace(key, value);
         _info_strings_display_order.push_back(key);
     } else {
         it->second = value;
@@ -392,6 +391,13 @@ const std::string* RuntimeProfile::get_info_string(const std::string& key) {
     }
 
     return &it->second;
+}
+
+void RuntimeProfile::get_all_info_strings(std::map<std::string, std::string>* info_strings) {
+    std::lock_guard<std::mutex> l(_info_strings_lock);
+    for (auto& [key, value] : _info_strings) {
+        info_strings->emplace(key, value);
+    }
 }
 
 void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
@@ -541,6 +547,19 @@ void RuntimeProfile::get_counters(const std::string& name, std::vector<Counter*>
 
     for (auto& i : _children) {
         i.first->get_counters(name, counters);
+    }
+}
+
+void RuntimeProfile::get_all_counters(std::map<std::string, Counter*>* counters,
+                                      std::map<std::string, std::set<std::string>>* child_counter_map) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+
+    for (auto& [key, value] : _counter_map) {
+        counters->emplace(key, value);
+    }
+
+    for (auto& [parent_counter_name, names] : _child_counter_map) {
+        child_counter_map->emplace(parent_counter_name, names);
     }
 }
 
@@ -973,7 +992,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             const auto max_value = std::get<2>(merged_info);
 
             auto* counter0 = profile0->get_counter(name);
-            // As memtioned before, some counters may only attach one of the isomorphic profiles
+            // As memtioned before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == nullptr) {
                 counter0 = profile0->add_counter(name, type);
@@ -982,11 +1001,20 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
             const auto diff = max_value - min_value;
-            if (is_average_type(counter0->type()) && (diff > 5'000'000L && diff > merged_value / 5)) {
-                auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
-                auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
-                min_counter->set(min_value);
-                max_counter->set(max_value);
+            if (is_average_type(counter0->type())) {
+                if ((diff > 5'000'000L && diff > merged_value / 5)) {
+                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    min_counter->set(min_value);
+                    max_counter->set(max_value);
+                }
+            } else {
+                if (diff > min_value) {
+                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    min_counter->set(min_value);
+                    max_counter->set(max_value);
+                }
             }
         }
     }
