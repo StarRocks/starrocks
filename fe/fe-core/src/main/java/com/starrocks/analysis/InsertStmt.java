@@ -249,6 +249,11 @@ public class InsertStmt extends DmlStmt {
         return queryStatement.isExplain();
     }
 
+    @Override
+    public ExplainLevel getExplainLevel() {
+        return queryStatement.getExplainLevel();
+    }
+
     public boolean isStreaming() {
         return isStreaming;
     }
@@ -867,6 +872,7 @@ public class InsertStmt extends DmlStmt {
     /**
      * Below function is added by new analyzer
      */
+    @Override
     public TableName getTableName() {
         return tblName;
     }

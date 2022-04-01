@@ -25,6 +25,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -247,11 +248,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitExpressionOrDefault(StarRocksParser.ExpressionOrDefaultContext ctx) {
-        if (ctx.DEFAULT() != null) {
+    public ParseNode visitExpressionOrDefault(StarRocksParser.ExpressionOrDefaultContext context) {
+        if (context.DEFAULT() != null) {
             return new DefaultValueExpr();
         } else {
-            return visit(ctx.expression());
+            return visit(context.expression());
         }
     }
 
@@ -296,23 +297,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitUpdate(StarRocksParser.UpdateContext ctx) {
-        QualifiedName qualifiedName = getQualifiedName(ctx.qualifiedName());
+    public ParseNode visitUpdate(StarRocksParser.UpdateContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        List<ColumnAssignment> assignments = visit(ctx.assignmentList().assignment(), ColumnAssignment.class);
-        Expr where = ctx.where != null ? (Expr) visit(ctx.where) : null;
+        List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
         UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
-        if (ctx.explainDesc() != null) {
-            ret.setIsExplain(true, getExplainType(ctx.explainDesc()));
+        if (context.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return ret;
     }
 
     @Override
-    public ParseNode visitAssignment(StarRocksParser.AssignmentContext ctx) {
-        String column = ((Identifier) visit(ctx.identifier())).getValue();
-        Expr expr = (Expr) visit(ctx.expressionOrDefault());
+    public ParseNode visitAssignment(StarRocksParser.AssignmentContext context) {
+        String column = ((Identifier) visit(context.identifier())).getValue();
+        Expr expr = (Expr) visit(context.expressionOrDefault());
         return new ColumnAssignment(column, expr);
+    }
+
+    @Override
+    public ParseNode visitDelete(StarRocksParser.DeleteContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, where);
+        if (context.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+        }
+        return ret;
     }
 
     @Override
