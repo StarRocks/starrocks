@@ -400,6 +400,7 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
         max_size = std::max(max_size, static_cast<uint32_t>(curr_offset - prev_offset));
         prev_offset = curr_offset;
     }
+    // TODO: may be overflow here, i will solve it later
     return max_size + sizeof(uint32_t);
 }
 
