@@ -30,7 +30,8 @@ namespace pipeline {
 class ScanOperator;
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node);
+    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                    vectorized::OlapScanNode* scan_node);
 
     ~OlapChunkSource() override = default;
 
@@ -116,13 +117,11 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
-    RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     int64_t _last_spent_cpu_time_ns = 0;
 
-    RuntimeProfile* _scan_profile = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;

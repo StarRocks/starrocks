@@ -488,7 +488,7 @@ public class RuntimeProfile {
             Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(type, counters);
 
             Counter counter0 = profile0.getCounter(name);
-            // As memtioned before, some counters may only attach one of the isomorphic profiles
+            // As memtioned before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == null) {
                 counter0 = profile0.addCounter(name, type);
@@ -497,13 +497,24 @@ public class RuntimeProfile {
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
             double diff = mergedInfo.maxValue - mergedInfo.minValue;
-            if (Counter.isAverageType(counter0.getType()) && (diff > 5000000L && diff > mergedInfo.mergedValue / 5)) {
-                Counter minCounter =
-                        profile0.addCounter(mergedInfoPrefixMin + name, type, name);
-                Counter maxCounter =
-                        profile0.addCounter(mergedInfoPrefixMax + name, type, name);
-                minCounter.setValue(mergedInfo.minValue);
-                maxCounter.setValue(mergedInfo.maxValue);
+            if (Counter.isAverageType(counter0.getType())) {
+                if (diff > 5000000L && diff > mergedInfo.mergedValue / 5) {
+                    Counter minCounter =
+                            profile0.addCounter(mergedInfoPrefixMin + name, type, name);
+                    Counter maxCounter =
+                            profile0.addCounter(mergedInfoPrefixMax + name, type, name);
+                    minCounter.setValue(mergedInfo.minValue);
+                    maxCounter.setValue(mergedInfo.maxValue);
+                }
+            } else {
+                if (diff > mergedInfo.minValue) {
+                    Counter minCounter =
+                            profile0.addCounter(mergedInfoPrefixMin + name, type, name);
+                    Counter maxCounter =
+                            profile0.addCounter(mergedInfoPrefixMax + name, type, name);
+                    minCounter.setValue(mergedInfo.minValue);
+                    maxCounter.setValue(mergedInfo.maxValue);
+                }
             }
         }
 
