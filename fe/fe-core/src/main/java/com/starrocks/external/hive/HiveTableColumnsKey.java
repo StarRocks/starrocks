@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table.TableType;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,12 +16,20 @@ public class HiveTableColumnsKey {
     private final List<Column> partitionColumns;
     private final List<String> columnNames;
 
+    private final TableType tableType;
+
     public HiveTableColumnsKey(String databaseName, String tableName, List<Column> partitionColumns,
-                               List<String> columnNames) {
+                               List<String> columnNames, TableType tableType) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionColumns = partitionColumns;
         this.columnNames = columnNames;
+        this.tableType = tableType;
+    }
+
+    public HiveTableColumnsKey(String databaseName, String tableName, List<Column> partitionColumns,
+                               List<String> columnNames) {
+        this(databaseName, tableName, partitionColumns, columnNames, TableType.HIVE);
     }
 
     public static HiveTableColumnsKey gen(String databaseName, String tableName, List<Column> partitionColumns,
@@ -44,6 +53,10 @@ public class HiveTableColumnsKey {
         return columnNames;
     }
 
+    public TableType getTableType() {
+        return tableType;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -55,11 +68,12 @@ public class HiveTableColumnsKey {
 
         HiveTableColumnsKey other = (HiveTableColumnsKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
-                Objects.equals(tableName, other.tableName);
+                Objects.equals(tableName, other.tableName) &&
+                Objects.equals(tableType, other.tableType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName);
+        return Objects.hash(databaseName, tableName, tableType);
     }
 }
