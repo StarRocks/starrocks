@@ -39,7 +39,9 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     if (++_doc_stream_itr != _doc_stream.end()) {
-        return _build_current();
+        RETURN_IF_ERROR(_build_current());
+        _need_reset = false;
+        return Status::OK();
     }
     return Status::EndOfFile("all documents of the stream are iterated");
 }
@@ -101,7 +103,9 @@ Status JsonArrayParser::advance() noexcept {
     if (++_array_itr == _array.end()) {
         return Status::EndOfFile("all values of the array are iterated");
     }
-    return _build_current();
+    RETURN_IF_ERROR(_build_current());
+    _need_reset = false;
+    return Status::OK();
 }
 
 Status JsonArrayParser::_build_current() noexcept {
@@ -142,7 +146,9 @@ Status JsonDocumentStreamParserWithRoot::advance() noexcept {
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_obj));
 
-    return _build_current();
+    RETURN_IF_ERROR(_build_current());
+    _need_reset = false;
+    return Status::OK();
 }
 
 Status JsonDocumentStreamParserWithRoot::_build_current() noexcept {
@@ -185,7 +191,9 @@ Status JsonArrayParserWithRoot::advance() noexcept {
     RETURN_IF_ERROR(this->JsonArrayParser::advance());
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_obj));
 
-    return _build_current();
+    RETURN_IF_ERROR(_build_current());
+    _need_reset = false;
+    return Status::OK();
 }
 
 Status JsonArrayParserWithRoot::_build_current() noexcept {
@@ -226,15 +234,19 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
-    _need_reset = false;
     if (++_array_itr != _array.end()) {
-        return _build_current();
+        RETURN_IF_ERROR(_build_current());
+        _need_reset = false;
+        return Status::OK();
     }
 
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::advance());
 
     RETURN_IF_ERROR(_advance_2_valid_array());
-    return _build_current();
+    RETURN_IF_ERROR(_build_current());
+
+    _need_reset = false;
+    return Status::OK();
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::_advance_2_valid_array() noexcept {
@@ -311,13 +323,18 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
 Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
     _need_reset = false;
     if (++_array_itr != _array.end()) {
-        return _build_current();
+        RETURN_IF_ERROR(_build_current());
+        _need_reset = false;
+        return Status::OK();
     }
 
     RETURN_IF_ERROR(this->JsonArrayParser::advance());
 
     RETURN_IF_ERROR(_advance_2_valid_array());
-    return _build_current();
+    RETURN_IF_ERROR(_build_current());
+
+    _need_reset = false;
+    return Status::OK();
 }
 
 Status ExpandedJsonArrayParserWithRoot::_advance_2_valid_array() noexcept {
