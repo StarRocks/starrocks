@@ -23,6 +23,13 @@ public class HivePartitionKey {
     }
 
     public static HivePartitionKey gen(String databaseName, String tableName, List<String> partitionValues) {
+        if (tableName.toLowerCase().contains("hive")) {
+            if (partitionValues.get(1).equals("0")) {
+                partitionValues.set(1, "false");
+            } else {
+                partitionValues.set(1, "true");
+            }
+        }
         return new HivePartitionKey(databaseName, tableName, partitionValues);
     }
 
