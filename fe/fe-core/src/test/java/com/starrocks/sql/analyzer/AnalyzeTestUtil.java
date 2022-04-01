@@ -181,7 +181,7 @@ public class AnalyzeTestUtil {
         } catch (Exception ex) {
             ex.printStackTrace();
             Assert.fail();
-            return null;
+            throw ex;
         }
     }
 

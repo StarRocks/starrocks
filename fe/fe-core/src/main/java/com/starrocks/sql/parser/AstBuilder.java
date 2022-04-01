@@ -572,7 +572,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Iterator<Relation> iterator = relations.iterator();
                 Relation relation = iterator.next();
                 while (iterator.hasNext()) {
-                    relation = new JoinRelation(JoinOperator.CROSS_JOIN, relation, iterator.next(), null, false);
+                    relation = new JoinRelation(null, relation, iterator.next(), null, false);
                 }
                 from = relation;
             }
@@ -921,7 +921,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(null, new QueryStatement((QueryRelation) visit(context.query())));
+        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.query())));
     }
 
     @Override
@@ -1316,6 +1316,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
         } else if (context.MINUTE() != null) {
             return new FunctionCallExpr("minute", visit(context.expression(), Expr.class));
+        } else if (context.MOD() != null) {
+            return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {

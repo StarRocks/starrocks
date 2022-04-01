@@ -1,20 +1,4 @@
 [sql]
-select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0
-[result]
-logical project (mod(cast(col * col as double) / cast(col as double), cast(col as double)) + cast(col as double) - cast(int_divide(col, col) as double))
-    logical project (col,col,col)
-        logical scan
-[end]
-
-[sql]
-select v2&~v1|v3^1 from t0
-[result]
-logical project (bitxor(bitor(bitand(col, bitnot(col)), col), 1))
-    logical project (col,col,col)
-        logical scan
-[end]
-
-[sql]
 select * from t0 where v1 in (1,2,3)
 [result]
 logical project (col,col,col)

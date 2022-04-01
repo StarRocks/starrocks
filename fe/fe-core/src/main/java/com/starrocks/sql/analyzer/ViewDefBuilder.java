@@ -7,11 +7,16 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static java.util.stream.Collectors.toList;
 
 public class ViewDefBuilder {
     public static String build(StatementBase statement) {
@@ -71,6 +76,52 @@ public class ViewDefBuilder {
                 sqlBuilder.append(visit(stmt.getHavingClause()));
             }
 
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitCTE(CTERelation relation, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append(relation.getName());
+
+            if (relation.isResolvedInFromClause()) {
+                if (relation.getAlias() != null) {
+                    sqlBuilder.append(" AS ").append(relation.getAlias());
+                }
+                return sqlBuilder.toString();
+            }
+
+            if (relation.getColumnOutputNames() != null) {
+                sqlBuilder.append("(")
+                        .append(Joiner.on(", ").join(
+                                relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
+                        .append(")");
+            }
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitView(ViewRelation node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append(node.getName().toSql());
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" AS ");
+                sqlBuilder.append("`").append(node.getAlias()).append("`");
+            }
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitTable(TableRelation node, Void outerScope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append(node.getName().toSql());
+
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" AS ");
+                sqlBuilder.append("`").append(node.getAlias()).append("`");
+            }
             return sqlBuilder.toString();
         }
 

@@ -250,6 +250,26 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
+
+/**
+ * Operator precedences are shown in the following list, from highest precedence to the lowest.
+ *
+ * !
+ * - (unary minus), ~ (unary bit inversion)
+ * ^
+ * *, /, DIV, %, MOD
+ * -, +
+ * &
+ * |
+ * = (comparison), <=>, >=, >, <=, <, <>, !=, IS, LIKE, REGEXP
+ * BETWEEN, CASE WHEN
+ * NOT
+ * AND, &&
+ * XOR
+ * OR, ||
+ * = (assignment)
+ */
+
 expression
     : booleanExpression                                                                   #expressionDefault
     | NOT expression                                                                      #logicalNot
@@ -277,7 +297,7 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | left = valueExpression BITXOR right = valueExpression                               #arithmeticBinary
+    | left = valueExpression operator = BITXOR right = valueExpression                    #arithmeticBinary
     | left = valueExpression operator = (
               ASTERISK_SYMBOL
             | SLASH_SYMBOL
@@ -287,8 +307,8 @@ valueExpression
       right = valueExpression                                                             #arithmeticBinary
     | left = valueExpression operator = (PLUS_SYMBOL | MINUS_SYMBOL)
         right = valueExpression                                                           #arithmeticBinary
-    | left = valueExpression BITAND right = valueExpression                               #arithmeticBinary
-    | left = valueExpression BITOR right = valueExpression                                #arithmeticBinary
+    | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
+    | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
     ;
 
 primaryExpression
@@ -311,7 +331,7 @@ primaryExpression
     | windowFunction over                                                                 #windowFunctionCall
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
-    | LOGICAL_NOT primaryExpression                                                       #arithmeticUnary
+    | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
     | EXISTS '(' query ')'                                                                #exists
     | subquery                                                                            #subqueryExpression
@@ -358,6 +378,7 @@ specialFunctionExpression
     | IF '(' (expression (',' expression)*)? ')'
     | LEFT '(' expression ',' expression ')'
     | MINUTE '(' expression ')'
+    | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
     | RIGHT '(' expression ',' expression ')'
     | SECOND '(' expression ')'

@@ -98,17 +98,15 @@ public class AST2SQL {
             sqlBuilder.append(relation.getName());
 
             if (relation.isResolvedInFromClause()) {
-                if (relation.getAliasWithoutNameRewrite() != null) {
-                    sqlBuilder.append(" AS ").append(relation.getAliasWithoutNameRewrite());
+                if (relation.getAlias() != null) {
+                    sqlBuilder.append(" AS ").append(relation.getAlias());
                 }
                 return sqlBuilder.toString();
             }
 
             if (relation.getColumnOutputNames() != null) {
                 sqlBuilder.append("(")
-                        .append(Joiner.on(", ").join(
-                                relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
-                        .append(")");
+                        .append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
             }
             sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
             return sqlBuilder.toString();
@@ -133,7 +131,7 @@ public class AST2SQL {
                 if (!item.isStar()) {
                     String aliasSql = null;
                     if (item.getAlias() != null) {
-                        aliasSql = "`" + item.getAlias() + "`";
+                        aliasSql = "AS " + item.getAlias();
                     }
                     selectItemLabel = visit(item.getExpr()) + ((aliasSql == null) ? "" : " " + aliasSql);
                 } else if (item.getTblName() != null) {
@@ -181,7 +179,7 @@ public class AST2SQL {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append(node.getAlias());
             }
             return sqlBuilder.toString();
         }
@@ -190,7 +188,11 @@ public class AST2SQL {
         public String visitJoin(JoinRelation relation, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(visit(relation.getLeft())).append(" ");
-            sqlBuilder.append(relation.getJoinOp());
+            if (relation.isImplicit()) {
+                sqlBuilder.append(",");
+            } else {
+                sqlBuilder.append(relation.getJoinOp());
+            }
             if (relation.getJoinHint() != null && !relation.getJoinHint().isEmpty()) {
                 sqlBuilder.append(" [").append(relation.getJoinHint()).append("]");
             }
@@ -252,11 +254,11 @@ public class AST2SQL {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append(node.getName().toSql());
+            sqlBuilder.append(node.getName().toString());
 
-            if (node.getAliasWithoutNameRewrite() != null) {
+            if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAliasWithoutNameRewrite()).append("`");
+                sqlBuilder.append(node.getAlias());
             }
             return sqlBuilder.toString();
         }
@@ -311,36 +313,17 @@ public class AST2SQL {
 
         @Override
         public String visitArithmeticExpr(ArithmeticExpr node, Void context) {
-            StringBuilder stringBuilder = new StringBuilder();
+            StringBuilder sqlBuilder = new StringBuilder();
 
             if (node.getChildren().size() == 1) {
-                stringBuilder.append(node.getOp());
-                if (node.getChild(0) instanceof SlotRef || node.getChild(0) instanceof LiteralExpr) {
-                    stringBuilder.append(visit(node.getChild(0)));
-                } else {
-                    stringBuilder.append("(");
-                    stringBuilder.append(visit(node.getChild(0)));
-                    stringBuilder.append(")");
-                }
+                sqlBuilder.append(node.getOp());
+                sqlBuilder.append(printWithParentheses(node.getChild(0)));
             } else {
-                if (node.getChild(0) instanceof SlotRef || node.getChild(0) instanceof LiteralExpr) {
-                    stringBuilder.append(visit(node.getChild(0)));
-                } else {
-                    stringBuilder.append("(");
-                    stringBuilder.append(visit(node.getChild(0)));
-                    stringBuilder.append(")");
-                }
-
-                stringBuilder.append(" ").append(node.getOp()).append(" ");
-                if (node.getChild(1) instanceof SlotRef || node.getChild(1) instanceof LiteralExpr) {
-                    stringBuilder.append(visit(node.getChild(1)));
-                } else {
-                    stringBuilder.append("(");
-                    stringBuilder.append(visit(node.getChild(1)));
-                    stringBuilder.append(")");
-                }
+                sqlBuilder.append(printWithParentheses(node.getChild(0)));
+                sqlBuilder.append(" ").append(node.getOp()).append(" ");
+                sqlBuilder.append(printWithParentheses(node.getChild(1)));
             }
-            return stringBuilder.toString();
+            return sqlBuilder.toString();
         }
 
         @Override
@@ -390,14 +373,15 @@ public class AST2SQL {
         @Override
         public String visitBetweenPredicate(BetweenPredicate node, Void context) {
             String notStr = (node.isNotBetween()) ? "NOT " : "";
-            return '(' + visit(node.getChild(0)) + ") " + notStr + "BETWEEN " +
-                    visit(node.getChild(1)) + " AND " + visit(node.getChild(2));
+            return printWithParentheses(node.getChild(0)) + " " + notStr + "BETWEEN " +
+                    printWithParentheses(node.getChild(1)) + " AND " + printWithParentheses(node.getChild(2));
         }
 
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
-            return "(" + visit(node.getChild(0)) + ") " + node.getOp().toString()
-                    + " (" + visit(node.getChild(1)) + ")";
+            return printWithParentheses(node.getChild(0)) +
+                    " " + node.getOp() + " " +
+                    printWithParentheses(node.getChild(1));
         }
 
         @Override
@@ -430,12 +414,16 @@ public class AST2SQL {
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
             if (node.getChildren().size() == 1) {
-                return "NOT (" + visit(node.getChild(0)) + ")";
+                sqlBuilder.append("NOT ");
+                sqlBuilder.append(printWithParentheses(node.getChild(0)));
             } else {
-                return "(" + visit(node.getChild(0)) + ")" + " " + node.getOp().toString() + " " + "(" +
-                        visit(node.getChild(1)) + ")";
+                sqlBuilder.append(printWithParentheses(node.getChild(0)));
+                sqlBuilder.append(" ").append(node.getOp()).append(" ");
+                sqlBuilder.append(printWithParentheses(node.getChild(1)));
             }
+            return sqlBuilder.toString();
         }
 
         public String visitDefaultValueExpr(DefaultValueExpr node, Void context) {
@@ -670,6 +658,14 @@ public class AST2SQL {
 
         private String visitAstList(List<? extends ParseNode> contexts) {
             return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
+        }
+
+        private String printWithParentheses(ParseNode node) {
+            if (node instanceof SlotRef || node instanceof LiteralExpr) {
+                return visit(node);
+            } else {
+                return "(" + visit(node) + ")";
+            }
         }
     }
 }

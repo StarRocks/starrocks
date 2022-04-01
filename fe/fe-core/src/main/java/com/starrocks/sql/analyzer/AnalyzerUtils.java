@@ -298,7 +298,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getAlias(), table);
+            tables.put(node.getResolveTableName(), table);
             return null;
         }
     }
