@@ -237,11 +237,6 @@ public:
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
-    size_t shrink_memory_usage() const override {
-        return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(_offsets[0]) +
-               _slices.size() * sizeof(_slices[0]);
-    }
-
     void swap_column(Column& rhs) override {
         auto& r = down_cast<BinaryColumnBase<T>&>(rhs);
         using std::swap;

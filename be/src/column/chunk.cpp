@@ -238,14 +238,6 @@ size_t Chunk::memory_usage() const {
     return memory_usage;
 }
 
-size_t Chunk::shrink_memory_usage() const {
-    size_t memory_usage = 0;
-    for (const auto& column : _columns) {
-        memory_usage += column->shrink_memory_usage();
-    }
-    return memory_usage;
-}
-
 size_t Chunk::container_memory_usage() const {
     size_t container_memory_usage = 0;
     for (const auto& column : _columns) {
