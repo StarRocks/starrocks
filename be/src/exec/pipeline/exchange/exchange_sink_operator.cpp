@@ -350,7 +350,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-    _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
+    _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
 
@@ -540,7 +540,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
                                              int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     {
-        SCOPED_TIMER(_serialize_batch_timer);
+        SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
