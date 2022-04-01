@@ -35,6 +35,7 @@ namespace starrocks {
 class MonotonicStopWatch {
 public:
     MonotonicStopWatch() {
+        _start = {};
         _total_time = 0;
         _running = false;
     }
@@ -72,8 +73,7 @@ public:
 
         timespec end;
         clock_gettime(CLOCK_MONOTONIC, &end);
-        return (end.tv_sec - _start.tv_sec) * 1000L * 1000L * 1000L +
-               (end.tv_nsec - _start.tv_nsec);
+        return (end.tv_sec - _start.tv_sec) * 1000L * 1000L * 1000L + (end.tv_nsec - _start.tv_nsec);
     }
 
 private:
@@ -82,4 +82,4 @@ private:
     bool _running;
 };
 
-}
+} // namespace starrocks

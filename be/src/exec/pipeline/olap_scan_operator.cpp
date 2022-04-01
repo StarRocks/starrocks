@@ -81,9 +81,10 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel) {
+ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     vectorized::OlapScanNode* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    return std::make_shared<OlapChunkSource>(std::move(morsel), this, olap_scan_node);
+    return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel), this,
+                                             olap_scan_node);
 }
 
 } // namespace starrocks::pipeline
