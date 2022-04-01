@@ -68,4 +68,11 @@ public class OrderByTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:SORT\n" +
                 "  |  order by: <slot 1> 1: v1 DESC"));
     }
+
+    @Test
+    public void testUnionOrderByDuplicateColumn() throws Exception {
+        String sql = "select * from t0 union all select * from t1 order by v1, v2, v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 7> 7: v1 ASC, <slot 8> 8: v2 ASC");
+    }
 }
