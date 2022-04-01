@@ -1135,7 +1135,6 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     // create new _index_block from the new snapshot file
     if (!_flushed) {
         std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-        std::string l0_index_file_path_tmp = l0_index_file_path + ".tmp";
         fs::CreateBlockOptions wblock_opts({l0_index_file_path});
         wblock_opts.mode = Env::MUST_EXIST;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
