@@ -81,7 +81,7 @@ Status StorageEngine::start_bg_threads() {
     }
     int32_t data_dir_num = data_dirs.size();
 
-    if (!config::enable_new_compaction_framework) {
+    if (!config::enable_event_based_compaction_framework) {
         // base and cumulative compaction threads
         int32_t base_compaction_num_threads_per_disk =
                 std::max<int32_t>(1, config::base_compaction_num_threads_per_disk);
