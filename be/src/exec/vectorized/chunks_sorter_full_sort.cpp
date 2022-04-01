@@ -252,12 +252,18 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
         _big_chunk = chunk->clone_empty();
     }
 
-    if (_big_chunk->num_rows() + chunk->num_rows() > std::numeric_limits<uint32_t>::max()) {
-        LOG(WARNING) << "full sort row is " << _big_chunk->num_rows() + chunk->num_rows();
-        return Status::InternalError("Full sort in single query instance only support at most 4294967295 rows");
+    size_t target_rows = _big_chunk->num_rows() + chunk->num_rows();
+    if (target_rows > Column::MAX_CAPACITY_LIMIT) {
+        LOG(WARNING) << "Full sort rows exceed limit " << target_rows;
+        return Status::InternalError(fmt::format("Full sort rows exceed limit: {}", target_rows));
     }
 
     _big_chunk->append(*chunk);
+
+    if (_big_chunk->reach_capacity_limit()) {
+        LOG(WARNING) << "Full sort encounter big chunk overflow issue";
+        return Status::InternalError(fmt::format("Full sort encounter big chunk overflow issue"));
+    }
 
     DCHECK(!_big_chunk->has_const_column());
     return Status::OK();
