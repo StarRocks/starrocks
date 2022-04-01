@@ -34,6 +34,9 @@ private:
 
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 // JsonArrayParser parse json in json array
@@ -52,6 +55,9 @@ private:
     simdjson::ondemand::document _doc;
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 // JsonDocumentStreamParserWithRoot parse json in document stream (ndjson) with json root.
@@ -62,9 +68,13 @@ class JsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
 public:
     JsonDocumentStreamParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) noexcept override;
+    Status advance() noexcept override;
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 // JsonArrayParserWithRoot parse json in json array with json root.
@@ -75,9 +85,13 @@ class JsonArrayParserWithRoot : public JsonArrayParser {
 public:
     JsonArrayParserWithRoot(const std::vector<SimpleJsonPath>& root_paths) : _root_paths(root_paths) {}
     Status get_current(simdjson::ondemand::object* row) noexcept override;
+    Status advance() noexcept override;
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 // ExpandedJsonDocumentStreamParserWithRoot parses json in document stream (ndjson) with json root, and expands the array under json root.
@@ -96,6 +110,9 @@ private:
     simdjson::ondemand::object _curr_row;
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 // ExpandedJsonArrayParserWithRoot parses json in json array with json root, and expands the array under json root.
@@ -114,6 +131,9 @@ private:
     simdjson::ondemand::object _curr_row;
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
+
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
 };
 
 } // namespace starrocks::vectorized
