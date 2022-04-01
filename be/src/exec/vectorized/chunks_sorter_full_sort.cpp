@@ -37,8 +37,8 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     _big_chunk->append(*chunk);
 
     if (_big_chunk->reach_capacity_limit()) {
-        LOG(WARNING) << "Full sort exceed single chunk memory limit";
-        return Status::InternalError(fmt::format("Full sort exceed single chunk memory limit"));
+        LOG(WARNING) << "Full sort encounter big chunk overflow issue";
+        return Status::InternalError(fmt::format("Full sort encounter big chunk overflow issue"));
     }
 
     DCHECK(!_big_chunk->has_const_column());
