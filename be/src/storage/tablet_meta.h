@@ -221,9 +221,7 @@ public:
 
     bool use_persistent_index() const { return _use_persistent_index; }
 
-    void set_use_persistent_index(bool use_persistent_index) {
-        _use_persistent_index = use_persistent_index;
-    }
+    void set_use_persistent_index(bool use_persistent_index) { _use_persistent_index = use_persistent_index; }
 
 private:
     Status _save_meta(DataDir* data_dir);

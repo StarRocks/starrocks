@@ -770,7 +770,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
     }
-    LOG(INFO) << "delete_ops: " << delete_op;
 
     PersistentIndexMetaPB index_meta;
     st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);

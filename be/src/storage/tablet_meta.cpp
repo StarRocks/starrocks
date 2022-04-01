@@ -232,7 +232,7 @@ Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& reque
                           RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta) {
     *tablet_meta = std::shared_ptr<TabletMeta>(
             new TabletMeta(request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash,
-                           shard_id, request.tablet_schema, next_unique_id, 
+                           shard_id, request.tablet_schema, next_unique_id,
                            request.__isset.use_persistent_index ? request.use_persistent_index : false,
                            col_ordinal_to_unique_id, tablet_uid,
                            request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
@@ -248,8 +248,9 @@ TabletMetaSharedPtr TabletMeta::create(MemTracker* mem_tracker) {
     return tablet_meta;
 }
 
-TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, 
-                       uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool use_persistent_index,
+TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
+                       uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
+                       bool use_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType, RowsetTypePB rowset_type)
         : _tablet_uid(0, 0), _preferred_rowset_type(rowset_type) {
