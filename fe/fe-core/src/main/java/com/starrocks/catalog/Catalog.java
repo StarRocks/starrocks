@@ -4983,10 +4983,13 @@ public class Catalog {
     }
 
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
+        SystemInfoService systemInfoService = Catalog.getCurrentSystemInfo();
         List<Long> chosenBackendIds =
-                Catalog.getCurrentSystemInfo().seqChooseBackendIds(replicationNum, true, true, clusterName);
+                systemInfoService.seqChooseBackendIds(replicationNum, true, true, clusterName);
         if (chosenBackendIds == null) {
-            throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum);
+            List<Long> backendIds = systemInfoService.getBackendIds(true);
+            throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
+                    ", Current alive backend is [" + Joiner.on(",").join(backendIds) + "]");
         }
         return chosenBackendIds;
     }
