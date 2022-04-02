@@ -13,7 +13,7 @@
 
 namespace starrocks {
 namespace vectorized {
-Status init_udaf_context(int id, const std::string& url, const std::string& checksum, const std::string& symbol,
+Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context);
 
 } // namespace vectorized
@@ -35,7 +35,7 @@ Status Aggregator::open(RuntimeState* state) {
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = vectorized::init_udaf_context(fn.id, fn.hdfs_location, fn.checksum,
+                    auto st = vectorized::init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum,
                                                             fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
                     RETURN_IF_ERROR(st);
                 }
