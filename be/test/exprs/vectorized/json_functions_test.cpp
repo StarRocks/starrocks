@@ -646,7 +646,7 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STREQ(output.data(), "2");
 
     st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output);
-    EXPECT_STATUS(Status::InvalidArgument(""), st);
+    EXPECT_STATUS(Status::NotFound(""), st);
 }
 
 } // namespace vectorized

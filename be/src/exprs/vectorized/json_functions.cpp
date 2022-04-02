@@ -161,9 +161,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             }
 
             if (index >= sz) {
-                return Status::InvalidArgument(
-                        fmt::format("the acquired index is beyond array size, field: {}, index: {}, array size: {}",
-                                    col, index, sz));
+                return Status::NotFound(
+                        fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
             }
 
             err = arr.at(index).get(tvalue);
