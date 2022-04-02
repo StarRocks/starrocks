@@ -250,6 +250,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList
