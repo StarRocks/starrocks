@@ -239,6 +239,7 @@ import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -4392,11 +4393,21 @@ public class Catalog {
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
-        columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
-        columns.add(new Column("_hoodie_commit_seqno", Type.STRING, true));
-        columns.add(new Column("_hoodie_record_key", Type.STRING, true));
-        columns.add(new Column("_hoodie_partition_path", Type.STRING, true));
-        columns.add(new Column("_hoodie_file_name", Type.STRING, true));
+        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.COMMIT_TIME_METADATA_FIELD))) {
+            columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
+        }
+        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.COMMIT_SEQNO_METADATA_FIELD))) {
+            columns.add(new Column(HoodieRecord.COMMIT_SEQNO_METADATA_FIELD, Type.STRING, true));
+        }
+        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.RECORD_KEY_METADATA_FIELD))) {
+            columns.add(new Column(HoodieRecord.RECORD_KEY_METADATA_FIELD, Type.STRING, true));
+        }
+        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.PARTITION_PATH_METADATA_FIELD))) {
+            columns.add(new Column(HoodieRecord.PARTITION_PATH_METADATA_FIELD, Type.STRING, true));
+        }
+        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.FILENAME_METADATA_FIELD))) {
+            columns.add(new Column(HoodieRecord.FILENAME_METADATA_FIELD, Type.STRING, true));
+        }
 
         long tableId = getNextId();
         HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
