@@ -1337,6 +1337,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
+    @ConfField(mutable = true)
+    public static long iceberg_meta_cache_ttl_s = 3600L * 24L;
+
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */

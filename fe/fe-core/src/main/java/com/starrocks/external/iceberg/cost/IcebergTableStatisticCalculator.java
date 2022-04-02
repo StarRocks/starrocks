@@ -36,13 +36,12 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.stream.Collectors.toSet;
 
-// TODO @caneGuy add cache for statistics, currently getting stats from iceberg metafiles is not time consuming
 public class IcebergTableStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(IcebergTableStatisticCalculator.class);
 
     private final Table icebergTable;
 
-    private IcebergTableStatisticCalculator(Table icebergTable) {
+    public IcebergTableStatisticCalculator(Table icebergTable) {
         this.icebergTable = icebergTable;
     }
 
@@ -64,8 +63,7 @@ public class IcebergTableStatisticCalculator {
                                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         List<ColumnStatistic> columnStatistics = new ArrayList<>();
         List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable).
-                generateIcebergFileStats(icebergPredicates, columns);
+        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
         if (icebergFileStats == null) {
             columnStatistics.add(ColumnStatistic.unknown());
         } else {
@@ -200,7 +198,7 @@ public class IcebergTableStatisticCalculator {
         }
     }
 
-    private IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
+    public IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
                                                       List<Types.NestedField> columns) {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
         if (!snapshot.isPresent()) {
