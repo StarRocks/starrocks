@@ -271,7 +271,6 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
 
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
-
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
@@ -301,6 +300,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
+
+    if (_scan_node->thrift_olap_scan_node().__isset.enable_rewrite_zone_map_predicate) {
+        _params.enable_rewrite_zone_map_predicate = _scan_node->thrift_olap_scan_node().enable_rewrite_zone_map_predicate;
+    }
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));

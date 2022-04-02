@@ -343,6 +343,7 @@ struct TOlapScanNode {
   23: optional map<i32, i32> dict_string_id_to_int_ids
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
+  25: optional bool enable_rewrite_zone_map_predicate
 }
 
 struct TJDBCScanNode {

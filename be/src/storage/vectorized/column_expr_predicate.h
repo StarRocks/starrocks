@@ -12,11 +12,13 @@ class SlotDescriptor;
 class SparseRange;
 class ExprContext;
 class BitmapIndexIterator;
+class ObjectPool;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
 
 class Column;
+
 
 // This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
 // used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
@@ -50,6 +52,12 @@ public:
     std::string debug_string() const override;
     RuntimeState* runtime_state() const { return _state; }
     const SlotDescriptor* slot_desc() const { return _slot_desc; }
+
+    // try to rewrite the predicate to equivalent one or more predicates that can be used on zone map index
+    // output is only valid when returning Status::OK()
+    // if output is empty, it means that the conditions of rewriting is not met
+    // otherwise, it will contain one or more predicates which form the conjunction normal form
+    Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool, std::vector<const ColumnExprPredicate*>* output);
 
 private:
     void _add_expr_ctx(ExprContext* expr_ctx);

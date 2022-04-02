@@ -54,6 +54,8 @@ struct TabletReaderParams {
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
+
+    bool enable_rewrite_zone_map_predicate = false;
 };
 
 } // namespace vectorized

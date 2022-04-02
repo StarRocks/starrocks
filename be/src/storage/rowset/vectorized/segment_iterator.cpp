@@ -37,6 +37,7 @@
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/column_or_predicate.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/column_expr_predicate.h"
 #include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
@@ -475,11 +476,17 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     for (const auto& pair : _opts.predicates) {
         columns.insert(pair.first);
     }
+    std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>> predicates_for_zone_map;
+    if (_opts.enable_rewrite_zone_map_predicate) {
+        RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite(&_obj_pool, _opts.predicates, &predicates_for_zone_map));
+    } else {
+        predicates_for_zone_map = _opts.predicates;
+    }
 
     std::vector<const ColumnPredicate*> query_preds;
     for (ColumnId cid : columns) {
-        auto iter1 = _opts.predicates.find(cid);
-        if (iter1 != _opts.predicates.end()) {
+        auto iter1 = predicates_for_zone_map.find(cid);
+        if (iter1 != predicates_for_zone_map.end()) {
             query_preds = iter1->second;
         } else {
             query_preds.clear();

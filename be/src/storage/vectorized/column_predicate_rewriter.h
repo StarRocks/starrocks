@@ -13,6 +13,8 @@
 #include "storage/vectorized/conjunctive_predicates.h"
 
 namespace starrocks::vectorized {
+class ColumnExprPredicate;
+
 // For dictionary columns, predicates can be rewriten
 // Int columns.
 // ColumnPredicateRewriter was a helper class, won't acquire any resource
@@ -75,6 +77,18 @@ private:
     ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
     std::vector<uint8_t>* _disable_dict_rewrite;
+};
+
+class ZonemapPredicatesRewriter {
+public:
+    using PredicateList = std::vector<const ColumnPredicate*>;
+
+    static Status rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src, std::unordered_map<ColumnId, PredicateList>* dst);
+
+    static Status rewrite(ObjectPool* pool, const PredicateList& src, PredicateList* dst);
+
+private:
+    static Status _rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred, std::vector<const ColumnExprPredicate*>* new_preds);
 };
 
 } // namespace starrocks::vectorized

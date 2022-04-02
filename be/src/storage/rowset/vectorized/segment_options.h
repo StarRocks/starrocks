@@ -61,6 +61,7 @@ public:
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     bool has_delete_pred = false;
+    bool enable_rewrite_zone_map_predicate = false;
 };
 
 } // namespace starrocks::vectorized

@@ -77,6 +77,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -731,6 +732,8 @@ public class OlapScanNode extends ScanNode {
         if (ConnectContext.get() != null) {
             msg.olap_scan_node.setEnable_column_expr_predicate(
                     ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+            msg.olap_scan_node.setEnable_rewrite_zone_map_predicate(
+                    ConnectContext.get().getSessionVariable().isEnableRewriteZonemapPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
