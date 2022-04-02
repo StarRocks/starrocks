@@ -4406,22 +4406,6 @@ public class Catalog {
         metaFields.removeAll(includedMetaFields);
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
-        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.COMMIT_TIME_METADATA_FIELD))) {
-            columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
-        }
-        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.COMMIT_SEQNO_METADATA_FIELD))) {
-            columns.add(new Column(HoodieRecord.COMMIT_SEQNO_METADATA_FIELD, Type.STRING, true));
-        }
-        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.RECORD_KEY_METADATA_FIELD))) {
-            columns.add(new Column(HoodieRecord.RECORD_KEY_METADATA_FIELD, Type.STRING, true));
-        }
-        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.PARTITION_PATH_METADATA_FIELD))) {
-            columns.add(new Column(HoodieRecord.PARTITION_PATH_METADATA_FIELD, Type.STRING, true));
-        }
-        if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.FILENAME_METADATA_FIELD))) {
-            columns.add(new Column(HoodieRecord.FILENAME_METADATA_FIELD, Type.STRING, true));
-        }
-
         long tableId = getNextId();
         HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
         // partition key, commented for show partition key
