@@ -24,6 +24,7 @@ statement
         properties?
         AS queryStatement                                                               #createTableAsSelect
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
@@ -236,6 +237,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList

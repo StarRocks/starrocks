@@ -165,7 +165,8 @@ public class UtFrameUtils {
             throws Exception {
         StatementBase statementBase;
         try {
-            statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+            statementBase =
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
@@ -315,7 +316,8 @@ public class UtFrameUtils {
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
 
-        List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
@@ -345,7 +347,9 @@ public class UtFrameUtils {
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                        .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
         QueryStatement queryStmt = (QueryStatement) statementBase;
         String digest = SqlDigestBuilder.build(queryStmt);
@@ -443,7 +447,8 @@ public class UtFrameUtils {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
 
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();

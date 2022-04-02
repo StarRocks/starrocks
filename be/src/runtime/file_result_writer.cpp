@@ -63,9 +63,9 @@ Status FileResultWriter::init(RuntimeState* state) {
 
 void FileResultWriter::_init_profile() {
     RuntimeProfile* profile = _parent_profile->create_child("FileResultWriter", true, true);
-    _append_row_batch_timer = ADD_TIMER(profile, "AppendBatchTime");
-    _convert_tuple_timer = ADD_CHILD_TIMER(profile, "TupleConvertTime", "AppendBatchTime");
-    _file_write_timer = ADD_CHILD_TIMER(profile, "FileWriteTime", "AppendBatchTime");
+    _append_chunk_timer = ADD_TIMER(profile, "AppendChunkTime");
+    _convert_tuple_timer = ADD_CHILD_TIMER(profile, "TupleConvertTime", "AppendChunkTime");
+    _file_write_timer = ADD_CHILD_TIMER(profile, "FileWriteTime", "AppendChunkTime");
     _writer_close_timer = ADD_TIMER(profile, "FileWriterCloseTime");
     _written_rows_counter = ADD_COUNTER(profile, "NumWrittenRows", TUnit::UNIT);
     _written_data_bytes = ADD_COUNTER(profile, "WrittenDataBytes", TUnit::BYTES);

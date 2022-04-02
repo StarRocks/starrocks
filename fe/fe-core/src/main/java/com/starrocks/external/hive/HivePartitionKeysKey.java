@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table.TableType;
 
 import java.util.List;
 import java.util.Objects;
@@ -13,11 +14,18 @@ public class HivePartitionKeysKey {
 
     // does not participate in hashCode/equals
     private final List<Column> partitionColumns;
+    private final TableType tableType;
 
-    public HivePartitionKeysKey(String databaseName, String tableName, List<Column> partitionColumns) {
+    public HivePartitionKeysKey(String databaseName, String tableName,
+                                TableType tableType, List<Column> partitionColumns) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionColumns = partitionColumns;
+        this.tableType = tableType;
+    }
+
+    public HivePartitionKeysKey(String databaseName, String tableName, List<Column> partitionColumns) {
+        this(databaseName, tableName, TableType.HIVE, partitionColumns);
     }
 
     public static HivePartitionKeysKey gen(String databaseName, String tableName, List<Column> partitionColumns) {
@@ -36,6 +44,10 @@ public class HivePartitionKeysKey {
         return partitionColumns;
     }
 
+    public TableType getTableType() {
+        return tableType;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -47,11 +59,12 @@ public class HivePartitionKeysKey {
 
         HivePartitionKeysKey other = (HivePartitionKeysKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
-                Objects.equals(tableName, other.tableName);
+                Objects.equals(tableName, other.tableName) &&
+                Objects.equals(tableType, other.tableType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName);
+        return Objects.hash(databaseName, tableName, tableType);
     }
 }

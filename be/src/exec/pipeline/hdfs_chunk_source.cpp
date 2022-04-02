@@ -92,34 +92,35 @@ Status HdfsChunkSource::_init_conjunct_ctxs(RuntimeState* state) {
 }
 
 void HdfsChunkSource::_init_partition_values() {
-    if (!(_lake_table != nullptr && _has_partition_columns && _has_partition_conjuncts)) return;
+    if (!(_lake_table != nullptr && _has_partition_columns)) return;
 
     auto* partition_desc = _lake_table->get_partition(_scan_range->partition_id);
     const auto& partition_values = partition_desc->partition_key_value_evals();
-    ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
+    _partition_values = partition_values;
 
-    // append partition data
-    for (size_t i = 0; i < _partition_slots.size(); i++) {
-        SlotId slot_id = _partition_slots[i]->id();
-        int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        auto partition_value_col = partition_values[partition_col_idx]->evaluate(nullptr);
-        assert(partition_value_col->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-        ColumnPtr data_column = const_column->data_column();
-        ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
+    if (_has_partition_conjuncts) {
+        ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
+        // append partition data
+        for (size_t i = 0; i < _partition_slots.size(); i++) {
+            SlotId slot_id = _partition_slots[i]->id();
+            int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
+            auto partition_value_col = partition_values[partition_col_idx]->evaluate(nullptr);
+            assert(partition_value_col->is_constant());
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
+            ColumnPtr data_column = const_column->data_column();
+            ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
+            if (data_column->is_nullable()) {
+                chunk_part_column->append_nulls(1);
+            } else {
+                chunk_part_column->append(*data_column, 0, 1);
+            }
         }
-    }
 
-    // eval conjuncts and skip if no rows.
-    ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get());
-    if (partition_chunk->has_rows()) {
-        _partition_values = partition_values;
-    } else {
-        _filter_by_eval_partition_conjuncts = true;
+        // eval conjuncts and skip if no rows.
+        ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get());
+        if (!partition_chunk->has_rows()) {
+            _filter_by_eval_partition_conjuncts = true;
+        }
     }
 }
 

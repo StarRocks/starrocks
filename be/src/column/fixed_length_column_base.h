@@ -178,7 +178,6 @@ public:
     std::string debug_string() const override;
 
     size_t container_memory_usage() const override { return _data.capacity() * sizeof(ValueType); }
-    size_t shrink_memory_usage() const override { return _data.size() * sizeof(ValueType); }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<FixedLengthColumnBase&>(rhs);
