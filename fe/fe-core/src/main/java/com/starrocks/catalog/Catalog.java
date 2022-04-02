@@ -134,7 +134,7 @@ import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.QueryableReentrantLock;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -295,11 +295,11 @@ public class Catalog {
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
-    // Operations like Get or Put do not need lock.
+    // Operations like Get or Put do not need to lock.
     // We use fair ReentrantLock to avoid starvation. Do not use this lock in critical code pass
     // because fair lock has poor performance.
-    // Using QueryableReentrantLock to print owner thread in debug mode.
-    private QueryableReentrantLock lock;
+    // Using QueryableReentrantReadWriteLock to print owner thread in debug mode.
+    private QueryableReentrantReadWriteLock rwLock;
 
     private ConcurrentHashMap<Long, Database> idToDb;
     private ConcurrentHashMap<String, Database> fullNameToDb;
@@ -528,7 +528,7 @@ public class Catalog {
         this.exportMgr = new ExportMgr();
         this.alter = new Alter();
         this.consistencyChecker = new ConsistencyChecker();
-        this.lock = new QueryableReentrantLock(true);
+        this.rwLock = new QueryableReentrantReadWriteLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteHandler = new DeleteHandler();
@@ -754,15 +754,14 @@ public class Catalog {
         return starOSAgent;
     }
 
-    // Use tryLock to avoid potential dead lock
-    private boolean tryLock(boolean mustLock) {
+    private boolean tryReadLock(boolean mustLock) {
         while (true) {
             try {
-                if (!lock.tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                if (!rwLock.readLock().tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                     // to see which thread held this lock for long time.
-                    Thread owner = lock.getOwner();
+                    Thread owner = rwLock.getOwner();
                     if (owner != null) {
-                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("catalog read lock is held by: {}", Util.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -773,19 +772,47 @@ public class Catalog {
                 }
                 return true;
             } catch (InterruptedException e) {
-                LOG.warn("got exception while getting catalog lock", e);
-                if (mustLock) {
-                    continue;
-                } else {
-                    return lock.isHeldByCurrentThread();
+                LOG.warn("got exception while getting catalog read lock", e);
+                if (!mustLock) {
+                    return false;
                 }
             }
         }
     }
 
-    private void unlock() {
-        if (lock.isHeldByCurrentThread()) {
-            this.lock.unlock();
+    private boolean tryWriteLock(boolean mustLock) {
+        while (true) {
+            try {
+                if (!rwLock.writeLock().tryLock(Config.catalog_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                    // to see which thread held this lock for long time.
+                    Thread owner = rwLock.getOwner();
+                    if (owner != null) {
+                        LOG.warn("catalog write lock is held by: {}", Util.dumpThread(owner, 50));
+                    }
+
+                    if (mustLock) {
+                        continue;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            } catch (InterruptedException e) {
+                LOG.warn("got exception while getting catalog write lock", e);
+                if (!mustLock) {
+                    return rwLock.isWriteLockedByCurrentThread();
+                }
+            }
+        }
+    }
+
+    private void readUnlock() {
+        this.rwLock.readLock().unlock();
+    }
+
+    private void writeUnlock() {
+        if (this.rwLock.writeLock().isHeldByCurrentThread()) {
+            this.rwLock.writeLock().unlock();
         }
     }
 
@@ -2559,7 +2586,7 @@ public class Catalog {
     }
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
-        if (!tryLock(false)) {
+        if (!tryWriteLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -2591,7 +2618,7 @@ public class Catalog {
 
             editLog.logAddFrontend(fe);
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -2599,7 +2626,7 @@ public class Catalog {
         if (host.equals(selfNode.first) && port == selfNode.second && feType == FrontendNodeType.MASTER) {
             throw new DdlException("can not drop current master node.");
         }
-        if (!tryLock(false)) {
+        if (!tryWriteLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -2619,7 +2646,7 @@ public class Catalog {
             }
             editLog.logRemoveFrontend(fe);
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -2655,8 +2682,8 @@ public class Catalog {
         final String clusterName = stmt.getClusterName();
         String fullDbName = stmt.getFullDbName();
         long id = 0L;
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+        if (!tryReadLock(false)) {
+            throw new DdlException("Failed to acquire catalog read lock. Try again");
         }
         try {
             if (!nameToCluster.containsKey(clusterName)) {
@@ -2677,7 +2704,7 @@ public class Catalog {
                 editLog.logCreateDb(db);
             }
         } finally {
-            unlock();
+            readUnlock();
         }
         LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
     }
@@ -2698,12 +2725,12 @@ public class Catalog {
     }
 
     public void replayCreateDb(Database db) {
-        tryLock(true);
+        tryReadLock(true);
         try {
             unprotectCreateDb(db);
             LOG.info("finish replay create db, name: {}, id: {}", db.getFullName(), db.getId());
         } finally {
-            unlock();
+            readUnlock();
         }
     }
 
@@ -2711,8 +2738,8 @@ public class Catalog {
         String dbName = stmt.getDbName();
 
         // 1. check if database exists
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+        if (!tryWriteLock(false)) {
+            throw new DdlException("Failed to acquire catalog write lock. Try again");
         }
         try {
             if (!fullNameToDb.containsKey(dbName)) {
@@ -2795,7 +2822,7 @@ public class Catalog {
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), stmt.isForceDrop());
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -2817,8 +2844,8 @@ public class Catalog {
         return batchTaskMap;
     }
 
-    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        tryLock(true);
+    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) throws DdlException {
+        tryWriteLock(true);
         try {
             final Database db = this.fullNameToDb.remove(info.getDropDbName());
             db.setDbState(info.getUpdateDbState());
@@ -2829,12 +2856,12 @@ public class Catalog {
             param.addLongParam(db.getId());
             cluster.removeLinkDb(param);
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        tryLock(true);
+        tryWriteLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
@@ -2857,7 +2884,7 @@ public class Catalog {
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -2870,8 +2897,8 @@ public class Catalog {
         Database db = Catalog.getCurrentRecycleBin().recoverDatabase(recoverStmt.getDbName());
 
         // add db to catalog
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+        if (!tryWriteLock(false)) {
+            throw new DdlException("Failed to acquire catalog write lock. Try again");
         }
         try {
             if (fullNameToDb.containsKey(db.getFullName())) {
@@ -2889,7 +2916,7 @@ public class Catalog {
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
             editLog.logRecoverDb(recoverInfo);
         } finally {
-            unlock();
+            writeUnlock();
         }
 
         LOG.info("finish recover database, name: {}, id: {}", recoverStmt.getDbName(), db.getId());
@@ -3004,7 +3031,7 @@ public class Catalog {
 
         Database db = null;
         Cluster cluster = null;
-        if (!tryLock(false)) {
+        if (!tryWriteLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -3038,14 +3065,14 @@ public class Catalog {
             DatabaseInfo dbInfo = new DatabaseInfo(fullDbName, newFullDbName, -1L, QuotaType.NONE);
             editLog.logDatabaseRename(dbInfo);
         } finally {
-            unlock();
+            writeUnlock();
         }
 
         LOG.info("rename database[{}] to [{}], id: {}", fullDbName, newFullDbName, db.getId());
     }
 
     public void replayRenameDatabase(String dbName, String newDbName) {
-        tryLock(true);
+        tryWriteLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
             Cluster cluster = nameToCluster.get(db.getClusterName());
@@ -3057,7 +3084,7 @@ public class Catalog {
 
             LOG.info("replay rename database {} to {}, id: {}", dbName, newDbName, db.getId());
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -4218,8 +4245,8 @@ public class Catalog {
             }
 
             // check database exists again, because database can be dropped when creating table
-            if (!tryLock(false)) {
-                throw new DdlException("Failed to acquire catalog lock. Try again");
+            if (!tryReadLock(false)) {
+                throw new DdlException("Failed to acquire catalog read lock. Try again");
             }
             try {
                 if (getDb(db.getId()) == null) {
@@ -4236,7 +4263,7 @@ public class Catalog {
                     }
                 }
             } finally {
-                unlock();
+                readUnlock();
             }
 
             // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
@@ -4278,7 +4305,7 @@ public class Catalog {
         mysqlTable.setComment(stmt.getComment());
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -4294,7 +4321,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("Successfully create table[{}-{}]", tableName, tableId);
@@ -4325,7 +4352,7 @@ public class Catalog {
         esTable.setComment(stmt.getComment());
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -4341,7 +4368,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("successfully create table{} with id {}", tableName, tableId);
@@ -4361,7 +4388,7 @@ public class Catalog {
         }
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -4377,7 +4404,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
@@ -4393,7 +4420,7 @@ public class Catalog {
         }
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -4409,7 +4436,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
@@ -4441,7 +4468,7 @@ public class Catalog {
         }
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -4457,7 +4484,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("Successfully create table[{}-{}]", tableName, tableId);
@@ -4470,7 +4497,7 @@ public class Catalog {
         long tableId = getNextId();
         JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
 
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
 
@@ -4487,7 +4514,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
@@ -5206,7 +5233,7 @@ public class Catalog {
     }
 
     public void replayAddFrontend(Frontend fe) {
-        tryLock(true);
+        tryWriteLock(true);
         try {
             Frontend existFe = checkFeExist(fe.getHost(), fe.getEditLogPort());
             if (existFe != null) {
@@ -5234,12 +5261,12 @@ public class Catalog {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
             }
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
     public void replayDropFrontend(Frontend frontend) {
-        tryLock(true);
+        tryWriteLock(true);
         try {
             Frontend removedFe = frontends.remove(frontend.getNodeName());
             if (removedFe == null) {
@@ -5253,7 +5280,7 @@ public class Catalog {
 
             removedFrontends.add(removedFe.getNodeName());
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -6389,7 +6416,7 @@ public class Catalog {
         }
 
         // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
+        if (!tryReadLock(false)) {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
@@ -6405,7 +6432,7 @@ public class Catalog {
                 }
             }
         } finally {
-            unlock();
+            readUnlock();
         }
 
         LOG.info("successfully create view[" + tableName + "-" + newView.getId() + "]");
@@ -6434,11 +6461,11 @@ public class Catalog {
     }
 
     public void replayCreateCluster(Cluster cluster) {
-        tryLock(true);
+        tryWriteLock(true);
         try {
             unprotectCreateCluster(cluster);
         } finally {
-            unlock();
+            writeUnlock();
         }
     }
 
@@ -6797,7 +6824,7 @@ public class Catalog {
         LOG.info("begin to dump meta data");
         String dumpFilePath;
         Map<Long, Database> lockedDbMap = Maps.newTreeMap();
-        tryLock(true);
+        tryReadLock(true);
         try {
             // sort all dbs
             for (long dbId : getDbIds()) {
@@ -6826,7 +6853,7 @@ public class Catalog {
             for (Database db : lockedDbMap.values()) {
                 db.readUnlock();
             }
-            unlock();
+            readUnlock();
         }
 
         LOG.info("finished dumpping image to {}", dumpFilePath);

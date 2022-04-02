@@ -160,12 +160,14 @@ public class Database extends MetaObject implements Writable {
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
-            return false;
+            return this.rwLock.writeLock().isHeldByCurrentThread();
         }
     }
 
     public void writeUnlock() {
-        this.rwLock.writeLock().unlock();
+        if (this.rwLock.writeLock().isHeldByCurrentThread()) {
+            this.rwLock.writeLock().unlock();
+        }
     }
 
     public boolean isWriteLockHeldByCurrentThread() {
