@@ -224,4 +224,23 @@ public class BDBHA implements HAProtocol {
             LOG.info("add {}:{} to helper sockets", ip, port);
         }
     }
+
+    public void removeNodeIfExist(String host, int port) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        if (replicationGroupAdmin == null) {
+            return;
+        }
+
+        List<String> conflictNodes = Lists.newArrayList();
+        Set<ReplicationNode> nodes = replicationGroupAdmin.getGroup().getElectableNodes();
+        for (ReplicationNode node : nodes) {
+            if (node.getHostName().equals(host) && node.getPort() == port) {
+                conflictNodes.add(node.getName());
+            }
+        }
+
+        for (String nodeName : conflictNodes) {
+            removeElectableNode(nodeName);
+        }
+    }
 }
