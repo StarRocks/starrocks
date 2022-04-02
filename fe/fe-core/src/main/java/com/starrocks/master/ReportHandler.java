@@ -625,7 +625,7 @@ public class ReportHandler extends Daemon {
                                             TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),
-                                            olapTable.usePersistentIndex(),
+                                            olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId));
                                     createReplicaTask.setIsRecoverTask(true);
                                     createReplicaBatchTask.addTask(createReplicaTask);

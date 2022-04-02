@@ -68,7 +68,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private boolean isInMemory;
 
-    private boolean usePersistentIndex;
+    private boolean enablePersistentIndex;
 
     private TTabletType tabletType;
 
@@ -93,7 +93,7 @@ public class CreateReplicaTask extends AgentTask {
                              Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
                              List<Index> indexes,
                              boolean isInMemory,
-                             boolean usePersistentIndex,
+                             boolean enablePersistentIndex,
                              TTabletType tabletType) {
         super(null, backendId, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
 
@@ -115,7 +115,7 @@ public class CreateReplicaTask extends AgentTask {
         this.latch = latch;
 
         this.isInMemory = isInMemory;
-        this.usePersistentIndex = usePersistentIndex;
+        this.enablePersistentIndex = enablePersistentIndex;
         this.tabletType = tabletType;
     }
 
@@ -209,7 +209,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setVersion(version);
 
         createTabletReq.setStorage_medium(storageMedium);
-        createTabletReq.setUse_persistent_index(usePersistentIndex);
+        createTabletReq.setUse_persistent_index(enablePersistentIndex);
         if (inRestoreMode) {
             createTabletReq.setIn_restore_mode(true);
         }

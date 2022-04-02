@@ -55,7 +55,7 @@ public class TableProperty implements Writable {
 
     private boolean isInMemory = false;
 
-    private boolean usePersistentIndex = false;
+    private boolean enablePersistentIndex = false;
 
     /*
      * the default storage format of this table.
@@ -132,9 +132,9 @@ public class TableProperty implements Writable {
                 TStorageFormat.DEFAULT.name()));
         return this;
     }
-    public TableProperty buildUsePersistentIndex() {
-        usePersistentIndex = Boolean.parseBoolean(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX, "false"));
+    public TableProperty buildEnablePersistentIndex() {
+        enablePersistentIndex = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
         return this;
     }
 
@@ -162,8 +162,8 @@ public class TableProperty implements Writable {
         return isInMemory;
     }
 
-    public boolean usePersistentIndex() {
-        return usePersistentIndex;
+    public boolean enablePersistentIndex() {
+        return enablePersistentIndex;
     }
 
     public TStorageFormat getStorageFormat() {
@@ -198,6 +198,6 @@ public class TableProperty implements Writable {
                 .buildReplicationNum()
                 .buildInMemory()
                 .buildStorageFormat()
-                .buildUsePersistentIndex();
+                .buildEnablePersistentIndex();
     }
 }

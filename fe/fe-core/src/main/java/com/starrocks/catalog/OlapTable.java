@@ -1443,21 +1443,21 @@ public class OlapTable extends Table {
         tableProperty.buildInMemory();
     }
 
-    public Boolean usePersistentIndex() {
+    public Boolean enablePersistentIndex() {
         if (tableProperty != null) {
-            return tableProperty.usePersistentIndex();
+            return tableProperty.enablePersistentIndex();
         }
         return false;
     }
 
-    public void setUsePersistentIndex(boolean usePersistentIndex) {
+    public void setEnablePersistentIndex(boolean enablePersistentIndex) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX,
-                                       Boolean.valueOf(usePersistentIndex).toString());
-        tableProperty.buildUsePersistentIndex();
+                                       Boolean.valueOf(enablePersistentIndex).toString());
+        tableProperty.buildEnablePersistentIndex();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
