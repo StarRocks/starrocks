@@ -67,7 +67,6 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    LOG(INFO) << "Received a snapshot request: " << apache::thrift::ThriftDebugString(request);
     if (config::storage_format_version == 1) {
         // If you upgrade from storage_format_version=1
         // to storage_format_version=2, clone will be rejected.
@@ -95,10 +94,18 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 
     StatusOr<std::string> res;
     if (request.__isset.missing_version) {
+        std::stringstream ss;
+        copy(request.missing_version.begin(), request.missing_version.end(), std::ostream_iterator<int64_t>(ss, ","));
+        LOG(INFO) << "make incremental snapshot tablet_id:" << request.tablet_id << " version:" << ss.str()
+                  << " timeout:" << timeout_s;
         res = snapshot_incremental(tablet, request.missing_version, timeout_s);
     } else if (request.__isset.version) {
+        LOG(INFO) << "make full snapshot tablet_id:" << request.tablet_id << " version:" << request.version
+                  << " timeout:" << timeout_s;
         res = snapshot_full(tablet, request.version, timeout_s);
     } else {
+        LOG(INFO) << "make full snapshot tablet_id:" << request.tablet_id << " version:" << 0
+                  << " timeout:" << timeout_s;
         res = snapshot_full(tablet, 0, timeout_s);
     }
     if (!res.ok()) {

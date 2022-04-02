@@ -38,6 +38,7 @@
 #include "util/file_utils.h"
 #include "util/filesystem_util.h"
 #include "util/path_util.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -107,13 +108,15 @@ void DownloadAction::handle_error_log(HttpRequest* req, const std::string& file_
 }
 
 void DownloadAction::handle(HttpRequest* req) {
-    LOG(INFO) << "accept one download request " << req->debug_string();
+    int64_t start = MonotonicMillis();
 
     // Get 'file' parameter, then assembly file absolute path
     const std::string& file_path = req->param(FILE_PARAMETER);
     if (file_path.empty()) {
         std::string error_msg = std::string("parameter " + FILE_PARAMETER + " not specified in url.");
         HttpChannel::send_reply(req, error_msg);
+        LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_path
+                     << " error:" << error_msg;
         return;
     }
 
@@ -123,7 +126,8 @@ void DownloadAction::handle(HttpRequest* req) {
         handle_normal(req, file_path);
     }
 
-    LOG(INFO) << "deal with download request finished!";
+    LOG(INFO) << "Download method:" << to_method_desc(req->method()) << " " << file_path << " "
+              << MonotonicMillis() - start << "ms";
 }
 
 Status DownloadAction::check_token(HttpRequest* req) {

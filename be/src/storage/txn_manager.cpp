@@ -200,8 +200,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         txn_tablet_map[key][tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
-                  << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " version: " << rowset_ptr->version().first;
+                  << " tablet: " << tablet_id << ", txn_id: " << key.second
+                  << ", rowsetid: " << rowset_ptr->rowset_id();
     }
     return Status::OK();
 }

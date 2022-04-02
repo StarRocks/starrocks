@@ -628,4 +628,13 @@ public class LocalTablet extends Tablet {
     public void setLastStatusCheckTime(long lastStatusCheckTime) {
         this.lastStatusCheckTime = lastStatusCheckTime;
     }
+
+    public String getReplicaInfos() {
+        StringBuilder sb = new StringBuilder();
+        for (Replica replica : replicas) {
+            sb.append(String.format("%d:%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
+                    replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
+        }
+        return sb.toString();
+    }
 }
