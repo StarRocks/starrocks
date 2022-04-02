@@ -219,7 +219,7 @@ public:
 
     int64_t mem_usage() const { return sizeof(TabletMeta); }
 
-    bool enable_persistent_index() const { return _enable_persistent_index; }
+    bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         _enable_persistent_index = enable_persistent_index;

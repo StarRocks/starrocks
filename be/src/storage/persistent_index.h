@@ -119,6 +119,8 @@ public:
 
     virtual void reserve(size_t size) = 0;
 
+    virtual size_t memory_usage() = 0;
+
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
     // |num_entry|: number of entries expected, it should be:
@@ -223,6 +225,8 @@ public:
 
     size_t size() const { return _size; }
     size_t kv_size = key_size() + sizeof(IndexValue);
+    size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
+    size_t memory_usage() const { return _l0 ? _l0->memory_usage() : 0; }
 
     EditVersion version() const { return _version; }
 

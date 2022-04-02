@@ -269,7 +269,7 @@ public:
 
     void reset_compaction(CompactionType type);
 
-    bool enable_persistent_index() { return _tablet_meta->enable_persistent_index(); }
+    bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);

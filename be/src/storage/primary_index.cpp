@@ -920,7 +920,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // load persistent index if enable persistent index meta
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
-    if (tablet->enable_persistent_index() && fix_size <= 64) {
+    if (tablet->get_enable_persistent_index() && fix_size <= 64) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
@@ -1150,14 +1150,23 @@ void PrimaryIndex::get(const vectorized::Column& key_col, std::vector<uint64_t>*
 }
 
 std::size_t PrimaryIndex::memory_usage() const {
+    if (_persistent_index) {
+        return _persistent_index->memory_usage();
+    }
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
 }
 
 std::size_t PrimaryIndex::size() const {
+    if (_persistent_index) {
+        return _persistent_index->size();
+    }
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->size() : 0;
 }
 
 std::size_t PrimaryIndex::capacity() const {
+    if (_persistent_index) {
+        return _persistent_index->capacity();
+    }
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->capacity() : 0;
 }
 
