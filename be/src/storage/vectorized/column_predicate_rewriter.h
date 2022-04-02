@@ -83,12 +83,14 @@ class ZonemapPredicatesRewriter {
 public:
     using PredicateList = std::vector<const ColumnPredicate*>;
 
-    static Status rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src, std::unordered_map<ColumnId, PredicateList>* dst);
+    static Status rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src,
+                          std::unordered_map<ColumnId, PredicateList>* dst);
 
     static Status rewrite(ObjectPool* pool, const PredicateList& src, PredicateList* dst);
 
 private:
-    static Status _rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred, std::vector<const ColumnExprPredicate*>* new_preds);
+    static Status _rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
+                                                  std::vector<const ColumnExprPredicate*>* new_preds);
 };
 
 } // namespace starrocks::vectorized

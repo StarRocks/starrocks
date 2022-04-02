@@ -302,7 +302,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
     if (_scan_node->thrift_olap_scan_node().__isset.enable_rewrite_zone_map_predicate) {
-        _params.enable_rewrite_zone_map_predicate = _scan_node->thrift_olap_scan_node().enable_rewrite_zone_map_predicate;
+        _params.enable_rewrite_zone_map_predicate =
+                _scan_node->thrift_olap_scan_node().enable_rewrite_zone_map_predicate;
     }
 
     RETURN_IF_ERROR(_reader->prepare());

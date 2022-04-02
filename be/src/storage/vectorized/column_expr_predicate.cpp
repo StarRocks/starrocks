@@ -6,9 +6,9 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/binary_predicate.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
@@ -177,7 +177,8 @@ std::string ColumnExprPredicate::debug_string() const {
     return ss.str();
 }
 
-Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool, std::vector<const ColumnExprPredicate*>* output) {
+Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
+                                                               std::vector<const ColumnExprPredicate*>* output) {
     DCHECK(pool != nullptr);
     DCHECK(output != nullptr);
     ExprContext* pred_from_planner = _expr_ctxs[0];
@@ -189,7 +190,7 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         DCHECK(root->get_num_children() == 2);
         if (root->get_child(0)->is_monotonic() && root->get_child(1)->is_monotonic()) {
             // rewrite = to >= and <=
-            auto build_binary_predicate_func = [this, pool, root] (TExprOpcode::type new_op) {
+            auto build_binary_predicate_func = [this, pool, root](TExprOpcode::type new_op) {
                 TExprNode node;
                 node.node_type = TExprNodeType::BINARY_PRED;
                 node.type = root->type().to_thrift();
@@ -218,13 +219,13 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         return Status::OK();
     }
     // build new ColumnExprPredicates
-    for (auto& expr: exprs_after_rewrite) {
+    for (auto& expr : exprs_after_rewrite) {
         ExprContext* ctx = new ExprContext(expr);
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
         ColumnExprPredicate* new_pred = new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc);
         // copy other cast exprs
-        for (size_t i = 1;i < _expr_ctxs.size();i ++) {
+        for (size_t i = 1; i < _expr_ctxs.size(); i++) {
             Expr* tmp_expr = Expr::copy(pool, _expr_ctxs[i]->root());
             ExprContext* tmp_ctx = new ExprContext(tmp_expr);
             RETURN_IF_ERROR(tmp_ctx->prepare(_state));
@@ -239,7 +240,6 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
 
     return Status::OK();
 }
-
 
 void ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     memset(selection + from, 0x1, to - from);

@@ -19,7 +19,6 @@ namespace starrocks::vectorized {
 
 class Column;
 
-
 // This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
 // used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
 // hopefully to scan less data and boost performance.
@@ -57,7 +56,8 @@ public:
     // output is only valid when returning Status::OK()
     // if output is empty, it means that the conditions of rewriting is not met
     // otherwise, it will contain one or more predicates which form the conjunction normal form
-    Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool, std::vector<const ColumnExprPredicate*>* output);
+    Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
+                                              std::vector<const ColumnExprPredicate*>* output);
 
 private:
     void _add_expr_ctx(ExprContext* expr_ctx);

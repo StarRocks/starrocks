@@ -391,7 +391,8 @@ void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
     pred_rewrite(_predicates.vec_preds());
 }
 
-Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src, std::unordered_map<ColumnId, PredicateList>* dst) {
+Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src,
+                                          std::unordered_map<ColumnId, PredicateList>* dst) {
     DCHECK(dst != nullptr);
     for (auto& [cid, preds] : src) {
         dst->insert({cid, {}});
@@ -419,9 +420,11 @@ Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const PredicateList&
     return Status::OK();
 }
 
-Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred, std::vector<const ColumnExprPredicate*>* new_preds) {
+Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
+                                                                  std::vector<const ColumnExprPredicate*>* new_preds) {
     DCHECK(new_preds != nullptr);
-    ColumnExprPredicate* column_expr_pred = const_cast<ColumnExprPredicate*>(static_cast<const ColumnExprPredicate*>(pred));
+    ColumnExprPredicate* column_expr_pred =
+            const_cast<ColumnExprPredicate*>(static_cast<const ColumnExprPredicate*>(pred));
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 

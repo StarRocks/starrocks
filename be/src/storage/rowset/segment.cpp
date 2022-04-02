@@ -43,9 +43,9 @@
 #include "storage/rowset/vectorized/segment_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "storage/vectorized/type_utils.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/column_predicate_rewriter.h"
+#include "storage/vectorized/type_utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -193,7 +193,8 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& sche
     ObjectPool pool;
     std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>> predicates_for_zone_map_filter;
     if (read_options.enable_rewrite_zone_map_predicate) {
-        RETURN_IF_ERROR(vectorized::ZonemapPredicatesRewriter::rewrite(&pool, read_options.predicates, &predicates_for_zone_map_filter));
+        RETURN_IF_ERROR(vectorized::ZonemapPredicatesRewriter::rewrite(&pool, read_options.predicates,
+                                                                       &predicates_for_zone_map_filter));
     } else {
         predicates_for_zone_map_filter = read_options.predicates;
     }
