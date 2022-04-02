@@ -170,4 +170,13 @@ public class AnalyzeFunctionTest {
 
         analyzeSuccess("select password('root')");
     }
+
+    @Test
+    public void testODBCFunction() {
+        analyzeSuccess("SELECT {fn ucase(ta)} FROM tall");
+        analyzeSuccess("SELECT {fn ucase(`ta`)} FROM tall");
+        analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
+        analyzeSuccess("select { fn extract(year from th)} from tall");
+        analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
+    }
 }

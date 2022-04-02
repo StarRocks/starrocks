@@ -2,7 +2,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSortedSet;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Set;
 
@@ -46,9 +46,9 @@ public class OdbcScalarFunctionCall {
         this.function = function;
     }
 
-    public Expr mappingFunction() throws AnalysisException {
+    public Expr mappingFunction() {
         if (!(function instanceof FunctionCallExpr)) {
-            throw new AnalysisException("unsupported odbc expr.");
+            throw new SemanticException("unsupported odbc expr.");
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
         String fnName = functionCallExpr.getFnName().getFunction();
@@ -63,7 +63,7 @@ public class OdbcScalarFunctionCall {
             return function;
         }
 
-        throw new AnalysisException("invalid odbc scalar function:" + fnName);
+        throw new SemanticException("invalid odbc scalar function:" + fnName);
     }
 
 }
