@@ -256,6 +256,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -4393,6 +4394,17 @@ public class Catalog {
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
+
+        Set<String> metaFields = new HashSet<>(Arrays.asList(
+                HoodieRecord.COMMIT_TIME_METADATA_FIELD,
+                HoodieRecord.COMMIT_SEQNO_METADATA_FIELD,
+                HoodieRecord.RECORD_KEY_METADATA_FIELD,
+                HoodieRecord.PARTITION_PATH_METADATA_FIELD,
+                HoodieRecord.FILENAME_METADATA_FIELD));
+        Set<String> includedMetaFields = columns.stream().map(Column::getName).filter(metaFields::contains).collect(Collectors.toSet());
+        metaFields.removeAll(includedMetaFields);
+        metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
+
         if (columns.stream().noneMatch(c -> c.getName().equals(HoodieRecord.COMMIT_TIME_METADATA_FIELD))) {
             columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
         }
