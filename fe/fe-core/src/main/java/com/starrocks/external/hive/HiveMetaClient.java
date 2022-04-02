@@ -72,6 +72,7 @@ import java.util.stream.Collectors;
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
+    public static final String HUDI_PARTITION_NULL_VALUE = "default";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -165,8 +166,9 @@ public class HiveMetaClient {
         }
     }
 
-    public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName, List<Column> partColumns)
-            throws DdlException {
+    public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName,
+                                                    List<Column> partColumns,
+                                                    boolean isHudiTable) throws DdlException {
         try (AutoCloseClient client = getClient()) {
             Table table = client.hiveClient.getTable(dbName, tableName);
             // partitionKeysSize > 0 means table is a partition table
@@ -175,7 +177,7 @@ public class HiveMetaClient {
                 Map<PartitionKey, Long> partitionKeys = Maps.newHashMapWithExpectedSize(partNames.size());
                 for (String partName : partNames) {
                     List<String> values = client.hiveClient.partitionNameToVals(partName);
-                    PartitionKey partitionKey = Utils.createPartitionKey(values, partColumns);
+                    PartitionKey partitionKey = Utils.createPartitionKey(values, partColumns, isHudiTable);
                     partitionKeys.put(partitionKey, nextPartitionId());
                 }
                 return partitionKeys;
@@ -360,13 +362,14 @@ public class HiveMetaClient {
     public Map<String, HiveColumnStats> getTableLevelColumnStatsForPartTable(String dbName, String tableName,
                                                                              List<PartitionKey> partitionKeys,
                                                                              List<Column> partitionColumns,
-                                                                             List<String> columnNames)
+                                                                             List<String> columnNames,
+                                                                             boolean isHudiTable)
             throws DdlException {
         // calculate partition names
         List<String> partNames = Lists.newArrayListWithCapacity(partitionKeys.size());
         List<String> partColumnNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
         for (PartitionKey partitionKey : partitionKeys) {
-            partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey)));
+            partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable)));
         }
 
         // get partition row number from metastore
@@ -476,10 +479,14 @@ public class HiveMetaClient {
             double vLength = 0.0f;
             for (PartitionKey partitionKey : partitionKeys) {
                 LiteralExpr literalExpr = partitionKey.getKeys().get(colIndex);
-                String partName = FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey));
+                String partName = FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable));
                 Long partRowNumber = partRowNumbers.get(partName);
                 if (literalExpr instanceof NullLiteral) {
-                    distinctCnt.add(PARTITION_NULL_VALUE);
+                    if (isHudiTable) {
+                        distinctCnt.add(HUDI_PARTITION_NULL_VALUE);
+                    } else {
+                        distinctCnt.add(PARTITION_NULL_VALUE);
+                    }
                     numNulls += partRowNumber;
                     continue;
                 } else {
