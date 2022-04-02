@@ -576,7 +576,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // add to TabletInvertedIndex
+                // Add to TabletInvertedIndex.
+                // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
+                // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
+                // should add the tablet to TabletInvertedIndex again on finish state.
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId,
                         indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
                 for (Tablet tablet : shadowIdx.getTablets()) {
