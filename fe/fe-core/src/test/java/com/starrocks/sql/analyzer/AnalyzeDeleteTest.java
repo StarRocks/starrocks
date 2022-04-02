@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -28,6 +29,17 @@ public class AnalyzeDeleteTest {
     public static void tearDown() {
         File file = new File(runningDir);
         file.delete();
+    }
+
+    @Test
+    public void testPartitions() {
+        DeleteStmt st;
+        st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0)", 0).get(0);
+        Assert.assertEquals(1, st.getPartitionNames().size());
+        st = (DeleteStmt) SqlParser.parse("delete from tjson partition p0", 0).get(0);
+        Assert.assertEquals(1, st.getPartitionNames().size());
+        st = (DeleteStmt) SqlParser.parse("delete from tjson partition (p0, p1)", 0).get(0);
+        Assert.assertEquals(2, st.getPartitionNames().size());
     }
 
     @Test
