@@ -35,6 +35,89 @@ public:
     virtual Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) = 0;
 };
 
+class Int64ToDateTimeConverter : public ColumnConverter {
+public:
+    Int64ToDateTimeConverter(bool is_adjusted_to_utc, const tparquet::TimeUnit& time_unit)
+            : _is_adjusted_to_utc(is_adjusted_to_utc) {
+        if (time_unit.__isset.MILLIS) {
+            _scale = 1000;
+            _denominator = 1;
+        } else if (time_unit.__isset.MICROS) {
+            _scale = 1;
+            _denominator = 1;
+        } else if (time_unit.__isset.NANOS) {
+            _scale = 1;
+            _denominator = 1000;
+        }
+    }
+
+    ~Int64ToDateTimeConverter() override = default;
+
+    Status init(const std::string& timezone);
+    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
+        return _convert_to_timestamp_column(src, dst);
+    }
+
+private:
+    // convert column from int64 to timestamp
+    Status _convert_to_timestamp_column(const vectorized::ColumnPtr& src, vectorized::Column* dst);
+    // When Hive stores a timestamp value into Parquet format, it converts local time
+    // into UTC time, and when it reads data out, it should be converted to the time
+    // according to session variable "time_zone".
+    vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) {
+        return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
+    }
+
+private:
+    bool _is_adjusted_to_utc;
+    int _offset = 0;
+    int _scale;
+    int _denominator;
+};
+
+Status Int64ToDateTimeConverter::init(const std::string& timezone) {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+        return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
+    }
+
+    const auto tp = std::chrono::system_clock::now();
+    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+    _offset = al.offset;
+
+    return Status::OK();
+}
+
+Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::ColumnPtr& src,
+                                                              vectorized::Column* dst) {
+    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
+    // hive only support null column
+    // TODO: support not null
+    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+    dst_nullable_column->resize(src_nullable_column->size());
+
+    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int64_t>>(
+            src_nullable_column->data_column());
+    auto* dst_column =
+            vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
+
+    auto& src_data = src_column->get_data();
+    auto& dst_data = dst_column->get_data();
+    auto& src_null_data = src_nullable_column->null_column()->get_data();
+    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+    size_t size = src_column->size();
+    for (size_t i = 0; i < size; i++) {
+        dst_null_data[i] = src_null_data[i];
+        if (!src_null_data[i]) {
+            vectorized::Timestamp timestamp = src_data[i] * _scale / _denominator;
+            dst_data[i].set_timestamp(_is_adjusted_to_utc ? _utc_to_local(timestamp) : timestamp);
+        }
+    }
+    dst_nullable_column->set_has_null(src_nullable_column->has_null());
+    return Status::OK();
+}
+
 class Int96ToDateTimeConverter : public ColumnConverter {
 public:
     Int96ToDateTimeConverter() = default;
@@ -390,6 +473,7 @@ private:
 // TODO(zc): Use the registration mechanism instead
 Status ScalarColumnReader::_init_convert_info() {
     tparquet::Type::type parquet_type = _field->physical_type;
+    const auto& parquet_logical_type = _field->logical_type;
     PrimitiveType col_type = _col_type.type;
 
     _need_convert = false;
@@ -479,6 +563,14 @@ Status ScalarColumnReader::_init_convert_info() {
             _converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL128>>(_field->scale,
                                                                                                  _col_type.scale);
             break;
+
+        case PrimitiveType::TYPE_DATETIME: {
+            DCHECK(parquet_logical_type.__isset.TIMESTAMP);
+            auto converter = std::make_unique<Int64ToDateTimeConverter>(parquet_logical_type.TIMESTAMP.isAdjustedToUTC,
+                                                                        parquet_logical_type.TIMESTAMP.unit);
+            RETURN_IF_ERROR(converter->init(_opts.timezone));
+            _converter = std::move(converter);
+        }
         default:
             break;
         }

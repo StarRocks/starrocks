@@ -38,6 +38,7 @@ struct ParquetField {
     TypeDescriptor type;
     bool is_nullable;
 
+    tparquet::LogicalType logical_type;
     // Only valid when this field is a leaf node
     tparquet::Type::type physical_type;
     // If type is FIXED_LEN_BYTE_ARRAY, this is the byte length of the vales.
