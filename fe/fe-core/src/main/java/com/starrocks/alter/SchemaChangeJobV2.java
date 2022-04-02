@@ -554,8 +554,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
+        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
@@ -574,10 +576,18 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
+                // Add to TabletInvertedIndex.
+                // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
+                // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
+                // should add the tablet to TabletInvertedIndex again on finish state.
+                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId,
+                        indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
                 for (Tablet tablet : shadowIdx.getTablets()) {
+                    invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                     for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                         replica.setState(ReplicaState.NORMAL);
+                        invertedIndex.addReplica(tablet.getId(), replica);
                     }
                 }
 
