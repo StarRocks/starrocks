@@ -1,3 +1,7 @@
+// This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/Cyan4973/xxHash/blob/dev/xxh3.h
+
 /*
  * xxHash - Extremely Fast Hash algorithm
  * Development source file for `xxh3`
