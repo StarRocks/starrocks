@@ -5019,6 +5019,7 @@ public class Catalog {
                         AgentTaskExecutor.submit(partTask);
                         curTask = 1;
                         partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
                     }
                 }
                 if (partTask.getAllTasks().size() > 0) {
@@ -5027,7 +5028,6 @@ public class Catalog {
             } else {
                 AgentTaskExecutor.submit(originTasks);
             }
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
         }
     }
 
