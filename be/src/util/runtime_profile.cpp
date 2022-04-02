@@ -495,8 +495,8 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
             name_queue.push(child_counter_name);
             auto* src_child_counter = src_profile->_counter_map[child_counter_name];
             DCHECK(src_child_counter != nullptr);
-            add_counter(child_counter_name, src_child_counter->type(), counter_name);
-            get_counter(child_counter_name)->set(src_child_counter->value());
+            auto* new_child_counter = add_counter(child_counter_name, src_child_counter->type(), counter_name);
+            new_child_counter->set(src_child_counter->value());
         }
     }
 }
