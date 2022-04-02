@@ -48,7 +48,7 @@ public:
         JsonFunctions::parse_json_paths(jsonpath, &path);
 
         simdjson::ondemand::value val;
-        RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, val));
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
         std::string_view sv = simdjson::to_json_string(val);
 
         output->assign(sv.data(), sv.size());

@@ -110,7 +110,7 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 }
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
-                                          simdjson::ondemand::value& value) noexcept {
+                                          simdjson::ondemand::value* value) noexcept {
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -174,7 +174,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }
     }
 
-    std::swap(value, tvalue);
+    std::swap(*value, tvalue);
 
     return Status::OK();
 }
@@ -257,7 +257,7 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
             }
 
             simdjson::ondemand::value value;
-            auto st = extract_from_object(obj, jsonpath, value);
+            auto st = extract_from_object(obj, jsonpath, &value);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -297,7 +297,7 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
                 }
 
                 simdjson::ondemand::value value;
-                auto st = extract_from_object(obj, jsonpath, value);
+                auto st = extract_from_object(obj, jsonpath, &value);
                 if (!st.ok()) {
                     result.append_null();
                     continue;
