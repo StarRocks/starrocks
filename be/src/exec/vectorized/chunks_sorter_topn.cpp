@@ -3,6 +3,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
@@ -145,7 +146,7 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 
     // step 2: filter batch-chunks as permutations.first and permutations.second when _init_merged_segment == true.
     // sort part chunks in permutations.first and permutations.second, if _init_merged_segment == false means permutations.first is empty.
-    RETURN_IF_ERROR(_filter_and_sort_data_by_row_cmp(state, permutations, segments, chunk_size));
+    RETURN_IF_ERROR(_filter_and_sort_data(state, permutations, segments, chunk_size));
 
     // step 3:
     // (1) take permutations.first as BEFORE.
@@ -194,27 +195,6 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
     return Status::OK();
 }
 
-Status ChunksSorterTopn::_sort_data_by_row_cmp(
-        RuntimeState* state, Permutation& permutation, size_t rows_to_sort, size_t rows_size,
-        const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn) {
-    if (rows_to_sort > 0 && rows_to_sort < rows_size / 5) {
-        // when Limit >= 1/5 of all data, a full sort will be faster than partial sort.
-        // partial sort
-        std::partial_sort(permutation.begin(), permutation.begin() + rows_to_sort, permutation.end(), cmp_fn);
-        // for topn, We don't need the data after [0, number_of_rows_to_sort).
-        permutation.resize(rows_to_sort);
-    } else {
-        // full sort
-        pdqsort(state->cancelled_ref(), permutation.begin(), permutation.end(), cmp_fn);
-        RETURN_IF_CANCELLED(state);
-        if (rows_size > rows_to_sort) {
-            // for topn, We don't need the data after [0, number_of_rows_to_sort).
-            permutation.resize(rows_to_sort);
-        }
-    }
-    return Status::OK();
-}
-
 void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t size,
                                                std::vector<std::vector<uint8_t>>& filter_array) {
     uint32_t first_size = 0;
@@ -260,9 +240,8 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
 //
 // then will obtain BEFORE and IN as permutations.first and permutations.second use filter_array.
 // at last we sort parts datas in permutations.first and permutations.second.
-Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
-                                                          std::pair<Permutation, Permutation>& permutations,
-                                                          DataSegments& segments, const size_t chunk_size) {
+Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                               DataSegments& segments, const size_t chunk_size) {
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
 
     DCHECK(_get_number_of_order_by_columns() > 0) << "order by columns can't be empty";
@@ -313,11 +292,8 @@ Status ChunksSorterTopn::_filter_and_sort_data_by_row_cmp(RuntimeState* state,
         }
         timer.start();
     }
-    if (_compare_strategy == Default || _compare_strategy == RowWise) {
-        return _partial_sort_row_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
-    } else {
-        return _partial_sort_col_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
-    }
+
+    return _partial_sort_col_wise(state, permutations, segments, chunk_size, number_of_rows_to_sort);
 }
 
 Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
@@ -342,43 +318,6 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
     if (rows_to_sort > first_size) {
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(do_sort(permutations.second, rows_to_sort - first_size));
-    }
-
-    return Status::OK();
-}
-
-Status ChunksSorterTopn::_partial_sort_row_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                                DataSegments& segments, const size_t chunk_size,
-                                                size_t number_of_rows_to_sort) {
-    const DataSegments& data = segments;
-    const std::vector<int>& sort_order_flag = _sort_order_flag;
-    const std::vector<int>& null_first_flag = _null_first_flag;
-
-    auto cmp_fn = [&data, &sort_order_flag, &null_first_flag](const PermutationItem& l, const PermutationItem& r) {
-        int c = data[l.chunk_index].compare_at(l.index_in_chunk, data[r.chunk_index], r.index_in_chunk, sort_order_flag,
-                                               null_first_flag);
-        if (c == 0) {
-            return l.permutation_index < r.permutation_index;
-        } else {
-            return c < 0;
-        }
-    };
-
-    // take topn in [permutations.first, permutations.second].
-    // if permutations.first.size() >= number_of_rows_to_sort, we just need number_of_rows_to_sort rows in permutations.first.
-    // else we need all permutations.first as BEFORE and take (number_of_rows_to_sort - permutations.first.size()) rows from
-    // permutations.second.
-    size_t first_size = permutations.first.size();
-    if (first_size >= number_of_rows_to_sort) {
-        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.first, number_of_rows_to_sort, first_size, cmp_fn));
-    } else {
-        if (first_size > 0) {
-            pdqsort(state->cancelled_ref(), permutations.first.begin(), permutations.first.end(), cmp_fn);
-            RETURN_IF_CANCELLED(state);
-        }
-
-        RETURN_IF_ERROR(_sort_data_by_row_cmp(state, permutations.second, number_of_rows_to_sort - first_size,
-                                              permutations.second.size(), cmp_fn));
     }
 
     return Status::OK();
