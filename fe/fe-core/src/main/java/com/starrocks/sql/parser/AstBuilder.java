@@ -48,6 +48,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
@@ -1190,11 +1191,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
     }
 
+    @Override
+    public ParseNode visitOdbcFunctionCallExpression(StarRocksParser.OdbcFunctionCallExpressionContext context) {
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
+        OdbcScalarFunctionCall odbcScalarFunctionCall = new OdbcScalarFunctionCall(functionCallExpr);
+        return odbcScalarFunctionCall.mappingFunction();
+    }
+
     private static final List<String> DATE_FUNCTIONS =
             Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
 
     @Override
-    public ParseNode visitFunctionCall(StarRocksParser.FunctionCallContext context) {
+    public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
         String functionName = getQualifiedName(context.qualifiedName()).toString();
 

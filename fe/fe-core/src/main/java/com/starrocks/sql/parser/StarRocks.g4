@@ -307,16 +307,21 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | columnReference                                                                     #columnRef
     | primaryExpression ARROW string                                                      #arrowExpression
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | '(' expression ')'                                                                  #parenthesizedExpression
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
+    | CAST '(' expression AS type ')'                                                     #cast
+    ;
+
+functionCall
+    : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
-    | CAST '(' expression AS type ')'                                                     #cast
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
 aggregationFunction
@@ -494,7 +499,7 @@ nonReserved
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
