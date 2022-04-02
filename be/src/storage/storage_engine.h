@@ -205,6 +205,8 @@ private:
 
     void _clean_unused_rowset_metas();
 
+    void _do_manual_compact();
+
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     // All these xxx_callback() functions are for Background threads

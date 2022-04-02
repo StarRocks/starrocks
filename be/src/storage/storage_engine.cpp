@@ -714,7 +714,35 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
+    _do_manual_compact();
+
     return res;
+}
+
+void StorageEngine::_do_manual_compact() {
+    auto data_dirs = get_stores();
+    for (auto data_dir : data_dirs) {
+        uint64_t live_sst_files_size_before = 0;
+        if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+            LOG(WARNING) << "get_live_sst_files_size failed";
+            continue;
+        }
+        if (live_sst_files_size_before > config::rocksdb_manual_compact_live_sst_files_size) {
+            Status s = data_dir->get_meta()->compact();
+            if (!s.ok()) {
+                LOG(WARNING) << "manual compact meta failed: " << s;
+            } else {
+                LOG(INFO) << "manual compact meta successfully:";
+                LOG(INFO) << data_dir->get_meta()->get_stats();
+                uint64_t live_sst_files_size_after = 0;
+                if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+                    LOG(WARNING) << "get_live_sst_files_size failed";
+                }
+                LOG(INFO) << "live_sst_files_size_before: " << live_sst_files_size_before
+                          << " live_sst_files_size_after: " << live_sst_files_size_after;
+            }
+        }
+    }
 }
 
 void StorageEngine::_clean_unused_rowset_metas() {
