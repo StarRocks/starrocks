@@ -11,7 +11,6 @@
 #include "column/column_visitor_mutable.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
-#include "exec/vectorized/sorting/sort_permute.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
@@ -149,9 +148,6 @@ public:
     virtual void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
-
-    // Append rows from permutation
-    virtual void append_permutation(const Columns& columns, const Permutation& perm) = 0;
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;

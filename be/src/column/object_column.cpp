@@ -83,16 +83,6 @@ void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src,
 };
 
 template <typename T>
-void ObjectColumn<T>::append_permutation(const Columns& columns, const Permutation& perm) {
-    if (columns.empty() || perm.empty()) {
-        return;
-    }
-    for (auto& p : perm) {
-        append(*columns[p.chunk_index], p.index_in_chunk, 1);
-    }
-}
-
-template <typename T>
 void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::Column& src, uint32_t index,
                                                   uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);

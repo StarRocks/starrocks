@@ -97,16 +97,6 @@ void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, u
     }
 }
 
-void ArrayColumn::append_permutation(const Columns& columns, const Permutation& perm) {
-    if (columns.empty() || perm.empty()) {
-        return;
-    }
-
-    for (auto& p : perm) {
-        append(*columns[p.chunk_index], p.index_in_chunk, 1);
-    }
-}
-
 void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);

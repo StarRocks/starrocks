@@ -32,26 +32,6 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::append_permutation(const Columns& columns, const Permutation& perm) {
-    using ColumnType = FixedLengthColumnBase<T>;
-
-    if (columns.empty() || perm.empty()) {
-        return;
-    }
-
-    size_t output = _data.size();
-    _data.resize(output + perm.size());
-    std::vector<const Container*> srcs;
-    for (auto& column : columns) {
-        srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
-    }
-
-    for (auto& p : perm) {
-        _data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
-    }
-}
-
-template <typename T>
 void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t orig_size = _data.size();

@@ -4,6 +4,7 @@
 
 #include "column/type_traits.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
@@ -450,7 +451,7 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
     }
     chunks.push_back(_merged_segment.chunk);
 
-    big_chunk->append_permutation(chunks, merged_perm);
+    append_by_permutation(big_chunk.get(), chunks, merged_perm);
 }
 
 Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,

@@ -30,15 +30,6 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
     append(src, indexes[from], size);
 }
 
-void ConstColumn::append_permutation(const Columns& columns, const Permutation& perm) {
-    if (columns.empty() || perm.empty()) {
-        return;
-    }
-    for (auto& p : perm) {
-        append(*columns[p.chunk_index], p.index_in_chunk, 1);
-    }
-}
-
 void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     append(src, index, size);
 }

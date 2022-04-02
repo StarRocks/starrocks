@@ -87,29 +87,6 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
-void NullableColumn::append_permutation(const Columns& columns, const Permutation& perm) {
-    if (columns.empty() || perm.empty()) {
-        return;
-    }
-
-    uint32_t orig_size = _null_column->size();
-    Columns null_columns, data_columns;
-    for (auto& col : columns) {
-        const NullableColumn* src_column = down_cast<const NullableColumn*>(col.get());
-        null_columns.push_back(src_column->null_column());
-        data_columns.push_back(src_column->data_column());
-    }
-    if (columns[0]->is_nullable()) {
-        _null_column->append_permutation(null_columns, perm);
-        _data_column->append_permutation(data_columns, perm);
-        _has_null = _has_null || SIMD::count_nonzero(&_null_column->get_data()[orig_size], perm.size());
-    } else {
-        _null_column->resize(orig_size + perm.size());
-        _data_column->append_permutation(data_columns, perm);
-    }
-    DCHECK_EQ(_null_column->size(), _data_column->size());
-}
-
 void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     uint32_t orig_size = _null_column->size();
