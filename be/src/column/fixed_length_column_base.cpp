@@ -45,7 +45,7 @@ void FixedLengthColumnBase<T>::append_permutation(const Columns& columns, const 
     for (auto& column : columns) {
         srcs.push_back(&(down_cast<const ColumnType*>(column.get())->get_data()));
     }
-    
+
     for (auto& p : perm) {
         _data[output++] = (*srcs[p.chunk_index])[p.index_in_chunk];
     }
