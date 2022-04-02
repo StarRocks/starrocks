@@ -26,8 +26,6 @@ template <bool handle_null>
 jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
 void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
-Status get_java_udaf_function(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                              starrocks_udf::FunctionContext* context, AggregateFunction** func);
 
 template <bool handle_null = true>
 class JavaUDAFAggregateFunction : public AggregateFunction {
