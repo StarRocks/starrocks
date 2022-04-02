@@ -600,7 +600,8 @@ public class Database extends MetaObject implements Writable {
             // Get function id for this UDF, use CatalogIdGenerator. Only get function id
             // when isReplay is false
             long functionId = Catalog.getCurrentCatalog().getNextId();
-            function.setId(functionId);
+            // all user-defined functions id are negative to avoid conflicts with the builtin function
+            function.setFunctionId(-functionId);
         }
 
         ImmutableList.Builder<Function> builder = ImmutableList.builder();

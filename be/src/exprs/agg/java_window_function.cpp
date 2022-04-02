@@ -17,7 +17,7 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
                                const std::string& symbol, starrocks_udf::FunctionContext* context) {
     std::string libpath;
     std::string state = symbol + "$State";
-    RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(id, url, checksum, &libpath));
+    RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fid, url, checksum, &libpath));
     auto* udaf_ctx = context->impl()->udaf_ctxs();
     udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
