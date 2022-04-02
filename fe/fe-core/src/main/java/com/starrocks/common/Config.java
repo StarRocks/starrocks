@@ -1277,6 +1277,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of agent task for one be. currently only for drop task.
+     */
+    @ConfField(mutable = true)
+    public static int max_agent_tasks_send_per_be = 10000;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField

@@ -691,6 +691,7 @@ public class ReportHandler extends Daemon {
                                           long backendId) {
         int deleteFromBackendCounter = 0;
         int addToMetaCounter = 0;
+        int maxTaskSendPerBe = Config.max_agent_tasks_send_per_be;
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long tabletId : backendTablets.keySet()) {
             TTablet backendTablet = backendTablets.get(tabletId);
@@ -703,7 +704,6 @@ public class ReportHandler extends Daemon {
                         try {
                             addReplica(tabletId, backendTabletInfo, backendId);
                             // update counter
-                            needDelete = false;
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
                             LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
@@ -715,17 +715,18 @@ public class ReportHandler extends Daemon {
                     }
                 }
 
-                if (needDelete) {
+                if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
                     DropReplicaTask task = new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
                     batchTask.addTask(task);
                     LOG.warn("delete tablet[" + tabletId + " - " + backendTabletInfo.getSchema_hash()
                             + "] from backend[" + backendId + "] because not found in meta");
                     ++deleteFromBackendCounter;
+                    --maxTaskSendPerBe;
                 }
             } // end for tabletInfos
 
-            if (foundTabletsWithInvalidSchema.containsKey(tabletId)) {
+            if (foundTabletsWithInvalidSchema.containsKey(tabletId) && maxTaskSendPerBe > 0) {
                 // this tablet is found in meta but with invalid schema hash.
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
@@ -734,6 +735,7 @@ public class ReportHandler extends Daemon {
                 LOG.warn("delete tablet[" + tabletId + " - " + schemaHash + "] from backend[" + backendId
                         + "] because invalid schema hash");
                 ++deleteFromBackendCounter;
+                --maxTaskSendPerBe;
             }
         } // end for backendTabletIds
         AgentTaskExecutor.submit(batchTask);
