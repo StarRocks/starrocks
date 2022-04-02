@@ -4401,7 +4401,8 @@ public class Catalog {
                 HoodieRecord.RECORD_KEY_METADATA_FIELD,
                 HoodieRecord.PARTITION_PATH_METADATA_FIELD,
                 HoodieRecord.FILENAME_METADATA_FIELD));
-        Set<String> includedMetaFields = columns.stream().map(Column::getName).filter(metaFields::contains).collect(Collectors.toSet());
+        Set<String> includedMetaFields = columns.stream().map(Column::getName)
+                .filter(metaFields::contains).collect(Collectors.toSet());
         metaFields.removeAll(includedMetaFields);
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
