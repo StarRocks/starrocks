@@ -2772,7 +2772,7 @@ public class Catalog {
             } finally {
                 db.writeUnlock();
             }
-            Catalog.getCurrentCatalog().sendDropTabletTasks(batchTaskMap);
+            sendDropTabletTasks(batchTaskMap);
 
             // 3. remove db from catalog
             idToDb.remove(db.getId());
