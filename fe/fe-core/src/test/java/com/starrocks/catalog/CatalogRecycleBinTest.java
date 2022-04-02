@@ -41,9 +41,9 @@ public class CatalogRecycleBinTest {
         Table table2 = new Table(2L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
         bin.recycleTable(11L, table2);
 
-        Table recycledTable = bin.getTable(1L);
+        Table recycledTable = bin.getTable(11L,1L);
         Assert.assertNull(recycledTable);
-        recycledTable = bin.getTable(2L);
+        recycledTable = bin.getTable(11L,2L);
         Assert.assertEquals(2L, recycledTable.getId());
 
         List<Table> tables = bin.getTables(11L);

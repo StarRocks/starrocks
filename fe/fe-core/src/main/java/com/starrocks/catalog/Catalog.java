@@ -226,6 +226,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
@@ -2749,6 +2750,7 @@ public class Catalog {
 
             // 2. drop tables in db
             Database db = this.fullNameToDb.get(dbName);
+            HashMap<Long, AgentBatchTask> batchTaskMap;
             db.writeLock();
             try {
                 if (!stmt.isForceDrop()) {
@@ -2796,7 +2798,7 @@ public class Catalog {
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
-                unprotectDropDb(db, stmt.isForceDrop(), false);
+                batchTaskMap = unprotectDropDb(db, stmt.isForceDrop(), false);
                 if (!stmt.isForceDrop()) {
                     Catalog.getCurrentRecycleBin().recycleDatabase(db, tableNames);
                 } else {
@@ -2805,6 +2807,7 @@ public class Catalog {
             } finally {
                 db.writeUnlock();
             }
+            sendDropTabletTasks(batchTaskMap);
 
             // 3. remove db from catalog
             idToDb.remove(db.getId());
@@ -2820,10 +2823,22 @@ public class Catalog {
         }
     }
 
-    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         for (Table table : db.getTables()) {
-            unprotectDropTable(db, table.getId(), isForeDrop, isReplay);
+            HashMap<Long, AgentBatchTask> dropTasks = unprotectDropTable(db, table.getId(), isForeDrop, isReplay);
+            if (!isReplay) {
+                for (Long backendId : dropTasks.keySet()) {
+                    AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                    if (batchTask == null) {
+                        batchTask = new AgentBatchTask();
+                        batchTaskMap.put(backendId, batchTask);
+                    }
+                    batchTask.addTasks(backendId, dropTasks.get(backendId).getAllTasks());
+                }
+            }
         }
+        return batchTaskMap;
     }
 
     public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
@@ -4956,7 +4971,8 @@ public class Catalog {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        Table table = null;
+        Table table;
+        HashMap<Long, AgentBatchTask> batchTaskMap;
         db.writeLock();
         try {
             table = db.getTable(tableName);
@@ -4990,37 +5006,67 @@ public class Catalog {
                                     " please use \"DROP table FORCE\".");
                 }
             }
-            unprotectDropTable(db, table.getId(), stmt.isForceDrop(), false);
+            batchTaskMap = unprotectDropTable(db, table.getId(), stmt.isForceDrop(), false);
             DropInfo info = new DropInfo(db.getId(), table.getId(), -1L, stmt.isForceDrop());
             editLog.logDropTable(info);
         } finally {
             db.writeUnlock();
         }
-
+        sendDropTabletTasks(batchTaskMap);
         LOG.info("finished dropping table: {} from db: {}, is force: {}", tableName, dbName, stmt.isForceDrop());
     }
 
-    public boolean unprotectDropTable(Database db, long tableId, boolean isForceDrop, boolean isReplay) {
+    public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
+                        AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                    }
+                }
+                if (partTask.getAllTasks().size() > 0) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
+            }
+        }
+    }
+
+    public HashMap<Long, AgentBatchTask> unprotectDropTable(Database db, long tableId, boolean isForceDrop, boolean isReplay) {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         Table table = db.getTable(tableId);
         // delete from db meta
         if (table == null) {
-            return false;
+            return batchTaskMap;
         }
 
         table.onDrop();
 
         db.dropTable(table.getName());
         if (!isForceDrop) {
-            Catalog.getCurrentRecycleBin().recycleTable(db.getId(), table);
+            Table oldTable = Catalog.getCurrentRecycleBin().recycleTable(db.getId(), table);
+            if (oldTable != null && oldTable.getType() == TableType.OLAP) {
+                batchTaskMap = Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) oldTable, false);
+            }
         } else {
             if (table.getType() == TableType.OLAP) {
-                Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, isReplay);
+                batchTaskMap = Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, isReplay);
             }
         }
 
         LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), db.getFullName(),
                 table.getId());
-        return true;
+        return batchTaskMap;
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
@@ -5220,7 +5266,7 @@ public class Catalog {
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
         Table table = db.getTable(tableId);
         if (table == null) {
-            table = recycleBin.getTable(tableId);
+            table = recycleBin.getTable(db.getId(), tableId);
         }
         return table;
     }
@@ -7549,7 +7595,7 @@ public class Catalog {
         Catalog.getCurrentCatalog().getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public void onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
         TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
@@ -7561,9 +7607,10 @@ public class Catalog {
             }
         }
 
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         if (!isReplay) {
             // drop all replicas
-            AgentBatchTask batchTask = new AgentBatchTask();
+
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> allIndices = partition.getMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
@@ -7575,16 +7622,20 @@ public class Catalog {
                         for (Replica replica : replicas) {
                             long backendId = replica.getBackendId();
                             DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
                             batchTask.addTask(dropTask);
                         } // end for replicas
                     } // end for tablets
                 } // end for indices
             } // end for partitions
-            AgentTaskExecutor.submit(batchTask);
         }
-
         // colocation
         Catalog.getCurrentColocateIndex().removeTable(olapTable.getId());
+        return batchTaskMap;
     }
 
     public void onErasePartition(Partition partition) {
