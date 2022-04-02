@@ -60,7 +60,7 @@ private:
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
-    void _init_partition_values();
+    Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
     void _init_chunk(ChunkPtr* chunk);
 

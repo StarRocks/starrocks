@@ -203,8 +203,8 @@ Status FileReader::_filter_group(const tparquet::RowGroup& row_group, bool* is_f
         }
 
         for (auto& min_max_conjunct_ctx : _param.min_max_conjunct_ctxs) {
-            auto min_column = min_max_conjunct_ctx->evaluate(min_chunk.get());
-            auto max_column = min_max_conjunct_ctx->evaluate(max_chunk.get());
+            ASSIGN_OR_RETURN(auto min_column, min_max_conjunct_ctx->evaluate(min_chunk.get()));
+            ASSIGN_OR_RETURN(auto max_column, min_max_conjunct_ctx->evaluate(max_chunk.get()));
 
             auto min = min_column->get(0).get_int8();
             auto max = max_column->get(0).get_int8();

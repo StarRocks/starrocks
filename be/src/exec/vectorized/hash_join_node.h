@@ -59,16 +59,16 @@ private:
     Status _probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk, bool& eos);
     Status _probe_remain(ChunkPtr* chunk, bool& eos);
 
-    void _evaluate_build_keys(const ChunkPtr& chunk);
+    Status _evaluate_build_keys(const ChunkPtr& chunk);
 
-    void _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);
 
-    void _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
-    void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
-    void _process_other_conjunct(ChunkPtr* chunk);
+    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
+    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
+    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
+    Status _process_other_conjunct(ChunkPtr* chunk);
 
     Status _do_publish_runtime_filters(RuntimeState* state, int64_t limit);
     Status _push_down_in_filter(RuntimeState* state);
