@@ -238,8 +238,6 @@ class HllSetResolver {
 public:
     HllSetResolver()
 
-    {}
-
     ~HllSetResolver() = default;
 
     typedef uint8_t SetTypeValueType;
