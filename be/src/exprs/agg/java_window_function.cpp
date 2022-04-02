@@ -13,8 +13,8 @@ const AggregateFunction* getJavaWindowFunction() {
     return &java_window_func;
 }
 
-Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                               starrocks_udf::FunctionContext* context) {
+Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
+                               const std::string& symbol, starrocks_udf::FunctionContext* context) {
     std::string libpath;
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fid, url, checksum, &libpath));
