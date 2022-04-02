@@ -563,7 +563,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                    for (Replica replica : tablet.getReplicas()) {
                         // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                         replica.setState(ReplicaState.NORMAL);
                         invertedIndex.addReplica(tablet.getId(), replica);
