@@ -32,10 +32,20 @@ private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
+    // data is parsed as a document stream.
+
+    // iterator context for document stream.
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 
@@ -52,11 +62,21 @@ private:
     uint8_t* _data;
     simdjson::ondemand::parser _parser;
 
+    // data is parsed as a document in array type.
     simdjson::ondemand::document _doc;
+
+    // iterator context for array.
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 
@@ -73,7 +93,14 @@ public:
 private:
     std::vector<SimpleJsonPath> _root_paths;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 
@@ -90,7 +117,14 @@ public:
 private:
     std::vector<SimpleJsonPath> _root_paths;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 
@@ -107,11 +141,24 @@ public:
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
+
+    // data is parsed as a document stream, in which every document is an object and has an array under json root.
+
+    // _curr_row is the current document in document stream.
     simdjson::ondemand::object _curr_row;
+
+    // iterator context for array under json root.
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 
@@ -128,11 +175,24 @@ public:
 
 private:
     std::vector<SimpleJsonPath> _root_paths;
+
+    // data is parsed as an array, in which every document is an object and has an array under json root.
+
+    // _curr_row is the current document in array.
     simdjson::ondemand::object _curr_row;
+
+    // iterator context for array under json root.
     simdjson::ondemand::array _array;
     simdjson::ondemand::array_iterator _array_itr;
 
+    // Iterator (value, object, array, etc) in simdjson could be only parsed once.
+    // If we want to access iterator twice, a call of rewind/reset is needed.
+    // get_current would access many iterators, which are hard to reset and get the object.
+    // Hance, we keep the object returned in _curr and reset it when necessary.
+
+    // _curr is the object returned by get_current.
     simdjson::ondemand::object _curr;
+    // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
 

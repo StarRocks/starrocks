@@ -26,7 +26,7 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
 }
 
 Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
@@ -95,7 +95,7 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexc
 }
 
 Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
@@ -141,7 +141,7 @@ Status JsonArrayParser::advance() noexcept {
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
@@ -179,7 +179,7 @@ Status JsonDocumentStreamParserWithRoot::advance() noexcept {
 }
 
 Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
@@ -244,7 +244,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
@@ -343,7 +343,7 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
 }
 
 Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
-    if (_curr_ready) {
+    if (UNLIKELY(_curr_ready)) {
         _curr.reset();
         *row = _curr;
         return Status::OK();
