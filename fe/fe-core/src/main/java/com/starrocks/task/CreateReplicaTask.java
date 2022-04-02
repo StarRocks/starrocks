@@ -209,7 +209,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setVersion(version);
 
         createTabletReq.setStorage_medium(storageMedium);
-        createTabletReq.setUse_persistent_index(enablePersistentIndex);
+        createTabletReq.setEnable_persistent_index(enablePersistentIndex);
         if (inRestoreMode) {
             createTabletReq.setIn_restore_mode(true);
         }

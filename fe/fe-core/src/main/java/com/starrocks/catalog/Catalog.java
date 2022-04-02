@@ -4016,7 +4016,7 @@ public class Catalog {
         olapTable.setIsInMemory(isInMemory);
 
         boolean enablePersistentIndex =
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX, false);
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
@@ -4624,8 +4624,8 @@ public class Catalog {
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
-            // use_persistent_index
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX).append("\" = \"");
+            // enable_persistent_index
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");            
 
             // storage media

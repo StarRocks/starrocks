@@ -1455,7 +1455,7 @@ public class OlapTable extends Table {
             tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty
-                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_PERSISTENT_INDEX,
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                                        Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
     }

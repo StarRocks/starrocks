@@ -921,6 +921,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
     if (tablet->enable_persistent_index() && fix_size <= 64) {
+        // TODO
+        // PersistentIndex and tablet data are currently stored in the same directory
+        // We may need to support the separation of PersistentIndex and Tablet data
         _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
         return _persistent_index->load_from_tablet(tablet);
     }
