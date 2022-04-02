@@ -110,7 +110,13 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 }
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
-                                          simdjson::ondemand::value& value) noexcept {
+                                          simdjson::ondemand::value* value) noexcept {
+    if (jsonpath.size() <= 1) {
+        // The first elem of json path should be '$'.
+        // A valid json path's size is >= 2.
+        return Status::InvalidArgument("empty json path");
+    }
+
     simdjson::ondemand::value tvalue;
 
     // Skip the first $.
@@ -122,6 +128,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
 
+        // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
+        // we have to do some special treatment for the second elem of json path.
         if (i == 1) {
             auto err = obj.find_field_unordered(col).get(tvalue);
             if (err) {
@@ -137,28 +145,36 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         }
 
         if (index != -1) {
-            auto arr = tvalue.get_array();
-            if (arr.error()) {
+            // try to access tvalue as array.
+            simdjson::ondemand::array arr;
+            auto err = tvalue.get_array().get(arr);
+            if (err) {
                 return Status::InvalidArgument(fmt::format("failed to access field as array, field: {}, err: {}", col,
-                                                           simdjson::error_message(arr.error())));
+                                                           simdjson::error_message(err)));
             }
 
-            int idx = 0;
-            for (auto a : arr) {
-                if (a.error()) {
-                    return Status::InvalidArgument(fmt::format("failed to access array element, field: {}, err: {}",
-                                                               col, simdjson::error_message(arr.error())));
-                }
+            size_t sz;
+            err = arr.count_elements().get(sz);
+            if (err) {
+                return Status::InvalidArgument(
+                        fmt::format("failed to get array size, field: {}, err: {}", col, simdjson::error_message(err)));
+            }
 
-                if (idx++ == index) {
-                    a.get(tvalue);
-                    break;
-                }
+            if (index >= sz) {
+                return Status::NotFound(
+                        fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
+            }
+
+            err = arr.at(index).get(tvalue);
+            if (err) {
+                return Status::InvalidArgument(
+                        fmt::format("failed to access array, field: {}, index: {}, array size: {}, err: {}", col, index,
+                                    sz, simdjson::error_message(err)));
             }
         }
     }
 
-    std::swap(value, tvalue);
+    std::swap(*value, tvalue);
 
     return Status::OK();
 }
@@ -241,7 +257,7 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
             }
 
             simdjson::ondemand::value value;
-            auto st = extract_from_object(obj, jsonpath, value);
+            auto st = extract_from_object(obj, jsonpath, &value);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -281,7 +297,7 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
                 }
 
                 simdjson::ondemand::value value;
-                auto st = extract_from_object(obj, jsonpath, value);
+                auto st = extract_from_object(obj, jsonpath, &value);
                 if (!st.ok()) {
                     result.append_null();
                     continue;
