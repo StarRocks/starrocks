@@ -16,6 +16,17 @@ public:
     static constexpr size_t kDefaultBufferedChunks = 64;
 
     // Tunning the max_buffer_chunks according to requested limit
+    // The experiment could refer to https://github.com/StarRocks/starrocks/pull/4694.
+    //
+    // This parameter has at least two effects:
+    // If smaller, the partial-merge-sort procedure would become more frequent, thus reduce the memory usage and
+    // generate a baseline to filter input data.
+    // If larger, the partial-merge-sort would become in-frequent, and cost lower, but the downside is the merge-sort
+    // stage is expensive compared to the filter stage.
+    //
+    // As a result, we need to tunning this parameter to achieve better performance.
+    // The followering heuristic is based on experiment of current algorithm implementation, which needs
+    // further improvement if the algorithm changed.
     static constexpr size_t tunning_buffered_chunks(int limit) {
         if (limit <= 1024) {
             return 16;
