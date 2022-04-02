@@ -464,6 +464,8 @@ set(STARROCKS_LINK_LIBS
     Rowset
     Runtime
     Service
+    ServiceBE
+    ServiceCN
     Udf
     Util
     StarRocksGen

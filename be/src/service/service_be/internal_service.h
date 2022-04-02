@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "service/internal_service.h"
 
 namespace brpc {
 class Controller;
@@ -34,30 +35,9 @@ namespace starrocks {
 class ExecEnv;
 
 template <typename T>
-class PInternalServiceImplBase : public T {
+class BackendInternalServiceImpl : public PInternalServiceImplBase<T> {
 public:
-    PInternalServiceImplBase(ExecEnv* exec_env);
-    ~PInternalServiceImplBase() override;
-
-    void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
-                       ::starrocks::PTransmitDataResult* response, ::google::protobuf::Closure* done) override;
-
-    void transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
-                        ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done) override;
-
-    void transmit_runtime_filter(::google::protobuf::RpcController* controller,
-                                 const ::starrocks::PTransmitRuntimeFilterParams* request,
-                                 ::starrocks::PTransmitRuntimeFilterResult* response,
-                                 ::google::protobuf::Closure* done) override;
-
-    void exec_plan_fragment(google::protobuf::RpcController* controller, const PExecPlanFragmentRequest* request,
-                            PExecPlanFragmentResult* result, google::protobuf::Closure* done) override;
-
-    void cancel_plan_fragment(google::protobuf::RpcController* controller, const PCancelPlanFragmentRequest* request,
-                              PCancelPlanFragmentResult* result, google::protobuf::Closure* done) override;
-
-    void fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
-                    PFetchDataResult* result, google::protobuf::Closure* done) override;
+    BackendInternalServiceImpl(ExecEnv* exec_env) : PInternalServiceImplBase<T>(exec_env) {}
 
     void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
                             PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
@@ -72,19 +52,6 @@ public:
 
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
-
-    void trigger_profile_report(google::protobuf::RpcController* controller,
-                                const PTriggerProfileReportRequest* request, PTriggerProfileReportResult* result,
-                                google::protobuf::Closure* done) override;
-
-    void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
-                  google::protobuf::Closure* done) override;
-
-private:
-    Status _exec_plan_fragment(brpc::Controller* cntl);
-
-protected:
-    ExecEnv* _exec_env;
 };
 
 } // namespace starrocks

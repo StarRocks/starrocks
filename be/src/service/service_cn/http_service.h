@@ -1,6 +1,6 @@
-// This file is made available under Elastic License 2.0.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/service/brpc_service.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/service/http_service.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -24,28 +24,29 @@
 #include <memory>
 
 #include "common/status.h"
-#include "service/brpc.h"
-
-namespace brpc {
-class Server;
-}
 
 namespace starrocks {
 
 class ExecEnv;
+class EvHttpServer;
+class HttpHandler;
+class WebPageHandler;
 
-// Class enclose brpc service.
-class BRpcService {
+// HTTP service for StarRocks CN
+class HttpServiceCN {
 public:
-    BRpcService(ExecEnv* exec_env);
-    ~BRpcService();
+    HttpServiceCN(ExecEnv* env, int port, int num_threads);
+    ~HttpServiceCN();
 
-    Status start(int port, google::protobuf::Service* service, google::protobuf::Service* doris_service);
-    void join();
+    Status start();
 
 private:
-    ExecEnv* _exec_env;
-    std::unique_ptr<brpc::Server> _server;
+    ExecEnv* _env;
+
+    std::unique_ptr<EvHttpServer> _ev_http_server;
+    std::unique_ptr<WebPageHandler> _web_page_handler;
+
+    std::vector<HttpHandler*> _http_handlers;
 };
 
 } // namespace starrocks
