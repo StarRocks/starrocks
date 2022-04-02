@@ -126,7 +126,7 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
 
     // json root filter.
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::object) {
@@ -149,7 +149,7 @@ Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noe
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(row));
     simdjson::ondemand::value val;
     // json root filter.
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::object) {
@@ -172,7 +172,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::array) {
@@ -229,7 +229,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
             RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
+            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
 
             try {
                 if (val.type() != simdjson::ondemand::json_type::array) {
@@ -259,7 +259,7 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::array) {
@@ -316,7 +316,7 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
             RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, val));
+            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
 
             try {
                 if (val.type() != simdjson::ondemand::json_type::array) {
