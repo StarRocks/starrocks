@@ -193,9 +193,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        return _pool.size() > Column::MAX_CAPACITY_LIMIT;
-    }
+    bool reach_capacity_limit() const override { return _pool.size() > Column::MAX_CAPACITY_LIMIT; }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 

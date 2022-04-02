@@ -78,7 +78,7 @@ public:
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
 #ifdef NDEBUG
-    size_t row_count = 1<<30;
+    size_t row_count = 1 << 30;
     auto c1 = BinaryColumn::create();
     c1->resize(row_count);
     auto c2 = BinaryColumn::create();
