@@ -695,6 +695,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (table.getType() == TableType.OLAP) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
                         Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
+                Catalog.getCurrentCatalog().sendDropTabletTasks(batchTaskMap);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }

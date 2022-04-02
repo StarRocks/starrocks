@@ -5017,7 +5017,6 @@ public class Catalog {
                     partTask.addTask(task);
                     if (curTask++ > numDropTaskPerBe) {
                         AgentTaskExecutor.submit(partTask);
-                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
                         curTask = 1;
                         partTask = new AgentBatchTask();
                     }
@@ -5028,6 +5027,7 @@ public class Catalog {
             } else {
                 AgentTaskExecutor.submit(originTasks);
             }
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
         }
     }
 
