@@ -30,8 +30,8 @@ Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
 
 Compaction::~Compaction() = default;
 
-Status Compaction::init(int concurreny) {
-    _concurrency_sem.set_count(concurreny);
+Status Compaction::init(int concurrency) {
+    _concurrency_sem.set_count(concurrency);
     return Status::OK();
 }
 
