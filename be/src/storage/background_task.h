@@ -6,11 +6,11 @@
 
 namespace starrocks {
 
-class BackgroudTask {
+class BackgroundTask {
 public:
-    BackgroudTask() : _stopped(false) {}
+    BackgroundTask() : _stopped(false) {}
 
-    virtual ~BackgroudTask() = default;
+    virtual ~BackgroundTask() = default;
 
     virtual void run() = 0;
 
