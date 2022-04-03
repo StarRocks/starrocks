@@ -11,7 +11,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -141,9 +140,6 @@ public class CachedStatisticStorage implements StatisticStorage {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, statisticData.dbId);
         }
         Table table = db.getTable(statisticData.tableId);
-        if (!(table instanceof OlapTable)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
-        }
         Column column = table.getColumn(statisticData.columnName);
         if (column == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);

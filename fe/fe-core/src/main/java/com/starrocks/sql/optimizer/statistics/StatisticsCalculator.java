@@ -24,12 +24,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.external.hive.HdfsFileDesc;
-import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -283,68 +281,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // 1. get table row count
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateHMSTableScanColumns(table, tableRowCount, colRefToColumnMetaMap);
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(tableRowCount);
 
         // 3. estimate cardinality
         context.setStatistics(builder.build());
         return visitOperator(node, context);
-    }
-
-    private Statistics.Builder estimateHMSTableScanColumns(Table table, long tableRowCount,
-                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
-        Statistics.Builder builder = Statistics.builder();
-
-        List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
-
-        List<ColumnStatistic> columnStatisticList = null;
-
-        try {
-            if (optimizerContext.getSessionVariable().enableHiveColumnStats()) {
-                Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                        tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
-                                map(ColumnRefOperator::getName).collect(Collectors.toList()));
-                List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                                computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
-                        .collect(Collectors.toList());
-                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                                new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                        hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                        hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
-                        .collect(Collectors.toList());
-            } else {
-                LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to {} get table column. error : {}", table.getName(), e);
-        } finally {
-            if (columnStatisticList == null || columnStatisticList.isEmpty()) {
-                columnStatisticList = Collections.nCopies(requiredColumns.size(), ColumnStatistic.unknown());
-            }
-        }
-
-        Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
-        for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
-        }
-
-        return builder;
-    }
-
-    // Hive column statistics may be -1 in avgSize, numNulls and distinct values, default values need to be reassigned
-    private HiveColumnStats computeHiveColumnStatistics(ColumnRefOperator column, HiveColumnStats hiveColumnStats) {
-        double avgSize =
-                hiveColumnStats.getAvgSize() != -1 ? hiveColumnStats.getAvgSize() : column.getType().getTypeSize();
-        long numNulls = hiveColumnStats.getNumNulls() != -1 ? hiveColumnStats.getNumNulls() : 0;
-        long distinctValues = hiveColumnStats.getNumDistinctValues() != -1 ? hiveColumnStats.getNumDistinctValues() : 1;
-
-        hiveColumnStats.setAvgSize(avgSize);
-        hiveColumnStats.setNumNulls(numNulls);
-        hiveColumnStats.setNumDistinctValues(distinctValues);
-        return hiveColumnStats;
     }
 
     private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
@@ -543,7 +485,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * 3. use totalBytes / schema size to compute if partition stats is missing
      */
     private long computeHMSTableTableRowCount(Table table, Collection<Long> selectedPartitionIds,
-                                          Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
+                                              Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
 
         long numRows = -1;
