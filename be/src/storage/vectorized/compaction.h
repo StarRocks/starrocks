@@ -36,7 +36,7 @@ public:
 
     virtual Status compact() = 0;
 
-    static Status init(int concurreny);
+    static Status init(int concurrency);
 
 protected:
     virtual Status pick_rowsets_to_compact() = 0;
