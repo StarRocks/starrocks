@@ -346,10 +346,10 @@ typedef std::variant<
 // clang-format on
 
 template <class T>
-inline ColumnValueRange<T>::ColumnValueRange() {}
+ColumnValueRange<T>::ColumnValueRange() {}
 
 template <class T>
-inline ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
+ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
         : _column_name(std::move(col_name)),
           _column_type(type),
           _type_min(min),
@@ -361,7 +361,7 @@ inline ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType
           _fixed_op(FILTER_IN) {}
 
 template <class T>
-inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
+Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
     if (INVALID_TYPE == _column_type) {
         return Status::InternalError("AddFixedValue failed, Invalid type");
     }
@@ -455,12 +455,12 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
 }
 
 template <class T>
-inline bool ColumnValueRange<T>::is_fixed_value_range() const {
+bool ColumnValueRange<T>::is_fixed_value_range() const {
     return _fixed_values.size() != 0 || _empty_range;
 }
 
 template <class T>
-inline bool ColumnValueRange<T>::is_empty_value_range() const {
+bool ColumnValueRange<T>::is_empty_value_range() const {
     if (INVALID_TYPE == _column_type) {
         return true;
     }
@@ -472,7 +472,7 @@ inline bool ColumnValueRange<T>::is_empty_value_range() const {
 }
 
 template <class T>
-inline bool ColumnValueRange<T>::is_fixed_value_convertible() const {
+bool ColumnValueRange<T>::is_fixed_value_convertible() const {
     if (is_fixed_value_range()) {
         return false;
     }
@@ -480,7 +480,7 @@ inline bool ColumnValueRange<T>::is_fixed_value_convertible() const {
 }
 
 template <class T>
-inline bool ColumnValueRange<T>::is_range_value_convertible() const {
+bool ColumnValueRange<T>::is_range_value_convertible() const {
     if (!is_fixed_value_range() || _fixed_op != FILTER_IN) {
         return false;
     }
@@ -488,7 +488,7 @@ inline bool ColumnValueRange<T>::is_range_value_convertible() const {
 }
 
 template <class T>
-inline size_t ColumnValueRange<T>::get_convertible_fixed_value_size() const {
+size_t ColumnValueRange<T>::get_convertible_fixed_value_size() const {
     return is_fixed_value_convertible() ? helper::difference(_low_value, _high_value) : 0;
 }
 

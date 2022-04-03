@@ -131,7 +131,7 @@ public:
     void set_compare_strategy(CompareStrategy cmp) { _compare_strategy = cmp; }
 
 protected:
-    inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
+    size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
 
