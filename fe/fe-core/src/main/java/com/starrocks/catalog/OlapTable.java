@@ -626,6 +626,7 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
+    @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
         if (defaultDistributionInfo instanceof RandomDistributionInfo) {
@@ -778,6 +779,7 @@ public class OlapTable extends Table {
     }
 
     // get all partitions except temp partitions
+    @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
     }

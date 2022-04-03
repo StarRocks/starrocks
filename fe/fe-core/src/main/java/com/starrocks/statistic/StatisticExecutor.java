@@ -26,6 +26,7 @@ import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -135,15 +136,18 @@ public class StatisticExecutor {
         }
     }
 
-
     // If you call this function, you must ensure that the db lock is added
-    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column) throws Exception {
+    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
+            throws Exception {
         if (dbId == -1) {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
         Table table = db.getTable(tableId);
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+        }
 
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
@@ -308,10 +312,10 @@ public class StatisticExecutor {
                                            StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
         ExecPlan execPlan;
         try {
-            if (isLockDb) { 
+            if (isLockDb) {
                 lock(dbs);
             }
-            
+
             Analyzer.analyze(parsedStmt, context);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -330,8 +334,8 @@ public class StatisticExecutor {
                     .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
-            if (isLockDb) { 
-                unLock(dbs); 
+            if (isLockDb) {
+                unLock(dbs);
             }
         }
         return execPlan;
@@ -370,7 +374,8 @@ public class StatisticExecutor {
         return parsedStmt;
     }
 
-    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
+    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan)
+            throws Exception {
         Coordinator coord =
                 new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
@@ -394,10 +399,9 @@ public class StatisticExecutor {
 
     private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
-
-        long count =
-                table.getPartitions().stream().map(p -> p.getBaseIndex().getRowCount()).reduce(Long::sum).orElse(1L);
+        Table table = db.getTable(tableId);
+        long count = table.getPartitions().stream().map(p -> p.getBaseIndex().getRowCount()).reduce(Long::sum)
+                .orElse(1L);
         if (isSample) {
             count = Math.min(count, rows);
         }
@@ -411,7 +415,7 @@ public class StatisticExecutor {
         StringBuilder builder = new StringBuilder(INSERT_STATISTIC_TEMPLATE).append(" ");
 
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        Table table = db.getTable(tableId);
 
         for (String name : columnNames) {
             VelocityContext context = new VelocityContext();
@@ -448,7 +452,7 @@ public class StatisticExecutor {
 
     private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Database db = Catalog.getCurrentCatalog().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        Table table = db.getTable(tableId);
 
         long hitRows = 1;
         long totalRows = 0;

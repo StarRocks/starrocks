@@ -18,7 +18,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
@@ -129,9 +128,6 @@ public class Analyzer {
         if (StatisticUtils.statisticDatabaseBlackListCheck(node.getTableName().getDb())) {
             throw new SemanticException("Forbidden collect database: %s", node.getTableName().getDb());
         }
-        if (analyzeTable.getType() != Table.TableType.OLAP) {
-            throw new SemanticException("Table '%s' is not a OLAP table", analyzeTable.getName());
-        }
 
         // Analyze columns mentioned in the statement.
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -183,11 +179,6 @@ public class Analyzer {
                 MetaUtils.normalizationTableName(session, node.getTableName());
                 Database db = MetaUtils.getStarRocks(session, node.getTableName());
                 Table table = MetaUtils.getStarRocksTable(session, node.getTableName());
-
-                if (!(table instanceof OlapTable)) {
-                    throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
-                }
-
                 // Analyze columns mentioned in the statement.
                 Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
