@@ -283,6 +283,21 @@ set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
+add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libopentelemetry_trace.a)
+
+add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libopentelemetry_common.a)
+
+add_library(opentelemetry_exporter_ostream_span STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_exporter_ostream_span PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libopentelemetry_exporter_ostream_span.a)
+
+add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libopentelemetry_resources.a)
+
+add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libopentelemetry_exporter_jaeger_trace.a)
+
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
 # Check if functions are supported in this platform. All flags will generated
@@ -526,6 +541,11 @@ set(STARROCKS_DEPENDENCIES
     simdjson
     librdkafka_cpp
     librdkafka
+    opentelemetry_trace
+    opentelemetry_common
+    opentelemetry_exporter_ostream_span
+    opentelemetry_resources
+    opentelemetry_exporter_jaeger_trace
     velocypack
     ${WL_END_GROUP}
 )
