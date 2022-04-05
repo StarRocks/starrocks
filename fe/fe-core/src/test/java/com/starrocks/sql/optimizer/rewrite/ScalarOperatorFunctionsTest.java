@@ -34,6 +34,7 @@ public class ScalarOperatorFunctionsTest {
     private ConstantOperator O_FLOAT_100;
     private ConstantOperator O_DOUBLE_100;
     private ConstantOperator O_BI_100;
+    private ConstantOperator O_BI_3;
     private ConstantOperator O_LI_100;
     private ConstantOperator O_DECIMAL_100;
     private ConstantOperator O_DECIMAL32P7S2_100;
@@ -52,6 +53,7 @@ public class ScalarOperatorFunctionsTest {
         O_FLOAT_100 = ConstantOperator.createFloat(100);
         O_DOUBLE_100 = ConstantOperator.createFloat(100);
         O_BI_100 = ConstantOperator.createBigint(100);
+        O_BI_3 = ConstantOperator.createBigint(3);
         O_LI_100 = ConstantOperator.createLargeInt(new BigInteger("100"));
         O_DECIMAL_100 = ConstantOperator.createDecimal(new BigDecimal(100), Type.DECIMALV2);
         O_DECIMAL32P7S2_100 = ConstantOperator.createDecimal(new BigDecimal(100),
@@ -549,8 +551,18 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void intDivide() {
+        assertEquals(33, ScalarOperatorFunctions.intDivideBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
     public void modInt() {
         assertEquals(0, ScalarOperatorFunctions.modBigInt(O_BI_100, O_BI_100).getBigint());
+    }
+
+    @Test
+    public void modLargeInt() {
+        assertEquals("0", ScalarOperatorFunctions.modLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
     }
 
     @Test
@@ -574,6 +586,36 @@ public class ScalarOperatorFunctionsTest {
                         .toString());
         assertTrue(ScalarOperatorFunctions.modDecimal(O_DECIMAL128P38S20_100, O_DECIMAL128P38S20_100).getType()
                 .isDecimalV3());
+    }
+
+    @Test
+    public void bitandBigint() {
+        assertEquals(100, ScalarOperatorFunctions.bitandBigint(O_BI_100, O_BI_100).getBigint());
+    }
+
+    @Test
+    public void bitandLargeInt() {
+        assertEquals("100", ScalarOperatorFunctions.bitandLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitorBigint() {
+        assertEquals(100, ScalarOperatorFunctions.bitorBigint(O_BI_100, O_BI_100).getBigint());
+    }
+
+    @Test
+    public void bitorLargeInt() {
+        assertEquals("100", ScalarOperatorFunctions.bitorLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitxorBigint() {
+        assertEquals(0, ScalarOperatorFunctions.bitxorBigint(O_BI_100, O_BI_100).getBigint());
+    }
+
+    @Test
+    public void bitxorLargeInt() {
+        assertEquals("0", ScalarOperatorFunctions.bitxorLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
     }
 
     @Test

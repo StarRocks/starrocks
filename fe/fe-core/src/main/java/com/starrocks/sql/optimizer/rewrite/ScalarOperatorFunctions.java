@@ -35,6 +35,7 @@ import com.starrocks.rewrite.FEFunction;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -389,12 +390,25 @@ public class ScalarOperatorFunctions {
         return createDecimalConstant(first.getDecimal().divide(second.getDecimal()));
     }
 
+    @FEFunction(name = "int_divide", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    public static ConstantOperator intDivideBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() / second.getBigint());
+    }
+
     @FEFunction(name = "mod", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
             return ConstantOperator.createNull(Type.BIGINT);
         }
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
+    }
+
+    @FEFunction(name = "mod", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getLargeInt().equals(new BigInteger("0"))) {
+            return ConstantOperator.createNull(Type.LARGEINT);
+        }
+        return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
 
     @FEFunction.List(list = {
@@ -409,6 +423,39 @@ public class ScalarOperatorFunctions {
         }
 
         return createDecimalConstant(first.getDecimal().remainder(second.getDecimal()));
+    }
+
+    /**
+     * Bitwise operation function
+     */
+    @FEFunction(name = "bitand", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    public static ConstantOperator bitandBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() & second.getBigint());
+    }
+
+    @FEFunction(name = "bitand", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    public static ConstantOperator bitandLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(first.getLargeInt().and(second.getLargeInt()));
+    }
+
+    @FEFunction(name = "bitor", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    public static ConstantOperator bitorBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() | second.getBigint());
+    }
+
+    @FEFunction(name = "bitor", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    public static ConstantOperator bitorLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(first.getLargeInt().or(second.getLargeInt()));
+    }
+
+    @FEFunction(name = "bitxor", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    public static ConstantOperator bitxorBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() ^ second.getBigint());
+    }
+
+    @FEFunction(name = "bitxor", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    public static ConstantOperator bitxorLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(first.getLargeInt().xor(second.getLargeInt()));
     }
 
     @FEFunction(name = "concat", argTypes = {"VARCHAR"}, returnType = "VARCHAR")
