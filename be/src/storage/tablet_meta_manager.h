@@ -89,10 +89,9 @@ public:
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
                                      rocksdb::WriteBatch& batch);
 
-    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                       const TabletMetaSharedPtr& tablet_meta);
+    static Status save(DataDir* store, const TabletMetaSharedPtr& tablet_meta);
 
-    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, const TabletMetaPB& meta_pb);
+    static Status save(DataDir* store, const TabletMetaPB& meta_pb);
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
