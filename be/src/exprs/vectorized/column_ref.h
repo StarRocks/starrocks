@@ -14,6 +14,9 @@ public:
 
     ColumnRef(const SlotDescriptor* desc);
 
+    // only used for UT
+    ColumnRef(const TypeDescriptor& type, SlotId slot = -1);
+
     SlotId slot_id() const { return _column_id; }
 
     TupleId tuple_id() const { return _tuple_id; }
