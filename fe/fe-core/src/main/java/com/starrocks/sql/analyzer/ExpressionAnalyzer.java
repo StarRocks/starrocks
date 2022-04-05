@@ -290,15 +290,16 @@ public class ExpressionAnalyzer {
                     case MULTIPLY:
                     case ADD:
                     case SUBTRACT:
-                    case MOD:
                         // numeric ops must be promoted to highest-resolution type
                         // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                        commonType = ArithmeticExpr.findCommonType(t1, t2);
+                        commonType = ArithmeticExpr.getBiggerType(ArithmeticExpr.getCommonType(t1, t2));
+                        break;
+                    case MOD:
+                        commonType = ArithmeticExpr.getCommonType(t1, t2);
                         break;
                     case DIVIDE:
-                        commonType = ArithmeticExpr.findCommonType(t1, t2);
-                        if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
-                                || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
+                        commonType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (commonType.isFixedPointType()) {
                             commonType = Type.DOUBLE;
                         }
                         break;
@@ -306,8 +307,10 @@ public class ExpressionAnalyzer {
                     case BITAND:
                     case BITOR:
                     case BITXOR:
-                        // Must be bigint
-                        commonType = Type.BIGINT;
+                        commonType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (!commonType.isFixedPointType()) {
+                            commonType = Type.BIGINT;
+                        }
                         break;
                     default:
                         // the programmer forgot to deal with a case

@@ -1328,8 +1328,11 @@ public abstract class Type implements Cloneable {
         switch (getPrimitiveType()) {
             case BOOLEAN:
             case TINYINT:
+                return Type.TINYINT;
             case SMALLINT:
+                return Type.SMALLINT;
             case INT:
+                return Type.INT;
             case BIGINT:
                 return Type.BIGINT;
             case LARGEINT:
