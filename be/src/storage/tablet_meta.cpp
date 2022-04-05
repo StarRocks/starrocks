@@ -391,7 +391,7 @@ Status TabletMeta::_save_meta(DataDir* data_dir) {
             << " tablet=" << full_name() << " _tablet_uid=" << _tablet_uid.to_string();
     TabletMetaPB tablet_meta_pb;
     to_meta_pb(&tablet_meta_pb);
-    Status st = TabletMetaManager::save(data_dir, tablet_id(), schema_hash(), tablet_meta_pb);
+    Status st = TabletMetaManager::save(data_dir, tablet_meta_pb);
     LOG_IF(FATAL, !st.ok()) << "fail to save tablet meta:" << st << ". tablet_id=" << tablet_id()
                             << ", schema_hash=" << schema_hash();
     return st;
