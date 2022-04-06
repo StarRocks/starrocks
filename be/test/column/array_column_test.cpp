@@ -26,6 +26,47 @@ PARALLEL_TEST(ArrayColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
+    // normal
+    auto offsets = UInt32Column::create();
+    auto elements = BinaryColumn::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    elements->append("1");
+    elements->append("2");
+    offsets->append(2);
+    auto ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_EQ(column->size(), 1);
+    auto array = column->get(0).get_array();
+    ASSERT_EQ(array[0].get_slice(), Slice("1"));
+    ASSERT_EQ(array[1].get_slice(), Slice("2"));
+
+#ifdef NDEBUG
+    /*
+    // the test case case will use a lot of memory, so temp comment it
+    // upgrade
+    offsets = UInt32Column::create();
+    elements = BinaryColumn::create();
+    column = ArrayColumn::create(elements, offsets);
+    size_t item_count = 1<<30;
+    for (size_t i = 0; i < item_count; i++) {
+        elements->append(std::to_string(i));
+    }
+    offsets->resize(item_count + 1);
+    for (size_t i = 0; i < item_count; i++) {
+        offsets->get_data()[i + 1] = i + 1;
+    }
+    ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_TRUE(column->elements_column()->is_large_binary());
+    */
+#endif
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();

@@ -23,11 +23,27 @@
 
 #include <gtest/gtest.h>
 
-#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
+    auto data_column = Int32Column::create();
+    data_column->append(1);
+
+    auto column = ConstColumn::create(std::move(data_column), 1024);
+    auto ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    data_column = Int32Column::create();
+    data_column->append(1);
+    column = ConstColumn::create(std::move(data_column), 2ul << 32u);
+    ret = column->upgrade_if_overflow();
+    ASSERT_FALSE(ret.ok());
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_basic) {

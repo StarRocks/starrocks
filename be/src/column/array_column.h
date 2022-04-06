@@ -149,6 +149,8 @@ public:
         return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
 
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+
     void check_or_die() const override;
 
 private:

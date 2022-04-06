@@ -41,7 +41,7 @@ public:
     // From the result, we can see when fixed length is 128, we can get speed up for column read.
     enum { APPEND_OVERFLOW_MAX_SIZE = 128 };
 
-    static const uint32_t MAX_CAPACITY_LIMIT = UINT32_MAX;
+    static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
     // mutable operations cannot be applied to shared data when concurrent
@@ -109,6 +109,13 @@ public:
     virtual void reserve(size_t n) = 0;
 
     virtual void resize(size_t n) = 0;
+
+    // If the column has already overflow, upgrade to one larger Column type,
+    // Return internal error if upgrade failed.
+    // Return null, if the column is not overflow.
+    // Return the new larger column, if upgrade success
+    // Current, only support upgrade BinaryColumn to LargeBinaryColumn
+    virtual StatusOr<ColumnPtr> upgrade_if_overflow() = 0;
 
     virtual void resize_uninitialized(size_t n) { resize(n); }
 
