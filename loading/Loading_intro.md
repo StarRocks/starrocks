@@ -107,7 +107,7 @@ All import methods support CSV data format. The `Broker Load` also supports parq
 
 StarRocks currently has two types of import methods: synchronous and asynchronous.
 
-> Note: If an external program accesses StarRocks's import function, you need to determine which type of import method is used first, and then determine the access method.
+> Note: If an external program accesses StarRocks' import function, you need to determine which type of import method is used first, and then determine the access method.
 
 #### **Synchronous Import**
 
@@ -176,7 +176,7 @@ The following system configurations belong to FE and can be modified by FE's con
 
 * `max_load_timeout_second and min_load_timeout_second`
 
-You can set the maximum and minimum range of values for the import timeout, both in seconds. The default maximum timeout is 3 days, and the minimum timeout is 1 second,. This parameter is common to all types of import jobs.
+You can set the maximum and minimum range of values for the import timeout, both in seconds. The default maximum timeout is 3 days, and the minimum timeout is 1 second. This parameter is common to all types of import jobs.
 
 * `desired_max_waiting_jobs`
 
@@ -228,7 +228,7 @@ When users import data to StarRocks, they usually use programmatic docking. The 
 2. Confirm the protocol of the import method: If you choose `Broker Load`, the external system needs to be able to submit and view the import jobs regularly using the MySQL protocol.
 3. Confirm the type of import method: The import method can be synchronous or asynchronous. If the import is asynchronous, the external system must invoke the `show load` command to see whether the import is successful.
 4. Develop a Label generation strategy: The Label generation strategy must meet the principle of uniqueness and fixity for each batch of data.
-5. Ensure Exactly-Once: External system needs to ensure At-Least-Once of data import. StarRocks's Label mechanism can ensure At-Most-Once of data import, so that the overall data import can be guaranteed Exactly-Once.
+5. Ensure Exactly-Once: External system needs to ensure At-Least-Once of data import. StarRocks' Label mechanism can ensure At-Most-Once of data import, so that the overall data import can be guaranteed Exactly-Once.
 
 ## FAQs
 

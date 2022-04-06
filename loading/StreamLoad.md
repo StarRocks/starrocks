@@ -154,7 +154,7 @@ For example, to import a 10GB file, the timeout should be set to 1000s.
 
 `streaming_load_max_mb = 16000`
 
-* Step2: Calculate if the approximate import time exceeds the default timeout value. The import time ≈ 15000 / 10 = 1500s, exceeds the default timeout time, you need to modify the FE configuration `FE.conf` as follow:
+* Step2: Calculate if the approximate import time exceeds the default timeout value. The import time ≈ 15000 / 10 = 1500s, exceeds the default timeout time, you need to modify the FE configuration `FE.conf` as follows:
 
 `stream_load_default_timeout_second = 1500`
 
