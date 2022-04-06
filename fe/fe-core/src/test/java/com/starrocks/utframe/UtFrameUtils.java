@@ -122,25 +122,6 @@ public class UtFrameUtils {
             "\"storage_format\" = \"DEFAULT\"\n" +
             ");";
 
-    static {
-        try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
-
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/");
-            addMockBackend(10001);
-
-            // sleep to wait first heartbeat
-            int retry = 0;
-            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
-                    retry++ < 600) {
-                Thread.sleep(100);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
         ConnectContext ctx = new ConnectContext(null);
@@ -230,7 +211,7 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    private static void startFEServer(String runningDir) throws EnvVarNotSetException, IOException,
+    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
             FeStartException, NotInitException {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
@@ -243,13 +224,40 @@ public class UtFrameUtils {
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
         // set additional fe config
-        feConfMap.put("edit_log_port", String.valueOf(8110));
+
+        if (startBDB) {
+            feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
+        }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
-        frontend.start(new String[0]);
+        frontend.start(startBDB, new String[0]);
     }
 
-    public static void createMinStarRocksCluster(String runningDir) {
+    public static void createMinStarRocksCluster(boolean startBDB) {
+        try {
+            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            addMockBackend(10001);
+
+            // sleep to wait first heartbeat
+            int retry = 0;
+            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+                    retry++ < 600) {
+                Thread.sleep(100);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void createMinStarRocksClusterWithBDB() {
+        createMinStarRocksCluster(true);
+    }
+
+    public static void createMinStarRocksCluster() {
+        createMinStarRocksCluster(false);
     }
 
     public static void addMockBackend(int backendId) throws Exception {

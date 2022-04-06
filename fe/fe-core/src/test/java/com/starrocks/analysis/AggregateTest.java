@@ -34,10 +34,6 @@ import org.junit.Test;
 import java.util.UUID;
 
 public class AggregateTest {
-
-    private static String baseDir = "fe";
-    private static String runningDir = baseDir + "/mocked/AggregateTest/"
-            + UUID.randomUUID().toString() + "/";
     private static final String TABLE_NAME = "table1";
     private static final String DB_NAME = "db1";
     private static StarRocksAssert starRocksAssert;
@@ -45,7 +41,7 @@ public class AggregateTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
         String createTableSQL = "create table " + DB_NAME + "." + TABLE_NAME + " (empid int, name varchar, " +
@@ -96,10 +92,5 @@ public class AggregateTest {
                 Assert.fail("should be query, no exception");
             }
         } while (false);
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(baseDir);
     }
 }
