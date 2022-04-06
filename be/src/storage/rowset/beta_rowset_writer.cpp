@@ -21,6 +21,8 @@
 
 #include "storage/rowset/beta_rowset_writer.h"
 
+#include <fmt/format.h>
+
 #include <ctime>
 #include <memory>
 
@@ -489,19 +491,14 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     // schema change with sorting create temporary segment files first
     // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {
-        if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS) {
+        if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
             itr = new_heap_merge_iterator(seg_iterators);
-        } else if (_context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+        } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
+                   _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
         } else {
-            for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
-                auto old_path =
-                        BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                RETURN_IF_ERROR_WITH_WARN(_context.env->rename_file(old_path, new_path), "Fail to rename file");
-            }
-            _context.write_tmp = false;
-            return Status::OK();
+            return Status::NotSupported(fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
+                                                    _context.tablet_schema->keys_type()));
         }
         _context.write_tmp = false;
     } else {
