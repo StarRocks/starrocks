@@ -7,7 +7,7 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 ## Terminology explanation
 
 * **Spark ETL**: Mainly responsible for ETL of data in the import process, including global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
-* **Broker**: Broker is an independent stateless process. It e     ncapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
+* **Broker**: Broker is an independent stateless process. It encapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
 * **Global Dictionary**: Saves the data structure that maps data from the original value to the encoded value. The original value can be any data type, while the encoded value is an integer. The global dictionary is mainly used in scenarios where precise de-duplication is precomputed.
 
 ## Fundamentals
@@ -262,7 +262,7 @@ WITH RESOURCE resource_name
  (key2=value2, ...)
 ~~~
 
-**Example 1**: T     he case where the upstream data source is HDFS
+**Example 1**: The case where the upstream data source is HDFS
 
 ~~~sql
 LOAD LABEL db1.label1
@@ -356,7 +356,7 @@ Label of the import job. Each import job has a Label that is unique within the d
 
 * **Data description class parameters**
   
-Currently supported data sources are CSV and Hive table. Other rules are the same as broker load.
+Currently, supported data sources are CSV and Hive table. Other rules are the same as broker load.
 
 * **Import Job Parameters**
   
@@ -485,7 +485,7 @@ For the full spark load import example, refer to the demo on github: [https://gi
 
 * `Error: When running with master 'yarn' either HADOOP-CONF-DIR or YARN-CONF-DIR must be set in the environment.`
 
- Using Spark Load without configuring the `HADOOP-CONF-DIR` environment variable in `spark-env.sh` of the Spark client..
+ Using Spark Load without configuring the `HADOOP-CONF-DIR` environment variable in `spark-env.sh` of the Spark client.
 
 * `Error: Cannot run program "xxx/bin/spark-submit": error=2, No such file or directory`
 

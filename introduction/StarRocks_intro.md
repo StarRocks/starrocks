@@ -12,7 +12,7 @@
 
 * StarRocks uses a distributed architecture to divide the table horizontally and store it in multiple replications. The clusters are highly scalable and therefore support 1) 10PB-level data analysis, 2) Massively Parallel Processing (MPP), and 3) data replication and elastic fault tolerance.
 
-* Leveraging a relational model, strong data typing, and a columnar storage engine, StarRocks reduces read-write amplification through encoding and compression techniques. Using vectorized query execution, it fully unleashes the power of parallel computing on multi-core CPUs, therefore significantly improves query performance.
+* Leveraging a relational model, strong data typing, and a columnar storage engine, StarRocks reduces read-write amplification through encoding and compression techniques. Using vectorized query execution, it fully unleashes the power of parallel computing on multicore CPUs, therefore significantly improves query performance.
 
 ## Main features
 
@@ -24,7 +24,7 @@ StarRocks does not rely on any external systems. The simple architecture makes i
 
 ### Native vectorized SQL engine
 
-StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses. Administrators only need to focus on the StarRocks system itself, without having to learn and manage other external systems.
+StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multidimensional analyses. Administrators only need to focus on the StarRocks system itself, without having to learn and manage other external systems.
 
 ### Query optimization
 
@@ -40,7 +40,7 @@ The updated model of StarRocks can perform upsert/delete operations according to
 
 ### Intelligent materialized view
 
-StarRocks supports intelligent materialized views. Users can create materialized views and generate pre-aggregated tables to speed up aggregate queries. StarRocks's materialized view automatically runs the aggregation when data is imported, keeping it consistent with the original table. When querying, users do not need to specify a materialized view, StarRocks can automatically select the best-materialized view to satisfy the query.
+StarRocks supports intelligent materialized views. Users can create materialized views and generate pre-aggregated tables to speed up aggregate queries. StarRocks' materialized view automatically runs the aggregation when data is imported, keeping it consistent with the original table. When querying, users do not need to specify a materialized view, StarRocks can automatically select the best-materialized view to satisfy the query.
 
 ### Standard SQL
 
