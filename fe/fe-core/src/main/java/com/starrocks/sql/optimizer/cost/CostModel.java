@@ -292,16 +292,15 @@ public class CostModel {
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
-                    result = CostEstimate
-                            .of(statistics.getOutputSize(outputColumns) *
-                                            Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
-                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum);
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns) *
+                                    Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
+                            statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
+                            Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     break;
                 case SHUFFLE:
                 case GATHER:
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
-                            statistics.getOutputSize(outputColumns));
+                            Math.max(statistics.getOutputSize(outputColumns), 1));
                     break;
                 default:
                     throw new StarRocksPlannerException(

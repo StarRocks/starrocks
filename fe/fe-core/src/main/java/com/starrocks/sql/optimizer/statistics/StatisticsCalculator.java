@@ -292,7 +292,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Statistics.Builder estimateHMSTableScanColumns(Table table, long tableRowCount,
-                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
         Statistics.Builder builder = Statistics.builder();
 
@@ -543,7 +543,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * 3. use totalBytes / schema size to compute if partition stats is missing
      */
     private long computeHMSTableTableRowCount(Table table, Collection<Long> selectedPartitionIds,
-                                          Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
+                                              Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
 
         long numRows = -1;
@@ -1230,6 +1230,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         for (ScalarOperator predicate : predicateList) {
             statistics = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+        }
+
+        // avoid sample statistics filter all data, save one rows least
+        if (statistics.getOutputRowCount() < 1) {
+            return Statistics.buildFrom(statistics).setOutputRowCount(1).build();
         }
         return statistics;
     }
