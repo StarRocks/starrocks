@@ -53,7 +53,7 @@ docker pull starrocks/dev-env:{version}
 
 ## Required
 
-Memroy: 8GB+
+Memory: 8GB+
 
 ## FAQ
 
