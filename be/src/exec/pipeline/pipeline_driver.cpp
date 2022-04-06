@@ -34,12 +34,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
     _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
-
-    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
-    _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
-    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
-    _schedule_accumulated_chunks_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -64,7 +58,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
         }
     }
-    _local_rf_waiting_set_counter->set((int64_t)all_local_rf_set.size());
+    if (!all_local_rf_set.empty()) {
+        _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
+    }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
     source_operator()->add_morsel_queue(_morsel_queue.get());
@@ -118,9 +114,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        _mark_operator_finishing(curr_op, runtime_state);
+                        RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _mark_operator_finishing(next_op, runtime_state);
+                    RETURN_IF_ERROR(_mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
@@ -180,9 +176,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
-                        _mark_operator_finishing(curr_op, runtime_state);
+                        RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _mark_operator_finishing(next_op, runtime_state);
+                    RETURN_IF_ERROR(_mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
                     continue;
                 }
@@ -202,7 +198,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < new_first_unfinished; ++i) {
-            _mark_operator_finished(_operators[i], runtime_state);
+            RETURN_IF_ERROR(_mark_operator_finished(_operators[i], runtime_state));
         }
         _first_unfinished = new_first_unfinished;
 
@@ -304,10 +300,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
-    COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
-    COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
-    COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
-    COUNTER_UPDATE(_schedule_accumulated_chunks_moved, driver_acct().get_accumulated_chunks_moved());
     _update_overhead_timer();
 
     // last root driver cancel the all drivers' execution and notify FE the
@@ -392,72 +384,73 @@ bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     return false;
 }
 
-void PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* state) {
+Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* state) {
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::FINISHING) {
-        return;
+        return Status::OK();
     }
 
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
     {
         SCOPED_TIMER(op->_finishing_timer);
-        op->set_finishing(state);
+        op_state = OperatorStage::FINISHING;
+        return op->set_finishing(state);
     }
-    op_state = OperatorStage::FINISHING;
 }
 
-void PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* state) {
-    _mark_operator_finishing(op, state);
+Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* state) {
+    RETURN_IF_ERROR(_mark_operator_finishing(op, state));
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::FINISHED) {
-        return;
+        return Status::OK();
     }
 
     VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
     {
         SCOPED_TIMER(op->_finished_timer);
-        op->set_finished(state);
+        op_state = OperatorStage::FINISHED;
+        return op->set_finished(state);
     }
-    op_state = OperatorStage::FINISHED;
 }
 
-void PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
-    _mark_operator_finished(op, state);
+Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
+    RETURN_IF_ERROR(_mark_operator_finished(op, state));
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
-        return;
+        return Status::OK();
     }
 
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
-    op->set_cancelled(state);
     op_state = OperatorStage::CANCELLED;
+    return op->set_cancelled(state);
 }
 
-void PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
     if (_fragment_ctx->is_canceled()) {
-        _mark_operator_cancelled(op, state);
+        RETURN_IF_ERROR(_mark_operator_cancelled(op, state));
     } else {
-        _mark_operator_finished(op, state);
+        RETURN_IF_ERROR(_mark_operator_finished(op, state));
     }
 
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CLOSED) {
-        return;
+        return Status::OK();
     }
 
     VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
                                     op->get_name());
     {
         SCOPED_TIMER(op->_close_timer);
+        op_state = OperatorStage::CLOSED;
         op->close(state);
     }
     COUNTER_UPDATE(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
                                              op->_finishing_timer->value() + op->_finished_timer->value() +
                                              op->_close_timer->value());
-    op_state = OperatorStage::CLOSED;
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

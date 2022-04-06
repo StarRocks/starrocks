@@ -88,7 +88,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         // Convert predicates to MySQL columns and filters.
         schemaDb = analyzer.getSchemaDb();
         schemaTable = analyzer.getSchemaTable();

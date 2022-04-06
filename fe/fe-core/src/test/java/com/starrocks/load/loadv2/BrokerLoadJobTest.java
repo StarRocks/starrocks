@@ -42,7 +42,6 @@ import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.Load;
-import com.starrocks.load.Source;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.MasterTaskExecutor;
@@ -161,15 +160,6 @@ public class BrokerLoadJobTest {
                 loadStmt.getEtlJobType();
                 minTimes = 0;
                 result = EtlJobType.BROKER;
-            }
-        };
-
-        new MockUp<Load>() {
-            @Mock
-            public void checkAndCreateSource(Database db, DataDescription dataDescription,
-                                             Map<Long, Map<Long, List<Source>>> tableToPartitionSources,
-                                             EtlJobType jobType) {
-
             }
         };
 

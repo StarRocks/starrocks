@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -107,8 +108,8 @@ public class QueryAnalyzer {
             }
 
             for (CTERelation withQuery : stmt.getCteRelations()) {
-                QueryRelation query = withQuery.getCteQuery();
-                process(new QueryStatement(withQuery.getCteQuery()), cteScope);
+                QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
+                process(withQuery.getCteQueryStatement(), cteScope);
 
                 /*
                  *  Because the analysis of CTE is sensitive to order
@@ -203,7 +204,7 @@ public class QueryAnalyzer {
                         // cte used in outer query and subquery can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
                                 cteRelation.getColumnOutputNames(),
-                                cteRelation.getCteQuery());
+                                cteRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
@@ -216,8 +217,7 @@ public class QueryAnalyzer {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
-                    ViewRelation viewRelation =
-                            new ViewRelation(tableName, view, queryStatement.getQueryRelation());
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableName);
                     return viewRelation;
                 } else {
@@ -264,7 +264,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitCTE(CTERelation cteRelation, Scope context) {
-            QueryRelation query = cteRelation.getCteQuery();
+            QueryRelation query = cteRelation.getCteQueryStatement().getQueryRelation();
             TableName tableName = cteRelation.getAlias();
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
@@ -333,6 +333,9 @@ public class QueryAnalyzer {
                 if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
+                }
+                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
+                    throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
                 }
             } else {
                 if (join.getType().isOuterJoin() || join.getType().isSemiAntiJoin()) {
@@ -406,11 +409,12 @@ public class QueryAnalyzer {
                 throw new SemanticException("Every derived table must have its own alias");
             }
 
-            Scope queryOutputScope = process(new QueryStatement(subquery.getQuery()), context);
+            Scope queryOutputScope = process(subquery.getQueryStatement(), context);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
-                outputFields.add(new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
+                outputFields.add(
+                        new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
             subquery.setScope(scope);
@@ -419,7 +423,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            Scope queryOutputScope = process(new QueryStatement(node.getQuery()), scope);
+            Scope queryOutputScope = process(node.getQueryStatement(), scope);
 
             View view = node.getView();
             TableName tableName = node.getName();
@@ -427,7 +431,8 @@ public class QueryAnalyzer {
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
-                Field field = new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
+                Field field =
+                        new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
                 fields.add(field);
             }
 
@@ -551,7 +556,8 @@ public class QueryAnalyzer {
             }
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
-                fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx], null,
+                fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
+                        node.getAlias(),
                         rows.get(0).get(fieldIdx)));
             }
 
@@ -573,21 +579,32 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "UNNEST");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "UNNEST");
             }
-            TableFunction fn = (TableFunction) Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+
+            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+            if (fn == null) {
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFunctionName(), argTypes);
+            }
 
             if (fn == null) {
                 throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
             }
 
-            node.setTableFunction(fn);
+            if (!(fn instanceof TableFunction)) {
+                throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),
+                        Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+            }
+
+            TableFunction tableFunction = (TableFunction) fn;
+            node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
-            for (int i = 0; i < fn.getTableFnReturnTypes().size(); ++i) {
-                Field field = new Field(fn.getDefaultColumnNames().get(i),
-                        fn.getTableFnReturnTypes().get(i), node.getAlias(),
+            for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+                Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
+                        tableFunction.getTableFnReturnTypes().get(i), node.getAlias(),
                         new SlotRef(node.getAlias(),
                                 node.getTableFunction().getDefaultColumnNames().get(i),
                                 node.getTableFunction().getDefaultColumnNames().get(i)));

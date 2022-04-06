@@ -97,7 +97,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         if (!super.equals(o)) {
             return false;
         }
-        PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
+        PhysicalScanOperator that = (PhysicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
                 Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap());
     }

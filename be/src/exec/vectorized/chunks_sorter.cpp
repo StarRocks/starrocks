@@ -2,22 +2,137 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 
-#include <type_traits>
-
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks::vectorized {
 
+static void get_compare_results_colwise(size_t row_to_sort, Columns& order_by_columns,
+                                        std::vector<CompareVector>& compare_results_array,
+                                        std::vector<DataSegment>& data_segments,
+                                        const std::vector<int>& sort_order_flags,
+                                        const std::vector<int>& null_first_flags) {
+    for (size_t i = 0; i < data_segments.size(); ++i) {
+        size_t rows = data_segments[i].chunk->num_rows();
+        compare_results_array[i].resize(rows, 0);
+    }
+
+    size_t dats_segment_size = data_segments.size();
+    size_t size = order_by_columns.size();
+
+    for (size_t i = 0; i < dats_segment_size; i++) {
+        std::vector<Datum> rhs_values;
+        auto& segment = data_segments[i];
+        for (size_t col_idx = 0; col_idx < size; col_idx++) {
+            rhs_values.push_back(order_by_columns[col_idx]->get(row_to_sort));
+        }
+        compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_order_flags,
+                        null_first_flags);
+    }
+}
+
+Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t number_of_rows_to_sort,
+                                     std::vector<std::vector<uint8_t>>& filter_array,
+                                     const std::vector<int>& sort_order_flags, const std::vector<int>& null_first_flags,
+                                     uint32_t& least_num, uint32_t& middle_num) {
+    size_t dats_segment_size = data_segments.size();
+    std::vector<CompareVector> compare_results_array(dats_segment_size);
+
+    // first compare with last row of this chunk.
+    {
+        get_compare_results_colwise(number_of_rows_to_sort - 1, order_by_columns, compare_results_array, data_segments,
+                                    sort_order_flags, null_first_flags);
+    }
+
+    // but we only have one compare.
+    // compare with first row of this DataSegment,
+    // then we set BEFORE_LAST_RESULT and IN_LAST_RESULT at filter_array.
+    if (number_of_rows_to_sort == 1) {
+        least_num = 0, middle_num = 0;
+        filter_array.resize(dats_segment_size);
+        for (size_t i = 0; i < dats_segment_size; ++i) {
+            size_t rows = data_segments[i].chunk->num_rows();
+            filter_array[i].resize(rows);
+
+            for (size_t j = 0; j < rows; ++j) {
+                if (compare_results_array[i][j] < 0) {
+                    filter_array[i][j] = DataSegment::BEFORE_LAST_RESULT;
+                    ++least_num;
+                } else {
+                    filter_array[i][j] = DataSegment::IN_LAST_RESULT;
+                    ++middle_num;
+                }
+            }
+        }
+    } else {
+        std::vector<size_t> first_size_array;
+        first_size_array.resize(dats_segment_size);
+
+        middle_num = 0;
+        filter_array.resize(dats_segment_size);
+        for (size_t i = 0; i < dats_segment_size; ++i) {
+            DataSegment& segment = data_segments[i];
+            size_t rows = segment.chunk->num_rows();
+            filter_array[i].resize(rows);
+
+            size_t local_first_size = middle_num;
+            for (size_t j = 0; j < rows; ++j) {
+                if (compare_results_array[i][j] < 0) {
+                    filter_array[i][j] = DataSegment::IN_LAST_RESULT;
+                    ++middle_num;
+                }
+            }
+
+            // obtain number of rows for second compare.
+            first_size_array[i] = middle_num - local_first_size;
+        }
+
+        // second compare with first row of this chunk, use rows from first compare.
+        {
+            for (size_t i = 0; i < dats_segment_size; i++) {
+                for (auto& cmp : compare_results_array[i]) {
+                    if (cmp < 0) {
+                        cmp = 0;
+                    }
+                }
+            }
+            get_compare_results_colwise(0, order_by_columns, compare_results_array, data_segments, sort_order_flags,
+                                        null_first_flags);
+        }
+
+        least_num = 0;
+        for (size_t i = 0; i < dats_segment_size; ++i) {
+            DataSegment& segment = data_segments[i];
+            size_t rows = segment.chunk->num_rows();
+
+            for (size_t j = 0; j < rows; ++j) {
+                if (compare_results_array[i][j] < 0) {
+                    filter_array[i][j] = DataSegment::BEFORE_LAST_RESULT;
+                    ++least_num;
+                }
+            }
+        }
+        middle_num -= least_num;
+    }
+
+    return Status::OK();
+}
+
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           size_t size_of_chunk_batch)
-        : _state(state), _sort_exprs(sort_exprs), _size_of_chunk_batch(size_of_chunk_batch) {
+                           const std::string& sort_keys, const bool is_topn, size_t size_of_chunk_batch)
+        : _state(state),
+          _sort_exprs(sort_exprs),
+          _sort_keys(sort_keys),
+          _is_topn(is_topn),
+          _size_of_chunk_batch(size_of_chunk_batch) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -39,15 +154,17 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
 
 ChunksSorter::~ChunksSorter() {}
 
-void ChunksSorter::setup_runtime(RuntimeProfile* profile, const std::string& parent_timer) {
-    _build_timer = ADD_CHILD_TIMER(profile, "1-BuildingTime", parent_timer);
-    _sort_timer = ADD_CHILD_TIMER(profile, "2-SortingTime", parent_timer);
-    _merge_timer = ADD_CHILD_TIMER(profile, "3-MergingTime", parent_timer);
-    _output_timer = ADD_CHILD_TIMER(profile, "4-OutputTime", parent_timer);
+void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
+    _build_timer = ADD_TIMER(profile, "BuildingTime");
+    _sort_timer = ADD_TIMER(profile, "SortingTime");
+    _merge_timer = ADD_TIMER(profile, "MergingTime");
+    _output_timer = ADD_TIMER(profile, "OutputTime");
+    profile->add_info_string("SortKeys", _sort_keys);
+    profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }
 
 Status ChunksSorter::finish(RuntimeState* state) {
-    RETURN_IF_ERROR(done(state));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(done(state)));
     _is_sink_complete = true;
     return Status::OK();
 }

@@ -2,17 +2,23 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class ArrayTypeTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>)" +
+        starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
     }
@@ -47,8 +53,8 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayElementExpr() throws Exception {
         String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "NULL | CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
+        Assert.assertTrue(plan.contains("  |  <slot 2> : NULL\n" +
+                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
 
         sql = "select v1, v3[1] + [1,2,3][1] as v, sum(v3[1]) from tarray group by v1, v order by v";
         plan = getFragmentPlan(sql);
@@ -99,6 +105,14 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
 
+        sql = "select [][1] from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
+        sql = "select [][1] from (values(1,2,3), (4,5,6)) t";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+
         sql = "select [v1,v2] from t0";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:Project\n" +
@@ -123,4 +137,51 @@ public class ArrayTypeTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("PREDICATES: array_length(2: c1) >= 2, array_length(2: c1) <= 3"));
     }
 
+    @Test
+    public void testArrayDifferenceArgs1() throws Exception {
+        String sql = "select array_difference(c2) from test_array";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_difference(3: c2)"));
+
+        sql = "select array_difference(c1) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("array_difference function only support numeric array types");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testArrayDifferenceArgs2() throws Exception {
+        String sql = "select array_difference(c0) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("No matching function with signature: array_difference(int(11)).");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testArrayDifferenceArgs3() throws Exception {
+        String sql = "select array_difference(c1, 3) from test_array";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("No matching function with signature: array_difference(ARRAY<varchar(65533)>, tinyint(4)).");
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testArrayDifferenceNullAndEmpty() throws Exception {
+        String sql = "select array_difference(null)";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("NULL"));
+
+        sql = "select array_difference([])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_difference"));
+    }
+
+    @Test
+    public void testArrayClone() throws Exception {
+        String sql = "select array_contains([v],1), array_contains([v],2) from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  8:Project\n" +
+                "  |  <slot 8> : array_contains(ARRAY<bigint(20)>[7: expr], 1)\n" +
+                "  |  <slot 9> : array_contains(ARRAY<bigint(20)>[7: expr], 2)"));
+    }
 }

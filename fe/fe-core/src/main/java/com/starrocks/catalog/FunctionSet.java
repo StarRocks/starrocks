@@ -53,8 +53,8 @@ public class FunctionSet {
     public static final String MAX = "max";
     public static final String MIN = "min";
     public static final String SUM = "sum";
+    public static final String SUM_DISTINCT = "sum_distinct";
     public static final String AVG = "avg";
-    public static final String TRUNCATE = "truncate";
     public static final String MONEY_FORMAT = "money_format";
     public static final String STR_TO_DATE = "str_to_date";
     public static final String HLL_UNION = "hll_union";
@@ -83,11 +83,16 @@ public class FunctionSet {
     public static final String LEAD = "lead";
     public static final String LAG = "lag";
     public static final String FIRST_VALUE = "first_value";
+    public static final String FIRST_VALUE_REWRITE = "first_value_rewrite";
     public static final String LAST_VALUE = "last_value";
+    public static final String DENSE_RANK = "dense_rank";
+    public static final String RANK = "rank";
+    public static final String ROW_NUMBER = "row_number";
 
     // Scalar functions:
     public static final String BITMAP_COUNT = "bitmap_count";
     public static final String HLL_HASH = "hll_hash";
+    public static final String HLL_CARDINALITY = "hll_cardinality";
     public static final String PERCENTILE_HASH = "percentile_hash";
     public static final String TO_BITMAP = "to_bitmap";
     public static final String NULL_OR_EMPTY = "null_or_empty";
@@ -124,6 +129,7 @@ public class FunctionSet {
     public static final String NOW = "now";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String DATE_TRUNC = "date_trunc";
 
     // string functions
     public static final String SUBSTRING = "substring";
@@ -137,6 +143,9 @@ public class FunctionSet {
     public static final String PARSE_JSON = "parse_json";
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+
+    // Array functions
+    public static final String ARRAY_DIFFERENCE = "array_difference";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
@@ -206,7 +215,8 @@ public class FunctionSet {
             "substr",
             "substring",
             "trim",
-            "upper");
+            "upper",
+            "if");
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
             ImmutableSet.<String>builder()
@@ -226,6 +236,21 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .build();
+
+    public static final Set<String> decimalRoundFunctions =
+            ImmutableSet.<String>builder()
+                    .add("truncate")
+                    .add("round")
+                    .add("round_up_to")
+                    .build();
+
+    public static final Set<String> nonDeterministicFunctions =
+            ImmutableSet.<String>builder()
+                    .add("rand")
+                    .add("random")
+                    .add("uuid")
+                    .add("sleep")
                     .build();
 
     public FunctionSet() {
@@ -560,7 +585,6 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(name,
                     Lists.newArrayList(Type.DECIMAL128), Type.DECIMAL128, Type.DECIMAL128, false, true, false));
         }
-
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin("hll_union_agg",

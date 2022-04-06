@@ -17,7 +17,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
@@ -71,14 +70,24 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (tnode.hash_join_node.__isset.partition_exprs) {
+        // the same column can appear more than once in either lateral side of eq_join_conjuncts, but multiple
+        // occurrences are accounted for once when determining local shuffle partition_exprs for bucket shuffle join.
+        // for an example:
+        // table t1 is bucketed by c1, the query 'select * from t1,t2 on t1.c1 = t2.c1 and t1.c1 in (TRUE, NULL) =
+        // t2.c1', SlotRef(t2.c1) appears twice, but the local shuffle partition_exprs should have the same number of
+        // exprs as partition_exprs used by ExchangeNode that sends data to right child of the HashJoin.
         for (const auto& partition_expr : tnode.hash_join_node.partition_exprs) {
+            bool match_exactly_once = false;
             for (auto i = 0; i < eq_join_conjuncts.size(); ++i) {
                 const auto& eq_join_conjunct = eq_join_conjuncts[i];
                 if (eq_join_conjunct.left == partition_expr || eq_join_conjunct.right == partition_expr) {
+                    match_exactly_once = true;
                     _probe_equivalence_partition_expr_ctxs.push_back(_probe_expr_ctxs[i]);
                     _build_equivalence_partition_expr_ctxs.push_back(_build_expr_ctxs[i]);
+                    break;
                 }
             }
+            DCHECK(match_exactly_once);
         }
     }
 
@@ -116,11 +125,11 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _build_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "4-BuildConjunctEvaluateTime", "BuildTime");
 
     _probe_timer = ADD_TIMER(_runtime_profile, "ProbeTime");
-    _merge_input_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-MergeInputChunkTimer", "ProbeTime");
-    _search_ht_timer = ADD_CHILD_TIMER(_runtime_profile, "2-SearchHashTableTimer", "ProbeTime");
-    _output_build_column_timer = ADD_CHILD_TIMER(_runtime_profile, "3-OutputBuildColumnTimer", "ProbeTime");
-    _output_probe_column_timer = ADD_CHILD_TIMER(_runtime_profile, "4-OutputProbeColumnTimer", "ProbeTime");
-    _output_tuple_column_timer = ADD_CHILD_TIMER(_runtime_profile, "5-OutputTupleColumnTimer", "ProbeTime");
+    _merge_input_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-MergeInputChunkTime", "ProbeTime");
+    _search_ht_timer = ADD_CHILD_TIMER(_runtime_profile, "2-SearchHashTableTime", "ProbeTime");
+    _output_build_column_timer = ADD_CHILD_TIMER(_runtime_profile, "3-OutputBuildColumnTime", "ProbeTime");
+    _output_probe_column_timer = ADD_CHILD_TIMER(_runtime_profile, "4-OutputProbeColumnTime", "ProbeTime");
+    _output_tuple_column_timer = ADD_CHILD_TIMER(_runtime_profile, "5-OutputTupleColumnTime", "ProbeTime");
     _probe_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "6-ProbeConjunctEvaluateTime", "ProbeTime");
     _other_join_conjunct_evaluate_timer =
             ADD_CHILD_TIMER(_runtime_profile, "7-OtherJoinConjunctEvaluateTime", "ProbeTime");
@@ -411,7 +420,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHFFULE_HASH_PARTITIONED
+            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
             // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
@@ -423,7 +432,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
                 if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     part_type = texchange_node.partition_type;
                     rhs_need_local_shuffle = false;
                 }
@@ -434,7 +443,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 auto& texchange_node = exchange_op->texchange_node();
                 DCHECK(texchange_node.__isset.partition_type);
                 if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     part_type = texchange_node.partition_type;
                     lhs_need_local_shuffle = false;
                 }
@@ -442,7 +451,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
             if (rhs_need_local_shuffle) {
-                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
                     rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
                             runtime_state(), rhs_operators, _build_equivalence_partition_expr_ctxs, part_type);
@@ -452,7 +461,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                 }
             }
             if (lhs_need_local_shuffle) {
-                if (part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+                if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
                     lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
                             runtime_state(), lhs_operators, _probe_equivalence_partition_expr_ctxs, part_type);

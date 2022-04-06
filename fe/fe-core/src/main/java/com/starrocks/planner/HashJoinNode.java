@@ -86,6 +86,10 @@ public class HashJoinNode extends PlanNode {
         return buildRuntimeFilters;
     }
 
+    public void clearBuildRuntimeFilters() {
+        buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
+    }
+
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, "HASH JOIN");

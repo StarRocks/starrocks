@@ -173,7 +173,7 @@ public class BlobStorage implements Writable {
             long leftSize = fileSize;
             long readOffset = 0;
             while (leftSize > 0) {
-                long readLen = leftSize > bufSize ? bufSize : leftSize;
+                long readLen = Math.min(leftSize, bufSize);
                 TBrokerReadResponse rep = null;
                 // We only retry if we encounter a timeout thrift exception.
                 int tryTimes = 0;

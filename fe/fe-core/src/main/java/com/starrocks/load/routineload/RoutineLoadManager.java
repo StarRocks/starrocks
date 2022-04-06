@@ -236,7 +236,7 @@ public class RoutineLoadManager implements Writable {
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
         Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
-        IDictManager.getInstance().forbitGlobalDict(routineLoadJob.getTableId());
+        IDictManager.getInstance().forbidGlobalDict(routineLoadJob.getTableId());
     }
 
     // TODO(ml): Idempotency

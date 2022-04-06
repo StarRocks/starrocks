@@ -24,13 +24,10 @@ package com.starrocks.http.rest;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -180,16 +177,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
                     for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         long indexSize = 0;
                         for (Tablet tablet : mIndex.getTablets()) {
-                            long maxReplicaSize = 0;
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                if (replica.getState() == ReplicaState.NORMAL
-                                        || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
-                                    if (replica.getDataSize() > maxReplicaSize) {
-                                        maxReplicaSize = replica.getDataSize();
-                                    }
-                                }
-                            } // end for replicas
-                            indexSize += maxReplicaSize;
+                            indexSize += tablet.getDataSize(true);
                         } // end for tablets
                         partitionSize += indexSize;
                     } // end for tables

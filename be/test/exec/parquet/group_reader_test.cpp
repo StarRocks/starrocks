@@ -20,7 +20,7 @@ public:
     StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override { return size; }
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override { return Status::OK(); }
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override { return Status::OK(); }
-    Status size(uint64_t* size) const override { return Status::OK(); }
+    StatusOr<uint64_t> get_size() const override { return 0; }
     const std::string& filename() const override { return _file; }
 
 private:

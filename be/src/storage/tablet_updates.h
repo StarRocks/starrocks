@@ -18,6 +18,7 @@
 namespace starrocks {
 
 class PrimaryIndex;
+class PersistentIndex;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class DelVector;
@@ -155,6 +156,8 @@ public:
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta);
 
+    void get_latest_applied_version(EditVersion* latest_applied_version);
+
     // Clear both in-memory cached and permanently stored meta data:
     //  - primary index
     //  - delete vectors
@@ -217,6 +220,7 @@ public:
 private:
     friend class Tablet;
     friend class PrimaryIndex;
+    friend class PersistentIndex;
     friend class RowsetUpdateState;
 
     template <typename K, typename V>
@@ -260,8 +264,6 @@ private:
     void _try_commit_pendings_unlocked();
 
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
-
-    void _get_latest_applied_version(EditVersion* latest_applied_version);
 
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 

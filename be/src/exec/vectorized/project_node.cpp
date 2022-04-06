@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/project_node.h"
 
-#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <set>
@@ -11,7 +10,6 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -22,10 +20,9 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "fmt/compile.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
@@ -97,14 +94,14 @@ Status ProjectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
     GlobalDictMaps* mdict_maps = state->mutable_query_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
+    _dict_optimize_parser.set_mutable_dict_maps(state, mdict_maps);
 
     auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
-        _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
+        return _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
     };
 
-    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids);
-    init_dict_optimize(_expr_ctxs, _slot_ids);
+    RETURN_IF_ERROR(init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids));
+    RETURN_IF_ERROR(init_dict_optimize(_expr_ctxs, _slot_ids));
     return Status::OK();
 }
 
@@ -122,6 +119,8 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     do {
         RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
     } while (!(*eos) && ((*chunk)->num_rows() == 0));
+
+    TRY_CATCH_ALLOC_SCOPE_START()
 
     if (*eos) {
         *chunk = nullptr;
@@ -185,6 +184,8 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     DCHECK_CHUNK(*chunk);
+
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

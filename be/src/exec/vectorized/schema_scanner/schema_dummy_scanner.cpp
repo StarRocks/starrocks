@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/schema_scanner/schema_dummy_scanner.h"
 
-#include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
 namespace starrocks::vectorized {

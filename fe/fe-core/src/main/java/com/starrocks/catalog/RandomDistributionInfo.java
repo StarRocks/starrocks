@@ -80,16 +80,17 @@ public class RandomDistributionInfo extends DistributionInfo {
         return distributionInfo;
     }
 
-    public boolean equals(DistributionInfo info) {
-        if (this == info) {
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
             return true;
         }
 
-        if (!(info instanceof RandomDistributionInfo)) {
+        if (!(other instanceof RandomDistributionInfo)) {
             return false;
         }
 
-        RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) info;
+        RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) other;
 
         return type == randomDistributionInfo.type
                 && bucketNum == randomDistributionInfo.bucketNum;

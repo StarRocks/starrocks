@@ -24,14 +24,18 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.Gson;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -46,20 +50,29 @@ import java.util.List;
  * show tablets' detail info within an index
  */
 public class TabletsProcDir implements ProcDirInterface {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("ReplicaId").add("BackendId").add("SchemaHash").add("Version")
-            .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
-            .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
-            .add("DataSize").add("RowCount").add("State")
-            .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
-            .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
-            .build();
+    public static final ImmutableList<String> TITLE_NAMES;
+
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("TabletId").add("ReplicaId").add("BackendId").add("SchemaHash").add("Version")
+                .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
+                .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
+                .add("DataSize").add("RowCount").add("State")
+                .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
+                .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus");
+        if (Config.use_staros) {
+            builder.add("ShardId");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private final Database db;
+    private final Partition partition;
     private final MaterializedIndex index;
 
-    public TabletsProcDir(Database db, MaterializedIndex index) {
+    public TabletsProcDir(Database db, Partition partition, MaterializedIndex index) {
         this.db = db;
+        this.partition = partition;
         this.index = index;
     }
 
@@ -81,25 +94,23 @@ public class TabletsProcDir implements ProcDirInterface {
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         db.readLock();
         try {
-            // get infos
-            for (Tablet tablet : index.getTablets()) {
-                LocalTablet localTablet = (LocalTablet) tablet;
-                long tabletId = tablet.getId();
-                if (localTablet.getReplicas().size() == 0) {
+            if (partition.isUseStarOS()) {
+                for (Tablet tablet : index.getTablets()) {
                     List<Comparable> tabletInfo = new ArrayList<Comparable>();
-                    tabletInfo.add(tabletId);
+                    StarOSTablet starOSTablet = (StarOSTablet) tablet;
+                    tabletInfo.add(starOSTablet.getId());
                     tabletInfo.add(-1); // replica id
-                    tabletInfo.add(-1); // backend id
+                    tabletInfo.add(new Gson().toJson(starOSTablet.getBackendIds()));
                     tabletInfo.add(-1); // schema hash
-                    tabletInfo.add(-1); // version
+                    tabletInfo.add(partition.getVisibleVersion());
                     tabletInfo.add(0); // version hash
                     tabletInfo.add(-1); // lst success version
                     tabletInfo.add(0); // lst success version hash
                     tabletInfo.add(-1); // lst failed version
                     tabletInfo.add(0); // lst failed version hash
                     tabletInfo.add(-1); // lst failed time
-                    tabletInfo.add(-1); // data size
-                    tabletInfo.add(-1); // row count
+                    tabletInfo.add(starOSTablet.getDataSize(true));
+                    tabletInfo.add(starOSTablet.getRowCount(0L));
                     tabletInfo.add(FeConstants.null_string); // state
                     tabletInfo.add(-1); // lst consistency check time
                     tabletInfo.add(-1); // check version
@@ -108,59 +119,101 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // path hash
                     tabletInfo.add(FeConstants.null_string); // meta url
                     tabletInfo.add(FeConstants.null_string); // compaction status
+                    if (Config.use_staros) {
+                        tabletInfo.add(starOSTablet.getShardId());
+                    }
 
                     tabletInfos.add(tabletInfo);
-                } else {
-                    for (Replica replica : localTablet.getReplicas()) {
-                        if ((version > -1 && replica.getVersion() != version)
-                                || (backendId > -1 && replica.getBackendId() != backendId)
-                                || (state != null && replica.getState() != state)) {
-                            continue;
-                        }
+                }
+            } else {
+                // get infos
+                for (Tablet tablet : index.getTablets()) {
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    long tabletId = tablet.getId();
+                    if (localTablet.getReplicas().size() == 0) {
                         List<Comparable> tabletInfo = new ArrayList<Comparable>();
-                        // tabletId -- replicaId -- backendId -- version -- versionHash -- dataSize -- rowCount -- state
                         tabletInfo.add(tabletId);
-                        tabletInfo.add(replica.getId());
-                        tabletInfo.add(replica.getBackendId());
-                        tabletInfo.add(replica.getSchemaHash());
-                        tabletInfo.add(replica.getVersion());
-                        tabletInfo.add(0);
-                        tabletInfo.add(replica.getLastSuccessVersion());
-                        tabletInfo.add(0);
-                        tabletInfo.add(replica.getLastFailedVersion());
-                        tabletInfo.add(0);
-                        tabletInfo.add(TimeUtils.longToTimeString(replica.getLastFailedTimestamp()));
-                        tabletInfo.add(replica.getDataSize());
-                        tabletInfo.add(replica.getRowCount());
-                        tabletInfo.add(replica.getState());
-
-                        tabletInfo.add(TimeUtils.longToTimeString(tablet.getLastCheckTime()));
-                        tabletInfo.add(localTablet.getCheckedVersion());
-                        tabletInfo.add(0);
-                        tabletInfo.add(replica.getVersionCount());
-                        tabletInfo.add(replica.getPathHash());
-                        Backend backend = backendMap.get(replica.getBackendId());
-                        String metaUrl;
-                        String compactionUrl;
-                        if (backend != null) {
-                            metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
-                                    backend.getHost(),
-                                    backend.getHttpPort(),
-                                    tabletId,
-                                    replica.getSchemaHash());
-                            compactionUrl = String.format(
-                                    "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                                    backend.getHost(),
-                                    backend.getHttpPort(),
-                                    tabletId,
-                                    replica.getSchemaHash());
-                        } else {
-                            metaUrl = "N/A";
-                            compactionUrl = "N/A";
+                        tabletInfo.add(-1); // replica id
+                        tabletInfo.add(-1); // backend id
+                        tabletInfo.add(-1); // schema hash
+                        tabletInfo.add(-1); // version
+                        tabletInfo.add(0); // version hash
+                        tabletInfo.add(-1); // lst success version
+                        tabletInfo.add(0); // lst success version hash
+                        tabletInfo.add(-1); // lst failed version
+                        tabletInfo.add(0); // lst failed version hash
+                        tabletInfo.add(-1); // lst failed time
+                        tabletInfo.add(-1); // data size
+                        tabletInfo.add(-1); // row count
+                        tabletInfo.add(FeConstants.null_string); // state
+                        tabletInfo.add(-1); // lst consistency check time
+                        tabletInfo.add(-1); // check version
+                        tabletInfo.add(0); // check version hash
+                        tabletInfo.add(-1); // version count
+                        tabletInfo.add(-1); // path hash
+                        tabletInfo.add(FeConstants.null_string); // meta url
+                        tabletInfo.add(FeConstants.null_string); // compaction status
+                        if (Config.use_staros) {
+                            tabletInfo.add(FeConstants.null_string); // shard id
                         }
-                        tabletInfo.add(metaUrl);
-                        tabletInfo.add(compactionUrl);
+
                         tabletInfos.add(tabletInfo);
+                    } else {
+                        for (Replica replica : localTablet.getReplicas()) {
+                            if ((version > -1 && replica.getVersion() != version)
+                                    || (backendId > -1 && replica.getBackendId() != backendId)
+                                    || (state != null && replica.getState() != state)) {
+                                continue;
+                            }
+                            List<Comparable> tabletInfo = new ArrayList<Comparable>();
+                            // tabletId -- replicaId -- backendId -- version -- versionHash -- dataSize -- rowCount -- state
+                            tabletInfo.add(tabletId);
+                            tabletInfo.add(replica.getId());
+                            tabletInfo.add(replica.getBackendId());
+                            tabletInfo.add(replica.getSchemaHash());
+                            tabletInfo.add(replica.getVersion());
+                            tabletInfo.add(0);
+                            tabletInfo.add(replica.getLastSuccessVersion());
+                            tabletInfo.add(0);
+                            tabletInfo.add(replica.getLastFailedVersion());
+                            tabletInfo.add(0);
+                            tabletInfo.add(TimeUtils.longToTimeString(replica.getLastFailedTimestamp()));
+                            tabletInfo.add(replica.getDataSize());
+                            tabletInfo.add(replica.getRowCount());
+                            tabletInfo.add(replica.getState());
+
+                            tabletInfo.add(TimeUtils.longToTimeString(tablet.getLastCheckTime()));
+                            tabletInfo.add(localTablet.getCheckedVersion());
+                            tabletInfo.add(0);
+                            tabletInfo.add(replica.getVersionCount());
+                            tabletInfo.add(replica.getPathHash());
+                            Backend backend = backendMap.get(replica.getBackendId());
+                            String metaUrl;
+                            String compactionUrl;
+                            if (backend != null) {
+                                metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
+                                        backend.getHost(),
+                                        backend.getHttpPort(),
+                                        tabletId,
+                                        replica.getSchemaHash());
+                                compactionUrl = String.format(
+                                        "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
+                                        backend.getHost(),
+                                        backend.getHttpPort(),
+                                        tabletId,
+                                        replica.getSchemaHash());
+                            } else {
+                                metaUrl = "N/A";
+                                compactionUrl = "N/A";
+                            }
+                            tabletInfo.add(metaUrl);
+                            tabletInfo.add(compactionUrl);
+                            if (Config.use_staros) {
+                                tabletInfo.add(FeConstants.null_string); // shard id
+                            }
+
+                            tabletInfos.add(tabletInfo);
+                        }
                     }
                 }
             }

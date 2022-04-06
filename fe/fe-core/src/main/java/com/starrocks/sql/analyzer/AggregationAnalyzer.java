@@ -6,6 +6,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
+import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
@@ -16,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -23,10 +26,11 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 import java.util.Objects;
@@ -53,9 +57,9 @@ public class AggregationAnalyzer {
      */
     private final List<Expr> groupingExpressions;
 
-    private Scope sourceScope;
+    private final Scope sourceScope;
 
-    private Scope orderByScope;
+    private final Scope orderByScope;
 
     /**
      * Verify whether output expression is semantically valid for aggregation
@@ -97,8 +101,7 @@ public class AggregationAnalyzer {
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
-    private class VerifyExpressionVisitor
-            extends AstVisitor<Boolean, Void> {
+    private class VerifyExpressionVisitor extends AstVisitor<Boolean, Void> {
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
@@ -127,18 +130,56 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitSlot(SlotRef node, Void context) {
-            return isGroupingKey(node);
+        public Boolean visitArithmeticExpr(ArithmeticExpr node, Void context) {
+            return visit(node.getChild(0)) && visit(node.getChild(1));
         }
 
         @Override
-        public Boolean visitBetweenPredicate(BetweenPredicate node, Void context) throws SemanticException {
+        public Boolean visitAnalyticExpr(AnalyticExpr node, Void context) {
+            if (!node.getFnCall().getChildren().stream().allMatch(this::visit)) {
+                return false;
+            }
+
+            if (!node.getOrderByElements().stream().map(OrderByElement::getExpr).allMatch(this::visit)) {
+                return false;
+            }
+
+            return node.getPartitionExprs().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitArrayExpr(ArrayExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitArrayElementExpr(ArrayElementExpr node, Void context) {
+            return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitArrowExpr(ArrowExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitBetweenPredicate(BetweenPredicate node, Void context) {
             return visit(node.getChild(0)) && visit(node.getChild(1)) && visit(node.getChild(2));
         }
 
         @Override
         public Boolean visitBinaryPredicate(BinaryPredicate node, Void context) {
             return visit(node.getChild(0)) && visit(node.getChild(1));
+        }
+
+        @Override
+        public Boolean visitCaseWhenExpr(CaseExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitCastExpr(CastExpr node, Void context) {
+            return visit(node.getChild(0));
         }
 
         @Override
@@ -151,23 +192,8 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitArithmeticExpr(ArithmeticExpr node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1));
-        }
-
-        @Override
-        public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Void context) {
-            return visit(node.getChild(0)) && visit(node.getChild(1));
-        }
-
-        @Override
-        public Boolean visitIsNullPredicate(IsNullPredicate node, Void context) throws SemanticException {
-            return visit(node.getChild(0));
-        }
-
-        @Override
-        public Boolean visitLikePredicate(LikePredicate node, Void context) throws SemanticException {
-            return visit(node.getChild(0));
+        public Boolean visitExistsPredicate(ExistsPredicate node, Void context) {
+            return visit(node.getSubquery());
         }
 
         @Override
@@ -195,57 +221,6 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitLiteral(LiteralExpr node, Void context) {
-            return true;
-        }
-
-        @Override
-        public Boolean visitCastExpr(CastExpr node, Void context) {
-            return visit(node.getChild(0));
-        }
-
-        @Override
-        public Boolean visitCaseWhenExpr(CaseExpr node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
-        }
-
-        @Override
-        public Boolean visitInPredicate(InPredicate node, Void context) {
-            return node.getChildren().stream().allMatch(this::visit);
-        }
-
-        @Override
-        public Boolean visitExistsPredicate(ExistsPredicate node, Void context) {
-            return visit(node.getSubquery());
-        }
-
-        @Override
-        public Boolean visitSubquery(Subquery node, Void context) {
-            QueryRelation qb = node.getQueryRelation();
-            List<FieldId> fieldIds = qb.getColumnReferences().values().stream()
-                    .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
-                    .collect(Collectors.toList());
-
-            return groupingFields.containsAll(fieldIds);
-        }
-
-        @Override
-        public Boolean visitAnalyticExpr(AnalyticExpr node, Void context) {
-            if (!node.getFnCall().getChildren().stream().allMatch(this::visit)) {
-                return false;
-            }
-
-            if (!node.getOrderByElements().stream().map(OrderByElement::getExpr).allMatch(this::visit)) {
-                return false;
-            }
-
-            if (!node.getPartitionExprs().stream().allMatch(this::visit)) {
-                return false;
-            }
-            return true;
-        }
-
-        @Override
         public Boolean visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
             if (orderByScope != null) {
                 throw new SemanticException("Grouping operations are not allowed in order by");
@@ -260,8 +235,53 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitArrayElementExpr(ArrayElementExpr node, Void context) {
+        public Boolean visitInformationFunction(InformationFunction node, Void context) {
+            return true;
+        }
+
+        @Override
+        public Boolean visitInPredicate(InPredicate node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitIsNullPredicate(IsNullPredicate node, Void context) {
             return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitLikePredicate(LikePredicate node, Void context) {
+            return visit(node.getChild(0));
+        }
+
+        @Override
+        public Boolean visitLiteral(LiteralExpr node, Void context) {
+            return true;
+        }
+
+        @Override
+        public Boolean visitSlot(SlotRef node, Void context) {
+            return isGroupingKey(node);
+        }
+
+        @Override
+        public Boolean visitSubquery(Subquery node, Void context) {
+            QueryStatement queryStatement = node.getQueryStatement();
+            List<FieldId> fieldIds = queryStatement.getQueryRelation().getColumnReferences().values().stream()
+                    .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
+                    .collect(Collectors.toList());
+
+            return groupingFields.containsAll(fieldIds);
+        }
+
+        @Override
+        public Boolean visitSysVariableDesc(SysVariableDesc node, Void context) {
+            return true;
+        }
+
+        @Override
+        public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Void context) {
+            return visit(node.getChild(0)) && visit(node.getChild(1));
         }
     }
 }

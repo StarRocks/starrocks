@@ -225,26 +225,6 @@ public abstract class QueryStmt extends StatementBase {
             if (absoluteRef == null && !tblRef.isRelative()) {
                 absoluteRef = tblRef;
             }
-            /*if (tblRef.isCorrelated()) {
-             *   
-             *   // Check if the correlated table ref is rooted at a tuple descriptor from within
-             *   // this query stmt. If so, the correlation is contained within this stmt
-             *   // and the table ref does not conflict with absolute refs.
-             *   CollectionTableRef t = (CollectionTableRef) tblRef;
-             *   Preconditions.checkState(t.getResolvedPath().isRootedAtTuple());
-             *   // This check relies on tblRefs being in depth-first order.
-             *   if (!tblRefIds.contains(t.getResolvedPath().getRootDesc().getId())) {
-             *       if (correlatedRef == null) correlatedRef = tblRef;
-             *       correlatedTupleIds.add(t.getResolvedPath().getRootDesc().getId());
-             *   }
-             *   
-            }*/
-            if (correlatedRef != null && absoluteRef != null) {
-                throw new AnalysisException(String.format(
-                        "Nested query is illegal because it contains a table reference '%s' " +
-                                "correlated with an outer block as well as an uncorrelated one '%s':\n%s",
-                        correlatedRef.tableRefToSql(), absoluteRef.tableRefToSql(), toSql()));
-            }
             tblRefIds.add(tblRef.getId());
         }
         return correlatedTupleIds;
@@ -264,15 +244,6 @@ public abstract class QueryStmt extends StatementBase {
 
     protected Expr rewriteQueryExprByMvColumnExpr(Expr expr, Analyzer analyzer) throws AnalysisException {
         return expr;
-//        if (forbiddenMVRewrite) {
-//            return expr;
-//        }
-//        if (expr.isBoundByTupleIds(new ArrayList<>(disableTuplesMVRewriter))) {
-//            return expr;
-//        }
-//        ExprRewriter rewriter = analyzer.getMVExprRewriter();
-//        rewriter.reset();
-//        return rewriter.rewrite(expr, analyzer);
     }
 
     /**
@@ -363,22 +334,6 @@ public abstract class QueryStmt extends StatementBase {
         }
 
         ExprSubstitutionMap smap = sortInfo.createSortTupleInfo(resultExprs, analyzer);
-
-        for (int i = 0; i < smap.size(); ++i) {
-            if (!(smap.getLhs().get(i) instanceof SlotRef)
-                    || !(smap.getRhs().get(i) instanceof SlotRef)) {
-                continue;
-            }
-            // TODO(zc)
-            // SlotRef inputSlotRef = (SlotRef) smap.getLhs().get(i);
-            // SlotRef outputSlotRef = (SlotRef) smap.getRhs().get(i);
-            // if (hasLimit()) {
-            //     analyzer.registerValueTransfer(
-            //             inputSlotRef.getSlotId(), outputSlotRef.getSlotId());
-            // } else {
-            //     analyzer.createAuxEquivPredicate(outputSlotRef, inputSlotRef);
-            // }
-        }
 
         substituteResultExprs(smap, analyzer);
     }
@@ -486,14 +441,6 @@ public abstract class QueryStmt extends StatementBase {
         return orderByElements;
     }
 
-    public List<OrderByElement> getOrderByElementsAfterAnalyzed() {
-        return orderByElementsAfterAnalyzed;
-    }
-
-    public void removeOrderByElements() {
-        orderByElements = null;
-    }
-
     public void setWithClause(WithClause withClause) {
         this.withClause_ = withClause;
     }
@@ -528,20 +475,12 @@ public abstract class QueryStmt extends StatementBase {
         limitElement = new LimitElement(newLimit);
     }
 
-    public void removeLimitElement() {
-        limitElement = LimitElement.NO_LIMIT;
-    }
-
     public long getOffset() {
         return limitElement.getOffset();
     }
 
     public void setAssertNumRowsElement(int desiredNumOfRows, AssertNumRowsElement.Assertion assertion) {
         this.assertNumRowsElement = new AssertNumRowsElement(desiredNumOfRows, toSql(), assertion);
-    }
-
-    public AssertNumRowsElement getAssertNumRowsElement() {
-        return assertNumRowsElement;
     }
 
     public void setIsExplain(boolean isExplain) {
@@ -564,10 +503,6 @@ public abstract class QueryStmt extends StatementBase {
         return sortInfo;
     }
 
-    public boolean evaluateOrderBy() {
-        return evaluateOrderBy;
-    }
-
     public ArrayList<Expr> getResultExprs() {
         return resultExprs;
     }
@@ -582,10 +517,6 @@ public abstract class QueryStmt extends StatementBase {
 
     public void forbiddenMVRewrite() {
         this.forbiddenMVRewrite = true;
-    }
-
-    public void updateDisableTuplesMVRewriter(TupleId tupleId) {
-        disableTuplesMVRewriter.add(tupleId);
     }
 
     /**

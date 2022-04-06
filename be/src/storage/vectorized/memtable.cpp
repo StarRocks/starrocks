@@ -7,6 +7,7 @@
 #include "column/json_column.h"
 #include "column/type_traits.h"
 #include "common/logging.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/primary_key_encoder.h"
@@ -247,38 +248,29 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 void MemTable::_sort(bool is_final) {
-    _permutations.resize(_chunk->num_rows());
-    for (uint32_t i = 0; i < _chunk->num_rows(); ++i) {
-        _permutations[i] = {i, i};
-    }
-    if (_tablet_schema->num_key_columns() <= 3) {
-        _sort_chunk_by_columns();
-    } else {
-        _sort_chunk_by_rows();
-    }
+    SmallPermutation perm = create_small_permutation(_chunk->num_rows());
+    std::swap(perm, _permutations);
+    _sort_column_inc();
+
     if (is_final) {
         // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
         _result_chunk = _chunk->clone_empty_with_schema(0);
-        _append_to_sorted_chunk<true>(_chunk.get(), _result_chunk.get());
+        _append_to_sorted_chunk(_chunk.get(), _result_chunk.get(), true);
         _chunk.reset();
     } else {
         _result_chunk = _chunk->clone_empty_with_schema();
-        _append_to_sorted_chunk<false>(_chunk.get(), _result_chunk.get());
+        _append_to_sorted_chunk(_chunk.get(), _result_chunk.get(), false);
         _chunk->reset();
     }
     _chunk_memory_usage = 0;
     _chunk_bytes_usage = 0;
 }
 
-template <bool is_final>
-void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest) {
-    _selective_values.clear();
-    _selective_values.reserve(src->num_rows());
-    for (size_t i = 0; i < src->num_rows(); ++i) {
-        _selective_values.push_back(_permutations[i].index_in_chunk);
-    }
-    if constexpr (is_final) {
+void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final) {
+    DCHECK_EQ(src->num_rows(), _permutations.size());
+    permutate_to_selective(_permutations, &_selective_values);
+    if (is_final) {
         dest->rolling_append_selective(*src, _selective_values.data(), 0, src->num_rows());
     } else {
         dest->append_selective(*src, _selective_values.data(), 0, src->num_rows());
@@ -310,7 +302,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     }
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
-    if (!*deletes) {
+    if (!(*deletes)) {
         auto st = PrimaryKeyEncoder::create_column(_vectorized_schema, deletes);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << _vectorized_schema
@@ -324,218 +316,19 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     return Status::OK();
 }
 
-// SortHelper functions only work for full sort.
-class SortHelper {
-public:
-    // Sort on type-known column, and the column has no NULL value in sorting range.
-    template <typename ColumnTypeName, typename CppTypeName>
-    static void sort_on_not_null_column(Column* column, MemTable::Permutation* perm) {
-        sort_on_not_null_column_within_range<ColumnTypeName, CppTypeName>(column, perm, 0, perm->size());
+void MemTable::_sort_column_inc() {
+    Columns columns;
+    std::vector<int> sort_orders;
+    std::vector<int> null_firsts;
+    for (int i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        columns.push_back(_chunk->get_column_by_index(i));
+        // Ascending, null first
+        sort_orders.push_back(1);
+        null_firsts.push_back(-1);
     }
 
-    // Sort on type-known column, and the column may have NULL values in the sorting range.
-    template <typename ColumnTypeName, typename CppTypeName>
-    static void sort_on_nullable_column(Column* column, MemTable::Permutation* perm) {
-        auto* nullable_col = down_cast<NullableColumn*>(column);
-
-        auto null_first_fn = [&nullable_col](const MemTable::PermutationItem& item) -> bool {
-            return nullable_col->is_null(item.index_in_chunk);
-        };
-
-        size_t data_offset = 0, data_count = 0;
-        // separate null and non-null values
-        // put all NULLs at the begin of the permutation.
-        auto begin_of_not_null = std::stable_partition(perm->begin(), perm->end(), null_first_fn);
-        data_offset = begin_of_not_null - perm->begin();
-        if (data_offset < perm->size()) {
-            data_count = perm->size() - data_offset;
-        } else {
-            return;
-        }
-        // sort non-null values
-        sort_on_not_null_column_within_range<ColumnTypeName, CppTypeName>(nullable_col->mutable_data_column(), perm,
-                                                                          data_offset, data_count);
-    }
-
-private:
-    // Sort on type-known column, and the column has no NULL value in sorting range.
-    template <typename ColumnTypeName, typename CppTypeName>
-    static void sort_on_not_null_column_within_range(Column* column, MemTable::Permutation* perm, size_t offset,
-                                                     size_t count = 0) {
-        // for numeric column: integers, floats, date and datetime
-        if constexpr (std::is_arithmetic_v<CppTypeName> || IsDate<CppTypeName> || IsDateTime<CppTypeName>) {
-            sort_on_not_null_numeric_column_within_range<CppTypeName>(column, perm, offset, count);
-            return;
-        }
-        // for binary column
-        if constexpr (std::is_same_v<CppTypeName, RunTimeTypeTraits<TYPE_VARCHAR>::CppType>) {
-            auto* col = down_cast<RunTimeTypeTraits<TYPE_VARCHAR>::ColumnType*>(column);
-            sort_on_not_null_binary_column_within_range(col, perm, offset, count);
-            return;
-        }
-        // for decimal column
-        if constexpr (std::is_same_v<CppTypeName, RunTimeTypeTraits<TYPE_DECIMALV2>::CppType>) {
-            auto* col = down_cast<RunTimeTypeTraits<TYPE_DECIMALV2>::ColumnType*>(column);
-            sort_on_not_null_decimal_column_within_range(col, perm, offset, count);
-            return;
-        }
-
-        // for other columns
-        const ColumnTypeName* col = down_cast<ColumnTypeName*>(column);
-        auto less_fn = [&col](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) -> bool {
-            int c = col->compare_at(l.index_in_chunk, r.index_in_chunk, *col, 1);
-            if (c == 0) {
-                return l.permutation_index < r.permutation_index;
-            } else {
-                return c < 0;
-            }
-        };
-        size_t end_pos = (count == 0 ? perm->size() : offset + count);
-        if (end_pos > perm->size()) {
-            end_pos = perm->size();
-        }
-        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
-    }
-
-    template <typename CppTypeName>
-    struct SortItem {
-        CppTypeName value;
-        uint32_t index_in_chunk;
-        uint32_t permutation_index; // sequence index for keeping sort stable.
-    };
-
-    // Sort on some numeric column which has no NULL value in sorting range.
-    // Only supports: integers, floats. Not Slice, DecimalV2Value.
-    template <typename CppTypeName>
-    static void sort_on_not_null_numeric_column_within_range(Column* column, MemTable::Permutation* perm, size_t offset,
-                                                             size_t count = 0) {
-        // column->size() == perm.size()
-        const size_t row_num = (count == 0 || offset + count > perm->size()) ? (perm->size() - offset) : count;
-        const CppTypeName* data = static_cast<CppTypeName*>((void*)column->mutable_raw_data());
-        std::vector<SortItem<CppTypeName>> sort_items(row_num);
-        for (uint32_t i = 0; i < row_num; ++i) {
-            sort_items[i] = {data[(*perm)[i + offset].index_in_chunk], (*perm)[i + offset].index_in_chunk, i};
-        }
-
-        auto less_fn = [](const SortItem<CppTypeName>& l, const SortItem<CppTypeName>& r) -> bool {
-            if (l.value == r.value) {
-                return l.permutation_index < r.permutation_index; // for stable sort
-            } else {
-                return l.value < r.value;
-            }
-        };
-
-        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
-
-        // output permutation
-        for (size_t i = 0; i < row_num; ++i) {
-            (*perm)[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
-        }
-    }
-
-    static void sort_on_not_null_binary_column_within_range(Column* column, MemTable::Permutation* perm, size_t offset,
-                                                            size_t count = 0) {
-        const size_t row_num = (count == 0 || offset + count > perm->size()) ? (perm->size() - offset) : count;
-        auto* binary_column = reinterpret_cast<BinaryColumn*>(column);
-        auto& data = binary_column->get_data();
-        std::vector<SortItem<Slice>> sort_items(row_num);
-        for (uint32_t i = 0; i < row_num; ++i) {
-            sort_items[i] = {data[(*perm)[i + offset].index_in_chunk], (*perm)[i + offset].index_in_chunk, i};
-        }
-        auto less_fn = [](const SortItem<Slice>& l, const SortItem<Slice>& r) -> bool {
-            int res = l.value.compare(r.value);
-            if (res == 0) {
-                return l.permutation_index < r.permutation_index;
-            } else {
-                return res < 0;
-            }
-        };
-
-        pdqsort(false, sort_items.begin(), sort_items.end(), less_fn);
-
-        for (size_t i = 0; i < row_num; ++i) {
-            (*perm)[i + offset].index_in_chunk = sort_items[i].index_in_chunk;
-        }
-    }
-
-    static void sort_on_not_null_decimal_column_within_range(RunTimeTypeTraits<TYPE_DECIMALV2>::ColumnType* column,
-                                                             MemTable::Permutation* perm, size_t offset,
-                                                             size_t count = 0) {
-        // avoid to call FixedLengthColumn::compare_at
-        const auto& container = column->get_data();
-        auto less_fn = [&container](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) -> bool {
-            const auto& lv = container[l.index_in_chunk];
-            const auto& rv = container[r.index_in_chunk];
-            if (lv == rv) {
-                return l.permutation_index < r.permutation_index;
-            } else {
-                return lv < rv;
-            }
-        };
-        size_t end_pos = (count == 0 ? perm->size() : offset + count);
-        if (end_pos > perm->size()) {
-            end_pos = perm->size();
-        }
-        pdqsort(false, perm->begin() + offset, perm->begin() + end_pos, less_fn);
-    }
-};
-
-void MemTable::_sort_chunk_by_columns() {
-    for (int i = _tablet_schema->num_key_columns() - 1; i >= 0; --i) {
-        Column* column = _chunk->get_column_by_index(i).get();
-        PrimitiveType slot_type = (*_slot_descs)[i]->type().type;
-        if (column->is_nullable()) {
-            switch (slot_type) {
-#define M(ptype)                                                                                                      \
-    case ptype: {                                                                                                     \
-        SortHelper::sort_on_nullable_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
-        break;                                                                                                        \
-    }
-                APPLY_FOR_ALL_SCALAR_TYPE(M)
-#undef M
-
-            default: {
-                CHECK(false) << "This type couldn't be key column";
-                break;
-            }
-            }
-        } else {
-            switch (slot_type) {
-#define M(ptype)                                                                                                      \
-    case ptype: {                                                                                                     \
-        SortHelper::sort_on_not_null_column<RunTimeColumnType<ptype>, RunTimeCppType<ptype>>(column, &_permutations); \
-        break;                                                                                                        \
-    }
-                APPLY_FOR_ALL_SCALAR_TYPE(M)
-#undef M
-            default: {
-                CHECK(false) << "This type couldn't be key column";
-                break;
-            }
-            }
-        }
-        // reset permutation_index
-        const size_t size = _permutations.size();
-        for (size_t j = 0; j < size; ++j) {
-            _permutations[j].permutation_index = j;
-        }
-    }
-}
-
-void MemTable::_sort_chunk_by_rows() {
-    pdqsort(false, _permutations.begin(), _permutations.end(),
-            [this](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) {
-                size_t col_number = _tablet_schema->num_key_columns();
-                int compare_result = 0;
-                for (size_t col_index = 0; col_index < col_number; ++col_index) {
-                    const auto& left_col = _chunk->get_column_by_index(col_index);
-                    compare_result = left_col->compare_at(l.index_in_chunk, r.index_in_chunk, *left_col, -1);
-                    if (compare_result != 0) {
-                        return compare_result < 0;
-                    }
-                }
-                return l.permutation_index < r.permutation_index;
-            });
+    Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
+    CHECK(st.ok());
 }
 
 } // namespace starrocks::vectorized

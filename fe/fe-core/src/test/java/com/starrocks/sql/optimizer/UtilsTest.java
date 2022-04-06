@@ -105,6 +105,19 @@ public class UtilsTest {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
@@ -237,7 +250,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void unknownStats() {
+    public void unknownStats1() {
         Catalog catalog = connectContext.getCatalog();
 
         OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
@@ -253,7 +266,8 @@ public class UtilsTest {
         columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
-        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
+        OptExpression opt =
+                new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
@@ -265,13 +279,23 @@ public class UtilsTest {
     }
 
     @Test
+    public void unknownStats2() {
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OptExpression opt =
+                new OptExpression(
+                        new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
+        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+    }
+
+    @Test
     public void testCapableSemiReorder() {
         OptExpression root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                    OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                            OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
-                            OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
-                    OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                        OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
         Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 1));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
@@ -279,13 +303,16 @@ public class UtilsTest {
 
         root = OptExpression.create(
                 new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
-                        OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null)),
+                OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
+                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
                                 OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                                        OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null),
-                                                OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
-                                                OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
-                                        OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
+                                        OptExpression.create(
+                                                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, null)),
+                                        OptExpression.create(
+                                                new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList()))),
+                                OptExpression.create(
+                                        new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())))),
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
         Assert.assertFalse(Utils.capableSemiReorder(root, false, 0, 0));

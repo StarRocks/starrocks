@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -54,6 +53,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,10 +61,10 @@ import static java.util.stream.Collectors.toList;
 
 public class AST2SQL {
     public static String toString(ParseNode expr) {
-        return new SQLLabelBuilderImpl().visit(expr);
+        return new SQLBuilder().visit(expr);
     }
 
-    public static class SQLLabelBuilderImpl extends AstVisitor<String, Void> {
+    public static class SQLBuilder extends AstVisitor<String, Void> {
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
@@ -106,7 +106,7 @@ public class AST2SQL {
             if (relation.getColumnOutputNames() != null) {
                 sqlBuilder.append("(").append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(new QueryStatement(relation.getCteQuery()))).append(") ");
+            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
             return sqlBuilder.toString();
         }
 
@@ -141,9 +141,10 @@ public class AST2SQL {
                 sqlBuilder.append(selectItemLabel);
             }
 
-            if (stmt.getRelation() != null) {
+            String fromClause = visit(stmt.getRelation());
+            if (fromClause != null) {
                 sqlBuilder.append(" FROM ");
-                sqlBuilder.append(visit(stmt.getRelation()));
+                sqlBuilder.append(fromClause);
             }
 
             if (stmt.hasWhereClause()) {
@@ -168,7 +169,7 @@ public class AST2SQL {
         public String visitSubquery(SubqueryRelation subquery, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append("(");
-            sqlBuilder.append(visit(new QueryStatement(subquery.getQuery())));
+            sqlBuilder.append(visit(subquery.getQueryStatement()));
             sqlBuilder.append(")");
             sqlBuilder.append(" ").append(subquery.getAlias());
             return sqlBuilder.toString();
@@ -178,7 +179,7 @@ public class AST2SQL {
         public String visitView(ViewRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append("(");
-            sqlBuilder.append(visit(new QueryStatement(node.getQuery())));
+            sqlBuilder.append(visit(node.getQueryStatement()));
             sqlBuilder.append(")");
             sqlBuilder.append(" ").append(node.getAlias());
             return sqlBuilder.toString();
@@ -262,28 +263,24 @@ public class AST2SQL {
         @Override
         public String visitValues(ValuesRelation node, Void scope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            if (node.getRows().size() == 1) {
-                sqlBuilder.append("SELECT ");
-                List<String> fieldLis = Lists.newArrayList();
-                for (int i = 0; i < node.getRows().get(0).size(); ++i) {
-                    String field = visit(node.getRows().get(0).get(i));
-                    String alias = " AS `" + node.getColumnOutputNames().get(i) + "`";
-                    fieldLis.add(field + alias);
-                }
-
-                sqlBuilder.append(Joiner.on(", ").join(fieldLis));
-            } else {
-                sqlBuilder.append("VALUES(");
-
-                for (int i = 0; i < node.getRows().size(); ++i) {
-                    sqlBuilder.append("(");
-                    List<String> rowStrings =
-                            node.getRows().get(i).stream().map(this::visit).collect(Collectors.toList());
-                    sqlBuilder.append(Joiner.on(", ").join(rowStrings));
-                    sqlBuilder.append(")");
-                }
-                sqlBuilder.append(")");
+            if (node.isNullValues()) {
+                return null;
             }
+
+            sqlBuilder.append("(VALUES");
+            List<String> values = new ArrayList<>();
+            for (int i = 0; i < node.getRows().size(); ++i) {
+                StringBuilder rowBuilder = new StringBuilder();
+                rowBuilder.append("(");
+                List<String> rowStrings =
+                        node.getRows().get(i).stream().map(this::visit).collect(Collectors.toList());
+                rowBuilder.append(Joiner.on(", ").join(rowStrings));
+                rowBuilder.append(")");
+                values.add(rowBuilder.toString());
+            }
+            sqlBuilder.append(Joiner.on(", ").join(values));
+            sqlBuilder.append(") ").append(node.getAlias());
+
             return sqlBuilder.toString();
         }
 
@@ -482,7 +479,7 @@ public class AST2SQL {
         }
 
         public String visitSubquery(Subquery node, Void context) {
-            return "(" + visit(new QueryStatement(node.getQueryRelation())) + ")";
+            return "(" + visit(node.getQueryStatement()) + ")";
         }
 
         public String visitSysVariableDesc(SysVariableDesc node, Void context) {

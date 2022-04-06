@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.AlterUserStmt;
-import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
@@ -619,7 +618,6 @@ public class Auth implements Writable {
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
         if (!SystemInfoService.DEFAULT_CLUSTER.equals(stmt.getClusterName())
-                && CreateClusterStmt.CLUSTER_SUPERUSER_NAME.equals(user)
                 && "%".equals(host)) {
             // Allow dropping `superuser@%` when doing `DROP CLUSTER`, but not for `DROP USER`.
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
@@ -638,12 +636,6 @@ public class Auth implements Writable {
 
     public void replayDropUser(UserIdentity userIdent) {
         dropUserInternal(userIdent, true);
-    }
-
-    public void replayOldDropUser(String userName) {
-        UserIdentity userIdentity = new UserIdentity(userName, "%");
-        userIdentity.setIsAnalyzed();
-        dropUserInternal(userIdentity, true /* is replay */);
     }
 
     private void dropUserInternal(UserIdentity userIdent, boolean isReplay) {

@@ -21,19 +21,13 @@
 
 #include "storage/task/engine_batch_load_task.h"
 
-#include <pthread.h>
-
-#include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/current_thread.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/push_handler.h"
@@ -71,7 +65,7 @@ Status EngineBatchLoadTask::execute() {
                     LOG(WARNING) << "transaction exists when realtime push, "
                                     "but unfinished, do not report to fe, signature: "
                                  << _signature;
-                    break; // not retry any more
+                    break; // not retry anymore
                 }
                 // Internal error, need retry
                 if (status == STARROCKS_ERROR) {

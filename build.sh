@@ -192,6 +192,14 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     time make -j${PARALLEL}
     make install
+
+    # Build JDBC Bridge
+    echo "Build JDBC Bridge"
+    cd ${STARROCKS_HOME}/jdbc_bridge
+    if [ ${CLEAN} -eq 1 ]; then
+        ${MVN_CMD} clean
+    fi
+    ${MVN_CMD} package -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -218,15 +226,6 @@ if [ ${FE_MODULES}x != ""x ]; then
     ${MVN_CMD} package -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}
 fi
-
-# Build JDBC Bridge
-echo "Build JDBC Bridge"
-cd ${STARROCKS_HOME}/jdbc_bridge
-if [ ${CLEAN} -eq 1 ]; then
-    ${MVN_CMD} clean
-fi
-${MVN_CMD} package -DskipTests
-cd ${STARROCKS_HOME}
 
 
 # Clean and prepare output dir

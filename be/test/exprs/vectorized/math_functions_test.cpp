@@ -68,11 +68,15 @@ TEST_F(VecMathFunctionsTest, truncateNanTest) {
     }
 }
 
-static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
-                                const std::vector<uint8_t>& arg0_null_flags, const int32_t precision,
-                                const int32_t scale, const std::vector<int32_t>& arg1_values,
-                                const std::vector<uint8_t>& arg1_null_flags, const std::vector<std::string>& res_values,
-                                const std::vector<uint8_t>& res_null_flags) {
+static constexpr uint8_t TYPE_ROUND = 0;
+static constexpr uint8_t TYPE_ROUND_UP_TO = 1;
+static constexpr uint8_t TYPE_TRUNCATE = 2;
+
+template <uint8_t type>
+static void testRoundDecimal(const std::vector<std::string>& arg0_values, const std::vector<uint8_t>& arg0_null_flags,
+                             const int32_t precision, const int32_t scale, const std::vector<int32_t>& arg1_values,
+                             const std::vector<uint8_t>& arg1_null_flags, const std::vector<std::string>& res_values,
+                             const std::vector<uint8_t>& res_null_flags) {
     ASSERT_GE(precision, 0);
     ASSERT_LE(precision, decimal_precision_limit<int128_t>);
     ASSERT_GE(scale, 0);
@@ -93,6 +97,7 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
     for (auto i = 0; i < arg0_values.size(); i++) {
         if (!arg0_null_flags.empty() && arg0_null_flags[i] == 1) {
             arg0_has_null = true;
+            arg0_data_column->append_default(1);
             continue;
         }
         arg0_all_null = false;
@@ -107,6 +112,7 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
     for (auto i = 0; i < arg1_values.size(); i++) {
         if (!arg1_null_flags.empty() && arg1_null_flags[i] == 1) {
             arg1_has_null = true;
+            arg1_data_column->append_default(1);
             continue;
         }
         arg1_all_null = false;
@@ -169,11 +175,16 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
     }
 
     columns.emplace_back(c0);
-    columns.emplace_back(c1);
+    if (type == TYPE_ROUND) {
+        c1_const = true;
+        c1_nullable = false;
+    } else {
+        columns.emplace_back(c1);
+    }
 
     FunctionContext::TypeDesc return_type;
     return_type.precision = decimal_precision_limit<int128_t>;
-    if (arg1_values.size() == 1) {
+    if (arg1_values.size() == 1 || c1_const) {
         if (arg1_values[0] < 0) {
             return_type.scale = 0;
         } else if (arg1_values[0] > decimal_precision_limit<int128_t>) {
@@ -186,15 +197,26 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
     }
     std::unique_ptr<FunctionContext> ctx(
             FunctionContext::create_test_context(std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
-    auto res_column = MathFunctions::truncate_decimal128(ctx.get(), columns);
+    ColumnPtr res_column;
+    bool res_const = false;
+    if (type == TYPE_ROUND) {
+        res_column = MathFunctions::round_decimal128(ctx.get(), columns);
+    } else if (type == TYPE_ROUND_UP_TO) {
+        res_column = MathFunctions::round_up_to_decimal128(ctx.get(), columns);
+    } else {
+        ASSERT_EQ(type, TYPE_TRUNCATE);
+        res_column = MathFunctions::truncate_decimal128(ctx.get(), columns);
+    }
     DecimalV3Column<int128_t>* decimal_res_column;
     NullColumn* null_fags_res_column = nullptr;
 
     if ((c0_const && c0_nullable) || (c1_const && c1_nullable)) {
         ASSERT_TRUE(res_column->only_null());
+        res_const = true;
         return;
     } else if (c0_const && c1_const) {
         ASSERT_TRUE(res_column->is_constant());
+        res_const = true;
         decimal_res_column =
                 ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_const(res_column)).get();
     } else if (c0_nullable || c1_nullable) {
@@ -212,7 +234,8 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
     ASSERT_EQ(return_type.scale, decimal_res_column->scale());
     if (res_null_flags.size() == res_values.size()) {
         ASSERT_TRUE(null_fags_res_column != nullptr);
-        for (auto i = 0; i < res_values.size(); i++) {
+        const auto end = res_const ? 0 : res_values.size();
+        for (auto i = 0; i < end; i++) {
             if (res_null_flags[i] > 0) {
                 ASSERT_EQ(res_null_flags[i], null_fags_res_column->get_data()[i]);
             } else {
@@ -221,40 +244,112 @@ static void testTruncateDecimal(const std::vector<std::string>& arg0_values,
             }
         }
     } else {
-        for (auto i = 0; i < res_values.size(); i++) {
+        const auto end = res_const ? 0 : res_values.size();
+        for (auto i = 0; i < end; i++) {
             ASSERT_EQ(res_values[i], DecimalV3Cast::to_string<int128_t>(decimal_res_column->get_data()[i],
                                                                         return_type.precision, return_type.scale));
         }
     }
 }
 
-TEST_F(VecMathFunctionsTest, truncateDecimalTest) {
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {-1}, {}, {"18450"}, {});
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {}, {"18450"}, {});
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {1}, {}, {"18450.7"}, {});
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {2}, {}, {"18450.76"}, {});
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {5}, {}, {"18450.76000"}, {});
-    testTruncateDecimal({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
-    testTruncateDecimal({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"}, {});
+TEST_F(VecMathFunctionsTest, DecimalRoundTest) {
+    testRoundDecimal<TYPE_ROUND>({"18450.76"}, {}, 10, 2, {0}, {}, {"18451"}, {});
+    testRoundDecimal<TYPE_ROUND>({"0.1"}, {}, 10, 1, {0}, {}, {"0"}, {});
+    testRoundDecimal<TYPE_ROUND>({"0.499"}, {}, 10, 3, {0}, {}, {"0"}, {});
+    testRoundDecimal<TYPE_ROUND>({"0.5"}, {}, 10, 1, {0}, {}, {"1"}, {});
+    testRoundDecimal<TYPE_ROUND>({"0.50"}, {}, 10, 2, {0}, {}, {"1"}, {});
+    testRoundDecimal<TYPE_ROUND>({"-0.1"}, {}, 10, 1, {0}, {}, {"0"}, {});
+    testRoundDecimal<TYPE_ROUND>({"-0.5"}, {}, 10, 1, {0}, {}, {"-1"}, {});
+    testRoundDecimal<TYPE_ROUND>({"-0.50"}, {}, 10, 2, {0}, {}, {"-1"}, {});
+    testRoundDecimal<TYPE_ROUND>({"-0.91"}, {}, 10, 2, {0}, {}, {"-1"}, {});
 }
 
-TEST_F(VecMathFunctionsTest, truncateDecimalNullTest) {
-    testTruncateDecimal({"18450.76"}, {}, 10, 2, {0}, {1}, {"INVALID"}, {1});
-    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {2}, {}, {"INVALID"}, {1});
-    testTruncateDecimal({"INVALID"}, {1}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+TEST_F(VecMathFunctionsTest, DecimalRoundNullTest) {
+    testRoundDecimal<TYPE_ROUND>({"INVALID"}, {1}, 10, 2, {0}, {}, {"INVALID"}, {1});
+
+    testRoundDecimal<TYPE_ROUND>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {0, 0}, {}, {"INVALID", "INVALID"}, {1, 1});
 }
 
-TEST_F(VecMathFunctionsTest, truncateDecimalByColTest) {
-    testTruncateDecimal({"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {},
-                        15, 5, {0, 1, 2, 3, 4, 5, 6}, {},
-                        {"123", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
-    testTruncateDecimal({"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
-                        {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
-                        {"123", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"},
-                        {0, 1, 0, 0, 0, 0, 1});
+TEST_F(VecMathFunctionsTest, DecimalRoundUpToTest) {
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {-1}, {}, {"18451"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {0}, {}, {"18451"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {1}, {}, {"18450.8"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {2}, {}, {"18450.76"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {5}, {}, {"18450.76000"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"},
+                                       {});
+
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"12345.67899", "12345.67899", "12345.67899", "12345.67899", "12345.67899"}, {},
+                                       15, 5, {2, 2, 2, 2, 2}, {},
+                                       {"12345.68", "12345.68", "12345.68", "12345.68", "12345.68"}, {});
 }
 
-TEST_F(VecMathFunctionsTest, Round_up_toTest) {
+TEST_F(VecMathFunctionsTest, DecimalRoundUpToNullTest) {
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"INVALID"}, {1}, 10, 2, {2}, {}, {"INVALID"}, {1});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"INVALID"}, {1}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76", "18450.76"}, {}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
+                                       {1, 1});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {2, 2}, {}, {"INVALID", "INVALID"},
+                                       {1, 1});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
+                                       {1, 1});
+}
+
+TEST_F(VecMathFunctionsTest, DecimalRoundUpToByColTest) {
+    testRoundDecimal<TYPE_ROUND_UP_TO>(
+            {"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {}, 15, 5,
+            {0, 1, 2, 3, 4, 5, 6}, {},
+            {"123", "123.50000", "123.46000", "123.45700", "123.45680", "123.45678", "123.45678"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>(
+            {"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
+            {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
+            {"123", "INVALID", "123.46000", "123.45700", "123.45680", "123.45678", "INVALID"}, {0, 1, 0, 0, 0, 0, 1});
+}
+
+TEST_F(VecMathFunctionsTest, DecimalTruncateTest) {
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {-1}, {}, {"18450"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {0}, {}, {"18450"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {1}, {}, {"18450.7"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {2}, {}, {"18450.76"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {5}, {}, {"18450.76000"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"}, {});
+
+    testRoundDecimal<TYPE_TRUNCATE>({"12345.67899", "12345.67899", "12345.67899", "12345.67899", "12345.67899"}, {}, 15,
+                                    5, {2, 2, 2, 2, 2}, {},
+                                    {"12345.67", "12345.67", "12345.67", "12345.67", "12345.67"}, {});
+}
+
+TEST_F(VecMathFunctionsTest, DecimalTruncateNullTest) {
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+    testRoundDecimal<TYPE_TRUNCATE>({"INVALID"}, {1}, 10, 2, {2}, {}, {"INVALID"}, {1});
+    testRoundDecimal<TYPE_TRUNCATE>({"INVALID"}, {1}, 10, 2, {0}, {1}, {"INVALID"}, {1});
+
+    testRoundDecimal<TYPE_TRUNCATE>({"18450.76", "18450.76"}, {}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
+                                    {1, 1});
+    testRoundDecimal<TYPE_TRUNCATE>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {2, 2}, {}, {"INVALID", "INVALID"}, {1, 1});
+    testRoundDecimal<TYPE_TRUNCATE>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
+                                    {1, 1});
+}
+
+TEST_F(VecMathFunctionsTest, DecimalTruncateByColTest) {
+    testRoundDecimal<TYPE_TRUNCATE>(
+            {"123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"}, {}, 15, 5,
+            {0, 1, 2, 3, 4, 5, 6}, {},
+            {"123", "123.40000", "123.45000", "123.45600", "123.45670", "123.45678", "123.45678"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>(
+            {"123.45678", "INVALID", "123.45678", "123.45678", "123.45678", "123.45678", "123.45678"},
+            {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
+            {"123", "INVALID", "123.45000", "123.45600", "123.45670", "123.45678", "INVALID"}, {0, 1, 0, 0, 0, 0, 1});
+    // truncate(v,d), v is const column
+    testRoundDecimal<TYPE_TRUNCATE>({"12345.6789", "12345.6789", "12345.6789", "12345.6789"}, {}, 15, 5, {1, 2, 3, 4},
+                                    {}, {"12345.60000", "12345.67000", "12345.67800", "12345.67890"}, {});
+}
+
+TEST_F(VecMathFunctionsTest, RoundUpToTest) {
     {
         Columns columns;
 

@@ -35,13 +35,13 @@ class SequentialFile;
 class WritableFile;
 
 // Return true if file is '.' or '..'
-inline bool is_dot_or_dotdot(const char* name) {
-    return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+inline bool is_dot_or_dotdot(std::string_view name) {
+    return name == "." || name == "..";
 }
 
 class FileUtils {
 public:
-    // Create directory of dir_path with default Env,
+    // Create directory of dir_path with proper Env,
     // This function will create directory recursively,
     // if dir's parent directory doesn't exist
     //
@@ -49,43 +49,51 @@ public:
     //  Status::OK()      if create directory success or directory already exists
     static Status create_dir(const std::string& dir_path);
 
-    // Create directory of dir_path,
-    // This function will create directory recursively,
-    // if dir's parent directory doesn't exist
-    //
-    // RETURNS:
-    //  Status::OK()      if create directory success or directory already exists
-    static Status create_dir(const std::string& dir_path, Env* env);
+    static Status create_dir(Env* env, const std::string& dir_path);
 
     // Delete file recursively.
     static Status remove_all(const std::string& dir_path);
 
-    // Delete dir or file, failed when there are files or dirs under the path
-    static Status remove(const std::string& path, Env* env);
+    static Status remove_all(Env* env, const std::string& dir_path);
 
+    // Delete dir or file, failed when there are files or dirs under the path
     static Status remove(const std::string& path);
 
+    static Status remove(Env* env, const std::string& path);
+
     static Status remove_paths(const std::vector<std::string>& paths);
+
+    static Status remove_paths(Env* env, const std::vector<std::string>& paths);
 
     // List all files in the specified directory without '.' and '..'.
     // If you want retreive all files, you can use Env::iterate_dir.
     // All valid files will be stored in given *files.
+    static Status list_files(const std::string& dir, std::vector<std::string>* files);
+
     static Status list_files(Env* env, const std::string& dir, std::vector<std::string>* files);
 
     // List all dirs and files in the specified directory
-    static Status list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files,
-                                  Env* env);
+    static Status list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files);
+
+    static Status list_dirs_files(Env* env, const std::string& path, std::set<std::string>* dirs,
+                                  std::set<std::string>* files);
 
     // Get the number of children belong to the specified directory, this
     // funciton also exclude '.' and '..'.
     // Return OK with *count is set to the count, if execute successful.
-    static Status get_children_count(Env* env, const std::string& dir, int64_t* count);
+    static Status get_children_count(const std::string& dir, int64_t* count);
 
-    // Check the file_path is not exist with default env, or is not a dir, return false.
-    static bool is_dir(const std::string& file_path, Env* env);
+    static Status get_children_count(Env* env, const std::string& dir, int64_t* count);
 
     // If the file_path is not exist, or is not a dir, return false.
     static bool is_dir(const std::string& file_path);
+
+    static bool is_dir(Env* env, const std::string& file_path);
+
+    // check path(file or directory) exist
+    static bool check_exist(const std::string& path);
+
+    static bool check_exist(Env* env, const std::string& path);
 
     // Get file path from fd
     // Return
@@ -107,12 +115,6 @@ public:
 
     // calc md5sum of a local file
     static Status md5sum(const std::string& file, std::string* md5sum);
-
-    // check path(file or directory) exist with default env
-    static bool check_exist(const std::string& path);
-
-    // check path(file or directory) exist with env
-    static bool check_exist(const std::string& path, Env* env);
 
     // Canonicalize 'path' by applying the following conversions:
     // - Converts a relative path into an absolute one using the cwd.

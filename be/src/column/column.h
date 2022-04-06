@@ -11,6 +11,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
@@ -41,6 +42,7 @@ public:
     enum { APPEND_OVERFLOW_MAX_SIZE = 128 };
 
     static const uint32_t MAX_CAPACITY_LIMIT = UINT32_MAX;
+    static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
@@ -63,6 +65,8 @@ public:
     virtual bool is_constant() const { return false; }
 
     virtual bool is_binary() const { return false; }
+
+    virtual bool is_large_binary() const { return false; }
 
     virtual bool is_decimal() const { return false; }
 
@@ -131,6 +135,7 @@ public:
     //      column data: [0, 1, 2, 3, 4]
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
+    // The values in indexes is incremented
     virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
@@ -328,7 +333,6 @@ public:
     //   2.1 object column: element serialize data size.
     //   2.2 other columns: 0.
     virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
-    virtual size_t shrink_memory_usage() const = 0;
     virtual size_t container_memory_usage() const = 0;
     virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
     virtual size_t element_memory_usage(size_t from, size_t size) const { return 0; }

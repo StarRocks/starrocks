@@ -116,8 +116,12 @@ public class ArrayType extends Type {
         return clone;
     }
 
-    public int getDimensions() {
-        return itemType.isArrayType() ? 1 + ((ArrayType) itemType).getDimensions() : 1;
+    public boolean hasNumericItem() {
+        return itemType.isNumericType();
+    }
+
+    public boolean isNullTypeItem() {
+        return itemType.isNull(); 
     }
 }
 

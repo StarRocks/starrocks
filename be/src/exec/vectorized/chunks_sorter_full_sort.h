@@ -21,7 +21,7 @@ public:
      */
     ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                          const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                         size_t size_of_chunk_batch);
+                         const std::string& sort_keys, size_t size_of_chunk_batch);
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.
@@ -41,9 +41,7 @@ public:
 private:
     Status _sort_chunks(RuntimeState* state);
     Status _build_sorting_data(RuntimeState* state);
-
-    Status _sort_by_row_cmp(RuntimeState* state);
-    Status _sort_by_columns(RuntimeState* state);
+    Status _sort_by_column_inc(RuntimeState* state);
 
     void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
 

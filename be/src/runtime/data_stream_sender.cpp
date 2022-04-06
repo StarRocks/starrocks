@@ -89,7 +89,7 @@ public:
         if (_closure != nullptr && _closure->unref()) {
             delete _closure;
         }
-        // release this before request desctruct
+        // release this before request destruct
         _brpc_request.release_finst_id();
 
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
@@ -110,7 +110,7 @@ public:
                               uint32_t size);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    // When the chunk is sent really rather than bachend, *is_real_sent will
+    // When the chunk is sent really rather than backend, *is_real_sent will
     // be set to true.
     Status send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent);
 
@@ -382,7 +382,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _part_type(sink.output_partition.type),
           _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
           _profile(nullptr),
-          _serialize_batch_timer(nullptr),
+          _serialize_chunk_timer(nullptr),
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
@@ -392,7 +392,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
            sink.output_partition.type == TPartitionType::RANDOM ||
            sink.output_partition.type == TPartitionType::RANGE_PARTITIONED ||
-           sink.output_partition.type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED);
+           sink.output_partition.type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
     // TODO: use something like google3's linked_ptr here (std::unique_ptr isn't copyable
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
@@ -425,7 +425,7 @@ Status DataStreamSender::init(const TDataSink& tsink) {
     RETURN_IF_ERROR(DataSink::init(tsink));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
@@ -484,7 +484,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
     } else {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
@@ -502,7 +502,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(profile(), "IgnoreRows", TUnit::UNIT);
-    _serialize_batch_timer = ADD_TIMER(profile(), "SerializeBatchTime");
+    _serialize_chunk_timer = ADD_TIMER(profile(), "SerializeChunkTime");
     _compress_timer = ADD_TIMER(profile(), "CompressTime");
     _send_request_timer = ADD_TIMER(profile(), "SendRequestTime");
     _wait_response_timer = ADD_TIMER(profile(), "WaitResponseTime");
@@ -578,7 +578,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
             _current_channel_idx = (_current_channel_idx + 1) % _channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         SCOPED_TIMER(_shuffle_dispatch_timer);
         // hash-partition batch's rows across channels
         int num_channels = _channels.size();
@@ -687,7 +687,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
     {
-        SCOPED_TIMER(_serialize_batch_timer);
+        SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);

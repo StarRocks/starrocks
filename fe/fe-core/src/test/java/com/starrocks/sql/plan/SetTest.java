@@ -12,12 +12,15 @@ public class SetTest extends PlanTestBase {
     public void testValuesNodePredicate() throws Exception {
         String queryStr = "SELECT 1 AS z, MIN(a.x) FROM (select 1 as x) a WHERE abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: min(1: expr)\n"
-                + "  |  group by: \n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: abs(1) = 2\n"));
+        Assert.assertTrue(explainString.contains("  3:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: expr)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: abs(1) = 2"));
     }
 
     @Test
@@ -34,12 +37,9 @@ public class SetTest extends PlanTestBase {
                 "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains(
-                "const_expr_lists:[[TExpr(nodes:[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode"
-                        + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
-                        + "int_literal:TIntLiteral"
-                        + "(value:2), "
-                        + "output_scale:-1, has_nullable_child:false, is_nullable:false, "
-                        + "is_monotonic:true)])]]"));
+                "TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                        "scalar_type:TScalarType(type:TINYINT))]), num_children:0, int_literal:TIntLiteral(value:2)," +
+                        " output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true"));
     }
 
     @Test
@@ -183,16 +183,24 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  10:UNION\n" +
+        Assert.assertTrue(plan.contains("  3:Project\n" +
+                "  |  <slot 2> : 499\n" +
+                "  |  \n" +
+                "  2:UNION\n" +
                 "     constant exprs: \n" +
-                "         499"));
-        Assert.assertTrue(plan.contains("1:UNION"));
-        Assert.assertTrue(plan.contains("  4:UNION\n" +
+                "         NULL"));
+        Assert.assertTrue(plan.contains("  6:Project\n" +
+                "  |  <slot 4> : 670\n" +
+                "  |  \n" +
+                "  5:UNION\n" +
                 "     constant exprs: \n" +
-                "         670"));
-        Assert.assertTrue(plan.contains("  2:UNION\n" +
+                "         NULL"));
+        Assert.assertTrue(plan.contains("  12:Project\n" +
+                "  |  <slot 7> : 499\n" +
+                "  |  \n" +
+                "  11:UNION\n" +
                 "     constant exprs: \n" +
-                "         499"));
+                "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
     }
 
@@ -249,33 +257,33 @@ public class SetTest extends PlanTestBase {
     public void testUnionNullConstant() throws Exception {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, NULL_TYPE, true]\n" +
-                "  |      [2, NULL_TYPE, true]"));
+                "  |      [2, NULL_TYPE, true]\n" +
+                "  |      [4, NULL_TYPE, true]"));
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(" 0:UNION\n" +
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, TINYINT, false]\n" +
-                "  |      [2, TINYINT, true]"));
+                "  |      [2, TINYINT, false]\n" +
+                "  |      [5, TINYINT, true]"));
 
         sql =
                 "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, DECIMAL64(12,2), true]\n" +
-                "  |      [2, DECIMAL64(12,2), true]"));
+                "  |      [3, DECIMAL64(12,2), true]\n" +
+                "  |      [6, DECIMAL64(12,2), true]"));
 
         sql =
                 "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [1, DECIMAL64(12,2), true]\n" +
-                "  |      [2, DECIMAL64(12,2), true]"));
+                "  |      [3, DECIMAL64(12,2), true]\n" +
+                "  |      [6, DECIMAL64(12,2), true]"));
     }
 
     @Test

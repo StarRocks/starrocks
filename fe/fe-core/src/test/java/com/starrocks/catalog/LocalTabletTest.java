@@ -89,7 +89,8 @@ public class LocalTabletTest {
         Assert.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
         Assert.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
 
-        Assert.assertEquals(600003L, tablet.getDataSize());
+        Assert.assertEquals(600003L, tablet.getDataSize(false));
+        Assert.assertEquals(200002L, tablet.getDataSize(true));
         Assert.assertEquals(3002L, tablet.getRowCount(100));
     }
 

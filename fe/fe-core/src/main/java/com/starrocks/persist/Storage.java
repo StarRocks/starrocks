@@ -33,8 +33,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Properties;
-import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 // VERSION file contains clusterId. eg:
 //      clusterId=123456
@@ -84,36 +84,35 @@ public class Storage {
         Properties prop = new Properties();
         File versionFile = getVersionFile();
         if (versionFile.isFile()) {
-            FileInputStream in = new FileInputStream(versionFile);
-            prop.load(in);
-            in.close();
-            clusterID = Integer.parseInt(prop.getProperty(CLUSTER_ID));
-            if (prop.getProperty(TOKEN) != null) {
-                token = prop.getProperty(TOKEN);
+            try (FileInputStream in = new FileInputStream(versionFile)) {
+                prop.load(in);
+                clusterID = Integer.parseInt(prop.getProperty(CLUSTER_ID));
+                if (prop.getProperty(TOKEN) != null) {
+                    token = prop.getProperty(TOKEN);
+                }
             }
         }
 
         File roleFile = getRoleFile();
         if (roleFile.isFile()) {
-            FileInputStream in = new FileInputStream(roleFile);
-            prop.load(in);
-            in.close();
-            role = FrontendNodeType.valueOf(prop.getProperty(FRONTEND_ROLE));
-            // For compatibility, NODE_NAME may not exist in ROLE file, set nodeName to null
-            nodeName = prop.getProperty(NODE_NAME, null);
+            try (FileInputStream in = new FileInputStream(roleFile)) {
+                prop.load(in);
+                role = FrontendNodeType.valueOf(prop.getProperty(FRONTEND_ROLE));
+                // For compatibility, NODE_NAME may not exist in ROLE file, set nodeName to null
+                nodeName = prop.getProperty(NODE_NAME, null);
+            }
         }
 
         // Find the latest image
         File dir = new File(metaDir);
         File[] children = dir.listFiles();
-        if (children == null) {
-            return;
-        } else {
+        if (children != null) {
             for (File child : children) {
                 String name = child.getName();
                 try {
                     if (!name.equals(IMAGE_NEW) && name.startsWith(IMAGE) && name.contains(".")) {
-                        imageJournalId = Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageJournalId);
+                        imageJournalId =
+                                Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageJournalId);
                     }
                 } catch (Exception e) {
                     LOG.warn(name + " is not a validate meta file, ignore it");
@@ -163,12 +162,9 @@ public class Storage {
     }
 
     public static int newClusterID() {
-        Random random = new Random();
-        random.setSeed(System.currentTimeMillis());
-
         int newID = 0;
         while (newID == 0) {
-            newID = random.nextInt(0x7FFFFFFF);
+            newID = ThreadLocalRandom.current().nextInt(0x7FFFFFFF);
         }
         return newID;
     }
@@ -190,19 +186,12 @@ public class Storage {
         Properties properties = new Properties();
         setFields(properties);
 
-        RandomAccessFile file = new RandomAccessFile(new File(metaDir, VERSION_FILE), "rws");
-        FileOutputStream out = null;
-
-        try {
+        try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, VERSION_FILE), "rws")) {
             file.seek(0);
-            out = new FileOutputStream(file.getFD());
-            properties.store(out, null);
-            file.setLength(out.getChannel().position());
-        } finally {
-            if (out != null) {
-                out.close();
+            try (FileOutputStream out = new FileOutputStream(file.getFD())) {
+                properties.store(out, null);
+                file.setLength(out.getChannel().position());
             }
-            file.close();
         }
     }
 
@@ -212,19 +201,12 @@ public class Storage {
         properties.setProperty(FRONTEND_ROLE, role.name());
         properties.setProperty(NODE_NAME, nameNode);
 
-        RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws");
-        FileOutputStream out = null;
-
-        try {
+        try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
             file.seek(0);
-            out = new FileOutputStream(file.getFD());
-            properties.store(out, null);
-            file.setLength(out.getChannel().position());
-        } finally {
-            if (out != null) {
-                out.close();
+            try (FileOutputStream out = new FileOutputStream(file.getFD())) {
+                properties.store(out, null);
+                file.setLength(out.getChannel().position());
             }
-            file.close();
         }
     }
 

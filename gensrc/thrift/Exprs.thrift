@@ -57,6 +57,9 @@ enum TExprNodeType {
   ARRAY_SLICE_EXPR,
 
   TABLE_FUNCTION_EXPR,
+
+  DICT_EXPR,
+  PLACEHOLDER_EXPR,
 }
 
 //enum TAggregationOp {
@@ -136,6 +139,11 @@ struct TSlotRef {
   2: required Types.TTupleId tuple_id
 }
 
+struct TPlaceHolder {
+  1: optional bool nullable;
+  2: optional i32 slot_id;
+}
+
 struct TStringLiteral {
   1: required string value;
 }
@@ -189,6 +197,8 @@ struct TExprNode {
   // If set, child[vararg_start_idx] is the first vararg child.
   27: optional i32 vararg_start_idx
   28: optional Types.TPrimitiveType child_type
+
+  29: optional TPlaceHolder vslot_ref;
 
   // For vector query engine
   50: optional bool use_vectorized

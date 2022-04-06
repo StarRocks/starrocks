@@ -26,6 +26,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -309,6 +310,14 @@ public class CreateTableTest {
         for (Partition partition : olapTable.getAllPartitions()) {
             Assert.assertTrue(partition.isUseStarOS());
         }
+
+        boolean throwException = false;
+        try {
+            CatalogUtils.checkOlapTableHasStarOSPartition(fullDbName, tableName);
+        } catch (AnalysisException e) {
+            throwException = true;
+        }
+        Assert.assertTrue(throwException);
     }
 
     private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {
@@ -323,7 +332,7 @@ public class CreateTableTest {
 
     @Test
     public void testCreateOlapTableWithStarOSTablet() throws DdlException {
-        ConfigBase.setMutableConfig("use_staros", "true");
+        Config.use_staros = true;
 
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -354,6 +363,18 @@ public class CreateTableTest {
         checkOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
         dropOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
 
-        ConfigBase.setMutableConfig("use_staros", "false");
+        Config.use_staros = false;
+    }
+
+    @Test
+    public void testCreateTableWithoutDistribution() {
+        ConnectContext.get().getSessionVariable().setAllowDefaultPartition(true);
+        
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
+                () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
 }

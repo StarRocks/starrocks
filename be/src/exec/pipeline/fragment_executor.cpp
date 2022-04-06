@@ -6,10 +6,10 @@
 
 #include "exec/exchange_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -41,8 +41,10 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* counter = pipeline->runtime_profile()->add_counter("DegreeOfParallelism", TUnit::UNIT);
-    counter->set(static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
+    auto* dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
+    auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
+    COUNTER_SET(total_dop_counter, dop_counter->value());
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
@@ -178,13 +180,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
-    ExecNode* plan = nullptr;
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &plan));
+    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &_fragment_ctx->plan()));
+    ExecNode* plan = _fragment_ctx->plan();
     plan->push_down_join_runtime_filter_recursively(runtime_state);
     std::vector<TupleSlotMapping> empty_mappings;
     plan->push_down_tuple_slot_mappings(runtime_state, empty_mappings);
     runtime_state->set_fragment_root_id(plan->id());
-    _fragment_ctx->set_plan(plan);
 
     // Set up global dict
     if (request.fragment.__isset.query_global_dicts) {
@@ -239,8 +240,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
-                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+        VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
+                 << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only OlapScanOperator need a MorselQueue attached.
@@ -268,7 +269,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                     scan_operator->set_workgroup(wg);
                 } else {
-                    scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                    if (dynamic_cast<HdfsScanOperator*>(scan_operator) != nullptr) {
+                        scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                    } else {
+                        scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                    }
                 }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
@@ -342,9 +347,14 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         bool is_pipeline_level_shuffle = false;
         int32_t dest_dop = -1;
         if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-            sender->get_partition_type() == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-            is_pipeline_level_shuffle = true;
+            sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
             dest_dop = t_stream_sink.dest_dop;
+
+            // UNPARTITIONED mode will be performed if both num of destination and dest dop is 1
+            // So we only enable pipeline level shuffle when num of destination or dest dop is greater than 1
+            if (sender->destinations().size() > 1 || dest_dop > 1) {
+                is_pipeline_level_shuffle = true;
+            }
             DCHECK_GT(dest_dop, 0);
         }
 
@@ -409,9 +419,10 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             // sink op
             auto sink_buffer = std::make_shared<SinkBuffer>(_fragment_ctx, sender->destinations(), is_dest_merge, dop);
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), -1, sink_buffer, sender->get_partition_type(), sender->destinations(),
-                    is_pipeline_level_shuffle, dest_dop, sender->sender_id(), sender->get_dest_node_id(),
-                    sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(), _fragment_ctx);
+                    context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
+                    sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
+                    sender->get_dest_node_id(), sender->get_partition_exprs(),
+                    sender->get_enable_exchange_pass_through(), _fragment_ctx);
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);

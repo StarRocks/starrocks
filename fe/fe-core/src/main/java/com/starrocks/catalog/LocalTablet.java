@@ -148,6 +148,7 @@ public class LocalTablet extends Tablet {
         return this.replicas;
     }
 
+    @Override
     public Set<Long> getBackendIds() {
         Set<Long> beIds = Sets.newHashSet();
         for (Replica replica : replicas) {
@@ -202,7 +203,8 @@ public class LocalTablet extends Tablet {
     }
 
     // for query
-    public void getQueryableReplicas(List<Replica> allQuerableReplica, List<Replica> localReplicas,
+    @Override
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -219,7 +221,7 @@ public class LocalTablet extends Tablet {
                 // replica.getSchemaHash() == -1 is for compatibility
                 if (replica.checkVersionCatchUp(visibleVersion, false)
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
-                    allQuerableReplica.add(replica);
+                    allQuerableReplicas.add(replica);
                     if (localBeId != -1 && replica.getBackendId() == localBeId) {
                         localReplicas.add(replica);
                     }
@@ -379,13 +381,21 @@ public class LocalTablet extends Tablet {
         return id == tablet.id;
     }
 
-    // Get total data size of all replicas which state is NORMAL or SCHEMA_CHANGE.
+    // Get total data size of all replicas if singleReplica is true, else get max replica data size.
+    // Replica state must be NORMAL or SCHEMA_CHANGE.
     @Override
-    public long getDataSize() {
+    public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
         for (Replica replica : getReplicas()) {
             if (replica.getState() == ReplicaState.NORMAL || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
-                dataSize += replica.getDataSize();
+                if (singleReplica) {
+                    long replicaDataSize = replica.getDataSize();
+                    if (replicaDataSize > dataSize) {
+                        dataSize = replicaDataSize;
+                    }
+                } else {
+                    dataSize += replica.getDataSize();
+                }
             }
         }
         return dataSize;

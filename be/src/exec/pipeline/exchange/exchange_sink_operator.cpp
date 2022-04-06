@@ -3,9 +3,7 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
 #include <arpa/inet.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
@@ -15,10 +13,8 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/raw_value.h"
@@ -28,9 +24,7 @@
 #include "util/block_compression.h"
 #include "util/compression_utils.h"
 #include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/thrift_client.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::pipeline {
 
@@ -41,13 +35,12 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, int32_t channel_id, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _channel_id(channel_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
@@ -102,7 +95,6 @@ private:
     const TNetworkAddress _brpc_dest_addr;
     const TUniqueId _fragment_instance_id;
     const PlanNodeId _dest_node_id;
-    const int32_t _channel_id;
 
     const bool _enable_exchange_pass_through;
     PassThroughContext _pass_through_context;
@@ -116,7 +108,7 @@ private:
     // always be 1
     std::vector<std::unique_ptr<vectorized::Chunk>> _chunks;
     PTransmitChunkParamsPtr _chunk_request;
-    size_t _current_request_bytes;
+    size_t _current_request_bytes = 0;
 
     bool _is_inited = false;
     bool _use_pass_through = false;
@@ -302,10 +294,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
             _channels.emplace_back(pseudo_channel.value());
         } else {
-            const auto channel_id = _channels.size();
             _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
-                                               _num_shuffles, channel_id, enable_exchange_pass_through,
-                                               pass_through_chunk_buffer));
+                                               _num_shuffles, enable_exchange_pass_through, pass_through_chunk_buffer));
             if (fragment_instance_id.lo == -1) {
                 pseudo_channel = _channels.back();
             }
@@ -342,7 +332,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
     }
 
@@ -352,21 +342,12 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     srand(reinterpret_cast<uint64_t>(this));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
-    _bytes_sent_counter = ADD_COUNTER(_unique_metrics, "BytesSent", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
-    _ignore_rows = ADD_COUNTER(_unique_metrics, "IgnoreRows", TUnit::UNIT);
-    _serialize_batch_timer = ADD_TIMER(_unique_metrics, "SerializeBatchTime");
-    _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTimer");
+    _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
+    _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
-    _send_request_timer = ADD_TIMER(_unique_metrics, "SendRequestTime");
-    _wait_response_timer = ADD_TIMER(_unique_metrics, "WaitResponseTime");
-    _overall_throughput = _unique_metrics->add_derived_counter(
-            "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            [capture0 = _bytes_sent_counter, capture1 = _total_timer] {
-                return RuntimeProfile::units_per_second(capture0, capture1);
-            },
-            "");
+
     for (auto& _channel : _channels) {
         RETURN_IF_ERROR(_channel->init(state));
     }
@@ -390,8 +371,9 @@ bool ExchangeSinkOperator::pending_finish() const {
     return !_buffer->is_finished();
 }
 
-void ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
+Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
     _buffer->cancel_one_sinker();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
@@ -452,7 +434,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
         const auto num_channels = _channels.size();
         {
@@ -482,7 +464,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
             for (size_t i = 0; i < num_rows; ++i) {
                 auto channel_id = _hash_values[i] % num_channels;
-                auto driver_sequence = _hash_values[i] % _num_shuffles;
+                // Note that xorshift32 rehash must be applied for both local shuffle and exchange sink here.
+                auto driver_sequence = HashUtil::xorshift32(_hash_values[i]) % _num_shuffles;
                 _channel_ids[i] = channel_id;
                 _driver_sequences[i] = driver_sequence;
                 _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]++;
@@ -522,7 +505,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     return Status::OK();
 }
 
-void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
+Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_chunk_request != nullptr) {
@@ -539,9 +522,11 @@ void ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+    return Status::OK();
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
+    _buffer->update_profile(_unique_metrics.get());
     Operator::close(state);
 }
 
@@ -549,7 +534,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
                                              int num_receivers) {
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     {
-        SCOPED_TIMER(_serialize_batch_timer);
+        SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
@@ -567,8 +552,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     const size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError("The input size for compression should be less than " +
-                                     _compress_codec->max_input_size());
+        return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                         _compress_codec->max_input_size()));
     }
 
     // try compress the ChunkPB data
@@ -596,7 +581,6 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     size_t chunk_size = dst->data().size();
     VLOG_ROW << "chunk data size " << chunk_size;
 
-    COUNTER_UPDATE(_bytes_sent_counter, chunk_size * num_receivers);
     COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
     return Status::OK();
 }
@@ -637,7 +621,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
         RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     }

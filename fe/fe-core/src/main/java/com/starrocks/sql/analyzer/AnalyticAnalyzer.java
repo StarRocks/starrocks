@@ -236,7 +236,7 @@ public class AnalyticAnalyzer {
                         + "constant positive number: " + boundary.toSql());
             }
 
-            boundary.setOffsetValue(new BigDecimal(val));
+            boundary.setOffsetValue(BigDecimal.valueOf(val));
         }
     }
 

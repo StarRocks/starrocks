@@ -14,6 +14,7 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exprs/expr.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -22,6 +23,7 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _chunks_sorter->setup_runtime(_unique_metrics.get());
     return Status::OK();
 }
 
@@ -37,17 +39,18 @@ StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeStat
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     vectorized::ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
             chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-    RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
     return Status::OK();
 }
 
-void PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
-    _chunks_sorter->finish(state);
+Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    RETURN_IF_ERROR(_chunks_sorter->finish(state));
 
     // Current partition sort is ended, and
     // the last call will drive LocalMergeSortSourceOperator to work.
     _sort_context->finish_partition(_chunks_sorter->get_partition_rows());
     _is_finished = true;
+    return Status::OK();
 }
 
 Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -68,16 +71,16 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             chunks_sorter = std::make_unique<HeapChunkSorter>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         }
     } else {
         chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(
                 runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                SIZE_OF_CHUNK_FOR_FULL_SORT);
+                _sort_keys, SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
     auto sort_context = _sort_context_factory->create(driver_sequence);
 

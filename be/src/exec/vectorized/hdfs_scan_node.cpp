@@ -17,11 +17,8 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gutil/map_util.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
@@ -340,10 +337,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     // if global status was not ok
     // we need fast failure
     if (!_get_status().ok()) {
-        scanner->release_pending_token(&_pending_token);
-        scanner->close(_runtime_state);
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        _release_scanner(scanner);
         return;
     }
 
@@ -392,6 +386,11 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     ChunkPtr chunk = nullptr;
 
     while (status.ok()) {
+        // if global status was not ok, we need fast failure and no need to read file
+        if (!_get_status().ok()) {
+            break;
+        }
+
         {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
@@ -447,20 +446,21 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
             }
         } else {
             _update_status(status);
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     } else {
         // sometimes state == ok but global_status was not ok
         if (scanner != nullptr) {
-            scanner->release_pending_token(&_pending_token);
-            scanner->close(_runtime_state);
-            _closed_scanners.fetch_add(1, std::memory_order_release);
-            _close_pending_scanners();
+            _release_scanner(scanner);
         }
     }
+}
+
+void HdfsScanNode::_release_scanner(HdfsScanner* scanner) {
+    scanner->release_pending_token(&_pending_token);
+    scanner->close(_runtime_state);
+    _closed_scanners.fetch_add(1, std::memory_order_release);
+    _close_pending_scanners();
 }
 
 void HdfsScanNode::_close_pending_scanners() {
@@ -481,6 +481,7 @@ HdfsScanner* HdfsScanNode::_pop_pending_scanner() {
     HdfsScanner* scanner = _pending_scanners.pop();
     uint64_t time = scanner->exit_pending_queue();
     COUNTER_UPDATE(_profile.scanner_queue_timer, time);
+    COUNTER_UPDATE(_profile.scanner_queue_counter, 1);
     return scanner;
 }
 
@@ -576,7 +577,9 @@ Status HdfsScanNode::close(RuntimeState* state) {
 
 Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& scan_range : scan_ranges) {
-        _scan_ranges.emplace_back(scan_range.scan_range.hdfs_scan_range);
+        auto& range = scan_range.scan_range.hdfs_scan_range;
+        if (range.file_length == 0) continue;
+        _scan_ranges.emplace_back(range);
         COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     }
 
@@ -665,7 +668,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromStringOrDefault(native_file_path));
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     std::string name_node;
     RETURN_IF_ERROR(get_namenode_from_path(native_file_path, &name_node));
@@ -700,6 +703,7 @@ void HdfsScanNode::_init_counter() {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
@@ -707,8 +711,8 @@ void HdfsScanNode::_init_counter() {
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IoTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 }

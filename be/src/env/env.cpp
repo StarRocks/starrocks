@@ -4,90 +4,80 @@
 
 #include <fmt/format.h>
 
-#include <regex>
 #include <type_traits>
 
 #include "env/env_hdfs.h"
 #include "env/env_posix.h"
 #include "env/env_s3.h"
-#include "gutil/macros.h"
 
 namespace starrocks {
 
-class EnvRegistry {
-public:
-    using FactoryFunc = Env::FactoryFunc;
+static thread_local std::shared_ptr<Env> tls_env_posix;
+static thread_local std::shared_ptr<Env> tls_env_s3;
+static thread_local std::shared_ptr<Env> tls_env_hdfs;
 
-    static EnvRegistry& Instance() {
-        static EnvRegistry instance;
-        return instance;
+inline std::shared_ptr<Env> get_tls_env_hdfs() {
+    if (tls_env_hdfs == nullptr) {
+        tls_env_hdfs.reset(new_env_hdfs().release());
     }
+    return tls_env_hdfs;
+}
 
-    DISALLOW_COPY_AND_ASSIGN(EnvRegistry);
-
-    void register_env(std::string_view pattern, FactoryFunc func) {
-        _entries.emplace_back(Entry{std::regex(pattern.begin(), pattern.end()), std::move(func)});
+inline std::shared_ptr<Env> get_tls_env_posix() {
+    if (tls_env_posix == nullptr) {
+        tls_env_posix.reset(new_env_posix().release());
     }
+    return tls_env_posix;
+}
 
-    auto create_env(std::string_view uri) -> std::invoke_result_t<FactoryFunc, std::string_view> {
-        for (auto&& [pattern, func] : _entries) {
-            if (std::regex_match(uri.begin(), uri.end(), pattern)) return func(uri);
-        }
-        return Status::NotFound(fmt::format("No registered Env for URI {}", uri));
+inline std::shared_ptr<Env> get_tls_env_s3() {
+    if (tls_env_s3 == nullptr) {
+        tls_env_s3.reset(new_env_s3().release());
     }
+    return tls_env_s3;
+}
 
-    auto create_env_or_default(std::string_view uri) -> std::invoke_result_t<FactoryFunc, std::string_view> {
-        for (auto&& [pattern, func] : _entries) {
-            if (std::regex_match(uri.begin(), uri.end(), pattern)) return func(uri);
-        }
-        return new_env_posix();
-    }
+inline bool starts_with(std::string_view s, std::string_view prefix) {
+    return (s.size() >= prefix.size()) && (memcmp(s.data(), prefix.data(), prefix.size()) == 0);
+}
 
-private:
-    EnvRegistry() = default;
+inline bool is_s3_uri(std::string_view uri) {
+    return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
+           starts_with(uri, "s3://");
+}
 
-    struct Entry {
-        std::regex pattern;
-        FactoryFunc func;
-    };
+inline bool is_hdfs_uri(std::string_view uri) {
+    return starts_with(uri, "hdfs://");
+}
 
-    std::vector<Entry> _entries;
-};
-
-void Env::Register(std::string_view pattern, FactoryFunc func) {
-    EnvRegistry::Instance().register_env(pattern, std::move(func));
+inline bool is_posix_uri(std::string_view uri) {
+    return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
 StatusOr<std::unique_ptr<Env>> Env::CreateUniqueFromString(std::string_view uri) {
-    return EnvRegistry::Instance().create_env(uri);
+    if (is_posix_uri(uri)) {
+        return new_env_posix();
+    }
+    if (is_hdfs_uri(uri)) {
+        return new_env_hdfs();
+    }
+    if (is_s3_uri(uri)) {
+        return new_env_s3();
+    }
+    return Status::NotSupported(fmt::format("No Env associated with {}", uri));
 }
 
 StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromString(std::string_view uri) {
-    ASSIGN_OR_RETURN(auto ptr, CreateUniqueFromString(uri));
-    return std::shared_ptr<Env>(std::move(ptr));
-}
-
-StatusOr<std::unique_ptr<Env>> Env::CreateUniqueFromStringOrDefault(std::string_view uri) {
-    return EnvRegistry::Instance().create_env_or_default(uri);
-}
-
-StatusOr<std::shared_ptr<Env>> Env::CreateSharedFromStringOrDefault(std::string_view uri) {
-    ASSIGN_OR_RETURN(auto ptr, CreateUniqueFromStringOrDefault(uri));
-    return std::shared_ptr<Env>(std::move(ptr));
-}
-
-class EnvGlobalInitializer {
-public:
-    EnvGlobalInitializer() {
-        Env::Register("posix://.*", [](std::string_view /*uri*/) { return new_env_posix(); });
-        Env::Register("hdfs://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvHdfs>(); });
-        Env::Register("oss://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3a://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3n://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
-        Env::Register("s3://.*", [](std::string_view /*uri*/) { return std::make_unique<EnvS3>(); });
+    if (is_posix_uri(uri)) {
+        return get_tls_env_posix();
     }
-};
-
-static EnvGlobalInitializer obj;
+    if (is_hdfs_uri(uri)) {
+        return get_tls_env_hdfs();
+    }
+    if (is_s3_uri(uri)) {
+        return get_tls_env_s3();
+    }
+    return Status::NotSupported(fmt::format("No Env associated with {}", uri));
+}
 
 } // namespace starrocks

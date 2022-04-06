@@ -42,9 +42,13 @@ import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.FileSystemViewManager;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,6 +72,7 @@ import java.util.stream.Collectors;
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
+    public static final String HUDI_PARTITION_NULL_VALUE = "default";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -99,7 +104,9 @@ public class HiveMetaClient {
                 String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf = conf;
 
-        init();
+        if (Config.enable_hms_events_incremental_sync) {
+            init();
+        }
     }
 
     private void init() throws DdlException {
@@ -159,8 +166,9 @@ public class HiveMetaClient {
         }
     }
 
-    public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName, List<Column> partColumns)
-            throws DdlException {
+    public Map<PartitionKey, Long> getPartitionKeys(String dbName, String tableName,
+                                                    List<Column> partColumns,
+                                                    boolean isHudiTable) throws DdlException {
         try (AutoCloseClient client = getClient()) {
             Table table = client.hiveClient.getTable(dbName, tableName);
             // partitionKeysSize > 0 means table is a partition table
@@ -169,7 +177,7 @@ public class HiveMetaClient {
                 Map<PartitionKey, Long> partitionKeys = Maps.newHashMapWithExpectedSize(partNames.size());
                 for (String partName : partNames) {
                     List<String> values = client.hiveClient.partitionNameToVals(partName);
-                    PartitionKey partitionKey = Utils.createPartitionKey(values, partColumns);
+                    PartitionKey partitionKey = Utils.createPartitionKey(values, partColumns, isHudiTable);
                     partitionKeys.put(partitionKey, nextPartitionId());
                 }
                 return partitionKeys;
@@ -234,12 +242,23 @@ public class HiveMetaClient {
                 sd = partition.getSd();
                 partName = FSUtils.getRelativePartitionPath(new Path(basePath), new Path(sd.getLocation()));
             }
-            HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-            if (format == null) {
-                throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
+            Configuration conf = new Configuration();
+            HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+            HoodieFileFormat hudiBaseFileFormat = metaClient.getTableConfig().getBaseFileFormat();
+
+            HdfsFileFormat format;
+            switch (hudiBaseFileFormat) {
+                case PARQUET:
+                    format = HdfsFileFormat.PARQUET;
+                    break;
+                case ORC:
+                    format = HdfsFileFormat.ORC;
+                    break;
+                default:
+                    throw new DdlException("unsupported file format [" + hudiBaseFileFormat.name() + "]");
             }
             String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
-            List<HdfsFileDesc> fileDescs = getHudiFileDescs(sd, basePath, partName);
+            List<HdfsFileDesc> fileDescs = getHudiFileDescs(sd, metaClient, partName);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
             throw new DdlException("Get hudi partition meta data failed: "
@@ -251,17 +270,19 @@ public class HiveMetaClient {
         }
     }
 
-    private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, String basePath, String partName) throws Exception {
+    private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, HoodieTableMetaClient metaClient,
+                                                String partName) throws Exception {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-
-        FileSystem fileSystem = getFileSystem(new URI(basePath));
-        Configuration conf = new Configuration();
-        HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+        FileSystem fileSystem = metaClient.getRawFs();
         HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
         HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().build();
         HoodieTableFileSystemView fileSystemView = FileSystemViewManager.createInMemoryFileSystemView(engineContext,
                 metaClient, metadataConfig);
-        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView.getLatestBaseFiles(partName).iterator();
+        HoodieTimeline activeInstants = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
+        Option<HoodieInstant> latestInstant = activeInstants.lastInstant();
+        String queryInstant = latestInstant.get().getTimestamp();
+        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView
+                .getLatestBaseFilesBeforeOrOn(partName, queryInstant).iterator();
         while (hoodieBaseFileIterator.hasNext()) {
             HoodieBaseFile baseFile = hoodieBaseFileIterator.next();
 
@@ -341,13 +362,14 @@ public class HiveMetaClient {
     public Map<String, HiveColumnStats> getTableLevelColumnStatsForPartTable(String dbName, String tableName,
                                                                              List<PartitionKey> partitionKeys,
                                                                              List<Column> partitionColumns,
-                                                                             List<String> columnNames)
+                                                                             List<String> columnNames,
+                                                                             boolean isHudiTable)
             throws DdlException {
         // calculate partition names
         List<String> partNames = Lists.newArrayListWithCapacity(partitionKeys.size());
         List<String> partColumnNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
         for (PartitionKey partitionKey : partitionKeys) {
-            partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey)));
+            partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable)));
         }
 
         // get partition row number from metastore
@@ -457,10 +479,14 @@ public class HiveMetaClient {
             double vLength = 0.0f;
             for (PartitionKey partitionKey : partitionKeys) {
                 LiteralExpr literalExpr = partitionKey.getKeys().get(colIndex);
-                String partName = FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey));
+                String partName = FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable));
                 Long partRowNumber = partRowNumbers.get(partName);
                 if (literalExpr instanceof NullLiteral) {
-                    distinctCnt.add(PARTITION_NULL_VALUE);
+                    if (isHudiTable) {
+                        distinctCnt.add(HUDI_PARTITION_NULL_VALUE);
+                    } else {
+                        distinctCnt.add(PARTITION_NULL_VALUE);
+                    }
                     numNulls += partRowNumber;
                     continue;
                 } else {
@@ -516,7 +542,7 @@ public class HiveMetaClient {
                 return literalExpr.getDoubleValue();
             case DATE:
             case DATETIME:
-                return (((DateLiteral) literalExpr).unixTimestamp(TimeZone.getDefault())) / 1000L;
+                return (((DateLiteral) literalExpr).unixTimestamp(TimeZone.getDefault())) / 1000.0;
             default:
                 return Double.NaN;
         }

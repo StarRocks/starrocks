@@ -31,6 +31,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TResourceInfo;
@@ -46,68 +47,67 @@ import java.util.UUID;
 // When one client connect in, we create a connect context for it.
 // We store session information here. Meanwhile ConnectScheduler all
 // connect with its connection id.
-// Use `volatile` to make the reference change atomic.
 public class ConnectContext {
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
     protected static ThreadLocal<ConnectContext> threadLocalInfo = new ThreadLocal<>();
 
     // set this id before analyze
-    protected volatile long stmtId;
-    protected volatile long forwardedStmtId;
+    protected long stmtId;
+    protected long forwardedStmtId;
 
     // The queryId of the last query processed by this session.
     // In some scenarios, the user can get the output of a request by queryId,
     // such as Insert, export requests
-    protected volatile UUID lastQueryId;
+    protected UUID lastQueryId;
 
     // The queryId is used to track a user's request. A user request will only have one queryId
     // in the entire StarRocks system. in some scenarios, a user request may be forwarded to multiple
     // nodes for processing or be processed repeatedly, but each execution instance will have
     // the same queryId
-    protected volatile UUID queryId;
+    protected UUID queryId;
 
     // A request will be executed multiple times because of retry or redirect.
     // This id is used to distinguish between different execution instances
-    protected volatile TUniqueId executionId;
+    protected TUniqueId executionId;
 
     // id for this connection
-    protected volatile int connectionId;
+    protected int connectionId;
     // mysql net
-    protected volatile MysqlChannel mysqlChannel;
+    protected MysqlChannel mysqlChannel;
     // state
-    protected volatile QueryState state;
-    protected volatile long returnRows;
+    protected QueryState state;
+    protected long returnRows;
     // the protocol capability which server say it can support
-    protected volatile MysqlCapability serverCapability;
+    protected MysqlCapability serverCapability;
     // the protocol capability after server and client negotiate
-    protected volatile MysqlCapability capability;
+    protected MysqlCapability capability;
     // Indicate if this client is killed.
-    protected volatile boolean isKilled;
+    protected boolean isKilled;
     // Db
-    protected volatile String currentDb = "";
+    protected String currentDb = "";
     // cluster name
-    protected volatile String clusterName = "";
+    protected String clusterName = "";
     // username@host of current login user
-    protected volatile String qualifiedUser;
+    protected String qualifiedUser;
     // username@host combination for the StarRocks account
     // that the server used to authenticate the current client.
     // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
     // This account determines user's access privileges.
-    protected volatile UserIdentity currentUserIdentity;
+    protected UserIdentity currentUserIdentity;
     // Serializer used to pack MySQL packet.
-    protected volatile MysqlSerializer serializer;
+    protected MysqlSerializer serializer;
     // Variables belong to this session.
-    protected volatile SessionVariable sessionVariable;
+    protected SessionVariable sessionVariable;
     // Scheduler this connection belongs to
-    protected volatile ConnectScheduler connectScheduler;
+    protected ConnectScheduler connectScheduler;
     // Executor
-    protected volatile StmtExecutor executor;
+    protected StmtExecutor executor;
     // Command this connection is processing.
-    protected volatile MysqlCommand command;
+    protected MysqlCommand command;
     // Timestamp in millisecond last command starts at
-    protected volatile long startTime = System.currentTimeMillis();
+    protected long startTime = System.currentTimeMillis();
     // Cache thread info for this connection.
-    protected volatile ThreadInfo threadInfo;
+    protected ThreadInfo threadInfo;
 
     // Catalog: put catalog here is convenient for unit test,
     // because catalog is singleton, hard to mock
@@ -136,6 +136,8 @@ public class ConnectContext {
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
+    protected PlannerProfile plannerProfile;
+
     public static ConnectContext get() {
         return threadLocalInfo.get();
     }
@@ -161,6 +163,8 @@ public class ConnectContext {
         sessionVariable = VariableMgr.newSessionVariable();
         command = MysqlCommand.COM_SLEEP;
         dumpInfo = new QueryDumpInfo(sessionVariable);
+        plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public ConnectContext(SocketChannel channel) {
@@ -177,6 +181,8 @@ public class ConnectContext {
         }
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
+        plannerProfile = new PlannerProfile();
+        plannerProfile.init(this);
     }
 
     public long getStmtId() {
@@ -437,6 +443,10 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
+    }
+
+    public PlannerProfile getPlannerProfile() {
+        return plannerProfile;
     }
 
     // kill operation with no protect.

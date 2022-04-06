@@ -6,6 +6,7 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "runtime/global_dicts.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -108,11 +109,10 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
     RETURN_IF_ERROR(_get_segments(params.tablet, params.version, &segments));
 
     for (auto& segment : segments) {
-        SegmentMetaCollecter* seg_collecter = new SegmentMetaCollecter(segment);
-        _obj_pool.add(seg_collecter);
+        auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 
         RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
-        _collect_context.seg_collecters.emplace_back(seg_collecter);
+        _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
     }
 
     return Status::OK();
@@ -192,9 +192,6 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
 }
 
 Status MetaReader::open() {
-    for (auto collector : _collect_context.seg_collecters) {
-        RETURN_IF_ERROR(collector->open());
-    }
     return Status::OK();
 }
 
@@ -211,7 +208,9 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
             _has_more = false;
             return Status::OK();
         }
+        RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->open());
         RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->collect(&columns));
+        _collect_context.seg_collecters[_collect_context.cursor_idx].reset();
         remaining--;
         _collect_context.cursor_idx++;
     }
@@ -241,7 +240,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     DCHECK_EQ(_params->fields.size(), _params->cids.size());
     DCHECK_EQ(_params->fields.size(), _params->read_page.size());
 
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(_segment->file_name()));
     RETURN_IF_ERROR(block_mgr->open_block(_segment->file_name(), &_rblock));
 
     _column_iterators.resize(_params->max_cid + 1, nullptr);
@@ -292,11 +291,13 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
 
     std::vector<Slice> words;
     if (!_column_iterators[cid]->all_page_dict_encoded()) {
-        // if all_page_dict_encoded if false, return fake dict word which cardinality exceed low cardinality base size
-        // so FE will not collect again and mark this column not a low cardinality
-        words = FAKE_DICT_SLICE_WORDS;
+        return Status::GlobalDictError("no global dict");
     } else {
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
+    }
+
+    if (words.size() > DICT_DECODE_MAX_SIZE) {
+        return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
     vectorized::ArrayColumn* array_column = nullptr;
@@ -310,7 +311,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
 
     // add elements
     auto dst = array_column->elements_column().get();
-    dst->append_strings(words);
+    CHECK(dst->append_strings(words));
 
     return Status::OK();
 }

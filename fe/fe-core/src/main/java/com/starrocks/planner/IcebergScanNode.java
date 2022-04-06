@@ -4,7 +4,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
@@ -22,6 +25,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
@@ -31,7 +35,9 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -77,7 +83,7 @@ public class IcebergScanNode extends ScanNode {
 
     /**
      * Extracts predicates from conjuncts that can be pushed down to Iceberg.
-     *
+     * <p>
      * Since Iceberg will filter data files by metadata instead of scan data files,
      * we pushdown all predicates to Iceberg to get the minimum data files to scan.
      * Here are three cases for predicate pushdown:
@@ -110,7 +116,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         if (isFinalized) {
             return;
         }
@@ -144,31 +150,36 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
         preProcessConjuncts();
-        for (FileScanTask task : IcebergUtil.getTableScan(
+        for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
                 srIcebergTable.getIcebergTable(), snapshot.get(),
-                icebergPredicates, true).planFiles()) {
-            DataFile file = task.file();
-            LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
+                icebergPredicates, true).planTasks()) {
+            for (FileScanTask task : combinedScanTask.files()) {
+                DataFile file = task.file();
+                LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
+                if (file.fileSizeInBytes() == 0) {
+                    continue;
+                }
 
-            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+                TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
-            THdfsScanRange hdfsScanRange = new THdfsScanRange();
-            hdfsScanRange.setFull_path(file.path().toString());
-            hdfsScanRange.setOffset(task.start());
-            hdfsScanRange.setLength(task.length());
-            // For iceberg table we do not need partition id
-            hdfsScanRange.setPartition_id(-1);
-            hdfsScanRange.setFile_length(file.fileSizeInBytes());
-            hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
-            TScanRange scanRange = new TScanRange();
-            scanRange.setHdfs_scan_range(hdfsScanRange);
-            scanRangeLocations.setScan_range(scanRange);
+                THdfsScanRange hdfsScanRange = new THdfsScanRange();
+                hdfsScanRange.setFull_path(file.path().toString());
+                hdfsScanRange.setOffset(task.start());
+                hdfsScanRange.setLength(task.length());
+                // For iceberg table we do not need partition id
+                hdfsScanRange.setPartition_id(-1);
+                hdfsScanRange.setFile_length(file.fileSizeInBytes());
+                hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
+                TScanRange scanRange = new TScanRange();
+                scanRange.setHdfs_scan_range(hdfsScanRange);
+                scanRangeLocations.setScan_range(scanRange);
 
-            // TODO: get hdfs block location information for scheduling, use iceberg meta cache
-            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
-            scanRangeLocations.addToLocations(scanRangeLocation);
+                // TODO: get hdfs block location information for scheduling, use iceberg meta cache
+                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+                scanRangeLocations.addToLocations(scanRangeLocation);
 
-            result.add(scanRangeLocations);
+                result.add(scanRangeLocations);
+            }
         }
     }
 
@@ -271,5 +282,10 @@ public class IcebergScanNode extends ScanNode {
 
     public void setMinMaxTuple(TupleDescriptor tuple) {
         minMaxTuple = tuple;
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
     }
 }

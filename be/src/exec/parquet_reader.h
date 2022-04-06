@@ -72,8 +72,10 @@ private:
 // Reader of broker parquet file
 class ParquetReaderWrap {
 public:
-    ParquetReaderWrap(FileReader* file_reader, int32_t num_of_columns_from_file);
-    ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file);
+    ParquetReaderWrap(FileReader* file_reader, int32_t num_of_columns_from_file, int64_t read_offset,
+                      int64_t read_size);
+    ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file,
+                      int64_t read_offset, int64_t read_size);
     virtual ~ParquetReaderWrap();
 
     void close();
@@ -85,6 +87,7 @@ public:
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
+    Status next_selected_row_group();
 
     const int32_t _num_of_columns_from_file;
     parquet::ReaderProperties _properties;
@@ -105,6 +108,9 @@ private:
     int _rows_of_group; // rows in a group.
     int _current_line_of_group;
     int _current_line_of_batch;
+
+    int64_t _read_offset;
+    int64_t _read_size;
 
     std::string _timezone;
 };

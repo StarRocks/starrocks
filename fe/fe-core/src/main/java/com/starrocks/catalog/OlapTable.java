@@ -256,13 +256,11 @@ public class OlapTable extends Table {
 
         // change single partition name
         if (this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-            // use for loop, because if we use getPartition(partitionName),
-            // we may not be able to get partition because this is a bug fix
-            for (Partition partition : getPartitions()) {
+            if (getPartitions().stream().findFirst().isPresent()) {
+                Partition partition = getPartitions().stream().findFirst().get();
                 partition.setName(newName);
                 nameToPartition.clear();
                 nameToPartition.put(newName, partition);
-                break;
             }
         }
     }
@@ -1193,14 +1191,6 @@ public class OlapTable extends Table {
         rebuildFullSchema();
     }
 
-    @Override
-    public boolean equals(Table table) {
-        if (this == table) {
-            return true;
-        }
-        return table instanceof OlapTable;
-    }
-
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
         OlapTable copied = new OlapTable();
         if (!DeepCopy.copy(this, copied, OlapTable.class)) {
@@ -1223,7 +1213,6 @@ public class OlapTable extends Table {
                     partition.deleteRollupIndex(deleteIndex.getId());
                 }
                 partition.setState(PartitionState.NORMAL);
-                copied.getPartitionInfo().setDataProperty(partition.getId(), new DataProperty(TStorageMedium.HDD));
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
                     for (Tablet tablet : idx.getTablets()) {

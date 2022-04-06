@@ -5,7 +5,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
 
 import java.util.List;
@@ -19,11 +18,15 @@ public interface HiveMetaStoreTable {
 
     List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException;
 
-    List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException;
-
     long getPartitionStatsRowCount(List<PartitionKey> partitions);
 
     List<Column> getPartitionColumns();
 
     Map<PartitionKey, Long> getPartitionKeys() throws DdlException;
+
+    void refreshTableCache() throws DdlException;
+
+    void refreshPartCache(List<String> partNames) throws DdlException;
+
+    void refreshTableColumnStats() throws DdlException;
 }

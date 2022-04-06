@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
@@ -34,6 +35,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -45,6 +47,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -158,7 +161,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             LogicalPlan producerPlan =
                     new RelationTransformer(columnRefFactory, session,
                             new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                            cteContext).transform(cteRelation.getCteQuery());
+                            cteContext).transform(cteRelation.getCteQueryStatement().getQueryRelation());
             OptExprBuilder produceOptBuilder =
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
@@ -174,7 +177,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             anchorOptBuilder = newAnchorOptBuilder;
 
             cteContext.put(cteRelation.getCteId(), new ExpressionMapping(
-                    new Scope(RelationId.of(cteRelation.getCteQuery()), cteRelation.getRelationFields()),
+                    new Scope(RelationId.of(
+                            cteRelation.getCteQueryStatement().getQueryRelation()),
+                            cteRelation.getRelationFields()),
                     producerPlan.getOutputColumn()));
         }
 
@@ -182,8 +187,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     }
 
     @Override
-    public LogicalPlan visitQueryRelation(QueryRelation node, ExpressionMapping context) {
-        throw new StarRocksPlannerException("query block not materialized", ErrorType.INTERNAL_ERROR);
+    public LogicalPlan visitQueryStatement(QueryStatement node, ExpressionMapping context) {
+        return visit(node.getQueryRelation());
     }
 
     @Override
@@ -286,7 +291,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     childPlan, expressionMapping);
 
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
-                root = root.withNewRoot(new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()));
+                root = root.withNewRoot(
+                        new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()));
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
             root = new OptExprBuilder(new LogicalExceptOperator.Builder()
@@ -303,15 +309,18 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             throw unsupportedException("New Planner only support Query Statement");
         }
 
-
         if (setOperationRelation.hasOrderByClause()) {
             List<Ordering> orderings = new ArrayList<>();
+            List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : setOperationRelation.getOrderBy()) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                         root.getExpressionMapping());
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
-                        OrderByElement.nullsFirst(item.getNullsFirstParam(), item.getIsAsc()));
-                orderings.add(ordering);
+                        OrderByElement.nullsFirst(item.getNullsFirstParam()));
+                if (!orderByColumns.contains(column)) {
+                    orderByColumns.add(column);
+                    orderings.add(ordering);
+                }
             }
             root = root.withNewRoot(new LogicalTopNOperator(orderings));
         }
@@ -326,7 +335,41 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitValues(ValuesRelation node, ExpressionMapping context) {
-        return new ValuesTransformer(columnRefFactory, session, cteContext).plan(node);
+        List<ColumnRefOperator> valuesOutputColumns = Lists.newArrayList();
+        for (int fieldIdx = 0; fieldIdx < node.getRelationFields().size(); ++fieldIdx) {
+            valuesOutputColumns.add(columnRefFactory.create(node.getColumnOutputNames().get(fieldIdx),
+                    node.getRelationFields().getFieldByIndex(fieldIdx).getType(), false));
+        }
+
+        List<List<ScalarOperator>> values = new ArrayList<>();
+        for (List<Expr> row : node.getRows()) {
+            List<ScalarOperator> valuesRow = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                Expr rowField = row.get(fieldIdx);
+                Type outputType = node.getRelationFields().getFieldByIndex(fieldIdx).getType();
+                Type fieldType = rowField.getType();
+                if (!outputType.equals(fieldType)) {
+                    if (fieldType.isNull()) {
+                        rowField.setType(outputType);
+                    } else {
+                        row.set(fieldIdx, TypeManager.addCastExpr(rowField, outputType));
+                    }
+                }
+
+                ScalarOperator constant = SqlToScalarOperatorTranslator.translate(row.get(fieldIdx),
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())));
+                valuesRow.add(constant);
+
+                if (constant.isNullable()) {
+                    valuesOutputColumns.get(fieldIdx).setNullable(true);
+                }
+            }
+            values.add(valuesRow);
+        }
+        OptExprBuilder valuesOpt = new OptExprBuilder(new LogicalValuesOperator(valuesOutputColumns, values),
+                Collections.emptyList(),
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), valuesOutputColumns));
+        return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
     @Override
@@ -433,7 +476,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        LogicalPlan childPlan = visit(node.getCteQuery());
+        LogicalPlan childPlan = visit(node.getCteQueryStatement());
         ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
         Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
 
@@ -452,12 +495,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap);
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
-        return new LogicalPlan(consumeBuilder, null, null);
+
+        return new LogicalPlan(consumeBuilder, childPlan.getOutputColumn(), null);
     }
 
     @Override
     public LogicalPlan visitSubquery(SubqueryRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = transform(node.getQuery());
+        LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
@@ -467,7 +511,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = transform(node.getQuery());
+        LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),

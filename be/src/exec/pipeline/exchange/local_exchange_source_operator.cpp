@@ -49,7 +49,7 @@ bool LocalExchangeSourceOperator::has_output() const {
            (_is_finished && _partition_rows_num > 0);
 }
 
-void LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
+Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     _is_finished = true;
     // Compute out the number of rows of the _full_chunk_queue.
@@ -66,6 +66,7 @@ void LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
     _memory_manager->update_row_count(-(full_rows_num + _partition_rows_num));
     _partition_rows_num = 0;
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {

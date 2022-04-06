@@ -26,6 +26,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -302,6 +303,12 @@ public class LoadStmt extends DdlStmt {
             // if cluster is null, use default hadoop cluster
             // if cluster is not null, use this hadoop cluster
             etlJobType = EtlJobType.HADOOP;
+        }
+
+        if (etlJobType == EtlJobType.SPARK) {
+            for (DataDescription dataDescription : dataDescriptions) {
+                CatalogUtils.checkOlapTableHasStarOSPartition(label.getDbName(), dataDescription.getTableName());
+            }
         }
 
         try {

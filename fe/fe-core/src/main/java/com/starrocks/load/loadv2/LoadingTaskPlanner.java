@@ -162,7 +162,7 @@ public class LoadingTaskPlanner {
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
-        scanNode.finalize(analyzer);
+        scanNode.finalizeStats(analyzer);
         LOG.info("use vectorized load: {}, load job id: {}", true, loadJobId);
         scanNodes.add(scanNode);
         descTable.computeMemLayout();

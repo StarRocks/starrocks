@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -15,6 +16,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictMappingExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -27,11 +29,14 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.PlaceHolderExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -40,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -115,6 +121,15 @@ public class ScalarOperatorToExpr {
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
             return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
                     buildExecExpression(node.getChild(1), context));
+        }
+
+        @Override
+        public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
+            ArraySliceExpr arraySliceExpr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
+                    buildExecExpression(node.getChild(1), context),
+                    buildExecExpression(node.getChild(2), context));
+            arraySliceExpr.setType(node.getType());
+            return arraySliceExpr;
         }
 
         @Override
@@ -443,5 +458,22 @@ public class ScalarOperatorToExpr {
             result.setType(operator.getType());
             return result;
         }
+
+        @Override
+        public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
+            final ColumnRefOperator dictColumn = operator.getDictColumn();
+            final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
+            final ScalarOperator call = operator.getOriginScalaOperator();
+            final ColumnRefOperator key =
+                    new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
+                            operator.getDictColumn().getName(),
+                            dictExpr.isNullable());
+            context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
+            final Expr callExpr = buildExecExpression(call, context);
+            Expr result = new DictMappingExpr(dictExpr, callExpr);
+            result.setType(operator.getType());
+            return result;
+        }
+
     }
 }

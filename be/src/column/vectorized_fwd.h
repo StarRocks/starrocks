@@ -31,7 +31,6 @@ template <typename T>
 using Buffer = std::vector<T>;
 
 class ArrayColumn;
-class BinaryColumn;
 class NullableColumn;
 class ConstColumn;
 
@@ -43,6 +42,9 @@ class FixedLengthColumnBase;
 
 template <typename T>
 class DecimalV3Column;
+
+template <typename T>
+class BinaryColumnBase;
 
 using ColumnPtr = std::shared_ptr<Column>;
 using MutableColumnPtr = std::unique_ptr<Column>;
@@ -67,6 +69,8 @@ using TimestampColumn = FixedLengthColumn<TimestampValue>;
 using Decimal32Column = DecimalV3Column<int32_t>;
 using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;
+using BinaryColumn = BinaryColumnBase<uint32_t>;
+using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 
 template <typename T>
 constexpr bool is_decimal_column = false;

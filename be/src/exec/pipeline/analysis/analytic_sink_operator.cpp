@@ -2,6 +2,7 @@
 
 #include "analytic_sink_operator.h"
 
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -43,11 +44,12 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-void AnalyticSinkOperator::set_finishing(RuntimeState* state) {
+Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
-    _process_by_partition_if_necessary();
+    RETURN_IF_ERROR(_process_by_partition_if_necessary());
     _analytor->sink_complete();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSinkOperator::pull_chunk(RuntimeState* state) {
@@ -68,21 +70,22 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // For performance, we do this special handle.
             // In future, if need, we could remove this if else easily.
             if (j == 0) {
-                _analytor->append_column(chunk_size, _analytor->agg_intput_columns()[i][j].get(), column);
+                TRY_CATCH_BAD_ALLOC(
+                        _analytor->append_column(chunk_size, _analytor->agg_intput_columns()[i][j].get(), column));
             } else {
-                _analytor->agg_intput_columns()[i][j]->append(*column, 0, column->size());
+                TRY_CATCH_BAD_ALLOC(_analytor->agg_intput_columns()[i][j]->append(*column, 0, column->size()));
             }
         }
     }
 
     for (size_t i = 0; i < _analytor->partition_ctxs().size(); i++) {
         ColumnPtr column = _analytor->partition_ctxs()[i]->evaluate(chunk.get());
-        _analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column);
+        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column));
     }
 
     for (size_t i = 0; i < _analytor->order_ctxs().size(); i++) {
         ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(chunk.get());
-        _analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column);
+        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column));
     }
 
     _analytor->input_chunks().emplace_back(std::move(chunk));

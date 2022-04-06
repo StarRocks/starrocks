@@ -141,10 +141,10 @@ public class HiveColumnStats {
                     numDistinctValues = dateStats.getNumDVs();
                     numNulls = dateStats.getNumNulls();
                     if (dateStats.isSetHighValue()) {
-                        maxValue = dateStats.getHighValue().getDaysSinceEpoch() * 24L * 3600L;
+                        maxValue = dateStats.getHighValue().getDaysSinceEpoch() * 24.0 * 3600L;
                     }
                     if (dateStats.isSetLowValue()) {
-                        minValue = dateStats.getLowValue().getDaysSinceEpoch() * 24L * 3600L;
+                        minValue = dateStats.getLowValue().getDaysSinceEpoch() * 24.0 * 3600L;
                     }
                 }
                 break;

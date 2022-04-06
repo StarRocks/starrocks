@@ -46,10 +46,7 @@ public:
         return Status::OK();
     }
 
-    Status size(uint64_t* size) const override {
-        *size = _str.size();
-        return Status::OK();
-    }
+    StatusOr<uint64_t> get_size() const override { return _str.size(); }
 
     const std::string& filename() const override {
         static std::string s_name = "StringRandomAccessFile";
@@ -77,17 +74,12 @@ public:
     }
 
     Status skip(uint64_t n) override {
-        uint64_t size = 0;
-        CHECK(_random_file.size(&size).ok());
+        ASSIGN_OR_RETURN(const uint64_t size, _random_file.get_size());
         _offset = std::min(_offset + n, size);
         return Status::OK();
     }
 
-    uint64_t size() const {
-        uint64_t sz;
-        (void)_random_file.size(&sz);
-        return sz;
-    }
+    StatusOr<uint64_t> get_size() const { return _random_file.get_size(); }
 
 private:
     uint64_t _offset = 0;
@@ -126,7 +118,7 @@ public:
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override;
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) override;
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
     Status delete_file(const std::string& url) override;
 
@@ -136,15 +128,17 @@ public:
 
     Status delete_dir(const std::string& dirname) override;
 
+    Status delete_dir_recursive(const std::string& dirname) override;
+
     Status sync_dir(const std::string& dirname) override;
 
-    Status is_directory(const std::string& url, bool* is_dir) override;
+    StatusOr<bool> is_directory(const std::string& url) override;
 
     Status canonicalize(const std::string& path, std::string* file) override;
 
-    Status get_file_size(const std::string& url, uint64_t* size) override;
+    StatusOr<uint64_t> get_file_size(const std::string& url) override;
 
-    Status get_file_modified_time(const std::string& url, uint64_t* file_mtime) override;
+    StatusOr<uint64_t> get_file_modified_time(const std::string& url) override;
 
     Status rename_file(const std::string& src, const std::string& target) override;
 

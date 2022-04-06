@@ -26,7 +26,7 @@ public:
 
     bool is_finished() const override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -34,7 +34,7 @@ public:
 
     void do_close(RuntimeState* state) override;
 
-    ChunkSourcePtr create_chunk_source(MorselPtr morsel) override;
+    ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
 private:
     Status _start_scanner_thread(RuntimeState* state);

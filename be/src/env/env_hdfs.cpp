@@ -26,7 +26,7 @@ public:
     StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    Status size(uint64_t* size) const override;
+    StatusOr<uint64_t> get_size() const override;
     const std::string& filename() const override { return _file_name; }
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
 
@@ -64,7 +64,7 @@ Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t s
     return Status::OK();
 }
 
-Status HdfsRandomAccessFile::size(uint64_t* size) const {
+StatusOr<uint64_t> HdfsRandomAccessFile::get_size() const {
     if (_file_size == 0) {
         auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
         if (UNLIKELY(info == nullptr)) {
@@ -73,8 +73,7 @@ Status HdfsRandomAccessFile::size(uint64_t* size) const {
         _file_size = info->mSize;
         hdfsFreeFileInfo(info, 1);
     }
-    *size = _file_size;
-    return Status::OK();
+    return _file_size;
 }
 
 StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
@@ -99,6 +98,94 @@ Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t 
     return Status::OK();
 }
 
+class EnvHdfs : public Env {
+public:
+    EnvHdfs() {}
+    ~EnvHdfs() override = default;
+
+    EnvHdfs(const EnvHdfs&) = delete;
+    void operator=(const EnvHdfs&) = delete;
+    EnvHdfs(EnvHdfs&&) = delete;
+    void operator=(EnvHdfs&&) = delete;
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override;
+
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::new_sequential_file");
+    }
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::new_writable_file");
+    }
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::new_writable_file");
+    }
+
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::new_random_rw_file");
+    }
+
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                               const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::new_random_rw_file");
+    }
+
+    Status path_exists(const std::string& path) override { return Status::NotSupported("EnvHdfs::path_exists"); }
+
+    Status get_children(const std::string& dir, std::vector<std::string>* file) override {
+        return Status::NotSupported("EnvHdfs::get_children");
+    }
+
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
+        return Status::NotSupported("EnvHdfs::iterate_dir");
+    }
+
+    Status delete_file(const std::string& path) override { return Status::NotSupported("EnvHdfs::delete_file"); }
+
+    Status create_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::create_dir"); }
+
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
+        return Status::NotSupported("EnvHdfs::create_dir_if_missing");
+    }
+
+    Status delete_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::delete_dir"); }
+
+    Status delete_dir_recursive(const std::string& dirname) override {
+        return Status::NotSupported("EnvHdfs::delete_dir_recursive");
+    }
+
+    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::sync_dir"); }
+
+    StatusOr<bool> is_directory(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::is_directory");
+    }
+
+    Status canonicalize(const std::string& path, std::string* file) override {
+        return Status::NotSupported("EnvHdfs::canonicalize");
+    }
+
+    StatusOr<uint64_t> get_file_size(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::get_file_size");
+    }
+
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
+        return Status::NotSupported("EnvHdfs::get_file_modified_time");
+    }
+
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return Status::NotSupported("EnvHdfs::rename_file");
+    }
+
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return Status::NotSupported("EnvHdfs::link_file");
+    }
+};
+
 StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(const std::string& path) {
     return EnvHdfs::new_random_access_file(RandomAccessFileOptions(), path);
 }
@@ -117,6 +204,10 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(cons
         return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
     }
     return std::make_unique<HdfsRandomAccessFile>(handle.hdfs_fs, file, path);
+}
+
+std::unique_ptr<Env> new_env_hdfs() {
+    return std::make_unique<EnvHdfs>();
 }
 
 } // namespace starrocks

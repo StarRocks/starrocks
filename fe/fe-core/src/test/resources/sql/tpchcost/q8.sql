@@ -81,7 +81,7 @@ HASH_PARTITIONED: 69: year
 |  group by: 69: year
 |
 30:Project
-|  <slot 69> : year(CAST(40: O_ORDERDATE AS DATETIME))
+|  <slot 69> : year(40: O_ORDERDATE)
 |  <slot 70> : 76: multiply
 |  <slot 71> : if(61: N_NAME = 'IRAN', 76: multiply, 0.0)
 |  common expressions:
@@ -278,7 +278,7 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 07
-BUCKET_SHFFULE_HASH_PARTITIONED: 19: L_ORDERKEY
+BUCKET_SHUFFLE_HASH_PARTITIONED: 19: L_ORDERKEY
 
 6:Project
 |  <slot 19> : 19: L_ORDERKEY

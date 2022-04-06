@@ -25,8 +25,6 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
 
-#include <algorithm>
-#include <cstdio>
 #include <map>
 #include <memory>
 #include <utility>
@@ -35,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
-#include "storage/compaction_manager.h"
 #include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
@@ -47,7 +44,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
-#include "util/path_util.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -193,7 +189,7 @@ Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<Row
         _rs_version_map[version] = std::move(rowset);
     }
 
-    if (config::enable_new_compaction_framework) {
+    if (config::enable_event_based_compaction_framework) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(
                 std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
@@ -273,7 +269,7 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
     _tablet_meta->modify_rs_metas(rs_metas_to_add, rs_metas_to_delete);
 
     // must be put after modify_rs_metas
-    if (config::enable_new_compaction_framework) {
+    if (config::enable_event_based_compaction_framework) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(
                 std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }
@@ -353,7 +349,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     _inc_rs_version_map[rowset->version()] = rowset;
 
     _timestamped_version_tracker.add_version(rowset->version());
-    if (config::enable_new_compaction_framework) {
+    if (config::enable_event_based_compaction_framework) {
         StorageEngine::instance()->compaction_manager()->update_tablet_async(
                 std::static_pointer_cast<Tablet>(shared_from_this()), true, false);
     }

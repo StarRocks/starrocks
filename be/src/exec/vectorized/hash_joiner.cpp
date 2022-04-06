@@ -38,7 +38,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters),
+          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _is_buildable(param._is_buildable),
           _read_only_join_probers(read_only_join_probers) {
     _is_push_down = param._hash_join_node.is_push_down;
@@ -66,13 +66,14 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
         runtime_profile->add_info_string("Predicates", _hash_join_node.sql_predicates);
     }
 
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinType", to_string(_join_type));
     _copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     _build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     _build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
     _build_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "BuildConjunctEvaluateTime");
     _build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     _runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
-    runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
 
     HashTableParam param;
     _init_hash_table_param(&param);
@@ -92,10 +93,12 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
         _runtime_state = state;
     }
 
-    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
+    runtime_profile->add_info_string("JoinType", to_string(_join_type));
+    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
     _probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     _other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     _where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
@@ -257,7 +260,7 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
             _is_push_down = false;
         }
 
-        if (_is_push_down || _build_conjunct_ctxs_is_empty) {
+        if (_is_push_down || !_build_conjunct_ctxs_is_empty) {
             // In filter could be used to fast compute segment row range in storage engine
             RETURN_IF_ERROR(_create_runtime_in_filters(state));
         }
@@ -313,7 +316,7 @@ Status HashJoiner::_build(RuntimeState* state) {
         if (_ht.get_build_chunk()->reach_capacity_limit()) {
             return Status::InternalError("Total size of single column exceed the limit of hash join");
         }
-        _prepare_build_key_columns();
+        TRY_CATCH_BAD_ALLOC(_prepare_build_key_columns());
     }
 
     {
@@ -450,35 +453,6 @@ void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
 void HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(_where_conjunct_evaluate_timer);
     ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
-}
-
-std::string HashJoiner::_get_join_type_str(TJoinOp::type join_type) {
-    switch (join_type) {
-    case TJoinOp::INNER_JOIN:
-        return "InnerJoin";
-    case TJoinOp::LEFT_OUTER_JOIN:
-        return "LeftOuterJoin";
-    case TJoinOp::LEFT_SEMI_JOIN:
-        return "LeftSemiJoin";
-    case TJoinOp::RIGHT_OUTER_JOIN:
-        return "RightOuterJoin";
-    case TJoinOp::FULL_OUTER_JOIN:
-        return "FullOuterJoin";
-    case TJoinOp::CROSS_JOIN:
-        return "CrossJoin";
-    case TJoinOp::MERGE_JOIN:
-        return "MergeJoin";
-    case TJoinOp::RIGHT_SEMI_JOIN:
-        return "RightSemiJoin";
-    case TJoinOp::LEFT_ANTI_JOIN:
-        return "LeftAntiJoin";
-    case TJoinOp::RIGHT_ANTI_JOIN:
-        return "RightAntiJoin";
-    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-        return "NullAwareLeftAntiJoin";
-    default:
-        return "";
-    }
 }
 
 } // namespace starrocks::vectorized

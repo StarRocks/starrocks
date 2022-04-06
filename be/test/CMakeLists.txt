@@ -35,12 +35,15 @@ set(EXEC_FILES
         ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
+        ./exec/vectorized/table_function_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
+        ./exec/pipeline/table_function_operator_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
         ./exec/parquet/encoding_test.cpp
         ./exec/parquet/page_reader_test.cpp
@@ -168,6 +171,7 @@ set(EXEC_FILES
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
+        ./storage/base_and_cumulative_compaction_policy_test.cpp
         ./storage/vectorized/aggregate_iterator_test.cpp
         ./storage/vectorized/chunk_aggregator_test.cpp
         ./storage/vectorized/chunk_helper_test.cpp

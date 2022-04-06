@@ -21,7 +21,6 @@
 
 #include "util/path_util.h"
 
-#include <cstring>
 #include <memory>
 // Use the POSIX version of dirname(3). See `man 3 dirname`
 #include <libgen.h>

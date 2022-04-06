@@ -95,7 +95,7 @@ void JDBCScanOperator::_start_scanner(RuntimeState* state) {
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
     scan_ctx.sql = get_jdbc_sql(jdbc_table->jdbc_table(), _jdbc_scan_node.columns, _jdbc_scan_node.filters, _limit);
 
-    _scanner.reset(new vectorized::JDBCScanner(scan_ctx, _result_tuple_desc));
+    _scanner.reset(new vectorized::JDBCScanner(scan_ctx, _result_tuple_desc, this));
 
     if (status = _scanner->open(state); !status.ok()) {
         _set_scanner_state(true, status);
@@ -111,8 +111,9 @@ void JDBCScanOperator::_start_scanner(RuntimeState* state) {
     _set_scanner_state(true, Status::OK());
 }
 
-void JDBCScanOperator::set_finishing(RuntimeState* state) {
+Status JDBCScanOperator::set_finishing(RuntimeState* state) {
     _is_finished.store(true);
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> JDBCScanOperator::pull_chunk(RuntimeState* state) {
@@ -162,7 +163,7 @@ void JDBCScanOperator::do_close(RuntimeState* state) {
     }
 }
 
-ChunkSourcePtr JDBCScanOperator::create_chunk_source(MorselPtr morsel) {
+ChunkSourcePtr JDBCScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     // this function is not be used in JDBCScanOperator, just ignore it
     return nullptr;
 }

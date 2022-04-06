@@ -5,89 +5,11 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "gutil/casts.h"
 #include "storage/vectorized/column_aggregate_func.h"
 
 namespace starrocks::vectorized {
-
-template <typename ColumnType, typename CppType>
-inline void compare_row(const Column* col, uint8_t* flags) {
-    const CppType* values = down_cast<const ColumnType*>(col)->get_data().data();
-    const int size = col->size();
-
-    for (int i = 1; i < size; ++i) {
-        flags[i] = flags[i] & (values[i] == values[i - 1]);
-    }
-}
-
-template <>
-inline void compare_row<BinaryColumn, Slice>(const Column* col, uint8_t* flags) {
-    const BinaryColumn* values = down_cast<const BinaryColumn*>(col);
-    const int size = col->size();
-
-    for (int i = 1; i < size; ++i) {
-        flags[i] = flags[i] && (values->get_slice(i) == values->get_slice(i - 1));
-    }
-}
-
-template <typename ColumnType, typename CppType>
-inline void compare_row_with_null(const Column* col, uint8_t* flags) {
-    const auto* nullable = down_cast<const NullableColumn*>(col);
-
-    if (nullable->has_null()) {
-        const uint8_t* nulls = nullable->null_column()->get_data().data();
-        const CppType* values = down_cast<const ColumnType*>(nullable->data_column().get())->get_data().data();
-
-        const int size = nullable->size();
-        DCHECK(nulls[0] == 0 || nulls[0] == 1);
-        for (int i = 1; i < size; ++i) {
-            // null == null, flag & 1
-            // not null = null, flag & 0
-            // not null = not null, use value flag
-            if (nulls[i] != nulls[i - 1]) {
-                flags[i] = 0;
-            } else if ((nulls[i] == 0) & (nulls[i - 1] == 0)) {
-                flags[i] = flags[i] & (values[i] == values[i - 1]);
-            }
-        }
-    } else {
-        compare_row<ColumnType, CppType>(nullable->data_column().get(), flags);
-    }
-}
-
-template <>
-inline void compare_row_with_null<BinaryColumn, Slice>(const Column* col, uint8_t* flags) {
-    const auto* nullable = down_cast<const NullableColumn*>(col);
-
-    if (nullable->has_null()) {
-        const uint8_t* nulls = nullable->null_column()->get_data().data();
-        const BinaryColumn* values = down_cast<const BinaryColumn*>(nullable->data_column().get());
-
-        const int size = nullable->size();
-        DCHECK(nulls[0] == 0 || nulls[0] == 1);
-        for (int i = 1; i < size; ++i) {
-            // null == null, flag & 1
-            // not null = null, flag & 0
-            // not null = not null, use value flag
-            if (nulls[i] != nulls[i - 1]) {
-                flags[i] = 0;
-            } else if ((nulls[i] == 0) & (nulls[i - 1] == 0)) {
-                flags[i] = flags[i] && (values->get_slice(i) == values->get_slice(i - 1));
-            }
-        }
-    } else {
-        compare_row<BinaryColumn, Slice>(nullable->data_column().get(), flags);
-    }
-}
-
-template <typename ColumnType, typename CppType>
-inline CompareFN get_comparator(bool null_type) {
-    if (null_type) {
-        return &compare_row_with_null<ColumnType, CppType>;
-    } else {
-        return &compare_row<ColumnType, CppType>;
-    }
-}
 
 ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
                                  uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
@@ -120,11 +42,6 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
 
     _column_aggregator.reserve(_num_fields);
 
-    // comparator
-    for (int i = 0; i < _key_fields; ++i) {
-        _comparator.emplace_back(_choose_comparator(_schema->field(i)));
-    }
-
     // column aggregator
     for (int i = 0; i < _key_fields; ++i) {
         _column_aggregator.emplace_back(ColumnAggregatorFactory::create_key_column_aggregator(_schema->field(i)));
@@ -146,61 +63,6 @@ ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, ui
 ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
-
-CompareFN ChunkAggregator::_choose_comparator(const FieldPtr& field) {
-    switch (field->type()->type()) {
-    case OLAP_FIELD_TYPE_TINYINT:
-        return get_comparator<Int8Column, int8_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return get_comparator<Int16Column, int16_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_INT:
-        return get_comparator<Int32Column, int32_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_BIGINT:
-        return get_comparator<Int64Column, int64_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return get_comparator<Int128Column, int128_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_BOOL:
-        return get_comparator<BooleanColumn, uint8_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return get_comparator<BinaryColumn, Slice>(field->is_nullable());
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return get_comparator<DecimalColumn, DecimalV2Value>(field->is_nullable());
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return get_comparator<DateColumn, DateValue>(field->is_nullable());
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return get_comparator<TimestampColumn, TimestampValue>(field->is_nullable());
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return get_comparator<Decimal32Column, int32_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return get_comparator<Decimal64Column, int64_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return get_comparator<Decimal128Column, int128_t>(field->is_nullable());
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_FLOAT:
-    case OLAP_FIELD_TYPE_DOUBLE:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_DATE:
-    case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_DECIMAL:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_JSON:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-        CHECK(false) << "unhandled key column type: " << field->type()->type();
-        return nullptr;
-    }
-    return nullptr;
-}
 
 bool ChunkAggregator::_row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const {
     for (uint16_t i = 0; i < _key_fields; i++) {
@@ -231,7 +93,8 @@ void ChunkAggregator::update_source(ChunkPtr& chunk, std::vector<RowSourceMask>*
         // update _is_eq by key comparison
         size_t factor = chunk->num_rows() * _factor;
         for (int i = _key_fields - 1; i >= 0; --i) {
-            _comparator[i](chunk->get_column_by_index(i).get(), _is_eq.data());
+            ColumnPtr column = chunk->get_column_by_index(i);
+            build_tie_for_column(column, &_is_eq);
 
             if (_factor > 0 && SIMD::count_nonzero(_is_eq) < factor) {
                 _do_aggregate = false;

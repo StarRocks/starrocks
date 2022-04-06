@@ -165,7 +165,7 @@ private:
         // the last item of |_read_schema| and |_dict_decode_schema| is a row id field.
         bool _late_materialize{false};
 
-        // not all dict encdoe
+        // not all dict encode
         bool _has_force_dict_encode{false};
     };
 
@@ -827,7 +827,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
 
     // evaluate brachless
     if (!_branchless_preds.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
+        SCOPED_RAW_TIMER(&_opts.stats->branchless_cond_evaluate_ns);
 
         uint16_t selected_size = 0;
         if (!_vectorized_preds.empty()) {
@@ -879,6 +879,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
 uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
     size_t chunk_size = chunk->num_rows();
     if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
+        SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
         const auto* pred = _expr_ctx_preds[0];
         Column* c = chunk->get_column_by_id(pred->column_id()).get();
         pred->evaluate(c, _selection.data(), 0, chunk_size);
@@ -1377,7 +1378,7 @@ void SegmentIterator::close() {
     }
 }
 
-// put the field that has predicate on it ahead of those without one, for handle late
+// put the field that has predicated on it ahead of those without one, for handle late
 // materialization easier.
 inline Schema reorder_schema(const Schema& input, const std::unordered_map<ColumnId, PredicateList>& predicates) {
     const std::vector<FieldPtr>& fields = input.fields();

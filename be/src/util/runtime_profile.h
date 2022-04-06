@@ -28,6 +28,7 @@
 #include <functional>
 #include <iostream>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 
 #include "common/compiler_util.h"
@@ -308,7 +309,7 @@ public:
     // parent_counter_name.
     // If the counter already exists, the existing counter object is returned.
     Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
-    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ""); }
+    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
@@ -333,6 +334,9 @@ public:
 
     // Copy all but the bucket counters from src profile
     void copy_all_counters_from(RuntimeProfile* src_profile);
+
+    // Remove the counter object with 'name', and it will remove all the child counters recursively
+    void remove_counter(const std::string& name);
 
     // Clean all the counters except saved_counter_names
     void remove_counters(const std::set<std::string>& saved_counter_names);
@@ -458,9 +462,13 @@ public:
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+public:
+    // The root counter name for all top level counters.
+    const static std::string ROOT_COUNTER;
+
 private:
     // vector of (profile, indentation flag)
-    typedef std::vector<std::pair<RuntimeProfile*, bool> > ChildVector;
+    typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
 
@@ -490,7 +498,7 @@ private:
 
     // Map from parent counter name to a set of child counter name.
     // All top level counters are the child of "" (root).
-    typedef std::map<std::string, std::set<std::string> > ChildCounterMap;
+    typedef std::map<std::string, std::set<std::string>> ChildCounterMap;
     ChildCounterMap _child_counter_map;
 
     // A set of bucket counters registered in this runtime profile.
@@ -619,6 +627,7 @@ public:
     static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
 
 private:
+    static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
     // The exact semantics of merge depends on TUnit::type
     // TODO(hcf) is the classification right?
@@ -630,7 +639,8 @@ private:
     // average:
     //     CPU_TICKS / TIME_NS / TIME_MS / TIME_S
     typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
-    static MergedInfo merge_isomorphic_counters(TUnit::type type, std::vector<Counter*>& counters);
+    static MergedInfo merge_isomorphic_counters(TUnit::type type,
+                                                std::vector<std::tuple<Counter*, Counter*, Counter*>>& counters);
 
     static bool is_average_type(TUnit::type type) {
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||

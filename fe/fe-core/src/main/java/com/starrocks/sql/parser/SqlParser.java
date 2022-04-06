@@ -2,18 +2,12 @@
 package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.StatementPlanner;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
@@ -35,19 +29,13 @@ public class SqlParser {
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder()
+                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
                         .visitSingleStatement(sqlStatements.singleStatement(0));
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, sqlMode);
-                if (statement instanceof QueryStmt
-                        || statement instanceof InsertStmt
-                        || statement instanceof CreateTableAsSelectStmt
-                        || statement instanceof CreateViewStmt
-                        || statement instanceof AlterViewStmt
-                        || statement instanceof ShowDbStmt
-                        || statement instanceof ShowTableStmt) {
+                if (StatementPlanner.supportedByNewParser(statement)) {
                     throw parsingException;
                 }
                 statements.add(statement);

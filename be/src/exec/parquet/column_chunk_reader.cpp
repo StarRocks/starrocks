@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "column/column.h"
 #include "env/env.h"
 #include "exec/parquet/encoding.h"
 #include "exec/parquet/encoding_dict.h"
@@ -52,8 +51,8 @@ public:
         return st;
     }
 
-    // Return the size of this file
-    Status size(uint64_t* size) const override { return _file->size(size); }
+    // Return the size of this file.
+    StatusOr<uint64_t> get_size() const override { return _file->get_size(); }
 
     // Return name of this file
     const std::string& filename() const override { return _file->filename(); }

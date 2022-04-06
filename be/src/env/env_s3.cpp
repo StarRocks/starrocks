@@ -8,9 +8,12 @@
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/DeleteObjectsResult.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
-#include <aws/s3/model/ListObjectsRequest.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
 #include <time.h>
@@ -19,13 +22,30 @@
 
 #include "common/config.h"
 #include "common/s3_uri.h"
-#include "gutil/strings/substitute.h"
+#include "gutil/strings/util.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
 #include "util/random.h"
 
 namespace starrocks {
+
+static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
+    switch (error) {
+    case Aws::S3::S3Errors::BUCKET_ALREADY_EXISTS:
+        return Status::AlreadyExist(fmt::format("bucket already exists: {}", msg));
+    case Aws::S3::S3Errors::BUCKET_ALREADY_OWNED_BY_YOU:
+        return Status::AlreadyExist(fmt::format("bucket already owned by you: {}", msg));
+    case Aws::S3::S3Errors::NO_SUCH_BUCKET:
+        return Status::NotFound(fmt::format("no such bucket: {}", msg));
+    case Aws::S3::S3Errors::NO_SUCH_KEY:
+        return Status::NotFound(fmt::format("no such key: {}", msg));
+    case Aws::S3::S3Errors::NO_SUCH_UPLOAD:
+        return Status::NotFound(fmt::format("no such upload: {}", msg));
+    default:
+        return Status::InternalError(fmt::format(msg));
+    }
+}
 
 // Wrap a `starrocks::io::SeekableInputStream` into `starrocks::RandomAccessFile`.
 // this wrapper will be deleted after we merged `starrocks::RandomAccessFile` and
@@ -40,7 +60,7 @@ public:
     StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
     Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
     Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    Status size(uint64_t* size) const override;
+    StatusOr<uint64_t> get_size() const override;
     const std::string& filename() const override { return _object_path; }
 
 private:
@@ -65,16 +85,11 @@ Status RandomAccessFileAdapter::readv_at(uint64_t offset, const Slice* res, size
     return Status::OK();
 }
 
-Status RandomAccessFileAdapter::size(uint64_t* size) const {
+StatusOr<uint64_t> RandomAccessFileAdapter::get_size() const {
     if (_object_size == 0) {
         ASSIGN_OR_RETURN(_object_size, _input->get_size());
     }
-    *size = _object_size;
-    return Status::OK();
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const std::string& path) {
-    return EnvS3::new_random_access_file(RandomAccessFileOptions(), path);
+    return _object_size;
 }
 
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
@@ -211,6 +226,90 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     return S3ClientFactory::instance().new_client(config);
 }
 
+class EnvS3 : public Env {
+public:
+    EnvS3() {}
+    ~EnvS3() override = default;
+
+    EnvS3(const EnvS3&) = delete;
+    void operator=(const EnvS3&) = delete;
+    EnvS3(EnvS3&&) = delete;
+    void operator=(EnvS3&&) = delete;
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override;
+
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
+        return Status::NotSupported("EnvS3::new_sequential_file");
+    }
+
+    // FIXME: `new_writable_file()` will not truncate an already-exist file/object, which does not satisfy
+    // the API requirement.
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
+
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& path) override;
+
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& path) override {
+        return Status::NotSupported("EnvS3::new_random_rw_file");
+    }
+
+    StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
+                                                               const std::string& path) override {
+        return Status::NotSupported("EnvS3::new_random_rw_file");
+    }
+
+    Status path_exists(const std::string& path) override { return Status::NotSupported("EnvS3::path_exists"); }
+
+    Status get_children(const std::string& dir, std::vector<std::string>* file) override {
+        return Status::NotSupported("EnvS3::get_children");
+    }
+
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
+
+    Status delete_file(const std::string& path) override;
+
+    Status create_dir(const std::string& dirname) override;
+
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override;
+
+    Status delete_dir(const std::string& dirname) override;
+
+    Status delete_dir_recursive(const std::string& dirname) override;
+
+    Status sync_dir(const std::string& dirname) override;
+
+    StatusOr<bool> is_directory(const std::string& path) override;
+
+    Status canonicalize(const std::string& path, std::string* file) override {
+        return Status::NotSupported("EnvS3::canonicalize");
+    }
+
+    StatusOr<uint64_t> get_file_size(const std::string& path) override {
+        return Status::NotSupported("EnvS3::get_file_size");
+    }
+
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
+        return Status::NotSupported("EnvS3::get_file_modified_time");
+    }
+
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return Status::NotSupported("EnvS3::rename_file");
+    }
+
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return Status::NotSupported("EnvS3::link_file");
+    }
+
+    StatusOr<SpaceInfo> space(const std::string& path) override;
+};
+
+StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const std::string& path) {
+    return EnvS3::new_random_access_file(RandomAccessFileOptions(), path);
+}
+
 StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                           const std::string& path) {
     S3URI uri;
@@ -226,8 +325,12 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const std::stri
     return new_writable_file(WritableFileOptions(), fname);
 }
 
+// NOTE: Unlike the posix env, we can create files under a non-exist directory.
 StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableFileOptions& opts,
                                                                  const std::string& fname) {
+    if (!fname.empty() && fname.back() == '/') {
+        return Status::NotSupported(fmt::format("S3: cannot create file with name ended with '/': {}", fname));
+    }
     S3URI uri;
     if (!uri.parse(fname)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", fname));
@@ -246,9 +349,267 @@ StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const WritableF
 }
 
 StatusOr<SpaceInfo> EnvS3::space(const std::string& path) {
+    // call `is_directory()` to check if 'path' is an valid path
+    const Status status = EnvS3::is_directory(path).status();
+    if (!status.ok()) {
+        return status;
+    }
     return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
                      .free = std::numeric_limits<int64_t>::max(),
                      .available = std::numeric_limits<int64_t>::max()};
+}
+
+Status EnvS3::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri);
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+#ifdef BE_TEST
+    request.SetMaxKeys(1);
+#endif
+    do {
+        auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetContinuationToken(result.GetNextContinuationToken());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+            std::string_view obj_key(obj.GetKey());
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+            }
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            if (!cb(name)) {
+                return Status::OK();
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
+// Creating directory is actually creating an object of key "dirname/"
+Status EnvS3::create_dir(const std::string& dirname) {
+    auto st = EnvS3::is_directory(dirname).status();
+    if (st.ok()) {
+        return Status::AlreadyExist(dirname);
+    }
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
+    }
+    if (uri.key().empty()) { // root directory '/'
+        return Status::AlreadyExist(fmt::format("root directory {} already exists", dirname));
+    }
+    Aws::S3::Model::PutObjectRequest req;
+    req.SetBucket(uri.bucket());
+    if (uri.key().back() == '/') {
+        req.SetKey(uri.key());
+    } else {
+        req.SetKey(fmt::format("{}/", uri.key()));
+    }
+    req.SetContentLength(0);
+    auto client = new_s3client(uri);
+    auto outcome = client->PutObject(req);
+    if (outcome.IsSuccess()) {
+        return Status::OK();
+    } else {
+        return to_status(outcome.GetError().GetErrorType(), outcome.GetError().GetMessage());
+    }
+}
+
+Status EnvS3::create_dir_if_missing(const std::string& dirname, bool* created) {
+    auto st = create_dir(dirname);
+    if (created != nullptr) {
+        *created = st.ok();
+    }
+    if (st.is_already_exist()) {
+        st = Status::OK();
+    }
+    return st;
+}
+
+StatusOr<bool> EnvS3::is_directory(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+    }
+    if (uri.key().empty()) { // root directory '/'
+        return true;
+    }
+    auto client = new_s3client(uri);
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithMaxKeys(1);
+    auto outcome = client->ListObjectsV2(request);
+    if (!outcome.IsSuccess()) {
+        return Status::IOError(fmt::format("fail to list {}: {}", path, outcome.GetError().GetMessage()));
+    }
+    result = outcome.GetResultWithOwnership();
+    request.SetContinuationToken(result.GetNextContinuationToken());
+    std::string dirname = uri.key() + "/";
+    for (auto&& obj : result.GetContents()) {
+        if (HasPrefixString(obj.GetKey(), dirname)) {
+            return true;
+        }
+        if (obj.GetKey() == uri.key()) {
+            return false;
+        }
+    }
+    return Status::NotFound(path);
+}
+
+Status EnvS3::delete_file(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+    }
+    if (UNLIKELY(!uri.key().empty() && uri.key().back() == '/')) {
+        return Status::InvalidArgument(fmt::format("object key ended with slash: {}", path));
+    }
+    Aws::S3::Model::DeleteObjectRequest request;
+    request.WithBucket(uri.bucket()).WithKey(uri.key());
+    auto client = new_s3client(uri);
+    auto outcome = client->DeleteObject(request);
+    // NOTE: If the object does not exist, outcome.IsSuccess() is true and OK is returned, which
+    // is different from the behavior of posix env.
+    if (outcome.IsSuccess()) {
+        return Status::OK();
+    } else {
+        return to_status(outcome.GetError().GetErrorType(), outcome.GetError().GetMessage());
+    }
+}
+
+Status EnvS3::delete_dir(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported("Cannot delete root directory of S3");
+    }
+    if (!HasSuffixString(uri.key(), "/")) {
+        uri.key().push_back('/');
+    }
+
+    auto client = new_s3client(uri);
+
+    // Check if the directory is empty
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/").WithMaxKeys(2);
+    auto outcome = client->ListObjectsV2(request);
+    if (!outcome.IsSuccess()) {
+        return to_status(outcome.GetError().GetErrorType(), outcome.GetError().GetMessage());
+    }
+    result = outcome.GetResultWithOwnership();
+    if (!result.GetCommonPrefixes().empty()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+    if (result.GetContents().empty()) {
+        return Status::NotFound(fmt::format("directory {} not exist", dirname));
+    }
+    if (result.GetContents().size() > 1 || result.GetContents()[0].GetKey() != uri.key()) {
+        return Status::IOError(fmt::format("directory {} not empty", dirname));
+    }
+
+    // The directory is empty, delete it now
+    Aws::S3::Model::DeleteObjectRequest del_request;
+    del_request.WithBucket(uri.bucket()).WithKey(uri.key());
+    auto del_outcome = client->DeleteObject(del_request);
+    if (del_outcome.IsSuccess()) {
+        return Status::OK();
+    } else {
+        return to_status(del_outcome.GetError().GetErrorType(), del_outcome.GetError().GetMessage());
+    }
+}
+
+Status EnvS3::sync_dir(const std::string& dirname) {
+    // The only thing we need to do is check whether the directory exist or not.
+    ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname));
+    if (is_dir) return Status::OK();
+    return Status::NotFound(fmt::format("{} not directory", dirname));
+}
+
+Status EnvS3::delete_dir_recursive(const std::string& dirname) {
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dirname));
+    }
+    if (uri.key().empty()) {
+        return Status::NotSupported(fmt::format("S3 URI with an empty key: {}", dirname));
+    }
+    if (uri.key().back() != '/') {
+        uri.key().push_back('/');
+    }
+    bool directory_exist = false;
+    auto client = new_s3client(uri);
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key());
+#ifdef BE_TEST
+    request.SetMaxKeys(1);
+#endif
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    do {
+        auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dirname, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        directory_exist |= !result.GetContents().empty();
+        Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+        objects.reserve(result.GetContents().size());
+        for (auto&& obj : result.GetContents()) {
+            objects.emplace_back().SetKey(obj.GetKey());
+        }
+        if (!objects.empty()) {
+            Aws::S3::Model::Delete d;
+            d.WithObjects(std::move(objects)).WithQuiet(true);
+            delete_request.SetDelete(std::move(d));
+            auto delete_outcome = client->DeleteObjects(delete_request);
+            if (!delete_outcome.IsSuccess()) {
+                return Status::IOError(
+                        fmt::format("fail to batch delete {}: {}", dirname, delete_outcome.GetError().GetMessage()));
+            }
+            if (!delete_outcome.GetResult().GetErrors().empty()) {
+                auto&& e = delete_outcome.GetResult().GetErrors()[0];
+                return Status::IOError(fmt::format("fail to delete {}: {}", e.GetKey(), e.GetMessage()));
+            }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dirname);
+}
+
+std::unique_ptr<Env> new_env_s3() {
+    return std::make_unique<EnvS3>();
 }
 
 } // namespace starrocks

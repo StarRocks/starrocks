@@ -2,8 +2,7 @@
 
 #include "exec/pipeline/hdfs_chunk_source.h"
 
-#include "env/env_hdfs.h"
-#include "env/env_s3.h"
+#include "env/env.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
@@ -14,20 +13,19 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-HdfsChunkSource::HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::HdfsScanNode* scan_node)
-        : ChunkSource(std::move(morsel)),
+HdfsChunkSource::HdfsChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                                 vectorized::HdfsScanNode* scan_node)
+        : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
-          _runtime_profile(op->unique_metrics()) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
@@ -94,34 +92,35 @@ Status HdfsChunkSource::_init_conjunct_ctxs(RuntimeState* state) {
 }
 
 void HdfsChunkSource::_init_partition_values() {
-    if (!(_lake_table != nullptr && _has_partition_columns && _has_partition_conjuncts)) return;
+    if (!(_lake_table != nullptr && _has_partition_columns)) return;
 
     auto* partition_desc = _lake_table->get_partition(_scan_range->partition_id);
     const auto& partition_values = partition_desc->partition_key_value_evals();
-    ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
+    _partition_values = partition_values;
 
-    // append partition data
-    for (size_t i = 0; i < _partition_slots.size(); i++) {
-        SlotId slot_id = _partition_slots[i]->id();
-        int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        auto partition_value_col = partition_values[partition_col_idx]->evaluate(nullptr);
-        assert(partition_value_col->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-        ColumnPtr data_column = const_column->data_column();
-        ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
+    if (_has_partition_conjuncts) {
+        ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
+        // append partition data
+        for (size_t i = 0; i < _partition_slots.size(); i++) {
+            SlotId slot_id = _partition_slots[i]->id();
+            int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
+            auto partition_value_col = partition_values[partition_col_idx]->evaluate(nullptr);
+            assert(partition_value_col->is_constant());
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
+            ColumnPtr data_column = const_column->data_column();
+            ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
+            if (data_column->is_nullable()) {
+                chunk_part_column->append_nulls(1);
+            } else {
+                chunk_part_column->append(*data_column, 0, 1);
+            }
         }
-    }
 
-    // eval conjuncts and skip if no rows.
-    ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get());
-    if (partition_chunk->has_rows()) {
-        _partition_values = partition_values;
-    } else {
-        _filter_by_eval_partition_conjuncts = true;
+        // eval conjuncts and skip if no rows.
+        ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get());
+        if (!partition_chunk->has_rows()) {
+            _filter_by_eval_partition_conjuncts = true;
+        }
     }
 }
 
@@ -188,6 +187,8 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
+    _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
+
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
 
@@ -195,8 +196,8 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IoTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IoCounter", TUnit::UNIT);
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
@@ -216,14 +217,9 @@ void HdfsChunkSource::_init_counter(RuntimeState* state) {
 
 Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = *_scan_range;
-    std::string scan_range_path = scan_range.full_path;
-    if (_lake_table != nullptr && _lake_table->has_partition()) {
-        scan_range_path = scan_range.relative_path;
-    }
-
     COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
-    if (_lake_table != nullptr) {
+    if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
 
         SCOPED_TIMER(_profile.open_file_timer);
@@ -233,20 +229,13 @@ Status HdfsChunkSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    Env* env = nullptr;
-    if (is_hdfs_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvHdfs());
-    } else if (is_object_storage_path(native_file_path.c_str())) {
-        env = _pool->add(new EnvS3());
-    } else {
-        env = Env::Default();
-    }
+    ASSIGN_OR_RETURN(auto env, Env::CreateUniqueFromString(native_file_path));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_bloom_filters;
     scanner_params.scan_ranges = {&scan_range};
-    scanner_params.env = env;
+    scanner_params.env = _pool->add(env.release());
     scanner_params.path = native_file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;

@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/hdfs_scan_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -10,18 +11,20 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-
 namespace starrocks::pipeline {
-
-using starrocks::workgroup::WorkGroupManager;
 
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
           _scan_node(scan_node),
+          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {}
+          _chunk_sources(MAX_IO_TASKS_PER_OP) {
+    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
+        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
+    }
+}
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -55,6 +58,7 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
+    _merge_chunk_source_profiles();
     do_close(state);
     Operator::close(state);
 }
@@ -120,8 +124,9 @@ bool ScanOperator::is_finished() const {
     return true;
 }
 
-void ScanOperator::set_finishing(RuntimeState* state) {
+Status ScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
@@ -175,19 +180,23 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [this, state, chunk_source_index](int worker_id) {
             {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-
                 size_t num_read_chunks = 0;
                 _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                         _buffer_size, _is_finished, &num_read_chunks, worker_id, _workgroup);
                 // TODO (by laotan332): More detailed information is needed
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+                _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
             }
 
             _num_running_io_tasks--;
             _is_io_task_running[chunk_source_index] = false;
         });
 
-        offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
+        if (dynamic_cast<HdfsScanOperator*>(this) != nullptr) {
+            offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
+        } else {
+            offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
+        }
     } else {
         PriorityThreadPool::Task task;
         task.work_function = [this, state, chunk_source_index]() {
@@ -236,7 +245,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (maybe_morsel.has_value()) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel));
+        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
@@ -247,6 +256,19 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     }
 
     return Status::OK();
+}
+
+void ScanOperator::_merge_chunk_source_profiles() {
+    std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
+    for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
+        profiles[i] = _chunk_source_profiles[i].get();
+    }
+    RuntimeProfile::merge_isomorphic_profiles(profiles);
+
+    RuntimeProfile* merged_profile = profiles[0];
+
+    _unique_metrics->copy_all_info_strings_from(merged_profile);
+    _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
 // ========== ScanOperatorFactory ==========
@@ -301,5 +323,4 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     }
     return operators;
 }
-
 } // namespace starrocks::pipeline

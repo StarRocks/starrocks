@@ -10,10 +10,8 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "storage/vectorized/base_compaction.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/compaction.h"
-#include "storage/vectorized/cumulative_compaction.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 

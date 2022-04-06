@@ -53,6 +53,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -191,7 +192,7 @@ public class OlapScanNode extends ScanNode {
     }
 
     private List<String> unUsedOutputStringColumns = new ArrayList<>();
-    
+
     public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
@@ -316,7 +317,7 @@ public class OlapScanNode extends ScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         if (isFinalized) {
             return;
         }
@@ -398,6 +399,7 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
+        boolean useStarOS = partition.isUseStarOS();
 
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
@@ -412,17 +414,21 @@ public class OlapScanNode extends ScanNode {
             internalRange.setTablet_id(tabletId);
 
             // random shuffle List && only collect one copy
-            LocalTablet localTablet = (LocalTablet) tablet;
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            localTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+            tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                     visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 LOG.error("no queryable replica found in tablet {}. visible version {}-{}",
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
-                    for (Replica replica : localTablet.getReplicas()) {
-                        LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
+                    if (useStarOS) {
+                        LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((StarOSTablet) tablet).getShardId(),
+                                tablet.getBackendIds());
+                    } else {
+                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
+                        }
                     }
                 }
                 throw new UserException("Failed to get scan range, no queryable replica found in tablet: " + tabletId);

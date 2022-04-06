@@ -43,7 +43,7 @@ public:
 
     virtual ~BaseTablet() = default;
 
-    inline DataDir* data_dir() const;
+    DataDir* data_dir() const;
 
     void set_data_dir(DataDir* data_dir) { _data_dir = data_dir; }
 
@@ -68,25 +68,25 @@ public:
     Status set_tablet_state(TabletState state);
 
     // Property encapsulated in TabletMeta
-    inline const TabletMetaSharedPtr tablet_meta();
+    const TabletMetaSharedPtr tablet_meta();
 
     void set_tablet_meta(const TabletMetaSharedPtr& tablet_meta) { _tablet_meta = tablet_meta; }
 
-    inline TabletUid tablet_uid() const;
-    inline int64_t table_id() const;
+    TabletUid tablet_uid() const;
+    int64_t table_id() const;
     // Returns a string can be used to uniquely identify a tablet.
     // The result string will often be printed to the log.
-    inline const std::string full_name() const;
-    inline int64_t partition_id() const;
-    inline int64_t tablet_id() const;
-    inline int32_t schema_hash() const;
-    inline int16_t shard_id();
-    inline const int64_t creation_time() const;
-    inline void set_creation_time(int64_t creation_time);
-    inline bool equal(int64_t tablet_id, int32_t schema_hash);
+    const std::string full_name() const;
+    int64_t partition_id() const;
+    int64_t tablet_id() const;
+    int32_t schema_hash() const;
+    int16_t shard_id();
+    const int64_t creation_time() const;
+    void set_creation_time(int64_t creation_time);
+    bool equal(int64_t tablet_id, int32_t schema_hash);
 
     // properties encapsulated in TabletSchema
-    inline const TabletSchema& tablet_schema() const;
+    const TabletSchema& tablet_schema() const;
 
 protected:
     virtual void on_shutdown() {}

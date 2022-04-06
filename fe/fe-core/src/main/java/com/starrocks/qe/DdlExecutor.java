@@ -26,7 +26,6 @@ import com.starrocks.analysis.AdminCheckTabletsStmt;
 import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterClusterStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterResourceStmt;
@@ -43,7 +42,6 @@ import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
-import com.starrocks.analysis.CreateClusterStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -58,9 +56,7 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropAnalyzeJobStmt;
-import com.starrocks.analysis.DropClusterStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
@@ -94,14 +90,7 @@ import com.starrocks.load.EtlJobType;
 
 public class DdlExecutor {
     public static void execute(Catalog catalog, DdlStmt ddlStmt) throws Exception {
-        if (ddlStmt instanceof CreateClusterStmt) {
-            CreateClusterStmt stmt = (CreateClusterStmt) ddlStmt;
-            catalog.createCluster(stmt);
-        } else if (ddlStmt instanceof AlterClusterStmt) {
-            catalog.processModifyCluster((AlterClusterStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropClusterStmt) {
-            catalog.dropCluster((DropClusterStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateDbStmt) {
+        if (ddlStmt instanceof CreateDbStmt) {
             catalog.createDb((CreateDbStmt) ddlStmt);
         } else if (ddlStmt instanceof DropDbStmt) {
             catalog.dropDb((DropDbStmt) ddlStmt);
@@ -149,8 +138,6 @@ public class DdlExecutor {
             catalog.getRoutineLoadManager().stopRoutineLoadJob((StopRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterRoutineLoadStmt) {
             catalog.getRoutineLoadManager().alterRoutineLoadJob((AlterRoutineLoadStmt) ddlStmt);
-        } else if (ddlStmt instanceof DeleteStmt) {
-            catalog.getDeleteHandler().process((DeleteStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateUserStmt) {
             CreateUserStmt stmt = (CreateUserStmt) ddlStmt;
             catalog.getAuth().createUser(stmt);

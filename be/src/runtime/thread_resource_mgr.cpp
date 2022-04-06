@@ -94,7 +94,7 @@ ThreadResourceMgr::ResourcePool* ThreadResourceMgr::register_pool() {
 void ThreadResourceMgr::unregister_pool(ResourcePool* pool) {
     DCHECK(pool != nullptr);
     std::unique_lock<std::mutex> l(_lock);
-    // this may be double unregisted after pr #3326 by LaiYingChun, so check if the pool is already unregisted
+    // this may be double unregister after pr #3326 by LaiYingChun, so check if the pool is already unregisted
     if (_pools.find(pool) != _pools.end()) {
         _pools.erase(pool);
         _free_pool_objs.push_back(pool);

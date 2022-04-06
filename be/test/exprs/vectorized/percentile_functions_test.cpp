@@ -49,5 +49,23 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
 }
 
+TEST_F(PercentileFunctionsTest, percentileNullTest) {
+    Columns columns;
+    auto c1 = PercentileColumn::create();
+    auto c1_null = NullableColumn::create(c1, NullColumn::create());
+    c1_null->append_nulls(1);
+    columns.push_back(c1_null);
+
+    auto c2 = DoubleColumn::create();
+    auto c2_null = NullableColumn::create(c2, NullColumn::create());
+    c2_null->append_nulls(1);
+    columns.push_back(c2_null);
+
+    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns);
+    ASSERT_TRUE(column->is_nullable());
+    auto result = ColumnHelper::as_column<NullableColumn>(column);
+    ASSERT_TRUE(result->is_null(0));
+}
+
 } // namespace vectorized
 } // namespace starrocks

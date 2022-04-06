@@ -51,6 +51,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(yearV2);
 
+    DEFINE_VECTORIZED_FN(yearV3);
+
     /**
      * @paramType columns: [TimestampColumn]
      * @return IntColumn
@@ -72,6 +74,8 @@ public:
      * @return Int8Column Code of a month in a year: [1, 12].
      */
     DEFINE_VECTORIZED_FN(monthV2);
+
+    DEFINE_VECTORIZED_FN(monthV3);
 
     /**
      * Get day of week of the timestamp.
@@ -103,6 +107,8 @@ public:
      * @return  Int8Column Day of the week:
      */
     DEFINE_VECTORIZED_FN(dayV2);
+
+    DEFINE_VECTORIZED_FN(dayV3);
 
     /**
      * Get day of the year.

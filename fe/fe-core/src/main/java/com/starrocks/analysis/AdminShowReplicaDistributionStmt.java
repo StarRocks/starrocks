@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -66,6 +67,8 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         }
 
         tblRef.getName().setDb(dbName);
+
+        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblRef.getName().getTbl());
     }
 
     public String getDbName() {

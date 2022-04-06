@@ -9,26 +9,19 @@
 
 #include "column/datum_tuple.h"
 #include "env/env_memory.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/column_iterator.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/segment.h"
-#include "storage/rowset/segment_writer.h"
 #include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
-#include "storage/tablet_schema_helper.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/union_iterator.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -63,7 +56,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -135,7 +128,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(*partial_schema.get());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
 
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
@@ -158,7 +151,7 @@ protected:
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
     static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::RowsetReadOptions rs_opts;
     rs_opts.is_primary_keys = true;
     rs_opts.sorted = false;
@@ -293,7 +286,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = vectorized::ChunkHelper::convert_schema(_tablet->tablet_schema());
+    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, N);
     auto& cols = chunk->columns();
     for (size_t i = 0; i < N; i++) {

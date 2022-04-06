@@ -9,6 +9,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
+import java.util.Set;
 
 /**
  * This class represents the cloud olap tablet related metadata.
@@ -36,8 +38,9 @@ public class StarOSTablet extends Tablet {
         return shardId;
     }
 
+    // singleReplica is not used
     @Override
-    public long getDataSize() {
+    public long getDataSize(boolean singleReplica) {
         return dataSize;
     }
 
@@ -45,7 +48,7 @@ public class StarOSTablet extends Tablet {
         this.dataSize = dataSize;
     }
 
-    // Version is not used
+    // version is not used
     @Override
     public long getRowCount(long version) {
         return rowCount;
@@ -57,6 +60,24 @@ public class StarOSTablet extends Tablet {
 
     public long getPrimaryBackendId() {
         return Catalog.getCurrentCatalog().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+    }
+
+    @Override
+    public Set<Long> getBackendIds() {
+        return Catalog.getCurrentCatalog().getStarOSAgent().getBackendIdsByShard(shardId);
+    }
+
+    // visibleVersion and schemaHash is not used
+    @Override
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash) {
+        for (long backendId : getBackendIds()) {
+            Replica replica = new Replica(-1, backendId, -1, null);
+            allQuerableReplicas.add(replica);
+            if (localBeId != -1 && backendId == localBeId) {
+                localReplicas.add(replica);
+            }
+        }
     }
 
     @Override

@@ -2,11 +2,9 @@
 
 #include "storage/tablet_updates.h"
 
-#include <algorithm>
 #include <ctime>
 #include <memory>
 
-#include "column/datum.h"
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -18,14 +16,12 @@
 #include "runtime/exec_env.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/rowset/vectorized/segment_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/rowset_update_state.h"
 #include "storage/snapshot_meta.h"
@@ -37,7 +33,6 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
-#include "storage/vectorized/compaction.h"
 #include "storage/vectorized/rowset_merger.h"
 #include "storage/vectorized/schema_change.h"
 #include "storage/wrapper_field.h"
@@ -603,7 +598,7 @@ Status TabletUpdates::save_meta() {
     TabletMetaPB metapb;
     // No need to acquire the meta lock?
     _tablet._tablet_meta->to_meta_pb(&metapb);
-    return TabletMetaManager::save(_tablet.data_dir(), _tablet.tablet_id(), _tablet.schema_hash(), metapb);
+    return TabletMetaManager::save(_tablet.data_dir(), metapb);
 }
 
 class ApplyCommitTask : public Runnable {
@@ -693,7 +688,7 @@ void TabletUpdates::_stop_and_wait_apply_done() {
     }
 }
 
-void TabletUpdates::_get_latest_applied_version(EditVersion* latest_applied_version) {
+void TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
     std::lock_guard l(_lock);
     *latest_applied_version = _edit_version_infos[_apply_version_idx]->version;
 }
@@ -743,7 +738,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
-    _get_latest_applied_version(&latest_applied_version);
+    get_latest_applied_version(&latest_applied_version);
     st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
@@ -2505,6 +2500,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             }
         }
     }
+    std::shared_ptr<fs::BlockManager> block_mgr;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         --iter;
@@ -2518,10 +2514,14 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             _set_error(msg);
             return Status::InternalError(msg);
         }
+        // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same block_mgr
+        if (block_mgr == nullptr) {
+            ASSIGN_OR_RETURN(block_mgr, fs::fs_util::block_manager(rowset->rowset_path()));
+        }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs::fs_util::block_manager(),
-                                     seg_path, rssid - iter->first, &rowset->schema());
+        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), block_mgr, seg_path,
+                                     rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -2533,7 +2533,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         std::unique_ptr<fs::ReadableBlock> rblock;
-        RETURN_IF_ERROR(fs::fs_util::block_manager()->open_block((*segment)->file_name(), &rblock));
+        RETURN_IF_ERROR(block_mgr->open_block((*segment)->file_name(), &rblock));
         iter_opts.rblock = rblock.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             ColumnIterator* col_iter_raw_ptr = nullptr;

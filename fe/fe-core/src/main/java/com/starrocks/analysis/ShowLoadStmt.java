@@ -32,7 +32,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.load.LoadJob.JobState;
+import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,9 +106,6 @@ public class ShowLoadStmt extends ShowStmt {
         JobState state = JobState.valueOf(stateValue);
         states.add(state);
 
-        if (state == JobState.FINISHED) {
-            states.add(JobState.QUORUM_FINISHED);
-        }
         return states;
     }
 

@@ -12,6 +12,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/column_predicate.h"
+
 namespace starrocks::vectorized {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,

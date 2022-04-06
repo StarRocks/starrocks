@@ -248,8 +248,9 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+                "  |  group by: [4: expr, DECIMAL128(28,0), true]"));
     }
 
     @Test
@@ -576,7 +577,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: "));
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         1"));
+                "         NULL"));
     }
 
     @Test
@@ -653,4 +654,41 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: [4: expr, BOOLEAN, false]"));
     }
 
+    @Test
+    public void testArrayAggFunctionWithColocateTable() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select L_ORDERKEY,retention([true,true]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=7/7");
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: retention([TRUE,TRUE])\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select v1,retention([true,true]) from t0 group by v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: retention([TRUE,TRUE])");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testLocalAggregateWithMultiStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select distinct L_ORDERKEY from lineitem_partition_colocate where L_ORDERKEY = 59633893 ;";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct L_ORDERKEY) from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        FeConstants.runningUnitTest = false;
+    }
 }

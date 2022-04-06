@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -65,17 +66,18 @@ public class WorkGroupMgr implements Writable {
         lock.writeLock().unlock();
     }
 
-    public void createWorkGroup(CreateWorkGroupStmt stmt) {
+    public void createWorkGroup(CreateWorkGroupStmt stmt) throws DdlException {
         writeLock();
         try {
             WorkGroup wg = stmt.getWorkgroup();
             if (workGroupMap.containsKey(wg.getName())) {
-                // create resource_group if exists <name> ...
-                if (stmt.isIfNotExists()) {
-                    return;
-                    // create resource_group or replace <name> ...
-                } else if (stmt.isReplaceIfExists()) {
+                // create resource_group or replace <name> ...
+                if (stmt.isReplaceIfExists()) {
                     dropWorkGroupUnlocked(wg.getName());
+                } else if (!stmt.isIfNotExists()) {
+                    throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
+                } else {
+                    return;
                 }
             }
             wg.setId(catalog.getCurrentCatalog().getNextId());
@@ -100,12 +102,33 @@ public class WorkGroupMgr implements Writable {
         if (stmt.getName() != null) {
             rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
         } else {
-            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(stmt.isListAll());
+            rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
         }
         return rows;
     }
 
-    public List<List<String>> showAllWorkGroups(Boolean isListAll) {
+    private String getUnqualifiedUser(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String qualifiedUser = ctx.getQualifiedUser();
+        //default_cluster:test
+        String[] userParts = qualifiedUser.split(":");
+        return userParts[userParts.length - 1];
+    }
+
+    private String getUnqualifiedRole(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String roleName = null;
+        String qualifiedRoleName = Catalog.getCurrentCatalog().getAuth()
+                .getRoleName(ctx.getCurrentUserIdentity());
+        if (qualifiedRoleName != null) {
+            //default_cluster:role
+            String[] roleParts = qualifiedRoleName.split(":");
+            roleName = roleParts[roleParts.length - 1];
+        }
+        return roleName;
+    }
+
+    public List<List<String>> showAllWorkGroups(ConnectContext ctx, Boolean isListAll) {
         readLock();
         try {
             List<WorkGroup> workGroupList = new ArrayList<>(workGroupMap.values());
@@ -114,11 +137,10 @@ public class WorkGroupMgr implements Writable {
                 return workGroupList.stream().map(WorkGroup::show)
                         .flatMap(Collection::stream).collect(Collectors.toList());
             } else {
-                String user = ConnectContext.get().getCurrentUserIdentity().getQualifiedUser();
-                String roleName = Catalog.getCurrentCatalog().getAuth()
-                        .getRoleName(ConnectContext.get().getCurrentUserIdentity());
-                String remoteIp = ConnectContext.get().getRemoteIP();
-                return workGroupList.stream().map(w -> w.showVisible(user, roleName, remoteIp))
+                String user = getUnqualifiedUser(ctx);
+                String role = getUnqualifiedRole(ctx);
+                String remoteIp = ctx.getRemoteIP();
+                return workGroupList.stream().map(w -> w.showVisible(user, role, remoteIp))
                         .flatMap(Collection::stream).collect(Collectors.toList());
             }
         } finally {
@@ -350,15 +372,17 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroup(String user, String roleName, WorkGroupClassifier.QueryType queryType, String ip) {
-
+    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType) {
+        String user = getUnqualifiedUser(ctx);
+        String role = getUnqualifiedRole(ctx);
+        String remoteIp = ctx.getRemoteIP();
         List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, roleName, queryType, ip)).collect(Collectors.toList());
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp)).collect(Collectors.toList());
         classifierList.sort(Comparator.comparingDouble(WorkGroupClassifier::weight));
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            return id2WorkGroupMap.get(classifierList.get(0).getWorkgroupId());
+            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
         }
     }
 

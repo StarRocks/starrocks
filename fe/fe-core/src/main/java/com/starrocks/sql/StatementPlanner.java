@@ -1,8 +1,24 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
@@ -45,12 +61,17 @@ public class StatementPlanner {
             } finally {
                 unLock(dbs);
             }
-        } else if (stmt instanceof InsertStmt) {
-            InsertStmt insertStmt = (InsertStmt) stmt;
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
+        } else if (stmt instanceof DmlStmt) {
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
             try {
                 lock(dbs);
-                return new InsertPlanner().plan((InsertStmt) stmt, session);
+                if (stmt instanceof InsertStmt) {
+                    return new InsertPlanner().plan((InsertStmt) stmt, session);
+                } else if (stmt instanceof UpdateStmt) {
+                    return new UpdatePlanner().plan((UpdateStmt) stmt, session);
+                } else if (stmt instanceof DeleteStmt) {
+                    return new DeletePlanner().plan((DeleteStmt) stmt, session);
+                }
             } finally {
                 unLock(dbs);
             }
@@ -123,5 +144,33 @@ public class StatementPlanner {
 
         ResultSink resultSink = (ResultSink) topFragment.getSink();
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
+    }
+
+    public static boolean supportedByNewParser(StatementBase statement) {
+        return statement instanceof AlterViewStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof DmlStmt
+                || statement instanceof QueryStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt;
+    }
+
+    public static boolean supportedByNewAnalyzer(StatementBase statement) {
+        return statement instanceof AlterViewStmt
+                || statement instanceof AlterWorkGroupStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof CreateWorkGroupStmt
+                || statement instanceof DmlStmt
+                || statement instanceof DropWorkGroupStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowColumnStmt
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt
+                || statement instanceof ShowTableStatusStmt
+                || statement instanceof ShowVariablesStmt
+                || statement instanceof ShowWorkGroupStmt;
     }
 }

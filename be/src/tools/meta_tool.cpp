@@ -21,10 +21,8 @@
 
 #include <gflags/gflags.h>
 
-#include <fstream>
 #include <iostream>
 #include <set>
-#include <sstream>
 #include <string>
 
 #include "common/status.h"
@@ -43,7 +41,6 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/utils.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/file_utils.h"
@@ -64,7 +61,6 @@ using starrocks::ColumnReader;
 using starrocks::BinaryPlainPageDecoder;
 using starrocks::PageHandle;
 using starrocks::PagePointer;
-using starrocks::ColumnReaderOptions;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
 
@@ -363,8 +359,7 @@ void batch_delete_meta(const std::string& tablet_file) {
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     const std::string& file_name = input_file->filename();
-    uint64_t file_size;
-    RETURN_IF_ERROR(input_file->size(&file_size));
+    ASSIGN_OR_RETURN(const uint64_t file_size, input_file->get_size());
 
     if (file_size < 12) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", file_name, file_size));

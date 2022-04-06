@@ -76,6 +76,7 @@ public enum OperatorType {
     SCALAR,
     ARRAY,
     ARRAY_ELEMENT,
+    ARRAY_SLICE,
     VARIABLE,
     CONSTANT,
     CALL,
@@ -86,6 +87,7 @@ public enum OperatorType {
     IN,
     IS_NULL,
     LIKE,
+    DICT_MAPPING,
 
     /**
      * PATTERN

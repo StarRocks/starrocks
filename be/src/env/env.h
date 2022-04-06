@@ -38,8 +38,6 @@ struct SpaceInfo {
 
 class Env {
 public:
-    using FactoryFunc = std::function<StatusOr<std::unique_ptr<Env>>(std::string_view uri)>;
-
     // Governs if/how the file is created.
     //
     // enum value                   | file exists       | file does not exist
@@ -53,15 +51,9 @@ public:
     Env() = default;
     virtual ~Env() = default;
 
-    static void Register(std::string_view pattern, FactoryFunc func);
-
     static StatusOr<std::unique_ptr<Env>> CreateUniqueFromString(std::string_view uri);
 
     static StatusOr<std::shared_ptr<Env>> CreateSharedFromString(std::string_view uri);
-
-    static StatusOr<std::unique_ptr<Env>> CreateUniqueFromStringOrDefault(std::string_view uri);
-
-    static StatusOr<std::shared_ptr<Env>> CreateSharedFromStringOrDefault(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own Env
@@ -135,9 +127,10 @@ public:
     //         NotFound if "dir" does not exist, the calling process does not have
     //                  permission to access "dir", or if "dir" is invalid.
     //         IOError if an IO Error was encountered
-    virtual Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) = 0;
+    virtual Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) = 0;
 
     // Delete the named file.
+    // FIXME: If the named file does not exist, OK or NOT_FOUND is returned, depend on the implementation.
     virtual Status delete_file(const std::string& fname) = 0;
 
     // Create the specified directory.
@@ -152,12 +145,16 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
+    // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
+    virtual Status delete_dir_recursive(const std::string& dirname) = 0;
+
     // Synchronize the entry for a specific directory.
     virtual Status sync_dir(const std::string& dirname) = 0;
 
     // Checks if the file is a directory. Returns an error if it doesn't
-    // exist, otherwise writes true or false into 'is_dir' appropriately.
-    virtual Status is_directory(const std::string& path, bool* is_dir) = 0;
+    // exist, otherwise return true or false.
+    virtual StatusOr<bool> is_directory(const std::string& path) = 0;
 
     // Canonicalize 'path' by applying the following conversions:
     // - Converts a relative path into an absolute one using the cwd.
@@ -167,10 +164,10 @@ public:
     // All directory entries in 'path' must exist on the filesystem.
     virtual Status canonicalize(const std::string& path, std::string* result) = 0;
 
-    virtual Status get_file_size(const std::string& fname, uint64_t* size) = 0;
+    virtual StatusOr<uint64_t> get_file_size(const std::string& fname) = 0;
 
-    // Store the last modification time of fname in *file_mtime.
-    virtual Status get_file_modified_time(const std::string& fname, uint64_t* file_mtime) = 0;
+    // Get the last modification time by given 'fname'.
+    virtual StatusOr<uint64_t> get_file_modified_time(const std::string& fname) = 0;
     // Rename file src to target.
     virtual Status rename_file(const std::string& src, const std::string& target) = 0;
 
@@ -265,8 +262,8 @@ public:
     // Safe for concurrent use by multiple threads.
     virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
 
-    // Return the size of this file
-    virtual Status size(uint64_t* size) const = 0;
+    // Return the size of this file.
+    virtual StatusOr<uint64_t> get_size() const = 0;
 
     // Return name of this file
     virtual const std::string& filename() const = 0;
@@ -353,7 +350,7 @@ public:
 
     virtual Status close() = 0;
 
-    virtual Status size(uint64_t* size) const = 0;
+    virtual StatusOr<uint64_t> get_size() const = 0;
     virtual const std::string& filename() const = 0;
 };
 

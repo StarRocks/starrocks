@@ -197,7 +197,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -231,6 +231,15 @@ public class PlanFragmentBuilder {
                 fragment.finalize(null, false);
             }
             Collections.reverse(fragments);
+            // compute local_rf_waiting_set for each PlanNode.
+            // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
+            // runtime filters from PlanNode.
+            boolean shouldClearRuntimeFilters = ConnectContext.get() != null &&
+                    !ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() &&
+                    ConnectContext.get().getSessionVariable().isEnablePipelineEngine();
+            for (PlanFragment fragment : fragments) {
+                fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
+            }
         } catch (UserException e) {
             throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);
         }
@@ -1172,9 +1181,6 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
-                    if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                        aggregationNode.setColocate(true);
-                    }
                 } else {
                     aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                     AggregateInfo aggInfo = AggregateInfo.create(
@@ -1185,6 +1191,10 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
+                }
+                // set aggregate node can use local aggregate
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
                 }
 
                 // set predicate
@@ -1335,7 +1345,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1606,7 +1616,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1618,13 +1628,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1669,7 +1679,15 @@ public class PlanFragmentBuilder {
                 hashJoinNode.setLimit(node.getLimit());
                 hashJoinNode.computeStatistics(optExpr.getStatistics());
 
-                if (ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter()) {
+                // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
+                // also needs be planned, because in pipeline engine, operators need local_rf_waiting_set constructed
+                // from global runtime filters to determine local runtime filters generated by which HashJoinNode
+                // to be waited to be completed. in this scenario, global runtime filters are built just for
+                // obtaining local_rf_waiting_set, so they are cleaned before deliver fragment instances to BEs.
+                boolean shouldBuildGlobalRuntimeFilter = ConnectContext.get() != null &&
+                        (ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() ||
+                                ConnectContext.get().getSessionVariable().isEnablePipelineEngine());
+                if (shouldBuildGlobalRuntimeFilter) {
                     hashJoinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, hashJoinNode.getChild(1),
                             hashJoinNode.getEqJoinConjuncts(), joinOperator);
                 }
@@ -1862,7 +1880,7 @@ public class PlanFragmentBuilder {
             hashJoinNode.setLocalHashBucket(true);
             hashJoinNode.setPartitionExprs(removeFragment.getDataPartition().getPartitionExprs());
             removeFragment.getChild(0)
-                    .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED,
+                    .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));
 
             // Currently, we always generate new fragment for PhysicalDistribution.
@@ -1942,7 +1960,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(

@@ -52,7 +52,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
@@ -87,7 +87,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
             auto chunk = vectorized::ChunkHelper::new_chunk(schema, max_rows_per_segment);
             auto& cols = chunk->columns();
@@ -241,7 +241,7 @@ public:
         RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         std::set<std::string> files;
-        auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+        auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
         CHECK(st.ok()) << st;
         files.erase("meta");
 
@@ -296,7 +296,7 @@ public:
         CHECK(std::filesystem::create_directories(new_tablet_path));
 
         std::set<std::string> files;
-        CHECK(FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default()).ok());
+        CHECK(FileUtils::list_dirs_files(meta_dir, NULL, &files).ok());
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = new_tablet_path + "/" + f;
@@ -349,7 +349,7 @@ static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, cons
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
     static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::RowsetReadOptions rs_opts;
     rs_opts.is_primary_keys = true;
     rs_opts.sorted = false;
@@ -971,7 +971,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1035,7 +1035,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1099,7 +1099,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1150,7 +1150,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1203,7 +1203,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1296,7 +1296,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1356,7 +1356,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
+    auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 

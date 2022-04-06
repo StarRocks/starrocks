@@ -169,6 +169,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
+    public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -188,6 +189,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
+
+    public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
+
+    public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
@@ -335,6 +340,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
     private double cboCTERuseRatio = 1.2;
 
+    @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
+    private boolean enableSQLDigest = false;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -458,6 +466,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
 
+    @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean allowDefaultPartition = false;
+
     @VariableMgr.VarAttr(name = "enable_cbo", flag = VariableMgr.INVISIBLE)
     @Deprecated
     private boolean enableCbo = true;
@@ -482,6 +493,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
+    private boolean enableHiveColumnStats = true;
+
+    public boolean enableHiveColumnStats() {
+        return enableHiveColumnStats;
+    }
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;
@@ -845,6 +863,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableExchangePassThrough;
     }
 
+    public boolean isAllowDefaultPartition() {
+        return allowDefaultPartition;
+    }
+
+    public void setAllowDefaultPartition(boolean allowDefaultPartition) {
+        this.allowDefaultPartition = allowDefaultPartition;
+    }
+
     /**
      * check cbo_cte_reuse && enable_pipeline
      */
@@ -870,6 +896,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCTERuseRatio(double cboCTERuseRatio) {
         this.cboCTERuseRatio = cboCTERuseRatio;
+    }
+
+    public boolean isEnableSQLDigest() {
+        return enableSQLDigest;
     }
 
     // Serialize to thrift object

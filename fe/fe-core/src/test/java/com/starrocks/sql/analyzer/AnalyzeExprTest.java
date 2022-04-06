@@ -6,7 +6,7 @@ import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -67,10 +67,7 @@ public class AnalyzeExprTest {
 
     private void testTranslateArrowExprForValue(String sql, String expected) {
         QueryRelation query = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
-        Assert.assertTrue(query instanceof ValuesRelation);
-        ValuesRelation valueRelation = (ValuesRelation) query;
-        Assert.assertEquals(1, valueRelation.getRows().size());
-        List<Expr> row = valueRelation.getRow(0);
+        List<Expr> row = ((SelectRelation) query).getOutputExpr();
         ArrowExpr arrow = (ArrowExpr) row.get(0);
 
         // translate arrow expression

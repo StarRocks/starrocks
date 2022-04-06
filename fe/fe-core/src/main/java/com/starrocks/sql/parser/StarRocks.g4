@@ -13,26 +13,34 @@ singleStatement
 
 statement
     : queryStatement                                                                    #statementDefault
-    | EXPLAIN (LOGICAL | VERBOSE | COSTS)? queryStatement                               #explain
-    | INSERT INTO qualifiedName (WITH LABEL lable=identifier)? columnAliases?
-    (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
+    | explainDesc queryStatement                                                        #explain
+    | explainDesc? INSERT INTO qualifiedName
+        (WITH LABEL label=identifier)? columnAliases?
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
         AS queryStatement                                                               #createTableAsSelect
+    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
-            ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-            viewComment=string? AS queryStatement                                       #createView
+        ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+        comment? AS queryStatement                               #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
     ;
+
+explainDesc
+    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    ;
+
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
@@ -82,7 +90,7 @@ comment
     ;
 
 columnNameWithComment
-    : identifier string?
+    : identifier comment?
     ;
 
 outfile
@@ -117,7 +125,6 @@ queryTerm
 
 queryPrimary
     : querySpecification                           #queryPrimaryDefault
-    | VALUES rowConstructor (',' rowConstructor)*  #inlineTable
     | subquery                                     #subqueryPrimary
     ;
 
@@ -222,6 +229,7 @@ columnAliases
 
 relationPrimary
     : qualifiedName partitionNames? tabletList? hint?                                     #tableName
+    | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     | '(' relation ')'                                                                    #parenthesizedRelation
@@ -229,6 +237,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList
@@ -291,22 +300,37 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | subquery                                                                            #subqueryExpression
     | EXISTS '(' query ')'                                                                #exists
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | columnReference                                                                     #columnRef
     | primaryExpression ARROW string                                                      #arrowExpression
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | '(' expression ')'                                                                  #parenthesizedExpression
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
+    | CAST '(' expression AS type ')'                                                     #cast
+    ;
+
+functionCall
+    : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' ASTERISK_SYMBOL ')' over?                                         #functionCall
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
+    | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
-    | CAST '(' expression AS type ')'                                                     #cast
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
+    ;
+
+aggregationFunction
+    : AVG '(' DISTINCT? expression ')'
+    | COUNT '(' ASTERISK_SYMBOL? ')'
+    | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
+    | MAX '(' DISTINCT? expression ')'
+    | MIN '(' DISTINCT? expression ')'
+    | SUM '(' DISTINCT? expression ')'
     ;
 
 variable
@@ -340,6 +364,7 @@ specialFunctionExpression
     | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
+    | PASSWORD '(' string ')'
     ;
 
 windowFunction
@@ -454,6 +479,14 @@ identifierList
     : '(' identifier (',' identifier)* ')'
     ;
 
+assignment
+    : identifier EQ expressionOrDefault
+    ;
+
+assignmentList
+    : assignment (',' assignment)*
+    ;
+
 number
     : DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
@@ -461,22 +494,22 @@ number
     ;
 
 nonReserved
-    : ARRAY
+    : ARRAY | AVG
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COSTS
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
     | LAST | LESS | LOCAL | LOGICAL
-    | MINUTE | MONTH
+    | MAX | MIN | MINUTE | MONTH | MERGE
     | NONE | NULLS
     | OFFSET
-    | PRECEDING | PROPERTIES
-    | ROLLUP
-    | SECOND | SESSION | SETS | START
+    | PASSWORD | PRECEDING | PROPERTIES
+    | ROLLUP | ROLLBACK
+    | SECOND | SESSION | SETS | START | SUM
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE

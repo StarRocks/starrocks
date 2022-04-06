@@ -26,6 +26,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(array, context);
     }
 
+    public R visitArraySlice(ArraySliceOperator array, C context) {
+        return visit(array, context);
+    }
+
     public R visitCall(CallOperator call, C context) {
         return visit(call, context);
     }
@@ -67,6 +71,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
     }
 
     public R visitCaseWhenOperator(CaseWhenOperator operator, C context) {
+        return visit(operator, context);
+    }
+
+    public R visitDictMappingOperator(DictMappingOperator operator, C context) {
         return visit(operator, context);
     }
 }

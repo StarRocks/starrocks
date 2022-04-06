@@ -12,8 +12,8 @@ bool AnalyticSourceOperator::is_finished() const {
     return _analytor->is_sink_complete() && _analytor->is_chunk_buffer_empty();
 }
 
-void AnalyticSourceOperator::set_finished(RuntimeState* state) {
-    _analytor->set_finished();
+Status AnalyticSourceOperator::set_finished(RuntimeState* state) {
+    return _analytor->set_finished();
 }
 
 void AnalyticSourceOperator::close(RuntimeState* state) {

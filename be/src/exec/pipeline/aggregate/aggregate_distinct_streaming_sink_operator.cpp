@@ -17,7 +17,7 @@ void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
+Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_aggregator->hash_set_variant().size() == 0) {
@@ -25,6 +25,7 @@ void AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) 
     }
 
     _aggregator->sink_complete();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeState* state) {

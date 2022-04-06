@@ -8,16 +8,23 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -28,6 +35,9 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -58,8 +68,49 @@ public class AnalyzerUtils {
         }
     }
 
+    public static void verifyNoSubQuery(Expr expression, String clause) {
+        List<Subquery> calls = Lists.newArrayList();
+        expression.collectAll((Predicate<Expr>) arg -> arg instanceof Subquery, calls);
+        if (!calls.isEmpty()) {
+            throw new SemanticException("%s clause cannot contain subquery", clause);
+        }
+    }
+
     public static boolean isAggregate(List<FunctionCallExpr> aggregates, List<Expr> groupByExpressions) {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
+    }
+
+
+    public static  Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+        String dbName = fnName.getDb();
+        if (StringUtils.isEmpty(dbName)) {
+            dbName = session.getDatabase();
+        } else {
+            dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+        }
+
+        if (!session.getCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
+                    ErrorType.USER_ERROR);
+        }
+
+        Database db = session.getCatalog().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+
+        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        if (fn == null) {
+            return null;
+        }
+
+        if (!Config.enable_udf) {
+            throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
+                    ErrorType.USER_ERROR);
+        }
+        return fn;
     }
 
     //Get all the db used, the query needs to add locks to them
@@ -89,6 +140,12 @@ public class AnalyzerUtils {
         }
 
         @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            getDB(node.getTableName());
+            return null;
+        }
+
+        @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());
         }
@@ -104,12 +161,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQuery());
+            return visit(node.getQueryStatement());
         }
 
         public Void visitView(ViewRelation node, Void context) {
             getDB(node.getName());
-            return visit(node.getQuery(), context);
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -130,7 +187,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQuery());
+            return visit(node.getCteQueryStatement());
         }
 
         @Override
@@ -181,12 +238,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQuery());
+            return visit(node.getQueryStatement());
         }
 
 
         public Void visitView(ViewRelation node, Void context) {
-            return visit(node.getQuery(), context);
+            return visit(node.getQueryStatement(), context);
         }
 
         @Override
@@ -216,7 +273,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQuery());
+            return visit(node.getCteQueryStatement());
         }
 
         @Override

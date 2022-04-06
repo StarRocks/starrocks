@@ -2,7 +2,13 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -13,6 +19,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.List;
+import java.util.Map;
 
 public class StarOSTabletTest {
     @Mocked
@@ -50,9 +58,42 @@ public class StarOSTabletTest {
         Assert.assertNotNull(newTablet);
         Assert.assertEquals(1L, newTablet.getId());
         Assert.assertEquals(2L, newTablet.getShardId());
-        Assert.assertEquals(3L, newTablet.getDataSize());
+        Assert.assertEquals(3L, newTablet.getDataSize(true));
         Assert.assertEquals(4L, newTablet.getRowCount(0L));
 
         file.delete();
+    }
+
+    @Test
+    public void testGetBackend(@Mocked SystemInfoService systemInfoService) {
+        Map<Long, Backend> idToBackend = Maps.newHashMap();
+        long backendId = 1L;
+        idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
+
+        new Expectations() {
+            {
+                Catalog.getCurrentCatalog();
+                result = catalog;
+                catalog.getStarOSAgent();
+                result = new StarOSAgent();
+                Catalog.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = ImmutableMap.copyOf(idToBackend);
+                systemInfoService.getBackendIdByHost(anyString);
+                result = backendId;
+            }
+        };
+
+        StarOSTablet tablet = new StarOSTablet(1L, 2L);
+        Assert.assertEquals(Sets.newHashSet(backendId), tablet.getBackendIds());
+        Assert.assertEquals(backendId, tablet.getPrimaryBackendId());
+        List<Replica> allQuerableReplicas = Lists.newArrayList();
+        List<Replica> localReplicas = Lists.newArrayList();
+        tablet.getQueryableReplicas(allQuerableReplicas, localReplicas, 0, backendId, 0);
+        Assert.assertEquals(1, allQuerableReplicas.size());
+        Assert.assertEquals(backendId, allQuerableReplicas.get(0).getBackendId());
+        Assert.assertEquals(1, localReplicas.size());
+        Assert.assertEquals(backendId, localReplicas.get(0).getBackendId());
     }
 }

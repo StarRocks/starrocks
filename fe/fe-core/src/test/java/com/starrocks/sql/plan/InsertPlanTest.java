@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -22,7 +24,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void testInsert() throws Exception {
         String explainString = getInsertExecPlan("insert into t0 values(1,2,3)");
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
+                " OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: column_2\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
@@ -35,7 +37,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         explainString = getInsertExecPlan("insert into t0(v1) values(1),(2)");
         Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: expr | 2: expr | 3: expr\n" +
+                " OUTPUT EXPRS:1: column_0 | 2: expr | 3: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
@@ -43,7 +45,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  1:Project\n" +
-                "  |  <slot 1> : 1: expr\n" +
+                "  |  <slot 1> : 1: column_0\n" +
                 "  |  <slot 2> : NULL\n" +
                 "  |  <slot 3> : NULL\n" +
                 "  |  \n" +
@@ -97,20 +99,21 @@ public class InsertPlanTest extends PlanTestBase {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String explainString = getInsertExecPlan("insert into test_insert_mv_sum values(1,2,3)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr"));
+
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: column_2"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_sum(v1) values(1)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr"));
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: expr | 3: expr"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
+                "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : NULL\n" +
                         "  |  <slot 3> : NULL"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_sum(v3,v1) values(3,1)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: expr | 3: expr | 1: expr"));
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: column_1 | 3: expr | 1: column_0"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
-                        "  |  <slot 2> : 2: expr\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                        "  |  <slot 2> : 2: column_1\n" +
                         "  |  <slot 3> : NULL"));
 
         starRocksAssert.dropTable("test_insert_mv_sum");
@@ -136,36 +139,38 @@ public class InsertPlanTest extends PlanTestBase {
         starRocksAssert.withMaterializedView(createMVSQL);
 
         String explainString = getInsertExecPlan("insert into test_insert_mv_count values(1,2,3)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr | 4: if\n"));
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: column_1 | 3: column_2 | 4: if\n"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
-                        "  |  <slot 2> : 2: expr\n" +
-                        "  |  <slot 3> : 3: expr\n" +
-                        "  |  <slot 4> : if(2: expr IS NULL, 0, 1)"));
+                "  |  <slot 1> : 1: column_0\n" +
+                        "  |  <slot 2> : 2: column_1\n" +
+                        "  |  <slot 3> : 3: column_2\n" +
+                        "  |  <slot 4> : if(2: column_1 IS NULL, 0, 1)"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v1) values(1)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr | 4: if"));
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: column_0 | 2: expr | 3: expr | 4: if"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
+                "  |  <slot 1> : 1: column_0\n" +
                         "  |  <slot 2> : NULL\n" +
                         "  |  <slot 3> : NULL\n" +
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: expr | 3: expr | 1: expr | 4: if"));
+
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:2: column_1 | 3: expr | 1: column_0 | 4: if"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
-                        "  |  <slot 2> : 2: expr\n" +
+                "  |  <slot 1> : 1: column_0\n" +
+                        "  |  <slot 2> : 2: column_1\n" +
                         "  |  <slot 3> : NULL\n" +
                         "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count select 1,2,3");
-        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr | 4: if"));
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:6: v1 | 7: v2 | 8: v3 | 5: if"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: expr\n" +
-                        "  |  <slot 2> : 2: expr\n" +
-                        "  |  <slot 3> : 3: expr\n" +
-                        "  |  <slot 4> : if(2: expr IS NULL, 0, 1)"));
+                "1:Project\n" +
+                        "  |  <slot 5> : if(2 IS NULL, 0, 1)\n" +
+                        "  |  <slot 6> : CAST(1 AS BIGINT)\n" +
+                        "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
+                        "  |  <slot 8> : CAST(3 AS BIGINT)"));
 
         starRocksAssert.dropTable("test_insert_mv_count");
     }
@@ -325,7 +330,7 @@ public class InsertPlanTest extends PlanTestBase {
         sql =
                 "insert into duplicate_table_with_default(K1,k2,k3) values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
-        Assert.assertTrue(explainString.contains("<slot 1> : 1: expr"));
+        Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
@@ -346,7 +351,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void testBitmapInsertInto() throws Exception {
         String sql = "INSERT INTO test.bitmap_table (id, id2) VALUES (1001, to_bitmap(1000)), (1001, to_bitmap(2000));";
         String plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: expr | 2: to_bitmap", "OLAP TABLE SINK",
+        containsKeywords(plan, "OUTPUT EXPRS:1: column_0 | 2: column_1", "OLAP TABLE SINK",
                 "constant exprs:", "1001 | to_bitmap('1000')", "1001 | to_bitmap('2000')");
 
         sql = "insert into test.bitmap_table select id, bitmap_union(id2) from test.bitmap_table_2 group by id;";
@@ -374,6 +379,7 @@ public class InsertPlanTest extends PlanTestBase {
 
     @Test
     public void testInsertWithColocate() throws Exception {
+        FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("CREATE TABLE `user_profile` (\n" +
                 "  `distinct_id` bigint(20) NULL ,\n" +
                 "  `user_id` varchar(128) NULL ,\n" +
@@ -547,5 +553,14 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testExplainInsert() throws Exception {
+        String sql = "explain insert into t0 select * from t0";
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        Assert.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 }

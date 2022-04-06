@@ -78,11 +78,7 @@ double WorkGroup::get_cpu_expected_use_ratio() const {
 }
 
 double WorkGroup::get_cpu_actual_use_ratio() const {
-    int64_t sum_cpu_runtime_ns = WorkGroupManager::instance()->sum_cpu_runtime_ns();
-    if (sum_cpu_runtime_ns == 0) {
-        return 0;
-    }
-    return static_cast<double>(real_runtime_ns()) / sum_cpu_runtime_ns;
+    return _cpu_actual_use_ratio;
 }
 
 WorkGroupManager::WorkGroupManager()
@@ -173,7 +169,7 @@ void WorkGroup::estimate_trend_factor_period() {
 
     double increase_factor = _period_scaned_chunk_num / get_cpu_actual_use_ratio();
 
-    _expect_factor = decrease_factor / increase_factor * get_cpu_expected_use_ratio();
+    _expect_factor = decrease_factor / increase_factor * get_cpu_actual_use_ratio();
 
     // diff_factor indicates the difference between the actual percentage of io resources used and the limited cpu percentage
     // If it is negative, it means that there are not enough resources and more resources are needed
@@ -253,7 +249,14 @@ void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
-    auto unique_id = wg->unique_id();
+    auto id = wg->id();
+    auto version_it = _workgroup_versions.find(id);
+    if (version_it == _workgroup_versions.end()) {
+        return;
+    }
+    auto version_id = version_it->second;
+    DCHECK(version_id < wg->version());
+    auto unique_id = WorkGroup::create_unique_id(id, version_id);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();

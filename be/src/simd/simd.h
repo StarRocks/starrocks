@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 #ifdef __SSE2__
 #include <emmintrin.h>
@@ -94,4 +95,29 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
     return count_nonzero(list.data(), list.size());
 }
 
+// NOTE: memchr is much faster than a plain SIMD implementation
+template <class T>
+inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte) {
+    if (start >= list.size()) {
+        return start;
+    }
+    const void* p = std::memchr((const void*)(list.data() + start), byte, list.size() - start);
+    if (p == nullptr) {
+        return list.size();
+    }
+    return (T*)p - list.data();
+}
+
+// Find position for zero byte, return size of list if not found
+inline size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
+    return find_byte<uint8_t>(list, start, 0);
+}
+
+inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
+    return find_byte<uint8_t>(list, start, 1);
+}
+
+inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
+    return find_byte<int8_t>(list, start, 0);
+}
 } // namespace SIMD

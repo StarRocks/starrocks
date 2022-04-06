@@ -840,8 +840,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 60;
 
-
-
     // Configurations for backup and restore
     /**
      * Plugins' path for BACKUP and RESTORE operations. Currently deprecated.
@@ -1169,7 +1167,7 @@ public class Config extends ConfigBase {
     /**
      * If kerberos authentication is enabled, the configuration must be filled.
      * like "starrocks-fe/<HOSTNAME>@STARROCKS.COM".
-     *
+     * <p>
      * Service principal name (SPN) is sent to clients that attempt to authenticate using Kerberos.
      * The SPN must be present in the database managed by the KDC server, and its key file
      * needs to be exported and configured. See authentication_kerberos_service_key_tab for details.
@@ -1180,7 +1178,7 @@ public class Config extends ConfigBase {
     /**
      * If kerberos authentication is enabled, the configuration must be filled.
      * like "$HOME/path/to/your/starrocks-fe.keytab"
-     *
+     * <p>
      * The keytab file for authenticating tickets received from clients.
      * This file must exist and contain a valid key for the SPN or authentication of clients will fail.
      * Export keytab file requires KDC administrator to operate.
@@ -1279,6 +1277,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of agent task for one be. currently only for drop task.
+     */
+    @ConfField(mutable = true)
+    public static int max_agent_tasks_send_per_be = 10000;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField
@@ -1368,7 +1372,7 @@ public class Config extends ConfigBase {
      */
     @Deprecated
     @ConfField(mutable = true)
-    public static boolean vectorized_load_enable = true; 
+    public static boolean vectorized_load_enable = true;
 
     /**
      * Unused config field, leave it here for backward compatibility
@@ -1412,6 +1416,11 @@ public class Config extends ConfigBase {
      * Temporary use, it will be removed later.
      * Set true if using StarOS to manage tablets, such as storage medium is S3.
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean use_staros = false;
+    /**
+     * default bucket number when create OLAP table without buckets info
+     */
+    @ConfField(mutable = true)
+    public static int default_bucket_num = 10;
 }

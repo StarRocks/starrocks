@@ -4,6 +4,13 @@
 
 namespace starrocks::pipeline {
 
+void TableFunctionOperator::close(RuntimeState* state) {
+    if (_table_function != nullptr && _table_function_state != nullptr) {
+        _table_function->close(state, _table_function_state);
+    }
+    Operator::close(state);
+}
+
 bool TableFunctionOperator::has_output() const {
     return _input_chunk != nullptr && (_remain_repeat_times > 0 || _input_chunk_index < _input_chunk->num_rows());
 }
@@ -16,8 +23,9 @@ bool TableFunctionOperator::is_finished() const {
     return _is_finished && !has_output();
 }
 
-void TableFunctionOperator::set_finishing(RuntimeState* state) {
+Status TableFunctionOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    return Status::OK();
 }
 
 Status TableFunctionOperator::prepare(RuntimeState* state) {
@@ -58,7 +66,8 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
         return_types.emplace_back(return_type.type);
     }
 
-    _table_function = vectorized::get_table_function(table_function_name, arg_types, return_types);
+    _table_function =
+            vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
@@ -69,7 +78,8 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     _remain_repeat_times = 0;
 
     _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionTime");
-    return _table_function->prepare(_table_function_state);
+    RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
+    return _table_function->open(state, _table_function_state);
 }
 
 StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {

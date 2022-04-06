@@ -21,7 +21,6 @@
 
 #include "util/thrift_client.h"
 
-#include <boost/assign.hpp>
 #include <ostream>
 #include <string>
 

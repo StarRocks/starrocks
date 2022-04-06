@@ -151,8 +151,8 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression8() throws Exception {
         String sql = "select cast(v1 as decimal128(10,5)) * cast(v2 as decimal64(9,7)) from t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n"));
+        Assert.assertTrue(planFragment.contains("1:Project\n" +
+                        "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
     }
 
     @Test
@@ -306,39 +306,26 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testDateDateTimeFunctionMatch() throws Exception {
         String sql = "select if(3, date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         if(CAST(3 AS BOOLEAN), '2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+        starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), '2021-01-12 00:00:00', " +
+                "str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
 
         sql = "select nullif(date('2021-01-12'), date('2021-01-11'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         nullif('2021-01-12', '2021-01-11')");
+        starRocksAssert.query(sql).explainContains("nullif('2021-01-12', '2021-01-11')");
 
         sql = "select nullif(date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+        starRocksAssert.query(sql).explainContains("nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
 
         sql = "select if(3, 4, 5);";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         if(CAST(3 AS BOOLEAN), 4, 5)");
+        starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), 4, 5)");
 
         sql = "select ifnull(date('2021-01-12'), 123);";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         ifnull(CAST('2021-01-12' AS INT), 123)");
+        starRocksAssert.query(sql).explainContains("ifnull(CAST('2021-01-12' AS INT), 123)");
 
         sql = "select ifnull(date('2021-01-12'), 'kks');";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         '2021-01-12'");
+        starRocksAssert.query(sql).explainContains("'2021-01-12'");
 
         sql = "select ifnull(1234, 'kks');";
-        starRocksAssert.query(sql).explainContains("  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         '1234'");
+        starRocksAssert.query(sql).explainContains("'1234'");
     }
 
     @Test
@@ -522,8 +509,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testLargeIntMod() throws Exception {
         String sql = "select -123 % 100000000000000000000000000000000000";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("     constant exprs: \n" +
-                "         -123 % 100000000000000000000000000000000000"));
+        Assert.assertTrue(plan.contains("-123 % 100000000000000000000000000000000000"));
     }
 
     @Test
@@ -620,7 +606,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select k5 from bigtable where k5 * 2 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(5: k5 AS DECIMAL64(18,3)) * 2 <= 3"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: 5: k5 * 2 <= 3"));
 
         sql = "select k5 from bigtable where 2 / k5 <= 3";
         planFragment = getFragmentPlan(sql);
@@ -725,7 +711,7 @@ public class ExpressionTest extends PlanTestBase {
         // test 1: case when then
         // 1.1 multi when in on `case when` and can be converted to constants
         String sql11 = "select case when false then 2 when true then 3 else 0 end as col11;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql11), "constant exprs: \n         3"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql11), "|  <slot 2> : 3"));
 
         // 1.2 multi `when expr` in on `case when` ,`when expr` can not be converted to constants
         String sql121 =
@@ -741,20 +727,20 @@ public class ExpressionTest extends PlanTestBase {
 
         // 1.2.3 test return `then expr` in the middle
         String sql124 = "select case when false then 1 when true then 2 when false then 3 else 'other' end as col124";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql124), "constant exprs: \n         '2'"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql124), "'2'"));
 
         // 1.3 test return null
         String sql3 = "select case when false then 2 end as col3";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql3), "constant exprs: \n         NULL"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql3), "NULL"));
 
         // 1.3.1 test return else expr
         String sql131 = "select case when false then 2 when false then 3 else 4 end as col131";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql131), "constant exprs: \n         4"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql131), "4"));
 
         // 1.4 nest `case when` and can be converted to constants
         String sql14 =
                 "select case when (case when true then true else false end) then 2 when false then 3 else 0 end as col";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql14), "constant exprs: \n         2"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql14), "2"));
 
         // 1.5 nest `case when` and can not be converted to constants
         String sql15 =
@@ -764,7 +750,7 @@ public class ExpressionTest extends PlanTestBase {
 
         // 1.6 test when expr is null
         String sql16 = "select case when null then 1 else 2 end as col16;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql16), "constant exprs: \n         2"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql16), "2"));
 
         // 1.7 test when true in first return directly
         String sql17 = "select case when true then 1 when substr(k7,2,1) then 3 else 2 end as col16 from test.baseall;";
@@ -784,21 +770,21 @@ public class ExpressionTest extends PlanTestBase {
         // test 2: case xxx when then
         // 2.1 test equal
         String sql2 = "select case 1 when 1 then 'a' when 2 then 'b' else 'other' end as col2;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql2), "constant exprs: \n         'a'"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql2), "'a'"));
 
         // FIXME(yan): following cases are correct, we have to fix for them.
         // 2.1.2 test not equal
         String sql212 = "select case 'a' when 1 then 'a' when 'a' then 'b' else 'other' end as col212;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql212), "constant exprs: \n         'b'"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql212), "'b'"));
 
         // 2.2 test return null
         String sql22 = "select case 'a' when 1 then 'a' when 'b' then 'b' end as col22;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql22), "constant exprs: \n         NULL"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql22), "NULL"));
 
         // 2.2.2 test return else
         String sql222 = "select case 1 when 2 then 'a' when 3 then 'b' else 'other' end as col222;";
         Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql222), "constant exprs: \n         'other'"));
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql222), "'other'"));
 
         // 2.3 test can not convert to constant,middle when expr is not constant
         String sql23 =
@@ -821,12 +807,12 @@ public class ExpressionTest extends PlanTestBase {
         // 2.4 when expr has true but not equals case expr
         String sql24 = "select case 10 when true then 'a' when 2 then 'b' else 'other' end as col2;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql24),
-                "constant exprs: \n         'other'"));
+                "'other'"));
 
         // 2.5 when expr has true but equals case expr
         String sql25 = "select case 1 when true then 'a' when 2 then 'b' else 'other' end as col2;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql25),
-                "constant exprs: \n         'a'"));
+                "'a'"));
 
         // 2.6 when expr equals case expr in middle
         String sql26 =
@@ -842,30 +828,30 @@ public class ExpressionTest extends PlanTestBase {
 
         // 3.1 test float,float in case expr
         String sql31 = "select case cast(100 as float) when 1 then 'a' when 2 then 'b' else 'other' end as col31;";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql31), "constant exprs: \n         'other'"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql31), "'other'"));
 
         // 4.1 test null in case expr return else
         String sql41 = "select case null when 1 then 'a' when 2 then 'b' else 'other' end as col41";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql41), "constant exprs: \n         'other'"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql41), "'other'"));
 
         // 4.1.2 test null in case expr return null
         String sql412 = "select case null when 1 then 'a' when 2 then 'b' end as col41";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql412), "constant exprs: \n         NULL"));
+        Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql412), "NULL"));
 
         // 4.2.1 test null in when expr
         String sql421 = "select case 'a' when null then 'a' else 'other' end as col421";
         Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql421), "constant exprs: \n         'other'"));
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql421), "'other'"));
 
         // 4.2.2 test null/false in when expr
         String sql422 = "select case 'a' when null then 'a' when false then 'b' else 'other' end as col421";
         Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql422), "constant exprs: \n         'other'"));
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql422), "'other'"));
 
         // 4.2.3 test null false in when expr return null
         String sql423 = "select case 'a' when null then 'a' when false then 'b' end as col421";
         Assert.assertTrue(
-                StringUtils.containsIgnoreCase(getFragmentPlan(sql423), "constant exprs: \n         NULL"));
+                StringUtils.containsIgnoreCase(getFragmentPlan(sql423), "NULL"));
     }
 
     @Test

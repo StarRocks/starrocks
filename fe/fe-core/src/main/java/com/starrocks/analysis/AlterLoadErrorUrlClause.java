@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -34,6 +33,7 @@ import java.util.Map;
 // FORMAT:
 //   ALTER SYSTEM SET LOAD ERRORS HUB properties("type" = "xxx");
 
+@Deprecated
 public class AlterLoadErrorUrlClause extends AlterClause {
     private static final Logger LOG = LogManager.getLogger(AlterLoadErrorUrlClause.class);
 
@@ -52,18 +52,7 @@ public class AlterLoadErrorUrlClause extends AlterClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (properties == null || properties.isEmpty()) {
-            throw new AnalysisException("Load errors hub's properties are missing");
-        }
-
-        String type = properties.get("type");
-        if (Strings.isNullOrEmpty(type)) {
-            throw new AnalysisException("Load errors hub's type is missing");
-        }
-
-        if (!type.equalsIgnoreCase("MYSQL") && !type.equalsIgnoreCase("BROKER")) {
-            throw new AnalysisException("Load errors hub's type should be MYSQL or BROKER");
-        }
+        throw new AnalysisException("Don't support Load errors hub");
     }
 
     @Override

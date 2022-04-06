@@ -4,7 +4,6 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,6 +35,23 @@ public class JsonTypeTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH (v_id) " +
                 "properties(\"replication_num\"=\"1\") ;"
         );
+    }
+
+    @Test
+    public void testJoin() {
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 using(v_json)"));
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json = t2.v_json"));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json > t2.v_json"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_id = t2.v_id"));
     }
 
     /**
@@ -130,7 +146,7 @@ public class JsonTypeTest extends PlanTestBase {
             ExceptionChecker.expectThrowsWithMsg(
                     SemanticException.class,
                     String.format(
-                            "Invalid type cast from json to %s in sql ``default_cluster:test`.`tjson_test`.`v_json``",
+                            "Invalid type cast from json to %s in sql `v_json`",
                             notAllowType),
                     () -> getFragmentPlan(columnCastSql)
             );
@@ -153,7 +169,7 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
-        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
+        assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");
@@ -171,11 +187,4 @@ public class JsonTypeTest extends PlanTestBase {
                 "select json_array(v_smallint, v_tinyint, v_int, v_boolean, v_double, v_varchar) from tjson_test",
                 "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
     }
-
-    private void assertPlanContains(String sql, String expected) throws Exception {
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue("expected is: " + expected + " but plan is \n" + plan,
-                StringUtils.containsIgnoreCase(plan.toLowerCase(), expected));
-    }
-
 }

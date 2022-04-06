@@ -16,6 +16,7 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
+
 namespace starrocks::vectorized {
 
 using AggDataPtr = uint8_t*;

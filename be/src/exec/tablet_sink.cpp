@@ -32,16 +32,13 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "service/brpc.h"
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
 #include "util/defer_op.h"
-#include "util/monotime.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
 
@@ -68,7 +65,7 @@ NodeChannel::~NodeChannel() {
         _open_closure = nullptr;
     }
 
-    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+    for (size_t i = 0; i < _add_batch_closures.size(); i++) {
         if (_add_batch_closures[i] != nullptr) {
             if (_add_batch_closures[i]->unref()) {
                 delete _add_batch_closures[i];
@@ -113,10 +110,17 @@ Status NodeChannel::init(RuntimeState* state) {
 
     if (state->query_options().__isset.load_dop) {
         _max_parallel_request_size = state->query_options().load_dop;
-        if (_max_parallel_request_size > 16 || _max_parallel_request_size < 1) {
-            _err_st = Status::InternalError(fmt::format("load_parallel_request_size should between [1-16]"));
+        if (_max_parallel_request_size > config::max_load_dop || _max_parallel_request_size < 1) {
+            _err_st = Status::InternalError(fmt::format("load_dop should between [1-%ld]", config::max_load_dop));
             return _err_st;
         }
+    }
+
+    // init add_chunk request closure
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
+        closure->ref();
+        _add_batch_closures.emplace_back(closure);
     }
 
     // for get global_dict
@@ -192,13 +196,6 @@ Status NodeChannel::open_wait() {
         _cancelled = true;
         _err_st = status;
         return _err_st;
-    }
-
-    // add batch closure
-    for (size_t i = 0; i < _max_parallel_request_size; i++) {
-        auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
-        closure->ref();
-        _add_batch_closures.emplace_back(closure);
     }
 
     return status;
@@ -651,16 +648,16 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
     _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
     _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _convert_batch_timer = ADD_TIMER(_profile, "ConvertBatchTime");
+    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
     _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _serialize_batch_timer = ADD_TIMER(_profile, "SerializeBatchTime");
+    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
     _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
     _compress_timer = ADD_TIMER(_profile, "CompressTime");
     _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
-    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTimer");
-    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTimer");
+    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTime");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
 
     _load_mem_limit = state->get_load_mem_limit();
 
@@ -850,6 +847,9 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
                                   false /* eos */);
 
         if (!st.ok()) {
+            LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
+                         << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
+                         << ", errmsg=" << st.get_error_msg();
             channel->mark_as_failed(node);
             err_st = st;
         }
@@ -910,9 +910,9 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
         COUNTER_SET(_send_data_timer, _send_data_ns);
-        COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
+        COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
-        COUNTER_SET(_serialize_batch_timer, serialize_batch_ns);
+        COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total =
                 _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
@@ -933,7 +933,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
         COUNTER_SET(_send_data_timer, _send_data_ns);
-        COUNTER_SET(_convert_batch_timer, _convert_batch_ns);
+        COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
 
         for (auto& channel : _channels) {

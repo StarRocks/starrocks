@@ -235,10 +235,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return type;
     }
 
-    public Priority getOrigPriority() {
-        return origPriority;
-    }
-
     public void setOrigPriority(Priority origPriority) {
         this.origPriority = origPriority;
         // reset dynamic priority along with the origin priority being set.
@@ -246,10 +242,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.failedSchedCounter = 0;
         this.lastSchedTime = 0;
         this.lastAdjustPrioTime = 0;
-    }
-
-    public Priority getDynamicPriority() {
-        return dynamicPriority;
     }
 
     public void increaseFailedSchedCounter() {
@@ -262,10 +254,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public void increaseFailedRunningCounter() {
         ++failedRunningCounter;
-    }
-
-    public int getFailedRunningCounter() {
-        return failedRunningCounter;
     }
 
     public void setLastSchedTime(long lastSchedTime) {
@@ -340,7 +328,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return createTime;
     }
 
-    public long getCommittedVersion() {
+    public long getVisibleVersion() {
         return visibleVersion;
     }
 
@@ -370,10 +358,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public void setErrMsg(String errMsg) {
         this.errMsg = errMsg;
-    }
-
-    public CloneTask getCloneTask() {
-        return cloneTask;
     }
 
     public long getCopySize() {
@@ -666,9 +650,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 db.writeLock();
                 try {
                     List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(r -> {
-                        cloneReplicas.add(r);
-                    });
+                    tablet.getReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                            cloneReplicas::add);
 
                     for (Replica cloneReplica : cloneReplicas) {
                         tablet.deleteReplica(cloneReplica);
@@ -941,7 +924,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // We should discard the clone replica with stale version.
         TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
         if (reportedTablet.getVersion() < visibleVersion) {
-            String msg = String.format("the clone replica's version is stale. %d-%d, task visible version: %d",
+            String msg = String.format("the clone replica's version is stale. %d, task visible version: %d",
                     reportedTablet.getVersion(),
                     visibleVersion);
             throw new SchedException(Status.RUNNING_FAILED, msg);
@@ -1107,13 +1090,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         } else if (dynamicPriority.ordinal() > o.dynamicPriority.ordinal()) {
             return -1;
         } else {
-            if (lastVisitedTime < o.lastVisitedTime) {
-                return -1;
-            } else if (lastVisitedTime > o.lastVisitedTime) {
-                return 1;
-            } else {
-                return 0;
-            }
+            return Long.compare(lastVisitedTime, o.lastVisitedTime);
         }
     }
 

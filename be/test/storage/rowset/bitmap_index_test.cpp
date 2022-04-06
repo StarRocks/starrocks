@@ -32,7 +32,6 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -45,20 +44,16 @@ public:
 protected:
     void SetUp() override {
         StoragePageCache::create_global_cache(&_tracker, 1000000000);
-        _env = new EnvMemory();
-        _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
+        _env = std::make_shared<EnvMemory>();
+        _block_mgr = std::make_shared<fs::FileBlockManager>(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kTestDir).ok());
     }
-    void TearDown() override {
-        StoragePageCache::release_global_cache();
-        delete _block_mgr;
-        delete _env;
-    }
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 
     void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
         *reader = new BitmapIndexReader();
-        auto st = (*reader)->load(_block_mgr, file_name, &meta.bitmap_index(), true, false);
+        auto st = (*reader)->load(_block_mgr.get(), file_name, &meta.bitmap_index(), true, false);
         ASSERT_TRUE(st.ok());
 
         st = (*reader)->new_iterator(iter);
@@ -84,8 +79,8 @@ protected:
         }
     }
 
-    EnvMemory* _env = nullptr;
-    fs::FileBlockManager* _block_mgr = nullptr;
+    std::shared_ptr<EnvMemory> _env = nullptr;
+    std::shared_ptr<fs::FileBlockManager> _block_mgr = nullptr;
     MemTracker _tracker;
     MemPool _pool;
 };

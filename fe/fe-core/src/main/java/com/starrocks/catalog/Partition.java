@@ -299,6 +299,14 @@ public class Partition extends MetaObject implements Writable {
         return dataSize;
     }
 
+    public long getRowCount() {
+        long rowCount = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            rowCount += mIndex.getRowCount();
+        }
+        return rowCount;
+    }
+
     public long getReplicaCount() {
         long replicaCount = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -465,7 +473,7 @@ public class Partition extends MetaObject implements Writable {
 
         return (visibleVersion == partition.visibleVersion)
                 && (baseIndex.equals(partition.baseIndex)
-                && distributionInfo.eqauls(partition.distributionInfo));
+                && distributionInfo.equals(partition.distributionInfo));
     }
 
     @Override

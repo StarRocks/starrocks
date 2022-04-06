@@ -61,7 +61,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> blk_mgr,
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
@@ -163,9 +163,12 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
     return Status::OK();
 }
 
-Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
+Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
-        : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
+        : _block_mgr(std::move(blk_mgr)),
+          _fname(std::move(fname)),
+          _tablet_schema(tablet_schema),
+          _segment_id(segment_id) {}
 
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
@@ -268,11 +271,8 @@ Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB*
             continue;
         }
 
-        ColumnReaderOptions opts;
-        opts.block_mgr = _block_mgr;
-        opts.storage_format_version = footer->version();
-        opts.kept_in_memory = _tablet_schema->is_in_memory();
-        auto res = ColumnReader::create(mem_tracker, opts, footer->mutable_columns(iter->second), _fname);
+        auto res = ColumnReader::create(mem_tracker, _block_mgr, footer->mutable_columns(iter->second), _fname,
+                                        footer->version(), _tablet_schema->is_in_memory());
         if (!res.ok()) {
             return res.status();
         }

@@ -7,7 +7,15 @@
 #include "env/env_memory.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
+#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_writer.h"
+#include "storage/rowset/rowset_writer_context.h"
+#include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
+#include "storage/update_manager.h"
+#include "storage/vectorized/chunk_helper.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
 #include "util/faststring.h"
@@ -99,27 +107,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     Env* env = Env::Default();
     const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
     const std::string kIndexFile = "./ut_dir/persistent_index_test/index.l0.0.0";
-    ASSERT_TRUE(env->create_dir(kPersistentIndexDir).ok());
-
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    std::unique_ptr<fs::WritableBlock> wblock;
-    fs::CreateBlockOptions wblock_opts({kIndexFile});
-    ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
-    wblock->close();
+    bool created;
+    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
 
     using Key = uint64_t;
-    EditVersion version(0, 0);
     PersistentIndexMetaPB index_meta;
-    index_meta.set_key_size(sizeof(Key));
-    index_meta.set_size(0);
-    version.to_pb(index_meta.mutable_version());
-    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
-    version.to_pb(snapshot_meta->mutable_version());
-    PersistentIndex index(kPersistentIndexDir);
-    ASSERT_TRUE(index.create(sizeof(Key), version).ok());
-    ASSERT_TRUE(index.load(index_meta).ok());
-
     // insert
     vector<Key> keys;
     vector<IndexValue> values;
@@ -128,77 +120,86 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
     }
-    ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
-    ASSERT_TRUE(index.insert(100, keys.data(), values.data(), false).ok());
-    ASSERT_TRUE(index.commit(&index_meta).ok());
-    ASSERT_TRUE(index.on_commited().ok());
-
-    {
-        std::vector<IndexValue> old_values(keys.size());
-        ASSERT_TRUE(index.prepare(EditVersion(2, 0)).ok());
-        ASSERT_TRUE(index.upsert(keys.size(), keys.data(), values.data(), old_values.data()).ok());
-        ASSERT_TRUE(index.commit(&index_meta).ok());
-        ASSERT_TRUE(index.on_commited().ok());
-    }
-
     // erase
     vector<Key> erase_keys;
     for (int i = 0; i < N / 2; i++) {
         erase_keys.emplace_back(i);
     }
-    vector<IndexValue> erase_old_values(erase_keys.size());
-    ASSERT_TRUE(index.prepare(EditVersion(3, 0)).ok());
-    ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
-    // update PersistentMetaPB in memory
-    ASSERT_TRUE(index.commit(&index_meta).ok());
-    ASSERT_TRUE(index.on_commited().ok());
-
     // append invalid wal
     std::vector<Key> invalid_keys;
     std::vector<IndexValue> invalid_values;
-    faststring fixed_buf;
     for (int i = 0; i < N / 2; i++) {
         invalid_keys.emplace_back(i);
         invalid_values.emplace_back(i * 2);
     }
 
     {
-        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(invalid_keys.data());
-        for (int i = 0; i < N / 2; i++) {
-            fixed_buf.append(fkeys + i * sizeof(Key), sizeof(Key));
-            put_fixed64_le(&fixed_buf, invalid_values[i]);
-        }
-
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+        ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
         std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions wblock_opts({"./ut_dir/persistent_index_test/index.l0.1.0"});
-        wblock_opts.mode = Env::MUST_EXIST;
+        fs::CreateBlockOptions wblock_opts({kIndexFile});
         ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
-        ASSERT_TRUE(wblock->append(fixed_buf).ok());
         wblock->close();
     }
 
-    // rebuild mutableindex according PersistentIndexMetaPB
-    PersistentIndex new_index(kPersistentIndexDir);
-    ASSERT_TRUE(new_index.create(sizeof(Key), EditVersion(3, 0)).ok());
-    //ASSERT_TRUE(new_index.load(index_meta).ok());
-    Status st = new_index.load(index_meta);
-    if (!st.ok()) {
-        LOG(WARNING) << "load failed, status is " << st.to_string();
-        ASSERT_TRUE(false);
-    }
-    std::vector<IndexValue> get_values(keys.size());
-
-    ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
-    ASSERT_EQ(keys.size(), get_values.size());
-    for (int i = 0; i < N / 2; i++) {
-        ASSERT_EQ(NullIndexValue, get_values[i]);
-    }
-    for (int i = N / 2; i < values.size(); i++) {
-        ASSERT_EQ(values[i], get_values[i]);
-    }
-    // upsert key/value to new_index
     {
+        EditVersion version(0, 0);
+        index_meta.set_key_size(sizeof(Key));
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        PersistentIndex index(kPersistentIndexDir);
+        //ASSERT_TRUE(index.create(sizeof(Key), version).ok());
+
+        ASSERT_TRUE(index.load(index_meta).ok());
+        ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
+        ASSERT_TRUE(index.insert(N, keys.data(), values.data(), false).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+
+        std::vector<IndexValue> old_values(keys.size());
+        ASSERT_TRUE(index.prepare(EditVersion(2, 0)).ok());
+        ASSERT_TRUE(index.upsert(keys.size(), keys.data(), values.data(), old_values.data()).ok());
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+
+        vector<IndexValue> erase_old_values(erase_keys.size());
+        ASSERT_TRUE(index.prepare(EditVersion(3, 0)).ok());
+        ASSERT_TRUE(index.erase(erase_keys.size(), erase_keys.data(), erase_old_values.data()).ok());
+        // update PersistentMetaPB in memory
+        ASSERT_TRUE(index.commit(&index_meta).ok());
+        ASSERT_TRUE(index.on_commited().ok());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < N / 2; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i]);
+        }
+        for (int i = N / 2; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+
+    {
+        // rebuild mutableindex according PersistentIndexMetaPB
+        PersistentIndex new_index(kPersistentIndexDir);
+        //ASSERT_TRUE(new_index.create(sizeof(Key), EditVersion(3, 0)).ok());
+        ASSERT_TRUE(new_index.load(index_meta).ok());
+        std::vector<IndexValue> get_values(keys.size());
+
+        ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+        for (int i = 0; i < N / 2; i++) {
+            ASSERT_EQ(NullIndexValue, get_values[i]);
+        }
+        for (int i = N / 2; i < values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+
+        // upsert key/value to new_index
         vector<IndexValue> old_values(invalid_keys.size());
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0)).ok());
         ASSERT_TRUE(new_index.upsert(invalid_keys.size(), invalid_keys.data(), invalid_values.data(), old_values.data())
@@ -209,7 +210,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     // rebuild mutableindex according to PersistentIndexMetaPB
     {
         PersistentIndex index(kPersistentIndexDir);
-        ASSERT_TRUE(index.create(sizeof(Key), EditVersion(4, 0)).ok());
+        //ASSERT_TRUE(index.create(sizeof(Key), EditVersion(4, 0)).ok());
         ASSERT_TRUE(index.load(index_meta).ok());
         std::vector<IndexValue> get_values(keys.size());
 
@@ -241,7 +242,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
 
     std::unique_ptr<fs::ReadableBlock> rb;
-    auto block_mgr = fs::fs_util::block_manager();
+    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
     ASSERT_TRUE(block_mgr->open_block("./index.l1.1.1", &rb).ok());
     auto st_load = ImmutableIndex::load(std::move(rb));
     if (!st_load.ok()) {
@@ -273,6 +274,179 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
         check_not_exist_keys[i] = N + i;
     }
     ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data()).ok());
+}
+
+TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    TCreateTabletReq request;
+    request.tablet_id = tablet_id;
+    request.__set_version(1);
+    request.__set_version_hash(0);
+    request.tablet_schema.schema_hash = schema_hash;
+    request.tablet_schema.short_key_column_count = 6;
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+    TColumn k1;
+    k1.column_name = "pk";
+    k1.__set_is_key(true);
+    k1.column_type.type = TPrimitiveType::BIGINT;
+    request.tablet_schema.columns.push_back(k1);
+
+    TColumn k2;
+    k2.column_name = "v1";
+    k2.__set_is_key(false);
+    k2.column_type.type = TPrimitiveType::SMALLINT;
+    request.tablet_schema.columns.push_back(k2);
+
+    TColumn k3;
+    k3.column_name = "v2";
+    k3.__set_is_key(false);
+    k3.column_type.type = TPrimitiveType::INT;
+    request.tablet_schema.columns.push_back(k3);
+    auto st = StorageEngine::instance()->create_tablet(request);
+    CHECK(st.ok()) << st.to_string();
+    return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+}
+
+RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                              vectorized::Column* one_delete = nullptr) {
+    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.rowset_id = rowset_id;
+    writer_context.tablet_id = tablet->tablet_id();
+    writer_context.tablet_schema_hash = tablet->schema_hash();
+    writer_context.partition_id = 0;
+    writer_context.rowset_type = BETA_ROWSET;
+    writer_context.rowset_path_prefix = tablet->schema_hash_path();
+    writer_context.rowset_state = COMMITTED;
+    writer_context.tablet_schema = &tablet->tablet_schema();
+    writer_context.version.first = 0;
+    writer_context.version.second = 0;
+    writer_context.segments_overlap = NONOVERLAPPING;
+    std::unique_ptr<RowsetWriter> writer;
+    EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+    auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+    auto& cols = chunk->columns();
+    size_t size = keys.size();
+    for (size_t i = 0; i < size; i++) {
+        cols[0]->append_datum(vectorized::Datum(keys[i]));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % size + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % size + 2)));
+    }
+    if (one_delete == nullptr && !keys.empty()) {
+        CHECK_OK(writer->flush_chunk(*chunk));
+    } else if (one_delete == nullptr) {
+        CHECK_OK(writer->flush());
+    } else if (one_delete != nullptr) {
+        CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+    }
+    return *writer->build();
+}
+
+void build_persistent_index_from_tablet(size_t N) {
+    Env* env = Env::Default();
+    const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
+    bool created;
+    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    TabletSharedPtr tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    std::vector<int64_t> keys(N);
+    for (int64_t i = 0; i < N; ++i) {
+        keys[i] = i;
+    }
+
+    RowsetSharedPtr rowset = create_rowset(tablet, keys);
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    auto version = 2;
+    auto st = tablet->rowset_commit(version, rowset);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    // Ensure that there is at most one thread doing the version apply job.
+    ASSERT_LE(pool->num_threads(), 1);
+    ASSERT_EQ(version, tablet->updates()->max_version());
+    ASSERT_EQ(version, tablet->updates()->version_history_count());
+    // call `get_applied_rowsets` to wait rowset apply finish
+    std::vector<RowsetSharedPtr> rowsets;
+    EditVersion full_edit_version;
+    ASSERT_TRUE(tablet->updates()->get_applied_rowsets(version, &rowsets, &full_edit_version).ok());
+
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    auto& primary_index = index_entry->value();
+    st = primary_index.load(tablet.get());
+    if (!st.ok()) {
+        LOG(WARNING) << "load primary index from tablet failed";
+        ASSERT_TRUE(false);
+    }
+
+    RowsetUpdateState state;
+    st = state.load(tablet.get(), rowset.get());
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to load rowset update state: " << st.to_string();
+        ASSERT_TRUE(false);
+    }
+    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    const std::vector<ColumnUniquePtr>& upserts = state.upserts();
+
+    PersistentIndex persistent_index(kPersistentIndexDir);
+    ASSERT_TRUE(persistent_index.load_from_tablet(tablet.get()).ok());
+
+    // check data in persistent index
+    for (size_t i = 0; i < upserts.size(); ++i) {
+        auto& pks = *upserts[i];
+
+        std::vector<uint64_t> primary_results;
+        std::vector<uint64_t> persistent_results;
+        primary_results.resize(pks.size());
+        persistent_results.resize(pks.size());
+        primary_index.get(pks, &primary_results);
+        persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+        ASSERT_EQ(primary_results.size(), persistent_results.size());
+        for (size_t j = 0; j < primary_results.size(); ++j) {
+            ASSERT_EQ(primary_results[i], persistent_results[i]);
+        }
+        primary_results.clear();
+        persistent_results.clear();
+    }
+
+    {
+        // load data from index file
+        PersistentIndex persistent_index(kPersistentIndexDir);
+        Status st = persistent_index.load_from_tablet(tablet.get());
+        if (!st.ok()) {
+            LOG(WARNING) << "build persistent index failed: " << st.to_string();
+            ASSERT_TRUE(false);
+        }
+        for (size_t i = 0; i < upserts.size(); ++i) {
+            auto& pks = *upserts[i];
+            std::vector<uint64_t> primary_results;
+            std::vector<uint64_t> persistent_results;
+            primary_results.resize(pks.size());
+            persistent_results.resize(pks.size());
+            primary_index.get(pks, &primary_results);
+            persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+            ASSERT_EQ(primary_results.size(), persistent_results.size());
+            for (size_t j = 0; j < primary_results.size(); ++j) {
+                ASSERT_EQ(primary_results[i], persistent_results[i]);
+            }
+            primary_results.clear();
+            persistent_results.clear();
+        }
+    }
+
+    manager->index_cache().release(index_entry);
+    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
+    // dump snapshot
+    build_persistent_index_from_tablet(100000);
+    // write wal
+    build_persistent_index_from_tablet(250000);
+    // flush l1
+    build_persistent_index_from_tablet(1000000);
 }
 
 } // namespace starrocks

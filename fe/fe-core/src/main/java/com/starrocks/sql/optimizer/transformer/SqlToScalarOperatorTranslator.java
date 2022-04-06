@@ -7,6 +7,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -33,6 +34,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -42,6 +44,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -198,6 +201,14 @@ public final class SqlToScalarOperatorTranslator {
             ScalarOperator arrayOperator = visit(node.getChild(0));
             ScalarOperator subscriptOperator = visit(node.getChild(1));
             return new ArrayElementOperator(node.getType(), arrayOperator, subscriptOperator);
+        }
+
+        @Override
+        public ScalarOperator visitArraySliceExpr(ArraySliceExpr node, Void context) {
+            ScalarOperator arrayOperator = visit(node.getChild(0));
+            ScalarOperator lowerBound = visit(node.getChild(1));
+            ScalarOperator upperBound = visit(node.getChild(2));
+            return new ArraySliceOperator(node.getType(), Lists.newArrayList(arrayOperator, lowerBound, upperBound));
         }
 
         @Override
@@ -473,7 +484,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSubquery(Subquery node, Void context) {
-            throw unsupportedException("complex subquery on " + node.toSql());
+            throw unsupportedException("complex subquery on " + AST2SQL.toString(node));
         }
     }
 }

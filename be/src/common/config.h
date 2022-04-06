@@ -175,6 +175,7 @@ CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
 // Number of olap scanner thread pool size.
 CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
+CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
 CONF_Int32(udf_thread_pool_size, "1");
@@ -297,7 +298,7 @@ CONF_mInt32(update_compaction_trace_threshold, "20");
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_mBool(enable_compaction, "true");
-CONF_Bool(enable_new_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "false");
 CONF_mInt32(max_compaction_task_num, "4");
 // < 0 means no limit
 CONF_mInt32(max_cumulative_compaction_task, "-1");
@@ -635,6 +636,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_hdfs_scan_thread_pool_thread_num, "48");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -684,6 +686,8 @@ CONF_Int32(orc_file_cache_max_size, "2097152");
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
 CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
+
+CONF_Int64(max_load_dop, "16");
 
 } // namespace config
 

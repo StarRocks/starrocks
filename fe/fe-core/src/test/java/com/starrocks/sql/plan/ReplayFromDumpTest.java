@@ -384,7 +384,16 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("  26:Project\n" +
-                "  |  <slot 24> : 21: bitmap_union\n" +
-                "  |  <slot 32> : 32: bitmap_union"));
+                "  |  <slot 21> : 18: bitmap_union\n" +
+                "  |  <slot 29> : 29: bitmap_union"));
+    }
+
+    @Test
+    public void testTPCHRandom() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpch_random"), null, TExplainLevel.NORMAL);
+        // check optimizer could extract best plan
+        Assert.assertTrue(replayPair.second.contains("11:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
     }
 }

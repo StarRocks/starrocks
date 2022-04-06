@@ -2,8 +2,6 @@
 
 #include "env/env_broker.h"
 
-#include <brpc/uri.h>
-
 #include <chrono>
 #include <memory>
 #include <string>
@@ -16,7 +14,6 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "util/coding.h"
 
 namespace starrocks {
 
@@ -199,10 +196,7 @@ public:
         return Status::OK();
     }
 
-    Status size(uint64_t* size) const override {
-        *size = _size;
-        return Status::OK();
-    }
+    StatusOr<uint64_t> get_size() const override { return _size; }
 
     const std::string& filename() const override { return _path; }
 
@@ -333,10 +327,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(co
         return to_status(response.opStatus);
     }
 
-    // Get file size
-    uint64_t size;
-    RETURN_IF_ERROR(_get_file_size(path, &size));
-    return std::make_unique<BrokerRandomAccessFile>(_broker_addr, path, response.fd, size);
+    // Get file size.
+    ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
+    return std::make_unique<BrokerRandomAccessFile>(_broker_addr, path, response.fd, file_size);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> EnvBroker::new_writable_file(const std::string& path) {
@@ -417,7 +410,7 @@ Status EnvBroker::get_children(const std::string& dir, std::vector<std::string>*
     return Status::NotSupported("EnvBroker::get_children");
 }
 
-Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) {
+Status EnvBroker::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
     std::vector<std::string> files;
     RETURN_IF_ERROR(get_children(dir, &files));
     for (const auto& f : files) {
@@ -469,29 +462,23 @@ Status EnvBroker::sync_dir(const std::string& dirname) {
     return Status::NotSupported("BrokerEnv::sync_dir");
 }
 
-Status EnvBroker::is_directory(const std::string& path, bool* is_dir) {
+StatusOr<bool> EnvBroker::is_directory(const std::string& path) {
     TBrokerFileStatus stat;
     RETURN_IF_ERROR(_list_file(path, &stat));
-    *is_dir = stat.isDir;
-    return Status::OK();
+    return stat.isDir;
 }
 
 Status EnvBroker::canonicalize(const std::string& path, std::string* file) {
     return Status::NotSupported("BrokerEnv::canonicalize");
 }
 
-Status EnvBroker::_get_file_size(const std::string& path, uint64_t* size) {
+StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
     TBrokerFileStatus stat;
-    Status st = _list_file(path, &stat);
-    *size = stat.size;
-    return st;
+    RETURN_IF_ERROR(_list_file(path, &stat));
+    return stat.size;
 }
 
-Status EnvBroker::get_file_size(const std::string& path, uint64_t* size) {
-    return _get_file_size(path, size);
-}
-
-Status EnvBroker::get_file_modified_time(const std::string& path, uint64_t* file_mtime) {
+StatusOr<uint64_t> EnvBroker::get_file_modified_time(const std::string& path) {
     return Status::NotSupported("BrokerEnv::get_file_modified_time");
 }
 

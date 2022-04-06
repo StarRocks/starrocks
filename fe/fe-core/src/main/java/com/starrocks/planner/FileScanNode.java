@@ -508,8 +508,8 @@ public class FileScanNode extends LoadScanNode {
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
             if (smallestLocations.second + leftBytes > bytesPerInstance &&
-                    (formatType == TFileFormatType.FORMAT_CSV_PLAIN && fileStatus.isSplitable)) {
-                // Now only support split plain text
+                    ((formatType == TFileFormatType.FORMAT_CSV_PLAIN || formatType == TFileFormatType.FORMAT_PARQUET)
+                            && fileStatus.isSplitable)) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -568,7 +568,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     @Override
-    public void finalize(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws UserException {
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 

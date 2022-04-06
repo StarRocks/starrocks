@@ -40,6 +40,7 @@
 #include "common/daemon.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -150,6 +151,9 @@ int main(int argc, char** argv) {
     }
 #endif
 
+    Aws::SDKOptions aws_sdk_options;
+    Aws::InitAPI(aws_sdk_options);
+
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
     if (!olap_res.ok()) {
@@ -219,7 +223,7 @@ int main(int argc, char** argv) {
     exec_env->set_storage_engine(engine);
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
-    // Start all backgroud threads of storage engine.
+    // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
     EXIT_IF_ERROR(engine->start_bg_threads());
 
@@ -277,9 +281,6 @@ int main(int argc, char** argv) {
         LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
-    Aws::SDKOptions aws_sdk_options;
-    Aws::InitAPI(aws_sdk_options);
-
     while (!starrocks::k_starrocks_exit) {
         sleep(10);
     }
@@ -293,6 +294,7 @@ int main(int argc, char** argv) {
     delete heartbeat_thrift_server;
 
     http_service.reset();
+    brpc_service->join();
     brpc_service.reset();
 
     be_server->stop();
@@ -302,7 +304,7 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-
+    starrocks::pipeline::QueryContextManager::instance()->clear();
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

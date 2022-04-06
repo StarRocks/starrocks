@@ -21,8 +21,8 @@ public:
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                     const std::vector<bool>* is_null_first, size_t offset = 0, size_t limit = 0,
-                     size_t size_of_chunk_batch = 1000);
+                     const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset = 0,
+                     size_t limit = 0, size_t size_of_chunk_batch = 1000);
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.
@@ -58,20 +58,19 @@ private:
     void _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number, size_t sorted_size,
                             size_t permutation_size, Permutation& new_permutation);
 
-    static Status _sort_data_by_row_cmp(
-            RuntimeState* state, Permutation& permutation, size_t rows_to_sort, size_t rows_size,
-            const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn);
-
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
     static void _set_permutation_complete(std::pair<Permutation, Permutation>&, size_t size,
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
-    Status _filter_and_sort_data_by_row_cmp(RuntimeState* state, std::pair<Permutation, Permutation>& permutation,
-                                            DataSegments& segments, size_t chunk_size);
+    Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutation,
+                                 DataSegments& segments, size_t chunk_size);
 
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);
+
+    Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                  DataSegments& segments, const size_t chunk_size, size_t number_of_rows_to_sort);
 
     // buffer
 

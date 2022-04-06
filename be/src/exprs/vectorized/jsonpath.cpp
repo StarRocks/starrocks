@@ -17,6 +17,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "util/json.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
@@ -24,6 +25,7 @@ namespace starrocks::vectorized {
 static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)");
 static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)");
 static const re2::RE2 ARRAY_SLICE_SELECTOR(R"(\d+\:\d+)");
+static const std::string JSONPATH_ROOT = "$";
 
 bool ArraySelectorSingle::match(const std::string& input) {
     return RE2::FullMatch(input, ARRAY_SINGLE_SELECTOR);
@@ -158,11 +160,18 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
         auto item_key = path_item.key;
         auto& array_selector = path_item.array_selector;
 
-        // iterate the path key
-        if (!current_value.isObject()) {
-            return noneJsonSlice();
+        vpack::Slice next_item = current_value;
+        if (item_key == JSONPATH_ROOT) {
+            // Reset the iterator to root
+            next_item = root;
+        } else if (!item_key.empty()) {
+            // Iterate to a sub-field
+            if (!current_value.isObject()) {
+                return noneJsonSlice();
+            }
+
+            next_item = current_value.get(item_key);
         }
-        vpack::Slice next_item = current_value.get(item_key);
         if (next_item.isNone()) {
             return noneJsonSlice();
         }
@@ -190,7 +199,9 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
                 vpack::ArrayBuilder ab(builder);
                 array_selector->iterate(next_item, [&](vpack::Slice array_item) {
                     auto sub = extract(array_item, jsonpath, i + 1, builder);
-                    builder->add(sub);
+                    if (!sub.isNone()) {
+                        builder->add(sub);
+                    }
                 });
             }
             return builder->slice();

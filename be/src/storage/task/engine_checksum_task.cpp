@@ -75,7 +75,7 @@ Status EngineChecksumTask::_compute_checksum() {
         // a fixed value, so these two types are ignored in calculating checksum.
         // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
         if (type == OLAP_FIELD_TYPE_FLOAT || type == OLAP_FIELD_TYPE_DOUBLE || type == OLAP_FIELD_TYPE_HLL ||
-            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE) {
+            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE || type == OLAP_FIELD_TYPE_JSON) {
             continue;
         }
         return_columns.push_back(i);
@@ -124,6 +124,10 @@ Status EngineChecksumTask::_compute_checksum() {
         chunk->reset();
         st = reader.get_next(chunk.get());
         bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return Status::InternalError("Process is going to quit. The checksum calculation will stop.");
     }
 
     if (!st.is_end_of_file() && !st.ok()) {

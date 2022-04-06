@@ -192,6 +192,11 @@ public:
         return down_cast<RunTimeColumnType<Type>*>(value.get());
     }
 
+    template <PrimitiveType Type>
+    static inline RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
+        return down_cast<RunTimeColumnType<Type>*>(value);
+    }
+
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself

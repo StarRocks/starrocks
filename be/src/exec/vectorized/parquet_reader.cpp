@@ -3,19 +3,13 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
-#include <column/array_column.h>
-#include <column/column_helper.h>
 #include <gutil/strings/substitute.h>
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "common/logging.h"
 #include "exec/file_reader.h"
-#include "exec/vectorized/arrow_to_starrocks_converter.h"
-#include "runtime/client_cache.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_pool.h"
 
 namespace starrocks::vectorized {
 
@@ -117,9 +111,10 @@ arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes
 }
 
 arrow::Result<int64_t> ParquetChunkFile::GetSize() {
-    int64_t size = 0;
-    _file->size((uint64_t*)&size);
-    return size;
+    const StatusOr<uint64_t> status_or = _file->get_size();
+    return status_or.ok() ? status_or.value()
+                          : arrow::Result<int64_t>(
+                                    arrow::Status(arrow::StatusCode::IOError, status_or.status().get_error_msg()));
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {

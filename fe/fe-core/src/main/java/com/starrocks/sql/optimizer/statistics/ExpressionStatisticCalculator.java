@@ -48,7 +48,11 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
-            return operator.getChild(0).accept(this, context);
+            if (operator.getChildren().size() > 1) {
+                return operator.getChild(0).accept(this, context);
+            } else {
+                return ColumnStatistic.unknown();
+            }
         }
 
         @Override

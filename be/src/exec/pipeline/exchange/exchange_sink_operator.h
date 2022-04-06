@@ -51,9 +51,9 @@ public:
 
     bool pending_finish() const override;
 
-    void set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    void set_cancelled(RuntimeState* state) override;
+    Status set_cancelled(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
@@ -115,18 +115,11 @@ private:
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
 
-    RuntimeProfile::Counter* _serialize_batch_timer = nullptr;
+    RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;
-    RuntimeProfile::Counter* _bytes_sent_counter = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;
-    RuntimeProfile::Counter* _ignore_rows = nullptr;
-
-    RuntimeProfile::Counter* _send_request_timer = nullptr;
-    RuntimeProfile::Counter* _wait_response_timer = nullptr;
-    // Throughput per total time spent in sender
-    RuntimeProfile::Counter* _overall_throughput = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

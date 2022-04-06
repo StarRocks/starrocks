@@ -129,14 +129,20 @@ public class StatisticProcDir implements ProcDirInterface {
                     OlapTable olapTable = (OlapTable) table;
 
                     for (Partition partition : olapTable.getAllPartitions()) {
+                        boolean useStarOS = partition.isUseStarOS();
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
                         for (MaterializedIndex materializedIndex : partition
                                 .getMaterializedIndices(IndexExtState.VISIBLE)) {
                             ++dbIndexNum;
                             for (Tablet tablet : materializedIndex.getTablets()) {
-                                LocalTablet localTablet = (LocalTablet) tablet;
                                 ++dbTabletNum;
+
+                                if (useStarOS) {
+                                    continue;
+                                }
+
+                                LocalTablet localTablet = (LocalTablet) tablet;
                                 dbReplicaNum += localTablet.getReplicas().size();
 
                                 Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(

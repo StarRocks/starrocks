@@ -85,7 +85,7 @@ import java.util.Set;
  * The only difference is that non-streaming will record the load info in LoadManager and return label.
  * User can check the load info by show load stmt.
  */
-public class InsertStmt extends DdlStmt {
+public class InsertStmt extends DmlStmt {
     private static final Logger LOG = LogManager.getLogger(InsertStmt.class);
 
     public static final String SHUFFLE_HINT = "SHUFFLE";
@@ -247,6 +247,11 @@ public class InsertStmt extends DdlStmt {
     @Override
     public boolean isExplain() {
         return queryStatement.isExplain();
+    }
+
+    @Override
+    public ExplainLevel getExplainLevel() {
+        return queryStatement.getExplainLevel();
     }
 
     public boolean isStreaming() {
@@ -867,6 +872,7 @@ public class InsertStmt extends DdlStmt {
     /**
      * Below function is added by new analyzer
      */
+    @Override
     public TableName getTableName() {
         return tblName;
     }

@@ -41,7 +41,7 @@ public:
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override;
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(const char*)>& cb) override;
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 
@@ -51,15 +51,19 @@ public:
 
     Status delete_dir(const std::string& dirname) override;
 
+    Status delete_dir_recursive(const std::string& dirname) override {
+        return Status::NotSupported("EnvBroker::delete_dir_recursive");
+    }
+
     Status sync_dir(const std::string& dirname) override;
 
-    Status is_directory(const std::string& path, bool* is_dir) override;
+    StatusOr<bool> is_directory(const std::string& path) override;
 
     Status canonicalize(const std::string& path, std::string* file) override;
 
-    Status get_file_size(const std::string& path, uint64_t* size) override;
+    StatusOr<uint64_t> get_file_size(const std::string& path) override;
 
-    Status get_file_modified_time(const std::string& path, uint64_t* file_mtime) override;
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override;
 
     Status rename_file(const std::string& src, const std::string& target) override;
 
@@ -70,7 +74,6 @@ public:
 #endif
 
 private:
-    Status _get_file_size(const std::string& params, uint64_t* size);
     Status _path_exists(const std::string& path);
     Status _delete_file(const std::string& path);
     Status _list_file(const std::string& path, TBrokerFileStatus* stat);

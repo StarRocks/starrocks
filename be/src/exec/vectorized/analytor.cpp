@@ -21,8 +21,8 @@
 
 namespace starrocks {
 namespace vectorized {
-Status window_init_jvm_context(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                               starrocks_udf::FunctionContext* context);
+Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
+                               const std::string& symbol, starrocks_udf::FunctionContext* context);
 } // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
@@ -90,6 +90,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _pool = pool;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
+    // add profile attributes
+    if (_tnode.analytic_node.__isset.sql_partition_keys) {
+        _runtime_profile->add_info_string("PartitionKeys", _tnode.analytic_node.sql_partition_keys);
+    }
+    if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
+        _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
+    }
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _mem_pool = std::make_unique<MemPool>();
 
@@ -265,7 +272,7 @@ Status Analytor::open(RuntimeState* state) {
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
-                auto st = vectorized::window_init_jvm_context(fn.id, fn.hdfs_location, fn.checksum,
+                auto st = vectorized::window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum,
                                                               fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
                 RETURN_IF_ERROR(st);
             }

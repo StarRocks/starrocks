@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -17,8 +18,8 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -28,8 +29,6 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -37,7 +36,6 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -47,23 +45,17 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -187,6 +179,16 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitArraySliceExpr(ArraySliceExpr node, Scope scope) {
+            if (!node.getChild(0).getType().isArrayType()) {
+                throw new SemanticException("cannot subscript type" +
+                        node.getChild(0).getType() + " because it is not an array");
+            }
+            node.setType(node.getChild(0).getType());
+            return null;
+        }
+
+        @Override
         public Void visitArrowExpr(ArrowExpr node, Scope scope) {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
@@ -206,9 +208,9 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < node.getChildren().size(); i++) {
                 Type type = node.getChild(i).getType();
                 if (!type.isBoolean() && !type.isNull()) {
-                    throw new SemanticException(
-                            "Operand '%s' part of predicate " + "'%s' should return type 'BOOLEAN' but " +
-                                    "returns type '%s'.", node.toSql(), node.getChild(i).toSql(), type.toSql());
+                    throw new SemanticException("Operand '%s' part of predicate " +
+                            "'%s' should return type 'BOOLEAN' but returns type '%s'.",
+                            AST2SQL.toString(node), AST2SQL.toString(node.getChild(i)), type.toSql());
                 }
             }
 
@@ -445,12 +447,14 @@ public class ExpressionAnalyzer {
 
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
-                        "left operand of " + node.getOp().toString() + " must be of type STRING: " + node.toSql());
+                        "left operand of " + node.getOp().toString() + " must be of type STRING: " +
+                                AST2SQL.toString(node));
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
-                        "right operand of " + node.getOp().toString() + " must be of type STRING: " + node.toSql());
+                        "right operand of " + node.getOp().toString() + " must be of type STRING: " +
+                                AST2SQL.toString(node));
             }
 
             // check pattern
@@ -458,7 +462,7 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + node.toSql() + "'");
+                    throw new SemanticException("Invalid regular expression in '" + AST2SQL.toString(node) + "'");
                 }
             }
 
@@ -471,8 +475,9 @@ public class ExpressionAnalyzer {
             node.setType(Type.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
-                if (expr.getType().isOnlyMetricType()) {
-                    throw new SemanticException("HLL, BITMAP and PERCENTILE type couldn't as Predicate");
+                if (expr.getType().isOnlyMetricType() ||
+                        (expr.getType() instanceof ArrayType && !(node instanceof IsNullPredicate))) {
+                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
                 }
             }
         }
@@ -489,7 +494,7 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + cast.getTargetTypeDef().getType().toSql() + " in sql `" +
-                        cast.getChild(0).toSql().replace("%", "%%") + "`");
+                        AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 
             cast.setType(castType);
@@ -500,8 +505,14 @@ public class ExpressionAnalyzer {
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
+            if (node.isNondeterministicBuiltinFnName()) {
+                ExprId exprId = analyzeState.getNextNondeterministicId();
+                node.setNondeterministicId(exprId);
+            }
+
             Function fn;
             String fnName = node.getFnName().getFunction();
+
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
@@ -513,7 +524,13 @@ public class ExpressionAnalyzer {
                     throw new SemanticException("Time Type can not used in %s function",
                             fnName);
                 }
-            } else if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
+                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+                // Since the priority of decimal version is higher than double version (according functionId),
+                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
+                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
+                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
+                // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
             } else if (FunctionSet.STR_TO_DATE.equalsIgnoreCase(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
@@ -522,7 +539,7 @@ public class ExpressionAnalyzer {
             }
 
             if (fn == null) {
-                fn = getUdfFunction(node.getFnName(), argumentTypes);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
@@ -540,8 +557,7 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).",
-                            fnName,
+                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
                             node.getParams().isStar() ? "*" : Joiner.on(", ")
                                     .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 }
@@ -583,8 +599,8 @@ public class ExpressionAnalyzer {
 
             ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping);
             if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
-                return Expr
-                        .getBuiltinFunction("str2date", argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                return Expr.getBuiltinFunction("str2date", argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
             return fn;
@@ -597,7 +613,7 @@ public class ExpressionAnalyzer {
             fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
-                fn = getUdfFunction(node.getFnName(), argumentTypes);
+                fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
@@ -646,12 +662,12 @@ public class ExpressionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
 
                 fn = newFn;
-            } else if (FunctionSet.TRUNCATE.equalsIgnoreCase(fnName)) {
-                // Decimal version of truncate may change the scale, we need to calculate the scale of the return type
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
+                // Decimal version of truncate/round/round_up_to may change the scale, we need to calculate the scale of the return type
                 // And we need to downgrade to double version if second param is neither int literal nor SlotRef expression
                 List<Type> argTypes = Arrays.stream(fn.getArgs()).map(t -> t.isDecimalV3() ? commonType : t)
                         .collect(Collectors.toList());
-                fn = DecimalV3FunctionAnalyzer.getFnOfTruncate(node, fn, argTypes);
+                fn = DecimalV3FunctionAnalyzer.getFunctionOfRound(node, fn, argTypes);
             }
             return fn;
         }
@@ -747,16 +763,9 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitSubquery(Subquery node, Scope context) {
-            QueryStmt stmt = node.getStatement();
-
-            if (!(stmt instanceof SelectStmt) && node.getQueryRelation() == null) {
-                throw new StarRocksPlannerException("A subquery must contain a single select block",
-                        ErrorType.INTERNAL_ERROR);
-            }
-
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
-            queryAnalyzer.analyze(new QueryStatement(node.getQueryRelation()), context);
-            node.setType(node.getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
+            queryAnalyzer.analyze(node.getQueryStatement(), context);
+            node.setType(node.getQueryStatement().getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
             return null;
         }
 
@@ -820,7 +829,6 @@ public class ExpressionAnalyzer {
             node.setType(Type.VARCHAR);
             return null;
         }
-
     }
 
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
@@ -828,35 +836,4 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyze(expression, state, scope);
     }
 
-    private Function getUdfFunction(FunctionName fnName, Type[] argTypes) {
-        String dbName = fnName.getDb();
-        if (StringUtils.isEmpty(dbName)) {
-            dbName = session.getDatabase();
-        } else {
-            dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
-        }
-
-        if (!session.getCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
-                    ErrorType.USER_ERROR);
-        }
-
-        Database db = session.getCatalog().getDb(dbName);
-        if (db == null) {
-            return null;
-        }
-
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
-        Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        if (fn == null) {
-            return null;
-        }
-
-        if (!Config.enable_udf) {
-            throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
-                    ErrorType.USER_ERROR);
-        }
-        return fn;
-    }
 }

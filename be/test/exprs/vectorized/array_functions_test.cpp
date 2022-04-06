@@ -1037,6 +1037,52 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
     }
 }
 
+TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_return_column_type) {
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, "abc"], NULL): 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), "abc"});
+
+        // const-null column.
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+
+        auto result = ArrayFunctions::array_position(nullptr, {array, target});
+        EXPECT_EQ(2, result->size());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+    }
+    // array_position([NULL], NULL): 1
+    // array_position([NULL, [1,2]], NULL): 1
+    // array_position([NULL, [1,2]], [1,2]): 2
+    // array_position([[1,2], NULL], [1,2]): 1
+    // array_position([[1,2], NULL], NULL): 2
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        array->append_datum(DatumArray{Datum()});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+        array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
+
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(DatumArray{1, 2});
+        target->append_datum(Datum());
+
+        auto result = ColumnHelper::cast_to<TYPE_INT>(ArrayFunctions::array_position(nullptr, {array, target}));
+        EXPECT_EQ(5, result->size());
+        EXPECT_EQ(1, result->get(0).get_int32());
+        EXPECT_EQ(1, result->get(1).get_int32());
+        EXPECT_EQ(2, result->get(2).get_int32());
+        EXPECT_EQ(1, result->get(3).get_int32());
+        EXPECT_EQ(2, result->get(4).get_int32());
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     // array_position(["a", "b"], "c"): 0
@@ -3262,6 +3308,90 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar) {
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
     ASSERT_EQ(Slice("2"), dest_column->get(4).get_array()[1].get_slice());
+}
+
+TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
+    src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
+    src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
+
+    auto offset_column = Int64Column::create();
+    offset_column->append(1);
+    offset_column->append(2);
+    offset_column->append(3);
+    offset_column->append(1);
+    offset_column->append(2);
+
+    ArraySlice<PrimitiveType::TYPE_BIGINT> slice;
+    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+
+    ASSERT_EQ(dest_column->size(), 5);
+    _check_array<int64_t>({(int64_t)5, (int64_t)3, (int64_t)6}, dest_column->get(0).get_array());
+    _check_array<int64_t>({(int64_t)3, (int64_t)7, (int64_t)8}, dest_column->get(1).get_array());
+    _check_array<int64_t>({(int64_t)2, (int64_t)1}, dest_column->get(2).get_array());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
+    ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_int64());
+    ASSERT_EQ(1, dest_column->get(4).get_array()[2].get_int64());
+}
+
+TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
+    src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
+    src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
+
+    auto offset_column = Int64Column::create();
+    offset_column->append(1);
+    offset_column->append(2);
+    offset_column->append(3);
+    offset_column->append(1);
+    offset_column->append(2);
+
+    ArraySlice<PrimitiveType::TYPE_DOUBLE> slice;
+    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+
+    ASSERT_EQ(dest_column->size(), 5);
+    _check_array<double>({(double)5, (double)3, (double)6}, dest_column->get(0).get_array());
+    _check_array<double>({(double)3, (double)7, (double)8}, dest_column->get(1).get_array());
+    _check_array<double>({(double)2, (double)1}, dest_column->get(2).get_array());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
+    ASSERT_EQ(2, dest_column->get(4).get_array()[1].get_double());
+    ASSERT_EQ(1, dest_column->get(4).get_array()[2].get_double());
+}
+
+TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("2"), Slice("3"), Slice("7"), Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
+
+    auto offset_column = Int64Column::create();
+    offset_column->append(1);
+    offset_column->append(2);
+    offset_column->append(3);
+    offset_column->append(1);
+    offset_column->append(2);
+
+    ArraySlice<PrimitiveType::TYPE_VARCHAR> slice;
+    auto dest_column = slice.process(nullptr, {src_column, offset_column});
+
+    ASSERT_EQ(dest_column->size(), 5);
+    _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array());
+    _check_array<Slice>({Slice("3"), Slice("7"), Slice("8")}, dest_column->get(1).get_array());
+    _check_array<Slice>({Slice("2"), Slice("1")}, dest_column->get(2).get_array());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
+    ASSERT_EQ(Slice("2"), dest_column->get(4).get_array()[1].get_slice());
+    ASSERT_EQ(Slice("1"), dest_column->get(4).get_array()[2].get_slice());
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_tinyint) {

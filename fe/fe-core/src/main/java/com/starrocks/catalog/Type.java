@@ -69,9 +69,8 @@ public abstract class Type implements Cloneable {
     public static final ScalarType DATE = new ScalarType(PrimitiveType.DATE);
     public static final ScalarType DATETIME = new ScalarType(PrimitiveType.DATETIME);
     public static final ScalarType TIME = new ScalarType(PrimitiveType.TIME);
-    public static final ScalarType DEFAULT_DECIMALV2 = (ScalarType)
-            ScalarType.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
-                    ScalarType.DEFAULT_SCALE);
+    public static final ScalarType DEFAULT_DECIMALV2 = ScalarType.createDecimalV2Type(ScalarType.DEFAULT_PRECISION,
+            ScalarType.DEFAULT_SCALE);
     public static final ScalarType DEFAULT_DECIMAL32 =
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 3);
     public static final ScalarType DEFAULT_DECIMAL64 =
@@ -647,6 +646,10 @@ public abstract class Type implements Cloneable {
         return !isOnlyMetricType() && !isJsonType();
     }
 
+    public boolean canJoinOn() {
+        return !isOnlyMetricType() && !isJsonType();
+    }
+
     public boolean canGroupBy() {
         // TODO(mofei) support group by for JSON
         return !isOnlyMetricType() && !isJsonType();
@@ -683,8 +686,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String OnlyMetricTypeErrorMsg =
-            "StarRocks hll and bitmap column must use with specific function, and don't support filter, group by and order by, " +
-                    "please run 'help hll' or 'help bitmap' in your mysql client.";
+            "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
@@ -981,14 +983,10 @@ public abstract class Type implements Cloneable {
             }
         } else if (isArrayType()) {
             ArrayType arrayType = (ArrayType) this;
-            if (arrayType.getItemType().exceedsMaxNestingDepth(d + 1)) {
-                return true;
-            }
+            return arrayType.getItemType().exceedsMaxNestingDepth(d + 1);
         } else if (isMapType()) {
             MapType mapType = (MapType) this;
-            if (mapType.getValueType().exceedsMaxNestingDepth(d + 1)) {
-                return true;
-            }
+            return mapType.getValueType().exceedsMaxNestingDepth(d + 1);
         } else {
             Preconditions.checkState(isScalarType());
         }
@@ -1042,12 +1040,12 @@ public abstract class Type implements Cloneable {
                     type = ScalarType.createHllType();
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL) {
                     Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetPrecision());
+                            && scalarType.isSetScale());
                     type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMALV2) {
                     Preconditions.checkState(scalarType.isSetPrecision()
-                            && scalarType.isSetPrecision());
+                            && scalarType.isSetScale());
                     type = ScalarType.createDecimalV2Type(scalarType.getPrecision(),
                             scalarType.getScale());
                 } else if (scalarType.getType() == TPrimitiveType.DECIMAL32 ||

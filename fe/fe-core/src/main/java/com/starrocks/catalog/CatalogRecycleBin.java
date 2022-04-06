@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -39,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,6 +48,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -108,14 +111,14 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         return null;
     }
 
-    public synchronized boolean recycleTable(long dbId, Table table) {
+    public synchronized Table recycleTable(long dbId, Table table) {
         if (idToTableInfo.row(dbId).containsKey(table.getId())) {
             LOG.error("table[{}-{}] already in recycle bin.", table.getId(), table.getName());
-            return false;
+            return null;
         }
 
         // erase table with same name
-        eraseTableWithSameName(dbId, table.getName());
+        Table oldTable = eraseTableWithSameName(dbId, table.getName());
 
         // recycle table
         RecycleTableInfo tableInfo = new RecycleTableInfo(dbId, table);
@@ -123,7 +126,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         idToTableInfo.put(dbId, table.getId(), tableInfo);
         nameToTableInfo.put(dbId, table.getName(), tableInfo);
         LOG.info("recycle table[{}-{}]", table.getId(), table.getName());
-        return true;
+        return oldTable;
     }
 
     public synchronized Table getTable(long dbId, long tableId) {
@@ -261,58 +264,54 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
-    private synchronized void eraseTable(long currentTimeMs) {
+    @VisibleForTesting
+    public synchronized List<RecycleTableInfo> eraseTable(long currentTimeMs) {
+        List<RecycleTableInfo> tableToRemove = Lists.newArrayList();
+        int currentEraseOpCnt = 0;
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            Iterator<Map.Entry<Long, RecycleTableInfo>> tableIter = tableEntry.entrySet().iterator();
-            List<Long> tableIdList = Lists.newArrayList();
-            int currentEraseOpCnt = 0;
-            while (tableIter.hasNext()) {
-                Map.Entry<Long, RecycleTableInfo> entry = tableIter.next();
+            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
                 RecycleTableInfo tableInfo = entry.getValue();
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
 
                 if (isExpire(tableId, currentTimeMs)) {
-                    if (table.getType() == TableType.OLAP) {
-                        Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
-                    }
-
-                    // erase table
-                    tableIter.remove();
-                    idToRecycleTime.remove(tableId);
-                    nameToTableInfo.row(tableInfo.dbId).remove(table.getName());
-                    tableIdList.add(tableId);
-                    // log
-                    LOG.info("erase table[{}-{}] in memory finished", tableId, table.getName());
+                    tableToRemove.add(tableInfo);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                         break;
                     }
                 }
             } // end for tables
-            if (!tableIdList.isEmpty()) {
-                Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
-                LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
-            }
         }
+
+        List<Long> tableIdList = Lists.newArrayList();
+        if (!tableToRemove.isEmpty()) {
+            for (RecycleTableInfo tableInfo : tableToRemove) {
+                Table table = tableInfo.getTable();
+                long tableId = table.getId();
+                idToRecycleTime.remove(tableId);
+                nameToTableInfo.remove(tableInfo.dbId, table.getName());
+                idToTableInfo.remove(tableInfo.dbId, tableId);
+                tableIdList.add(tableId);
+            }
+            Catalog.getCurrentCatalog().getEditLog().logEraseMultiTables(tableIdList);
+            LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
+        }
+        return tableToRemove;
     }
 
-    private synchronized void eraseTableWithSameName(long dbId, String tableName) {
+    private synchronized Table eraseTableWithSameName(long dbId, String tableName) {
         Map<String, RecycleTableInfo> nameToTableInfoDBLevel = nameToTableInfo.row(dbId);
         RecycleTableInfo tableInfo = nameToTableInfoDBLevel.get(tableName);
         if (tableInfo == null) {
-            return;
+            return null;
         }
         Table table = tableInfo.getTable();
-
-        if (table.getType() == TableType.OLAP) {
-            Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
-        }
-
         nameToTableInfoDBLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
         idToRecycleTime.remove(table.getId());
         LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
+        return table;
     }
 
     public synchronized void replayEraseTable(long tableId) {
@@ -679,13 +678,27 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
             Thread.sleep(100);
-            eraseTable(currentTimeMs);
+            List<RecycleTableInfo> recycleTableInfos = eraseTable(currentTimeMs);
+            postProcessEraseTable(recycleTableInfos);
             Thread.sleep(100);
             eraseDatabase(currentTimeMs);
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
 
+    }
+
+    private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
+        for (RecycleTableInfo tableInfo : tableToRemove) {
+            Table table = tableInfo.getTable();
+            long tableId = table.getId();
+            if (table.getType() == TableType.OLAP) {
+                HashMap<Long, AgentBatchTask> batchTaskMap =
+                        Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
+                Catalog.getCurrentCatalog().sendDropTabletTasks(batchTaskMap);
+            }
+            LOG.info("erased table [{}-{}].", tableId, table.getName());
+        }
     }
 
     @Override

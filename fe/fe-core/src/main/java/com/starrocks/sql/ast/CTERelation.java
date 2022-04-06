@@ -10,18 +10,18 @@ public class CTERelation extends Relation {
     private final int cteId;
     private final String name;
     private List<String> columnOutputNames;
-    private final QueryRelation cteQuery;
+    private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
 
-    public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
+    public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
         this.cteId = cteId;
         this.name = name;
         this.columnOutputNames = columnOutputNames;
-        this.cteQuery = cteQuery;
+        this.cteQueryStatement = cteQueryStatement;
     }
 
-    public QueryRelation getCteQuery() {
-        return cteQuery;
+    public QueryStatement getCteQueryStatement() {
+        return cteQueryStatement;
     }
 
     public int getCteId() {

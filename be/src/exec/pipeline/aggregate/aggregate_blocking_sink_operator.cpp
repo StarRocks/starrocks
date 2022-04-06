@@ -17,7 +17,7 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (!_aggregator->is_none_group_by_exprs()) {
@@ -45,6 +45,7 @@ void AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     _aggregator->sink_complete();
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
