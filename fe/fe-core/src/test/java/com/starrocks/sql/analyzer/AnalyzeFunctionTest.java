@@ -169,6 +169,10 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select year('2022-01-01 00:00:00')");
 
         analyzeSuccess("select password('root')");
+
+        analyzeSuccess("select like(ta, ta) from tall");
+        analyzeSuccess("select regexp(ta, ta) from tall");
+        analyzeSuccess("select rlike(ta, ta) from tall");
     }
 
     @Test
