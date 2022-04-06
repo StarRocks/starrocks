@@ -38,7 +38,9 @@ PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
-    column = ConstColumn::create(std::move(data_column), 2ul << 32);
+    data_column = Int32Column::create();
+    data_column->append(1);
+    column = ConstColumn::create(std::move(data_column), 2ul << 32u);
     ret = column->upgrade_if_overflow();
     ASSERT_FALSE(ret.ok());
 }
