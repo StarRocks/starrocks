@@ -22,6 +22,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -120,6 +121,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitUpdateStatement(UpdateStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitDeleteStatement(DeleteStmt node, C context) {
+        return visitStatement(node, context);
     }
 
     public R visitShowStatement(ShowStmt statement, C context) {

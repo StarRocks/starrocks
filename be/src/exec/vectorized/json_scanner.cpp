@@ -517,7 +517,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                 row->reset();
                 RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
-            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], val).ok()) {
+            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
                     if (column->is_binary()) {

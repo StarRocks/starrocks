@@ -577,7 +577,9 @@ Status HdfsScanNode::close(RuntimeState* state) {
 
 Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (const auto& scan_range : scan_ranges) {
-        _scan_ranges.emplace_back(scan_range.scan_range.hdfs_scan_range);
+        auto& range = scan_range.scan_range.hdfs_scan_range;
+        if (range.file_length == 0) continue;
+        _scan_ranges.emplace_back(range);
         COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     }
 

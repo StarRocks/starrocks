@@ -12,7 +12,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
-#include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 
@@ -30,12 +30,12 @@ public:
 
     void TearDown() { _runtime_state.reset(); }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<SlotRef>> build_column(TypeDescriptor type_desc, int slot_index,
-                                                                        bool low_card, bool nullable) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(TypeDescriptor type_desc, int slot_index,
+                                                                          bool low_card, bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
-        auto expr = std::make_unique<SlotRef>(type_desc, 0, slot_index);
+        auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
         std::mt19937 rng(dev());
@@ -115,7 +115,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     }
 
     Columns columns;
-    std::vector<std::unique_ptr<SlotRef>> exprs;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
     std::vector<bool> asc_arr;
     std::vector<bool> null_first;

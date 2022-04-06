@@ -353,7 +353,7 @@ public class AST2SQL {
 
             StringBuilder sb = new StringBuilder();
             if (explicitType) {
-                sb.append(node.getType().toSql());
+                sb.append(node.getType().toString());
             }
             sb.append('[');
             sb.append(visitAstList(node.getChildren()));

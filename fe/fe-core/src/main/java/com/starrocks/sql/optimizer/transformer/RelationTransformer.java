@@ -311,12 +311,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         if (setOperationRelation.hasOrderByClause()) {
             List<Ordering> orderings = new ArrayList<>();
+            List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : setOperationRelation.getOrderBy()) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                         root.getExpressionMapping());
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
                         OrderByElement.nullsFirst(item.getNullsFirstParam()));
-                orderings.add(ordering);
+                if (!orderByColumns.contains(column)) {
+                    orderByColumns.add(column);
+                    orderings.add(ordering);
+                }
             }
             root = root.withNewRoot(new LogicalTopNOperator(orderings));
         }

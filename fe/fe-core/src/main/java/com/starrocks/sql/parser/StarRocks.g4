@@ -24,6 +24,7 @@ statement
         properties?
         AS queryStatement                                                               #createTableAsSelect
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
@@ -236,6 +237,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList
@@ -314,9 +316,8 @@ valueExpression
 primaryExpression
     : variable                                                                            #var
     | columnReference                                                                     #columnRef
-    | specialFunctionExpression                                                           #specialFunction
-    | informationFunctionExpression                                                       #informationFunction
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | NULL                                                                                #nullLiteral
     | interval                                                                            #intervalLiteral
@@ -325,10 +326,6 @@ primaryExpression
     | number                                                                              #numericLiteral
     | booleanValue                                                                        #booleanLiteral
     | string                                                                              #stringLiteral
-    | aggregationFunction over?                                                           #aggregationFunctionCall
-    | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
-    | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
-    | windowFunction over                                                                 #windowFunctionCall
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -338,11 +335,21 @@ primaryExpression
     | CAST '(' expression AS type ')'                                                     #cast
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
+    ;
+
+functionCall
+    : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
+    | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
+    | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
+    | informationFunctionExpression                                                       #informationFunction
+    | specialFunctionExpression                                                           #specialFunction
+    | aggregationFunction over?                                                           #aggregationFunctionCall
+    | windowFunction over                                                                 #windowFunctionCall
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
 aggregationFunction
@@ -516,12 +523,12 @@ number
     ;
 
 nonReserved
-    : ARRAY | AVG
+    : AVG
     | BUCKETS
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN
     | GLOBAL
     | HASH | HOUR
     | INTERVAL

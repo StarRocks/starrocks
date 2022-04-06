@@ -598,7 +598,7 @@ Status TabletUpdates::save_meta() {
     TabletMetaPB metapb;
     // No need to acquire the meta lock?
     _tablet._tablet_meta->to_meta_pb(&metapb);
-    return TabletMetaManager::save(_tablet.data_dir(), _tablet.tablet_id(), _tablet.schema_hash(), metapb);
+    return TabletMetaManager::save(_tablet.data_dir(), metapb);
 }
 
 class ApplyCommitTask : public Runnable {

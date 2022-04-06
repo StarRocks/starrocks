@@ -2,6 +2,8 @@
 
 package com.starrocks.external.hive;
 
+import com.starrocks.catalog.Table.TableType;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -9,17 +11,17 @@ public class HivePartitionKey {
     private final String databaseName;
     private final String tableName;
     private final List<String> partitionValues;
-    private final boolean isHudiTable;
+    private final TableType tableType;
 
     public HivePartitionKey(String databaseName, String tableName, List<String> partitionValues) {
-        this(databaseName, tableName, partitionValues, false);
+        this(databaseName, tableName, TableType.HIVE, partitionValues);
     }
 
-    public HivePartitionKey(String databaseName, String tableName, List<String> partitionValues, boolean isHudiTable) {
+    public HivePartitionKey(String databaseName, String tableName, TableType tableType, List<String> partitionValues) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionValues = partitionValues;
-        this.isHudiTable = isHudiTable;
+        this.tableType = tableType;
     }
 
     public static HivePartitionKey gen(String databaseName, String tableName, List<String> partitionValues) {
@@ -38,8 +40,8 @@ public class HivePartitionKey {
         return partitionValues;
     }
 
-    public boolean isHudiTable() {
-        return isHudiTable;
+    public TableType getTableType() {
+        return tableType;
     }
 
     @Override
@@ -55,11 +57,11 @@ public class HivePartitionKey {
         return Objects.equals(databaseName, other.databaseName) &&
                 Objects.equals(tableName, other.tableName) &&
                 Objects.equals(partitionValues, other.partitionValues) &&
-                Objects.equals(isHudiTable, other.isHudiTable);
+                Objects.equals(tableType, other.tableType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, partitionValues, isHudiTable);
+        return Objects.hash(databaseName, tableName, partitionValues, tableType);
     }
 }

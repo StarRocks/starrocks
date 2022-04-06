@@ -148,8 +148,6 @@ public:
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 
-    size_t shrink_memory_usage() const override { return _pool.size() * type_size() + byte_size(); }
-
     size_t container_memory_usage() const override { return _pool.capacity() * type_size(); }
 
     size_t element_memory_usage() const override { return byte_size(); }
