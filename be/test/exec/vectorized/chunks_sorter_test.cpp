@@ -171,7 +171,7 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     sorter.set_compare_strategy(ColumnInc);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
@@ -338,7 +338,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -385,7 +385,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -434,7 +434,7 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -484,7 +484,7 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
