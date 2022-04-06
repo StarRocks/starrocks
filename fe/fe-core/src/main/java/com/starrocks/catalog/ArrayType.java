@@ -120,6 +120,10 @@ public class ArrayType extends Type {
         return itemType.isNumericType();
     }
 
+    public boolean isBooleanType() {
+        return itemType.isBoolean();
+    }
+
     public boolean isNullTypeItem() {
         return itemType.isNull(); 
     }
