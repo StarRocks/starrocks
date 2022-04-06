@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#ifndef STARROCKS_METACACHE_H
-#define STARROCKS_METACACHE_H
+#pragma once
+
 #include "common/s3_uri.h"
 #include "common/statusor.h"
 #include "env/env.h"
@@ -35,4 +35,3 @@ private:
 };
 
 } // namespace starrocks
-#endif //STARROCKS_METACACHE_H

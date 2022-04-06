@@ -97,7 +97,8 @@ public:
 
     static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
-    static Status traverse_for_tablet(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func,int64_t tabletid);
+    static Status traverse_for_tablet(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func,
+                                      int64_t tabletid);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 

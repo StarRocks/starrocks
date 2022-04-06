@@ -34,6 +34,8 @@
 
 #include "common/version.h"
 #include "env/env.h"
+#include "gen_cpp/Types_types.h"
+#include "gen_cpp/version.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -49,7 +51,6 @@
 #include "util/file_utils.h"
 #include "util/monotime.h"
 #include "util/string_util.h"
-#include "gen_cpp/Types_types.h"
 
 using strings::Substitute;
 
@@ -394,9 +395,9 @@ Status DataDir::load() {
     std::set<int64_t> tablet_ids;
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
-                                                                     std::string_view value) -> bool {
-        StatusOr<TabletSharedPtr > st =
-                _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false,true);
+                                                                    std::string_view value) -> bool {
+        StatusOr<TabletSharedPtr> st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value,
+                                                                              false, false, false, false, true);
         if (!st.ok() && !to_status(st).is_not_found()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
@@ -404,8 +405,8 @@ Status DataDir::load() {
             // will read the tablet in the DELETE state from rocksdb. These tablets have been
             // added to the garbage collection queue and will be automatically deleted afterwards.
             // Therefore, we believe that this situation is not a failure.
-            LOG(WARNING) << "load tablet from header failed. status:" << to_status(st).to_string() << ", tablet=" << tablet_id
-                         << "." << schema_hash;
+            LOG(WARNING) << "load tablet from header failed. status:" << to_status(st).to_string()
+                         << ", tablet=" << tablet_id << "." << schema_hash;
             failed_tablet_ids.insert(tablet_id);
         } else {
             tablet_ids.insert(tablet_id);
@@ -486,31 +487,31 @@ Status DataDir::load() {
 }
 
 StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tabletid) {
-    if(_storage_medium ==  TStorageMedium::S3){
+    if (_storage_medium == TStorageMedium::S3) {
         return Status::IOError("");
     }
     LOG(INFO) << "start to load tablets from " << _path;
     LOG(INFO) << "begin loading tablet from meta";
     // load tablet
     // create tablet from tablet meta and add it to tablet mgr
-    TabletSharedPtr  tablet= nullptr;
-    auto load_tablet_func = [this,&tablet](int64_t tablet_id, int32_t schema_hash,
-                                                                    const std::string& value) -> bool {
-      auto st =
-              _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false,false);
-      if(st.ok()){
-          tablet=st.value();
-          return false;
-      }
-      return true;
+    TabletSharedPtr tablet = nullptr;
+    auto load_tablet_func = [this, &tablet](int64_t tablet_id, int32_t schema_hash, const std::string& value) -> bool {
+        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false,
+                                                         false, false);
+        if (st.ok()) {
+            tablet = st.value();
+            return false;
+        }
+        return true;
     };
 
-    TabletMetaManager::traverse_for_tablet(_kv_store, load_tablet_func,tabletid);
-    if(!tablet){
-        LOG(ERROR) << "load tablets from header failed"<< ", loaded tablet: " << tabletid << ", path: " << _path;
-        return Status::NotFound("Not found in "+_path);
+    TabletMetaManager::traverse_for_tablet(_kv_store, load_tablet_func, tabletid);
+    if (!tablet) {
+        LOG(ERROR) << "load tablets from header failed"
+                   << ", loaded tablet: " << tabletid << ", path: " << _path;
+        return Status::NotFound("Not found in " + _path);
     }
-    TabletUid   tablet_uid = tablet->tablet_uid();
+    TabletUid tablet_uid = tablet->tablet_uid();
 
     // load rowset meta from meta env and create rowset
     // COMMITTED: add to txn manager
@@ -520,24 +521,25 @@ StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tabletid) {
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 const std::string& meta_str) -> bool {
-      RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-      bool parsed = rowset_meta->init(meta_str);
-      if (!parsed) {
-          LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
-          // return false will break meta iterator, return true to skip this error
-          return true;
-      }
-      if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
-          LOG(FATAL) << "must change V1 format to V2 format."
-                     << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                     << ", schema_hash: " << rowset_meta->tablet_schema_hash()
-                     << ", rowset_id:" << rowset_meta->rowset_id();
-      }
-      dir_rowset_metas.push_back(rowset_meta);
-      return true;
+        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+        bool parsed = rowset_meta->init(meta_str);
+        if (!parsed) {
+            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+            // return false will break meta iterator, return true to skip this error
+            return true;
+        }
+        if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
+            LOG(FATAL) << "must change V1 format to V2 format."
+                       << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
+                       << ", schema_hash: " << rowset_meta->tablet_schema_hash()
+                       << ", rowset_id:" << rowset_meta->rowset_id();
+        }
+        dir_rowset_metas.push_back(rowset_meta);
+        return true;
     };
 
-    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas_for_tabletuid(_kv_store, load_rowset_func,tablet_uid);
+    Status load_rowset_status =
+            RowsetMetaManager::traverse_rowset_metas_for_tabletuid(_kv_store, load_rowset_func, tablet_uid);
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;

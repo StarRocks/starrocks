@@ -83,11 +83,10 @@ public:
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
-    TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr,
-                               int64_t staros_shardid = 0);
+    TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
-                               std::string* err = nullptr, int64_t staros_shardid = 0);
+                               std::string* err = nullptr);
 
     // Extract tablet_id and schema_hash from given path.
     //
@@ -204,9 +203,8 @@ private:
 
     Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
-    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool need_load, int64_t staros_shardid = 0);
-    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err,
-                                         int64_t staros_shardid = 0);
+    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool need_load);
+    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
 
     TabletSharedPtr _internal_create_tablet_unlocked(AlterTabletType alter_type, const TCreateTabletReq& request,
                                                      bool is_schema_change, const Tablet* base_tablet,
@@ -214,7 +212,7 @@ private:
     TabletSharedPtr _create_tablet_meta_and_dir_unlocked(const TCreateTabletReq& request, bool is_schema_change,
                                                          const Tablet* base_tablet,
                                                          const std::vector<DataDir*>& data_dirs);
-    StatusOr<TabletSharedPtr> _load_tablet(int64_t staros_shardid, TTabletId tablet_id);
+    StatusOr<TabletSharedPtr> _load_tablet(TTabletId tablet_id);
     Status _create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, bool is_schema_change_tablet,
                                         const Tablet* base_tablet, TabletMetaSharedPtr* tablet_meta);
 
