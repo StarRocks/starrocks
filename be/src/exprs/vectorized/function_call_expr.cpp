@@ -47,7 +47,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, const
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */;
+                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uniq_id */;
 
     return Status::OK();
 }
