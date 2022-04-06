@@ -63,7 +63,7 @@ Step 1: Customize the configuration file `conf/fe.conf`.
 JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log"
 ```
 
-You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
+You can adjust `-Xmx4096m` based on the FE memory size. It is recommended to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
 
 Step 2: Create a metadata directory and add the meta_dir config to `conf/fe.conf`
 
@@ -534,7 +534,7 @@ In a composite partition:
 
 Composite partitions are recommended for the following scenarios:
 
-* There are time keys or similar keys with ordered values. Such keys can be used as partition keys. Partition granularity can be evaluated based on import frequency, partition data volume, and etc.
+* There are time keys or similar keys with ordered values. Such keys can be used as partition keys. Partition granularity can be evaluated based on import frequency, partition data volume, etc.
 * If there is a requirement to delete historical data (for example, only keep the data of the last N days), use composite partitions to achieve that goal. You can also delete data by sending a `DELETE` statement in the specified partition.
 * To solve the problem of data skew. Each partition can individually specify the number of buckets. For example, when partitioning by day and the amount of data varies greatly each day, you can specify the number of buckets in the partition to reasonably divide the data into different partitions. It is recommended to choose easily differentiable keys as the bucket keys.
 
