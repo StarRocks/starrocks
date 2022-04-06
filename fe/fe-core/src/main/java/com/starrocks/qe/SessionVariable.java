@@ -460,8 +460,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-
-
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
     private boolean enableExchangePassThrough = true;
 
@@ -799,6 +797,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableResourceGroup() {
         return enableResourceGroup;
+    }
+
+    public void setEnableResourceGroup(boolean enableResourceGroup) {
+        this.enableResourceGroup = enableResourceGroup;
     }
 
     public int getPipelineDop() {
