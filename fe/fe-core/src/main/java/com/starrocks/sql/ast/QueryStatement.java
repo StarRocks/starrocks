@@ -20,7 +20,6 @@ public class QueryStatement extends StatementBase {
         return queryRelation;
     }
 
-
     public void setOutFileClause(OutFileClause outFileClause) {
         this.outFileClause = outFileClause;
     }

@@ -16,23 +16,18 @@ public class TableFunctionRelation extends Relation {
      * functionName is created by parser
      * and will be converted to tableFunction in Analyzer
      */
-    private FunctionName functionName;
+    private final FunctionName functionName;
     /**
      * functionParams is created by parser
      * and will be converted to childExpressions in Analyzer
      */
-    private FunctionParams functionParams;
+    private final FunctionParams functionParams;
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
 
     public TableFunctionRelation(String functionName, FunctionParams functionParams) {
         this.functionName = new FunctionName(functionName);
         this.functionParams = functionParams;
-    }
-
-    public TableFunctionRelation(TableFunction tableFunction, List<Expr> childExpressions) {
-        this.tableFunction = tableFunction;
-        this.childExpressions = childExpressions;
     }
 
     public FunctionName getFunctionName() {

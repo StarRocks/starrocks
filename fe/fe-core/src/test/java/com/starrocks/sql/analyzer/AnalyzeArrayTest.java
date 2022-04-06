@@ -33,5 +33,19 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select []");
         analyzeSuccess("select [][-1]");
         analyzeSuccess("select [1,2,3][v1] from t0");
+
+        analyzeSuccess(" select\n" +
+                "            array_contains([1], 1),\n" +
+                "            array_contains(ARRAY<SMALLINT>[1], 1),\n" +
+                "            array_contains(ARRAY<INT>[1], 1),\n" +
+                "            array_contains(ARRAY<float>[1], cast(1.0 as float)),\n" +
+                "            array_contains(ARRAY<double>[1], cast(1.0 as double)),\n" +
+                "            array_contains(ARRAY<date>['2020-01-01', '2020-01-02'], cast('2020-01-2' as date)),\n" +
+                "            array_contains(ARRAY<date>['2020-01-01', '2020-01-02'], cast('2020-01-1' as date)),\n" +
+                "            array_contains(['x', 'y', null], null),\n" +
+                "            array_contains(['x', 'y', null], 'x'),\n" +
+                "            array_contains(['x', 'y', null], 'y'),\n" +
+                "            array_contains([true, false, true], true),\n" +
+                "            array_contains([true, false, true], false)");
     }
 }

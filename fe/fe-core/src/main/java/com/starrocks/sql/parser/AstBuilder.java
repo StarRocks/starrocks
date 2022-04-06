@@ -543,7 +543,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Iterator<Relation> iterator = relations.iterator();
                 Relation relation = iterator.next();
                 while (iterator.hasNext()) {
-                    relation = new JoinRelation(JoinOperator.CROSS_JOIN, relation, iterator.next(), null, false);
+                    relation = new JoinRelation(null, relation, iterator.next(), null, false);
                 }
                 from = relation;
             }
@@ -892,7 +892,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(null, new QueryStatement((QueryRelation) visit(context.query())));
+        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.query())));
     }
 
     @Override
@@ -1056,7 +1056,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleCase(StarRocksParser.SimpleCaseContext context) {
         return new CaseExpr(
-                (Expr) visit(context.valueExpression()),
+                (Expr) visit(context.caseExpr),
                 visit(context.whenClause(), CaseWhenClause.class),
                 (Expr) visitIfPresent(context.elseExpression));
     }
@@ -1078,7 +1078,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitArithmeticUnary(StarRocksParser.ArithmeticUnaryContext context) {
-        Expr child = (Expr) visit(context.valueExpression());
+        Expr child = (Expr) visit(context.primaryExpression());
         switch (context.operator.getType()) {
             case StarRocksLexer.MINUS_SYMBOL:
                 if (child.isLiteral() && child.getType().isNumericType()) {
@@ -1095,6 +1095,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return child;
             case StarRocksLexer.BITNOT:
                 return new ArithmeticExpr(ArithmeticExpr.Operator.BITNOT, child, null);
+            case StarRocksLexer.LOGICAL_NOT:
+                return new CompoundPredicate(CompoundPredicate.Operator.NOT, child, null);
             default:
                 throw new UnsupportedOperationException("Unsupported sign: " + context.operator.getText());
         }
@@ -1292,6 +1294,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
         } else if (context.MINUTE() != null) {
             return new FunctionCallExpr("minute", visit(context.expression(), Expr.class));
+        } else if (context.MOD() != null) {
+            return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
@@ -1577,6 +1581,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitBackQuotedIdentifier(StarRocksParser.BackQuotedIdentifierContext context) {
         return new Identifier(context.getText().replace("`", ""));
+    }
+
+    @Override
+    public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
+        return new Identifier(context.getText());
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
