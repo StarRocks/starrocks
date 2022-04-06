@@ -2,15 +2,20 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -2157,5 +2162,98 @@ public class JoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: t1a = 21: cast\n" +
                 "  |  equal join conjunct: 22: cast = 11: t1a");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void tesAutoEstimateDopForLocalBucketAndColocateJoin() throws Exception {
+        final int numCPUs = 8;
+        new MockUp<BackendCoreStat>() {
+            @Mock
+            public int getAvgNumOfHardwareCoresOfBe() {
+                return numCPUs;
+            }
+        };
+
+        // Enable DopAutoEstimate.
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        Assert.assertNotNull(sessionVariable);
+        sessionVariable.setEnablePipelineEngine(true);
+        sessionVariable.setPipelineDop(0);
+        sessionVariable.setParallelExecInstanceNum(1);
+
+        // Case 1: local bucket shuffle join should use fragment instance parallel.
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 a join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1";
+        ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        String planString = plan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        assertContains(planString, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)");
+        PlanFragment fragment = plan.getFragments().get(1);
+        Assert.assertEquals(numCPUs / 2, fragment.getParallelExecNum());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+
+        // Case 2: colocate join should use fragment instance parallel.
+        sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";;
+        plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        planString = plan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        assertContains(planString, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  2:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (COLOCATE)\n");
+        fragment = plan.getFragments().get(1);
+        Assert.assertEquals(numCPUs / 2, fragment.getParallelExecNum());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+
+        // Case 3: local bucket shuffle join succeeded by broadcast should also use fragment instance parallel.
+        sql = "select a.v1 from t0 a join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1 join [broadcast] t0 c on a.v1 = c.v2";
+        plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        planString = plan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        assertContains(planString, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 8: v2\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)");
+        fragment = plan.getFragments().get(1);
+        Assert.assertEquals(numCPUs / 2, fragment.getParallelExecNum());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+
+        FeConstants.runningUnitTest = false;
+        sessionVariable.setEnablePipelineEngine(false);
     }
 }
