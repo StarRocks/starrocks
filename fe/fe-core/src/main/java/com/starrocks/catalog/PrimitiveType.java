@@ -317,6 +317,8 @@ public enum PrimitiveType {
     public int getTypeSize() {
         int typeSize = 0;
         switch (this) {
+            case INVALID_TYPE:
+                break;
             case NULL_TYPE:
             case BOOLEAN:
             case TINYINT:
@@ -361,7 +363,7 @@ public enum PrimitiveType {
                 typeSize = 1024;
                 break;
             default:
-                Preconditions.checkState(false, "unreachable");
+                Preconditions.checkState(false, "unknown type " + this);
         }
         return typeSize;
     }
