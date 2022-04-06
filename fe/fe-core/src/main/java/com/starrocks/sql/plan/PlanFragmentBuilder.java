@@ -1495,7 +1495,7 @@ public class PlanFragmentBuilder {
          * because there is no local shuffle for these joins.
          * @param fragment The fragment which needs to estimate DOP.
          */
-        private void estimateDopOfBroadcastOrReplicatedJoinInPipeline(PlanFragment fragment) {
+        private void estimateDopOfBroadcastAndReplicatedJoinInPipeline(PlanFragment fragment) {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
@@ -1509,7 +1509,7 @@ public class PlanFragmentBuilder {
          * to avoid local shuffle and too large in-filter in left scan node.
          * @param fragment The fragment which needs to estimate DOP.
          */
-        private void estimateDopOfColocateOrLocalBucketJoinInPipeline(PlanFragment fragment) {
+        private void estimateDopOfColocateAndLocalBucketJoinInPipeline(PlanFragment fragment) {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
@@ -1720,7 +1720,7 @@ public class PlanFragmentBuilder {
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    estimateDopOfBroadcastOrReplicatedJoinInPipeline(leftFragment);
+                    estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1765,9 +1765,9 @@ public class PlanFragmentBuilder {
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                     if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        estimateDopOfColocateOrLocalBucketJoinInPipeline(leftFragment);
+                        estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
                     } else {
-                        estimateDopOfBroadcastOrReplicatedJoinInPipeline(leftFragment);
+                        estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
                     }
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
@@ -1806,7 +1806,7 @@ public class PlanFragmentBuilder {
                         leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
-                    estimateDopOfColocateOrLocalBucketJoinInPipeline(leftFragment);
+                    estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
                     return leftFragment;
                 }
             }
