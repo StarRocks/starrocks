@@ -27,7 +27,7 @@ public:
     // As a result, we need to tunning this parameter to achieve better performance.
     // The followering heuristic is based on experiment of current algorithm implementation, which needs
     // further improvement if the algorithm changed.
-    static constexpr size_t tunning_buffered_chunks(int limit) {
+    static constexpr size_t tunning_buffered_chunks(size_t limit) {
         if (limit <= 1024) {
             return 16;
         }
