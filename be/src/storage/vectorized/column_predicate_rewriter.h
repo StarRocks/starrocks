@@ -79,14 +79,18 @@ private:
     std::vector<uint8_t>* _disable_dict_rewrite;
 };
 
+// For zone map index, some predicates can not be used directly,
+// but they can be used by rewriting them into equivalent monotonic functions.
+// ZonemapPredicatesRewriter is to implement the rewriting strategy.
+// It will only be used before performing segment-level and page-level zone map filters
 class ZonemapPredicatesRewriter {
 public:
     using PredicateList = std::vector<const ColumnPredicate*>;
 
-    static Status rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src,
-                          std::unordered_map<ColumnId, PredicateList>* dst);
+    static Status rewrite_predicate_map(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src,
+                                        std::unordered_map<ColumnId, PredicateList>* dst);
 
-    static Status rewrite(ObjectPool* pool, const PredicateList& src, PredicateList* dst);
+    static Status rewrite_predicate_list(ObjectPool* pool, const PredicateList& src, PredicateList* dst);
 
 private:
     static Status _rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,

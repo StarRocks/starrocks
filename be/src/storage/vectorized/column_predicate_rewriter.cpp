@@ -391,18 +391,20 @@ void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
     pred_rewrite(_predicates.vec_preds());
 }
 
-Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const std::unordered_map<ColumnId, PredicateList>& src,
-                                          std::unordered_map<ColumnId, PredicateList>* dst) {
+Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool,
+                                                        const std::unordered_map<ColumnId, PredicateList>& src,
+                                                        std::unordered_map<ColumnId, PredicateList>* dst) {
     DCHECK(dst != nullptr);
     for (auto& [cid, preds] : src) {
         dst->insert({cid, {}});
         auto& preds_after_rewrite = dst->at(cid);
-        RETURN_IF_ERROR(rewrite(pool, preds, &preds_after_rewrite));
+        RETURN_IF_ERROR(rewrite_predicate_list(pool, preds, &preds_after_rewrite));
     }
     return Status::OK();
 }
 
-Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const PredicateList& src, PredicateList* dst) {
+Status ZonemapPredicatesRewriter::rewrite_predicate_list(ObjectPool* pool, const PredicateList& src,
+                                                         PredicateList* dst) {
     DCHECK(dst != nullptr);
     for (auto& pred : src) {
         if (pred->is_expr_predicate()) {

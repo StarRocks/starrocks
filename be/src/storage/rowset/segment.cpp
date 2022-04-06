@@ -192,8 +192,8 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& sche
     // trying to prune the current segment by segment-level zone map
     ObjectPool pool;
     std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>> predicates_for_zone_map_filter;
-    RETURN_IF_ERROR(vectorized::ZonemapPredicatesRewriter::rewrite(&pool, read_options.predicates,
-                                                                    &predicates_for_zone_map_filter));
+    RETURN_IF_ERROR(vectorized::ZonemapPredicatesRewriter::rewrite_predicate_map(&pool, read_options.predicates,
+                                                                                 &predicates_for_zone_map_filter));
 
     for (const auto& pair : predicates_for_zone_map_filter) {
         ColumnId column_id = pair.first;
