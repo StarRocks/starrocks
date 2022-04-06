@@ -1527,9 +1527,14 @@ public class ViewPlanTest extends PlanTestBase {
         String sql = "SELECT * FROM (VALUES(1,2,3),(4,5,6),(7,8,9)) T";
         testView(sql);
     }
+    @Test
+    public void test313() throws Exception {
+        String sql = "select * from t0,t1 inner join t2 on v4 = v7";
+        testView(sql);
+    }
 
     @Test
-    public void testArray() throws Exception {
+    public void test314() throws Exception {
         String sql = "select split('1,2,3', ',') from t1;";
         testView(sql);
 
@@ -1537,6 +1542,15 @@ public class ViewPlanTest extends PlanTestBase {
         testView(sql);
 
         sql = "select array_sum(v3) from tarray";
+        testView(sql);
+
+        sql = "select v1,unnest from tarray,unnest(v3)";
+        testView(sql);
+
+        sql = "select * from tarray,unnest(v3)";
+        testView(sql);
+
+        sql = "select * from tarray,unnest(v3) t";
         testView(sql);
     }
 

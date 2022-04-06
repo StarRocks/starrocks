@@ -252,10 +252,30 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
+
+/**
+ * Operator precedences are shown in the following list, from highest precedence to the lowest.
+ *
+ * !
+ * - (unary minus), ~ (unary bit inversion)
+ * ^
+ * *, /, DIV, %, MOD
+ * -, +
+ * &
+ * |
+ * = (comparison), <=>, >=, >, <=, <, <>, !=, IS, LIKE, REGEXP
+ * BETWEEN, CASE WHEN
+ * NOT
+ * AND, &&
+ * XOR
+ * OR, ||
+ * = (assignment)
+ */
+
 expression
     : booleanExpression                                                                   #expressionDefault
-    | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
-    | left=expression operator=AND right=expression                                       #logicalBinary
+    | NOT expression                                                                      #logicalNot
+    | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
@@ -279,38 +299,46 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) valueExpression                    #arithmeticUnary
-    | left = valueExpression operator = (ASTERISK_SYMBOL | SLASH_SYMBOL |
-        PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
+    | left = valueExpression operator = BITXOR right = valueExpression                    #arithmeticBinary
+    | left = valueExpression operator = (
+              ASTERISK_SYMBOL
+            | SLASH_SYMBOL
+            | PERCENT_SYMBOL
+            | INT_DIV
+            | MOD)
       right = valueExpression                                                             #arithmeticBinary
-    | left = valueExpression operator =
-        (PLUS_SYMBOL | MINUS_SYMBOL) right = valueExpression                              #arithmeticBinary
-    | left = valueExpression CONCAT right = valueExpression                               #concat
+    | left = valueExpression operator = (PLUS_SYMBOL | MINUS_SYMBOL)
+        right = valueExpression                                                           #arithmeticBinary
+    | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
+    | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
     ;
 
 primaryExpression
-    : NULL                                                                                #nullLiteral
+    : variable                                                                            #var
+    | columnReference                                                                     #columnRef
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
+    | primaryExpression COLLATE (identifier | string)                                     #collate
+    | NULL                                                                                #nullLiteral
     | interval                                                                            #intervalLiteral
     | DATE string                                                                         #typeConstructor
     | DATETIME string                                                                     #typeConstructor
     | number                                                                              #numericLiteral
     | booleanValue                                                                        #booleanLiteral
     | string                                                                              #stringLiteral
-    | variable                                                                            #var
-    | primaryExpression COLLATE (identifier | string)                                     #collate
+    | left = primaryExpression CONCAT right = primaryExpression                           #concat
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
+    | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
+    | '(' expression ')'                                                                  #parenthesizedExpression
+    | EXISTS '(' query ')'                                                                #exists
+    | subquery                                                                            #subqueryExpression
+    | CAST '(' expression AS type ')'                                                     #cast
+    | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
-    | subquery                                                                            #subqueryExpression
-    | EXISTS '(' query ')'                                                                #exists
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | columnReference                                                                     #columnRef
     | primaryExpression ARROW string                                                      #arrowExpression
-    | '(' expression ')'                                                                  #parenthesizedExpression
-    | functionCall                                                                        #functionCallExpression
-    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
-    | CAST '(' expression AS type ')'                                                     #cast
     ;
 
 functionCall
@@ -357,6 +385,7 @@ specialFunctionExpression
     | IF '(' (expression (',' expression)*)? ')'
     | LEFT '(' expression ',' expression ')'
     | MINUTE '(' expression ')'
+    | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
     | RIGHT '(' expression ',' expression ')'
     | SECOND '(' expression ')'
@@ -494,7 +523,7 @@ number
     ;
 
 nonReserved
-    : ARRAY | AVG
+    : AVG
     | BUCKETS
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
