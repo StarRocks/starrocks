@@ -160,7 +160,7 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
             if (PredicateType::kGT == pred->type() && iter != sorted_dicts.end() && iter->first == value) {
                 iter++;
             }
-            while (iter < sorted_dicts.end()) {
+            while (iter != sorted_dicts.end()) {
                 str_codewords.push_back(std::to_string(iter->second));
                 iter++;
             }
@@ -423,8 +423,7 @@ Status ZonemapPredicatesRewriter::rewrite(ObjectPool* pool, const PredicateList&
 Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
                                                                   std::vector<const ColumnExprPredicate*>* new_preds) {
     DCHECK(new_preds != nullptr);
-    ColumnExprPredicate* column_expr_pred =
-            const_cast<ColumnExprPredicate*>(static_cast<const ColumnExprPredicate*>(pred));
+    const ColumnExprPredicate* column_expr_pred = static_cast<const ColumnExprPredicate*>(pred);
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 

@@ -178,7 +178,7 @@ std::string ColumnExprPredicate::debug_string() const {
 }
 
 Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
-                                                               std::vector<const ColumnExprPredicate*>* output) {
+                                                               std::vector<const ColumnExprPredicate*>* output) const {
     DCHECK(pool != nullptr);
     DCHECK(output != nullptr);
     ExprContext* pred_from_planner = _expr_ctxs[0];
@@ -220,21 +220,18 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     }
     // build new ColumnExprPredicates
     for (auto& expr : exprs_after_rewrite) {
-        ExprContext* ctx = new ExprContext(expr);
+        ExprContext* ctx = pool->add(new ExprContext(expr));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
-        ColumnExprPredicate* new_pred = new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc);
+        ColumnExprPredicate* new_pred = pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc));
         // copy other cast exprs
         for (size_t i = 1; i < _expr_ctxs.size(); i++) {
             Expr* tmp_expr = Expr::copy(pool, _expr_ctxs[i]->root());
-            ExprContext* tmp_ctx = new ExprContext(tmp_expr);
+            ExprContext* tmp_ctx = pool->add(new ExprContext(tmp_expr));
             RETURN_IF_ERROR(tmp_ctx->prepare(_state));
             RETURN_IF_ERROR(tmp_ctx->open(_state));
             new_pred->_add_expr_ctx(tmp_ctx);
-            pool->add(tmp_expr);
-            pool->add(tmp_ctx);
         }
-        pool->add(new_pred);
         output->emplace_back(new_pred);
     }
 
