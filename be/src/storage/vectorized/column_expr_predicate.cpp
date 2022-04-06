@@ -223,7 +223,8 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         ExprContext* ctx = pool->add(new ExprContext(expr));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
-        ColumnExprPredicate* new_pred = pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc));
+        ColumnExprPredicate* new_pred =
+                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, ctx, _slot_desc));
         // copy other cast exprs
         for (size_t i = 1; i < _expr_ctxs.size(); i++) {
             Expr* tmp_expr = Expr::copy(pool, _expr_ctxs[i]->root());
