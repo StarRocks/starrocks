@@ -522,6 +522,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+
+    _buffer->set_finishing();
     return Status::OK();
 }
 
