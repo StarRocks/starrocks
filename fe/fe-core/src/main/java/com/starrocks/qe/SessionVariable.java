@@ -186,7 +186,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "global_runtime_filter_probe_min_selectivity";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
-    public static final String ENABLE_REWRITE_ZONE_MAP_PREDICATE = "enable_rewrite_zone_map_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
@@ -461,8 +460,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_REWRITE_ZONE_MAP_PREDICATE)
-    private boolean enableRewriteZonemapPredicate = true;
 
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH)
@@ -804,10 +801,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableResourceGroup;
     }
 
-    public void setEnableResourceGroup(boolean enableResourceGroup) {
-        this.enableResourceGroup = enableResourceGroup;
-    }
-
     public int getPipelineDop() {
         return this.pipelineDop;
     }
@@ -862,10 +855,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
-    }
-
-    public boolean isEnableRewriteZonemapPredicate() {
-        return enableRewriteZonemapPredicate;
     }
 
     public boolean isEnableExchangePassThrough() {

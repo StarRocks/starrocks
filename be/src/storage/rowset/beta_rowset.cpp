@@ -246,7 +246,6 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
-    seg_options.enable_rewrite_zone_map_predicate = options.enable_rewrite_zone_map_predicate;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

@@ -144,9 +144,6 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         }
         _predicate_free_pool.emplace_back(std::move(p));
     }
-    if (_parent->thrift_olap_scan_node().__isset.enable_rewrite_zone_map_predicate) {
-        _params.enable_rewrite_zone_map_predicate = _parent->thrift_olap_scan_node().enable_rewrite_zone_map_predicate;
-    }
 
     ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
     not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);

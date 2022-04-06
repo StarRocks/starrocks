@@ -32,7 +32,6 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->use_page_cache = use_page_cache;
     dst->profile = profile;
     dst->global_dictmaps = global_dictmaps;
-    dst->enable_rewrite_zone_map_predicate = enable_rewrite_zone_map_predicate;
     return Status::OK();
 }
 

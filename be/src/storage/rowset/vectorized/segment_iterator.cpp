@@ -477,11 +477,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         columns.insert(pair.first);
     }
     std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>> predicates_for_zone_map;
-    if (_opts.enable_rewrite_zone_map_predicate) {
-        RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite(&_obj_pool, _opts.predicates, &predicates_for_zone_map));
-    } else {
-        predicates_for_zone_map = _opts.predicates;
-    }
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite(&_obj_pool, _opts.predicates, &predicates_for_zone_map));
 
     std::vector<const ColumnPredicate*> query_preds;
     for (ColumnId cid : columns) {

@@ -187,7 +187,10 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     std::vector<Expr*> exprs_after_rewrite;
 
     if (root->op() == TExprOpcode::EQ) {
-        DCHECK(root->get_num_children() == 2);
+        if (root->get_num_children() != 2) {
+            DCHECK(false) << "unexpected number of children in equal binary predicate, expected is 2, actual is " << root->get_num_children();
+            return Status::OK();
+        }
         if (root->get_child(0)->is_monotonic() && root->get_child(1)->is_monotonic()) {
             // rewrite = to >= and <=
             auto build_binary_predicate_func = [this, pool, root](TExprOpcode::type new_op) {
