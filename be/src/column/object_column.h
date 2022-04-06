@@ -148,8 +148,6 @@ public:
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 
-    size_t shrink_memory_usage() const override { return _pool.size() * type_size() + byte_size(); }
-
     size_t container_memory_usage() const override { return _pool.capacity() * type_size(); }
 
     size_t element_memory_usage() const override { return byte_size(); }
@@ -195,10 +193,9 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        return _pool.size() >= Column::MAX_CAPACITY_LIMIT || _cache.size() >= Column::MAX_CAPACITY_LIMIT ||
-               _slices.size() >= Column::MAX_CAPACITY_LIMIT || _buffer.size() >= Column::MAX_CAPACITY_LIMIT;
-    }
+    bool reach_capacity_limit() const override { return _pool.size() > Column::MAX_CAPACITY_LIMIT; }
+
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
 private:
     void _build_cache() const {

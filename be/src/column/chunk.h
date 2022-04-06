@@ -43,6 +43,8 @@ public:
     // Remove all records and reset the delete state.
     void reset();
 
+    Status upgrade_if_overflow();
+
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }
@@ -185,9 +187,6 @@ public:
     // 1. object column: (column container capacity * type size) + pointer element serialize data size
     // 2. other columns: column container capacity * type size
     size_t memory_usage() const;
-
-    // memory usage after shrink
-    size_t shrink_memory_usage() const;
 
     // Column container memory usage
     size_t container_memory_usage() const;

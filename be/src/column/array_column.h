@@ -123,10 +123,6 @@ public:
 
     size_t memory_usage() const override { return _elements->memory_usage() + _offsets->memory_usage(); }
 
-    size_t shrink_memory_usage() const override {
-        return _elements->shrink_memory_usage() + _offsets->shrink_memory_usage();
-    }
-
     size_t container_memory_usage() const override {
         return _elements->container_memory_usage() + _offsets->container_memory_usage();
     }
@@ -152,6 +148,8 @@ public:
     bool reach_capacity_limit() const override {
         return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
+
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
     void check_or_die() const override;
 

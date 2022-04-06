@@ -138,11 +138,6 @@ public:
     size_t get_limited() const { return _pruned_limit; }
 
     Status do_visit(const vectorized::NullableColumn& column) {
-        // Fastpath
-        if (!column.has_null()) {
-            return column.data_column_ref().accept(this);
-        }
-
         std::vector<const NullData*> null_datas;
         std::vector<ColumnPtr> data_columns;
         for (auto& col : _vertical_columns) {
@@ -458,6 +453,21 @@ Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vert
     }
 
     return Status::OK();
+}
+
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
+    if (chunks.empty() || perm.empty()) {
+        return;
+    }
+
+    DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
+    for (size_t col_index = 0; col_index < dst->columns().size(); col_index++) {
+        Columns tmp_columns;
+        for (auto chunk : chunks) {
+            tmp_columns.push_back(chunk->get_column_by_index(col_index));
+        }
+        append_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
+    }
 }
 
 } // namespace starrocks::vectorized

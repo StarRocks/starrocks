@@ -15,16 +15,13 @@ import java.util.List;
 import java.util.UUID;
 
 public class DeletePruneTest {
-
-    private static String runningDir = "fe/mocked/DeletePruneTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static DeleteHandler deleteHandler;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -84,59 +81,58 @@ public class DeletePruneTest {
         OlapTable tbl = (OlapTable) db.getTable("test_delete");
 
         String deleteSQL = "delete from test_delete where k1 = '2020-01-01'";
-        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p20200101");
 
-
         deleteSQL = "delete from test_delete where k1 = '2020-01-01' and k8 = 1";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p20200101");
 
         deleteSQL = "delete from test_delete where k1 not in ('2020-01-01')";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(366, res.size());
 
         deleteSQL = "delete from test_delete where k8 = 1";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(366, res.size());
 
         deleteSQL = "delete from test_delete where k1 in ('2020-01-01')";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p20200101");
 
         deleteSQL = "delete from test_delete where k1 > '2020-01-01' and k1 < '2020-01-03'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(2, res.size());
         Assert.assertEquals(res.get(0), "p20200101");
         Assert.assertEquals(res.get(1), "p20200102");
 
         deleteSQL = "delete from test_delete where k1 > '2020-01-03' and k1 < '2020-01-01'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(0, res.size());
 
         deleteSQL = "delete from test_delete where k1 = '2020-01-01' and k1 > '2020-01-03'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(0, res.size());
 
         deleteSQL = "delete from test_delete where k1 = '2020-01-03' and k1 > '2020-01-01'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p20200103");
 
         deleteSQL = "delete from test_delete where k1 in ('2020-01-03') and k1 > '2020-01-01'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p20200103");
@@ -150,25 +146,25 @@ public class DeletePruneTest {
         OlapTable tbl = (OlapTable) db.getTable("test_delete2");
 
         String deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id = 1000";
-        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         List<String> res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where date in ('2020-02-02')";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id > 1000";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(1, res.size());
         Assert.assertEquals(res.get(0), "p202002_2000");
 
         deleteSQL = "delete from test_delete2 where value = 'a'";
-        deleteStmt = (DeleteStmt) UtFrameUtils.parseAndAnalyzeStmt(deleteSQL, ctx);
+        deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
         res = deleteHandler.extractPartitionNamesByCondition(deleteStmt, tbl);
         Assert.assertEquals(3, res.size());
     }

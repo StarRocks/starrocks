@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY_ELEMENT;
 
 public class ArrayElementOperator extends ScalarOperator {
-    private final List<ScalarOperator> arguments = Lists.newArrayList();
+    protected List<ScalarOperator> arguments = Lists.newArrayList();
 
     public ArrayElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator) {
         super(ARRAY_ELEMENT, type);
@@ -47,6 +47,30 @@ public class ArrayElementOperator extends ScalarOperator {
     }
 
     @Override
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet used = new ColumnRefSet();
+        for (ScalarOperator child : arguments) {
+            used.union(child.getUsedColumns());
+        }
+        return used;
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        ArrayElementOperator operator = (ArrayElementOperator) super.clone();
+        // Deep copy here
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        this.arguments.forEach(p -> newArguments.add(p.clone()));
+        operator.arguments = newArguments;
+        return operator;
+    }
+
+    @Override
+    public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitArrayElement(this, context);
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;
@@ -61,18 +85,5 @@ public class ArrayElementOperator extends ScalarOperator {
     @Override
     public int hashCode() {
         return Objects.hashCode(arguments);
-    }
-
-    public ColumnRefSet getUsedColumns() {
-        ColumnRefSet used = new ColumnRefSet();
-        for (ScalarOperator child : arguments) {
-            used.union(child.getUsedColumns());
-        }
-        return used;
-    }
-
-    @Override
-    public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitArrayElement(this, context);
     }
 }

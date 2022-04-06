@@ -481,6 +481,7 @@ vectorized_functions = [
     [100013, 'current_version', 'VARCHAR', [], "UtilityFunctions::current_version"],
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
+    [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",

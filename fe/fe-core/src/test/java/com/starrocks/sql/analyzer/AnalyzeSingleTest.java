@@ -19,16 +19,14 @@ import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeSingleTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeSingle/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
@@ -52,8 +50,8 @@ public class AnalyzeSingleTest {
          *  Test ambiguous reference
          */
         analyzeSuccess("select v1, v1 from t0");
-        analyzeSuccess("select * from (select v1, v1 from t0) a");
-        analyzeSuccess("select * from (select v1 as v, v2 as v from t0) a");
+        analyzeWithoutTestView("select * from (select v1, v1 from t0) a");
+        analyzeWithoutTestView("select * from (select v1 as v, v2 as v from t0) a");
 
         /**
          * Test invalid reference
@@ -349,7 +347,8 @@ public class AnalyzeSingleTest {
                 "v1,v2,v3," +
                         "CAST(v1 AS INT),CAST(v1 AS CHAR),CAST(v1 AS VARCHAR),CAST(v1 AS DECIMAL64(10,5)),CAST(v1 AS BOOLEAN)," +
                         "abs(v1)," +
-                        "v1 * v1 / v1 % v1 + v1 - v1 DIV v1,v2 & ~ v1 | v3 ^ 1," +
+                        "((((v1 * v1) / v1) % v1) + v1) - (v1 DIV v1)," +
+                        "(v2 & (~v1)) | (v3 ^ 1)," +
                         "v1 + 20," +
                         "CASE v2 WHEN v3 THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
@@ -416,26 +415,26 @@ public class AnalyzeSingleTest {
     public void testSqlMode() {
         ConnectContext connectContext = getConnectContext();
         analyzeFail("select 'a' || 'b' from t0",
-                "Operand '('a') OR ('b')' part of predicate ''a'' should return type 'BOOLEAN'");
+                "Operand ''a' OR 'b'' part of predicate ''a'' should return type 'BOOLEAN'");
 
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT (TRUE) OR (FALSE) FROM `default_cluster:test`.`t0`"
+        Assert.assertEquals("SELECT TRUE OR FALSE FROM default_cluster:test.t0"
                 , AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT concat('a', 'b') FROM `default_cluster:test`.`t0`",
+        Assert.assertEquals("SELECT concat('a', 'b') FROM default_cluster:test.t0",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM `default_cluster:test`.`tall` WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
+                "SELECT * FROM default_cluster:test.tall WHERE ta LIKE concat(concat('h', 'a', 'i'), '%')",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -443,24 +442,24 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM `default_cluster:test`.`tall` WHERE (ta LIKE concat('h', 'a', 'i')) OR (TRUE)",
+                "SELECT * FROM default_cluster:test.tall WHERE (ta LIKE concat('h', 'a', 'i')) OR TRUE",
                 AST2SQL.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
-                "LIKE concat('h', 'a', 'i')) OR ('%')' part of predicate ''%'' should return type 'BOOLEAN'");
+                "LIKE concat('h', 'a', 'i')) OR '%'' part of predicate ''%'' should return type 'BOOLEAN'");
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_SORT_NULLS_LAST);
         statementBase = SqlParser.parse("select * from  tall order by ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta ASC NULLS LAST ",
+        Assert.assertEquals("SELECT * FROM default_cluster:test.tall ORDER BY ta ASC NULLS LAST ",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall order by ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta DESC NULLS FIRST ",
+                "SELECT * FROM default_cluster:test.tall ORDER BY ta DESC NULLS FIRST ",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -468,7 +467,7 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM `default_cluster:test`.`tall` ORDER BY ta ASC ",
+                "SELECT * FROM default_cluster:test.tall ORDER BY ta ASC ",
                 AST2SQL.toString(statementBase));
     }
 

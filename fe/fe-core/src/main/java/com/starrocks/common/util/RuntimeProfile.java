@@ -415,6 +415,10 @@ public class RuntimeProfile {
         this.name = name;
     }
 
+    public String getName() {
+        return name;
+    }
+
     // Returns the value to which the specified key is mapped;
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {

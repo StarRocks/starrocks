@@ -8,11 +8,19 @@
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
-#include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks::vectorized {
+
+template <typename T>
+StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+    if (reach_capacity_limit()) {
+        return Status::InternalError("Size of FixedLengthColumn exceed the limit");
+    } else {
+        return nullptr;
+    }
+}
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {

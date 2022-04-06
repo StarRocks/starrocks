@@ -7,12 +7,13 @@ import com.starrocks.analysis.JoinOperator;
 import java.util.List;
 
 public class JoinRelation extends Relation {
-    private final JoinOperator type;
+    private final JoinOperator joinOp;
     private Relation left;
     private Relation right;
     private Expr onPredicate;
     private String joinHint = "";
-    private final boolean lateral;
+    private boolean lateral;
+    private boolean isImplicit;
 
     /**
      * usingColNames is created by parser
@@ -20,16 +21,21 @@ public class JoinRelation extends Relation {
      */
     private List<String> usingColNames;
 
-    public JoinRelation(JoinOperator type, Relation left, Relation right, Expr onPredicate, boolean isLateral) {
-        this.type = type;
+    public JoinRelation(JoinOperator joinOp, Relation left, Relation right, Expr onPredicate, boolean isLateral) {
+        if (joinOp == null) {
+            this.joinOp = JoinOperator.CROSS_JOIN;
+            isImplicit = true;
+        } else {
+            this.joinOp = joinOp;
+        }
         this.left = left;
         this.right = right;
         this.onPredicate = onPredicate;
         this.lateral = isLateral;
     }
 
-    public JoinOperator getType() {
-        return type;
+    public JoinOperator getJoinOp() {
+        return joinOp;
     }
 
     public Relation getLeft() {
@@ -66,6 +72,14 @@ public class JoinRelation extends Relation {
 
     public boolean isLateral() {
         return lateral;
+    }
+
+    public void setLateral(boolean lateral) {
+        this.lateral = lateral;
+    }
+
+    public boolean isImplicit() {
+        return isImplicit;
     }
 
     public List<String> getUsingColNames() {

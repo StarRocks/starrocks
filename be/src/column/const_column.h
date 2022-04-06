@@ -177,8 +177,6 @@ public:
 
     size_t memory_usage() const override { return _data->memory_usage() + sizeof(size_t); }
 
-    size_t shrink_memory_usage() const override { return _data->shrink_memory_usage() + sizeof(size_t); }
-
     size_t container_memory_usage() const override { return _data->container_memory_usage(); }
 
     size_t element_memory_usage() const override { return _data->element_memory_usage(); }
@@ -213,9 +211,13 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
+    bool reach_capacity_limit() const override {
+        return _data->reach_capacity_limit() || _size > Column::MAX_CAPACITY_LIMIT;
+    }
 
     void check_or_die() const override;
+
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
 private:
     ColumnPtr _data;

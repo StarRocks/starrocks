@@ -17,6 +17,20 @@ Chunk::Chunk() {
     _tuple_id_to_index.reserve(1);
 }
 
+Status Chunk::upgrade_if_overflow() {
+    for (auto& column : columns()) {
+        auto ret = column->upgrade_if_overflow();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = ret.value();
+        } else {
+            continue;
+        }
+    }
+    return Status::OK();
+}
+
 Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
@@ -234,14 +248,6 @@ size_t Chunk::memory_usage() const {
     size_t memory_usage = 0;
     for (const auto& column : _columns) {
         memory_usage += column->memory_usage();
-    }
-    return memory_usage;
-}
-
-size_t Chunk::shrink_memory_usage() const {
-    size_t memory_usage = 0;
-    for (const auto& column : _columns) {
-        memory_usage += column->shrink_memory_usage();
     }
     return memory_usage;
 }
