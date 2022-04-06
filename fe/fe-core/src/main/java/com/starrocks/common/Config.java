@@ -1081,19 +1081,6 @@ public class Config extends ConfigBase {
     public static boolean using_old_load_usage_pattern = false;
 
     /**
-     * If the jvm memory used percent(heap or old mem pool) exceed this threshold, checkpoint thread will
-     * not work to avoid OOM.
-     */
-    @ConfField(mutable = true)
-    public static long metadata_checkopoint_memory_threshold = 60;
-
-    /**
-     * If set to true, the checkpoint thread will make the checkpoint regardless of the jvm memory used percent.
-     */
-    @ConfField(mutable = true)
-    public static boolean force_do_metadata_checkpoint = false;
-
-    /**
      * control rollup job concurrent limit
      */
     @ConfField(mutable = true)

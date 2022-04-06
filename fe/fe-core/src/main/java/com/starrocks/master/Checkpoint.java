@@ -26,9 +26,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.monitor.jvm.JvmService;
-import com.starrocks.monitor.jvm.JvmStats;
-import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
@@ -40,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -79,10 +75,6 @@ public class Checkpoint extends MasterDaemon {
             }
         } catch (IOException e) {
             LOG.error("Does not get storage info", e);
-            return;
-        }
-
-        if (!checkMemoryEnoughToDoCheckpoint()) {
             return;
         }
 
@@ -210,50 +202,4 @@ public class Checkpoint extends MasterDaemon {
         }
 
     }
-
-    /*
-     * Check whether can we do the checkpoint due to the memory used percent.
-     */
-    private boolean checkMemoryEnoughToDoCheckpoint() {
-        long memUsedPercent = getMemoryUsedPercent();
-        LOG.info("get jvm memory used percent: {} %", memUsedPercent);
-
-        if (memUsedPercent > Config.metadata_checkopoint_memory_threshold && !Config.force_do_metadata_checkpoint) {
-            LOG.warn("the memory used percent {} exceed the checkpoint memory threshold: {}",
-                    memUsedPercent, Config.metadata_checkopoint_memory_threshold);
-            return false;
-        }
-
-        return true;
-    }
-
-    /*
-     * Get the used percent of jvm memory pool.
-     * If old mem pool does not found(It probably should not happen), use heap mem usage instead.
-     * heap mem is slightly larger than old mem pool usage.
-     */
-    private long getMemoryUsedPercent() {
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
-        Iterator<MemoryPool> memIter = jvmStats.getMem().iterator();
-        MemoryPool oldMemPool = null;
-        while (memIter.hasNext()) {
-            MemoryPool memPool = memIter.next();
-            if (memPool.getName().equalsIgnoreCase("old")) {
-                oldMemPool = memPool;
-                break;
-            }
-        }
-        if (oldMemPool != null) {
-            long used = oldMemPool.getUsed().getBytes();
-            long max = oldMemPool.getMax().getBytes();
-            return used * 100 / max;
-        } else {
-            LOG.warn("failed to get jvm old mem pool, use heap usage instead");
-            long used = jvmStats.getMem().getHeapUsed().getBytes();
-            long max = jvmStats.getMem().getHeapMax().getBytes();
-            return used * 100 / max;
-        }
-    }
-
 }
