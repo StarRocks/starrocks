@@ -196,8 +196,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
+    private long runtimeFilterScanWaitTime = 20L;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
@@ -499,6 +504,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    public long getRuntimeFilterScanWaitTime() {
+        return runtimeFilterScanWaitTime;
+    }
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
     }
@@ -945,6 +953,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         final int global_runtime_filter_rpc_timeout = 400;
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
         switch (pipelineProfileLevel) {
             case 0:
