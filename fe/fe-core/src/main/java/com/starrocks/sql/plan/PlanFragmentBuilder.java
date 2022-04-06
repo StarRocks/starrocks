@@ -1470,6 +1470,7 @@ public class PlanFragmentBuilder {
             sortNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(sortNode);
+            estimateDopOfTopN(inputFragment);
             return inputFragment;
         }
 
@@ -1491,6 +1492,15 @@ public class PlanFragmentBuilder {
                     ConnectContext.get().getSessionVariable().getPipelineDop() == 0);
         }
 
+        private void estimateDopOfTopN(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.setPipelineDop(fragment.getParallelExecNum());
+            fragment.setParallelExecNum(1);
+            fragment.setDopEstimated();
+        }
+
         /**
          * Broadcast join and duplicate join should use pipeline parallel not fragment instance parallel,
          * because there is no local shuffle for these joins.
@@ -1499,6 +1509,13 @@ public class PlanFragmentBuilder {
          */
         private void estimateDopOfBroadcastAndReplicatedJoinInPipeline(PlanFragment fragment) {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            Preconditions.checkArgument(fragment.getPlanRoot() instanceof HashJoinNode);
+            HashJoinNode hashJoinNode = (HashJoinNode) fragment.getPlanRoot();
+            HashJoinNode.DistributionMode distributionMode = hashJoinNode.getDistributionMode();
+            if (!distributionMode.equals(HashJoinNode.DistributionMode.BROADCAST) &&
+                    !distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
                 return;
             }
             fragment.setPipelineDop(fragment.getParallelExecNum());
