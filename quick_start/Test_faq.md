@@ -22,7 +22,7 @@
 
 #### Hash partitioning
 
-* Choose **high-cardinality columns** as the hash partition key) to ensure that data is balanced among buckets. If a column has a unique ID, use it as the hash partition key. If there is data skew, use multiple columns as the hash partition key but try not to choose too many columns.
+* Choose **high-cardinality columns** as the hash partition key to ensure that data is balanced among buckets. If a column has a unique ID, use it as the hash partition key. If there is data skew, use multiple columns as the hash partition key but try not to choose too many columns.
 * The number of buckets affects query parallelism. We recommend setting each bucket around 100MB to 1GB.
 * To make full use of the limited machine resources, set the number of buckets based on ` Number of BE * cpu core / 2 `. For example, you have a table with 100GB data and four BEs each of which is 64C. To take full advantage of the CPU resources with only one partition, you can set 144 buckets (`4 * 64 /2  = 144`) and each bucket contains 694 MB data.
 

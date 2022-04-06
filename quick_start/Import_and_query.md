@@ -206,7 +206,7 @@ CANCEL ALTER TABLE COLUMN FROM table1\G
 
 ### Create Roll up
 
-Rollup is a new pre-aggregate acceleration technique used by StarRocks, which can be regarded as a materialized indexing structure built on the base table. By materialized, it means data is stored independently. By indexting, it means rollup can adjust the column order to increase the hit rate of prefix indexes, and also reduce key columns to make data aggregation efficient.
+Rollup is a new pre-aggregate acceleration technique used by StarRocks, which can be regarded as a materialized indexing structure built on the base table. By materialized, it means data is stored independently. By indexing, it means rollup can adjust the column order to increase the hit rate of prefix indexes, and also reduce key columns to make data aggregation efficient.
 
 The schema of the original table1 is as follows:
 
