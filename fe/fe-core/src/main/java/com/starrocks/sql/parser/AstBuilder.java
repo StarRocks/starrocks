@@ -1339,14 +1339,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("if", visit(context.expression(), Expr.class));
         } else if (context.LEFT() != null) {
             return new FunctionCallExpr("left", visit(context.expression(), Expr.class));
+        } else if (context.LIKE() != null) {
+            return new FunctionCallExpr("like", visit(context.expression(), Expr.class));
         } else if (context.MINUTE() != null) {
             return new FunctionCallExpr("minute", visit(context.expression(), Expr.class));
         } else if (context.MOD() != null) {
             return new FunctionCallExpr("mod", visit(context.expression(), Expr.class));
         } else if (context.MONTH() != null) {
             return new FunctionCallExpr("month", visit(context.expression(), Expr.class));
+        } else if (context.REGEXP() != null) {
+            return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
         } else if (context.RIGHT() != null) {
             return new FunctionCallExpr("right", visit(context.expression(), Expr.class));
+        } else if (context.RLIKE() != null) {
+            return new FunctionCallExpr("regexp", visit(context.expression(), Expr.class));
         } else if (context.SECOND() != null) {
             return new FunctionCallExpr("second", visit(context.expression(), Expr.class));
         } else if (context.YEAR() != null) {
