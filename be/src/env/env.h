@@ -379,4 +379,28 @@ private:
     std::vector<int64_t> _values;
 };
 
+inline void NumericStatistics::append(std::string_view name, int64_t value) {
+    _names.emplace_back(name);
+    _values.emplace_back(value);
+}
+
+inline int64_t NumericStatistics::size() const {
+    return static_cast<int64_t>(_names.size());
+}
+
+inline const std::string& NumericStatistics::name(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _names[idx];
+}
+
+inline int64_t NumericStatistics::value(int64_t idx) const {
+    assert(idx >= 0 && idx < size());
+    return _values[idx];
+}
+
+inline void NumericStatistics::reserve(int64_t size) {
+    _names.reserve(size);
+    _values.reserve(size);
+}
+
 } // namespace starrocks
