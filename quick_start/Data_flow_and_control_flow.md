@@ -33,7 +33,7 @@ The data import process is as follows:
 * After receiving the request, the BE reports to the FE master node, executes `loadTxnBegin`, and creates a global transaction. Due to that the base table and multiple buckets of the materialized index need to be updated at the same time, the global transaction is used to control the atomicity of this import to ensure consistency.
 * When the transaction is created successfully, it executes the `streamLoadPut` call to obtain the data import plan from the FE. Data import can be regarded as distributing data to all tablets copies involved, and the import plan contains data schemas and tablet replication information.
 * The BE pulls data from the data source, and constructs the internal data format based on the schemas of the base table and materialized index table.
-* According to the partitioning and bucketing rules and the copy location information, the BE coordinator packs and sends the data batches. The receiving BE writes the data to the corresponding bucket replicaiton.
+* According to the partitioning and bucketing rules and the copy location information, the BE coordinator packs and sends the data batches. The receiving BE writes the data to the corresponding bucket replication.
 * When the BE coordinator node completes the data import, it executes `loadTxnCommit` to the FE master node, submits the global transaction, and sends the execution status. The FE master confirms that most of the tablets involved are successfully copied, and makes the data publicly visible. If the import fails, the data won’t be visible and inconsistent data will be cleaned up in the background.
 
 ![load](../assets/2.4.2-1.png)
