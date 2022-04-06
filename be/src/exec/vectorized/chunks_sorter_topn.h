@@ -11,6 +11,32 @@ namespace starrocks::vectorized {
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorterTopn : public ChunksSorter {
 public:
+    static constexpr size_t kMaxBufferedChunks = 512;
+    static constexpr size_t kMinBufferedChunks = 16;
+    static constexpr size_t kDefaultBufferedChunks = 64;
+
+    // Tunning the max_buffer_chunks according to requested limit
+    // The experiment could refer to https://github.com/StarRocks/starrocks/pull/4694.
+    //
+    // This parameter has at least two effects:
+    // If smaller, the partial-merge-sort procedure would become more frequent, thus reduce the memory usage and
+    // generate a baseline to filter input data.
+    // If larger, the partial-merge-sort would become in-frequent, and cost lower, but the downside is the merge-sort
+    // stage is expensive compared to the filter stage.
+    //
+    // As a result, we need to tunning this parameter to achieve better performance.
+    // The followering heuristic is based on experiment of current algorithm implementation, which needs
+    // further improvement if the algorithm changed.
+    static constexpr size_t tunning_buffered_chunks(size_t limit) {
+        if (limit <= 1024) {
+            return 16;
+        }
+        if (limit <= 65536) {
+            return 64;
+        }
+        return 256;
+    }
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -18,11 +44,11 @@ public:
      * @param is_null_first  NULL values should at the head or tail.
      * @param offset         Number of top rows to skip.
      * @param limit          Number of top rows after those skipped to extract. Zero means no limit.
-     * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
+     * @param max_buffered_chunks  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                      const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset = 0,
-                     size_t limit = 0, size_t size_of_chunk_batch = 1000);
+                     size_t limit = 0, size_t max_buffered_chunks = kDefaultBufferedChunks);
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.
@@ -94,9 +120,9 @@ private:
 
     const size_t _offset;
     const size_t _limit;
+    const size_t _max_buffered_chunks;
 
     RawChunks _raw_chunks;
-
     bool _init_merged_segment;
     DataSegment _merged_segment;
 };
