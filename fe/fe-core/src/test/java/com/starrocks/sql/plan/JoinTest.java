@@ -2165,7 +2165,7 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
-    public void tesAutoEstimateDopForLocalBucketAndColocateJoin() throws Exception {
+    public void tesAutoEstimateDopInPipelineForJoin() throws Exception {
         final int numCPUs = 8;
         new MockUp<BackendCoreStat>() {
             @Mock
@@ -2221,7 +2221,28 @@ public class JoinTest extends PlanTestBase {
         Assert.assertEquals(numCPUs / 2, fragment.getParallelExecNum());
         Assert.assertEquals(1, fragment.getPipelineDop());
 
-        // Case 3: local bucket shuffle join succeeded by broadcast should also use fragment instance parallel.
+        // Case 3: broadcast join should use pipeline parallel.
+        sql = "select a.v1 from t0 a join [broadcast] t0 b on a.v1 = b.v2 and a.v2 = b.v1";
+        plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        planString = plan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        assertContains(planString, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)");
+        fragment = plan.getFragments().get(1);
+        Assert.assertEquals(1, fragment.getParallelExecNum());
+        Assert.assertEquals(numCPUs / 2, fragment.getPipelineDop());
+
+        // Case 4: local bucket shuffle join succeeded by broadcast should use fragment instance parallel.
         sql = "select a.v1 from t0 a join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1 join [broadcast] t0 c on a.v1 = c.v2";
         plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
         planString = plan.getExplainString(StatementBase.ExplainLevel.NORMAL);
