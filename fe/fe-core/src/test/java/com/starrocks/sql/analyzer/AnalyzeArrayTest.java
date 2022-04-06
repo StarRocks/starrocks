@@ -47,5 +47,6 @@ public class AnalyzeArrayTest {
                 "            array_contains(['x', 'y', null], 'y'),\n" +
                 "            array_contains([true, false, true], true),\n" +
                 "            array_contains([true, false, true], false)");
+        analyzeSuccess("select array_length(null)");
     }
 }
