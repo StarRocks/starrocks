@@ -12,6 +12,16 @@
 namespace starrocks::vectorized {
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
+    auto c0 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
+    c0->append_datum((uint32_t)1);
+
+    auto ret = c0->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
     auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
