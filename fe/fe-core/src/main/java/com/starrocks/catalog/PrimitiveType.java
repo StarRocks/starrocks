@@ -338,6 +338,7 @@ public enum PrimitiveType {
         int typeSize = 0;
         switch (this) {
             case INVALID_TYPE:
+            case BINARY:
                 break;
             case NULL_TYPE:
             case BOOLEAN:
