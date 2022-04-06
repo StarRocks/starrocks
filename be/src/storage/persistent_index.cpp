@@ -1247,12 +1247,12 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
             status = load(index_meta);
-            LOG(INFO) << "load persistent index #tablet:" << tablet->tablet_id() << " #version:" << version.to_string()
-                      << " #size: " << _size << " #l0_size: " << (_l0 ? _l0->size() : 0)
-                      << " #l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                      << " #shards: " << (_l1 ? _l1->_shards.size() : 0) << " #l1_size:" << (_l1 ? _l1->_size : 0)
-                      << " #memory: " << memory_usage() << " #status: " << status.to_string()
-                      << " #time:" << timer.elapsed_time() / 1000000 << "ms";
+            LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
+                      << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                      << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                      << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+                      << " memory: " << memory_usage() << " status: " << status.to_string()
+                      << " time:" << timer.elapsed_time() / 1000000 << "ms";
             return status;
         }
     }
@@ -1343,9 +1343,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     RETURN_IF_ERROR(_build_commit(tablet, index_meta));
     LOG(INFO) << "build persistent index finish tablet: " << tablet->tablet_id() << " version:" << apply_version
               << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
-              << " #size: " << _size << " #l0_size: " << _l0->size() << " #l0_capacity:" << _l0->capacity()
-              << " #shards: " << (_l1 ? _l1->_shards.size() : 0) << " #l1_size:" << (_l1 ? _l1->_size : 0)
-              << " #memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
+              << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
