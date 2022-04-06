@@ -16,20 +16,14 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class CreateTableWithPartitionTest {
-    private static String runningDir = "fe/mocked/CreateTableWithPartitionTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");

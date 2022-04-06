@@ -63,14 +63,13 @@ public class TempPartitionTest {
 
     private static String tempPartitionFile = "./TempPartitionTest";
     private static String tblFile = "./tblFile";
-    private static String runningDir = "fe/mocked/TempPartitionTest/" + UUID.randomUUID().toString() + "/";
 
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void setup() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         FeConstants.default_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
@@ -78,8 +77,6 @@ public class TempPartitionTest {
 
     @AfterClass
     public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
         File file2 = new File(tempPartitionFile);
         file2.delete();
         File file3 = new File(tblFile);
