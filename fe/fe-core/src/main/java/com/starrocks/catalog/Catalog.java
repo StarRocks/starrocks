@@ -1737,7 +1737,7 @@ public class Catalog {
         // load jobs
         int jobSize = dis.readInt();
         long newChecksum = checksum ^ jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of job jobs must be 0");
+        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
 
         // delete jobs
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
