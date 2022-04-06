@@ -12,12 +12,8 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -25,12 +21,13 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.parser.ParsingException;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.StringReader;
 import java.util.List;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
@@ -58,11 +55,9 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         ConnectContext context = ConnectContext.get();
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), context.getSessionVariable().getSqlMode());
-        com.starrocks.analysis.SqlParser parser = new SqlParser(input);
         StatementBase parsedStmt;
         try {
-            final List<StatementBase> stmts = SqlParserUtils.getMultiStmts(parser);
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, context.getSessionVariable().getSqlMode());
             if (stmts.size() > 1) {
                 response.appendContent(new RestBaseResult("/api/sql not support execute multiple query").toJson());
                 writeResponse(request, response, BAD_REQUEST);
@@ -86,8 +81,10 @@ public class ExecuteSqlAction extends RestBaseAction {
                 writeResponse(request, response, BAD_REQUEST);
                 return;
             }
-        } catch (AnalysisException e) {
-            response.appendContent(new RestBaseResult(parser.getErrorMsg(originStmt)).toJson());
+
+            PrivilegeChecker.check(parsedStmt, context);
+        } catch (ParsingException parsingException) {
+            response.appendContent(new RestBaseResult(parsingException.getErrorMessage()).toJson());
             writeResponse(request, response, BAD_REQUEST);
             return;
         } catch (Throwable e) {
