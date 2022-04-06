@@ -15,13 +15,14 @@ namespace starrocks::vectorized {
 ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                    const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
                                    const std::string& sort_keys, size_t offset, size_t limit,
-                                   size_t size_of_chunk_batch)
-        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true, size_of_chunk_batch),
+                                   size_t max_buffered_chunks)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true),
           _offset(offset),
           _limit(limit),
+          _max_buffered_chunks(max_buffered_chunks),
           _init_merged_segment(false) {
     auto& raw_chunks = _raw_chunks.chunks;
-    raw_chunks.reserve(size_of_chunk_batch);
+    raw_chunks.reserve(max_buffered_chunks);
 }
 
 ChunksSorterTopn::~ChunksSorterTopn() = default;
@@ -50,7 +51,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     // TopN caches _limit or _size_of_chunk_batch primitive chunks,
     // performs sorting once, and discards extra rows
 
-    if (_limit > 0 && (chunk_number >= _limit || chunk_number >= _size_of_chunk_batch)) {
+    if (_limit > 0 && (chunk_number >= _limit || chunk_number >= _max_buffered_chunks)) {
         RETURN_IF_ERROR(_sort_chunks(state));
     }
 

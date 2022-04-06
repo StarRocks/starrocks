@@ -16,8 +16,8 @@ namespace starrocks::vectorized {
 
 ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                                           const std::string& sort_keys, size_t size_of_chunk_batch)
-        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, false, size_of_chunk_batch) {
+                                           const std::string& sort_keys)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, false) {
     _selective_values.resize(_state->chunk_size());
 }
 

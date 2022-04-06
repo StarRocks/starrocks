@@ -161,7 +161,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
             sorter.done(nullptr);
@@ -179,7 +179,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
@@ -200,7 +200,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[1])));
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
@@ -233,7 +233,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_nullable_test) {
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
             // limit 5
             int limit_sz = 5;
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);
@@ -256,7 +256,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_nullable_test) {
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
             // limit 5
             int limit_sz = 10;
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);
@@ -280,7 +280,7 @@ TEST_F(HeapChunkSorterTest, single_column_order_by_nullable_test) {
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
             // limit 5
             int limit_sz = 5;
-            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz, 1024);
+            HeapChunkSorter sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(10));
             sorter.done(nullptr);

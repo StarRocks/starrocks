@@ -138,27 +138,23 @@ Status TopNNode::close(RuntimeState* state) {
 }
 
 Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
-    static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
-    static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
-
     ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
     if (_limit > 0) {
         // HeapChunkSorter has higher performance when sorting fewer elements,
         // after testing we think 1024 is a good threshold
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            _chunks_sorter = std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                               &_is_asc_order, &_is_null_first, _sort_keys, _offset,
-                                                               _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter =
+                    std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                      &_is_asc_order, &_is_null_first, _sort_keys, _offset, _limit);
         } else {
-            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys, _offset,
-                                                                _limit, SIZE_OF_CHUNK_FOR_TOPN);
+            _chunks_sorter = std::make_unique<ChunksSorterTopn>(
+                    state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
+                    _offset, _limit, ChunksSorterTopn::tunning_buffered_chunks(_limit));
         }
 
     } else {
         _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys,
-                                                                SIZE_OF_CHUNK_FOR_FULL_SORT);
+                                                                &_is_asc_order, &_is_null_first, _sort_keys);
     }
 
     bool eos = false;
