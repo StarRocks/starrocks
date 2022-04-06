@@ -33,7 +33,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ReplayFromDumpTest {
-    public static String runningDir = "fe/mocked/ReplayFromDumpTest/" + UUID.randomUUID().toString() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -42,7 +41,7 @@ public class ReplayFromDumpTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

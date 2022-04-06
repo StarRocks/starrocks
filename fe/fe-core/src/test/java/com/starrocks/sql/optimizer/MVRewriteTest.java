@@ -35,9 +35,6 @@ import org.junit.Test;
 import java.util.UUID;
 
 public class MVRewriteTest {
-    private static String baseDir = "fe";
-    private static String runningDir = baseDir + "/mocked/MaterializedViewFunctionTest/"
-            + UUID.randomUUID().toString() + "/";
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
     private static final String HR_DB_NAME = "db1";
@@ -58,7 +55,7 @@ public class MVRewriteTest {
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
@@ -118,7 +115,6 @@ public class MVRewriteTest {
     @AfterClass
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("ods_order");
-        UtFrameUtils.cleanStarRocksFeDir(baseDir);
     }
 
     @Test

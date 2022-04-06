@@ -17,7 +17,7 @@ public class AnalyzeTestUtil {
 
     public static void init() throws Exception {
         // create connect context
-        UtFrameUtils.createMinStarRocksCluster("analyze_test");
+        UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);

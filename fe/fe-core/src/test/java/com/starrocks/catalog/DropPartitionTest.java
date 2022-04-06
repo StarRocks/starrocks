@@ -39,13 +39,11 @@ import java.util.List;
 import java.util.UUID;
 
 public class DropPartitionTest {
-    private static String runningDir = "fe/mocked/DropPartitionTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -58,12 +56,6 @@ public class DropPartitionTest {
                 + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
         createTable(createTablleStr);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     private static void createDb(String sql) throws Exception {

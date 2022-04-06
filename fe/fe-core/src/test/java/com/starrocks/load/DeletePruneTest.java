@@ -15,16 +15,13 @@ import java.util.List;
 import java.util.UUID;
 
 public class DeletePruneTest {
-
-    private static String runningDir = "fe/mocked/DeletePruneTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static DeleteHandler deleteHandler;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

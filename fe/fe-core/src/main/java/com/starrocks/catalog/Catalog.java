@@ -2582,6 +2582,7 @@ public class Catalog {
             if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
                 bdbha.addHelperSocket(host, editLogPort);
                 helperNodes.add(Pair.create(host, editLogPort));
+                bdbha.addUnstableNode(host, getFollowerCnt());
             }
 
             // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
@@ -2618,6 +2619,9 @@ public class Catalog {
             if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
                 haProtocol.removeElectableNode(fe.getNodeName());
                 helperNodes.remove(Pair.create(host, port));
+
+                BDBHA ha = (BDBHA) haProtocol;
+                ha.removeUnstableNode(host, getFollowerCnt());
             }
             editLog.logRemoveFrontend(fe);
         } finally {
@@ -2650,6 +2654,16 @@ public class Catalog {
             }
         }
         return null;
+    }
+
+    public int getFollowerCnt() {
+        int cnt = 0;
+        for (Frontend fe : frontends.values()) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                cnt++;
+            }
+        }
+        return cnt;
     }
 
     // The interface which DdlExecutor needs.
