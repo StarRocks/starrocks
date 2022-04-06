@@ -28,6 +28,7 @@
 #include <memory>
 #include <vector>
 
+#include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -66,14 +67,13 @@ public:
     bool sort(ChunkPtr& chunk, TabletSharedPtr new_tablet);
     size_t allocated_rows() { return _max_allocated_rows; }
 
-    static bool _chunk_comparator(const ChunkRow& lhs, const ChunkRow& rhs) { return compare_chunk_row(lhs, rhs) < 0; }
-
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
     size_t _max_allocated_rows;
 };
 
+// TODO: optimize it with vertical sort
 class ChunkMerger {
 public:
     explicit ChunkMerger(TabletSharedPtr tablet);
@@ -482,24 +482,24 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
     }
 
     _swap_chunk->reset();
-    std::vector<ChunkRow> chunk_rows;
-    for (size_t i = 0; i < chunk->num_rows(); ++i) {
-        chunk_rows.emplace_back(i, chunk.get());
+
+    Columns key_columns;
+    std::vector<int> sort_orders;
+    std::vector<int> null_firsts;
+    for (int i = 0; i < chunk->schema()->num_key_fields(); i++) {
+        key_columns.push_back(chunk->get_column_by_index(i));
+        sort_orders.push_back(1);
+        null_firsts.push_back(-1);
     }
 
-    std::stable_sort(chunk_rows.begin(), chunk_rows.end(), _chunk_comparator);
-    // TODO
-    // check chunk is need to be sort or not
-    for (size_t i = 0; i < chunk->num_columns(); ++i) {
-        ColumnPtr& base_col = chunk->get_column_by_index(i);
-        ColumnPtr& new_col = _swap_chunk->get_column_by_index(i);
-        for (auto row : chunk_rows) {
-            size_t row_index = row.first;
-            new_col->append_datum(base_col->get(row_index));
-        }
-    }
+    SmallPermutation perm = create_small_permutation(chunk->num_rows());
+    Status st = stable_sort_and_tie_columns(false, key_columns, sort_orders, null_firsts, &perm);
+    CHECK(st.ok());
+    std::vector<uint32_t> selective;
+    permutate_to_selective(perm, &selective);
+    _swap_chunk = chunk->clone_empty_with_schema();
+    _swap_chunk->append_selective(*chunk, selective.data(), 0, chunk->num_rows());
 
-    chunk->swap_chunk(*_swap_chunk);
     return true;
 }
 
