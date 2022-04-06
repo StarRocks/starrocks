@@ -28,7 +28,9 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.MasterStateException;
 import com.sleepycat.je.rep.MemberNotFoundException;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationGroup;
+import com.sleepycat.je.rep.ReplicationMutableConfig;
 import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
@@ -40,15 +42,24 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class BDBHA implements HAProtocol {
     private static final Logger LOG = LogManager.getLogger(BDBHA.class);
 
-    private BDBEnvironment environment;
-    private String nodeName;
+    private final BDBEnvironment environment;
+    private final String nodeName;
     private static final int RETRY_TIME = 3;
+    // Unstable node is a follower node that is joining the cluster but have not completed.
+    // We should record this kind node and set the bdb electable group size to
+    // (size_of_all_followers - size_of_unstable_nodes).
+    // Because once the handshake is successful, the joined node is put into the optional group,
+    // but it may take a little time for this node to replicate the historical data.
+    // This node will never respond to a new data replication until the historical replication is completed,
+    // and if the master cannot receive a quorum response, the write operation will fail.
+    private final Set<String> unstableNodes = new HashSet<>();
 
     public BDBHA(BDBEnvironment env, String nodeName) {
         this.environment = env;
@@ -241,6 +252,33 @@ public class BDBHA implements HAProtocol {
 
         for (String nodeName : conflictNodes) {
             removeElectableNode(nodeName);
+        }
+    }
+
+    public synchronized void addUnstableNode(String nodeName, int currentFollowerCnt) {
+        unstableNodes.add(nodeName);
+        ReplicatedEnvironment replicatedEnvironment = environment.getReplicatedEnvironment();
+        if (replicatedEnvironment != null) {
+            replicatedEnvironment.
+                    setRepMutableConfig(new ReplicationMutableConfig().
+                            setElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size()));
+        }
+    }
+
+    public synchronized void removeUnstableNode(String nodeName, int currentFollowerCnt) {
+        unstableNodes.remove(nodeName);
+        ReplicatedEnvironment replicatedEnvironment = environment.getReplicatedEnvironment();
+        if (replicatedEnvironment != null) {
+            if (unstableNodes.isEmpty()) {
+                // Setting ElectableGroupSizeOverride to 0 means remove this config,
+                // and bdb will use the normal electable group size.
+                replicatedEnvironment.
+                        setRepMutableConfig(new ReplicationMutableConfig().setElectableGroupSizeOverride(0));
+            } else {
+                replicatedEnvironment.
+                        setRepMutableConfig(new ReplicationMutableConfig().
+                                setElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size()));
+            }
         }
     }
 }

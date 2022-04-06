@@ -34,8 +34,6 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class AdminSetConfigStmtTest {
-    private static String runningDir = "fe/mocked/AdminSetConfigStmtTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
 
     @Rule
@@ -43,7 +41,7 @@ public class AdminSetConfigStmtTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

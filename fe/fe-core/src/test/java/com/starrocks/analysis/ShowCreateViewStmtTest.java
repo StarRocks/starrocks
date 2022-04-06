@@ -20,8 +20,6 @@ import java.util.UUID;
 
 public class ShowCreateViewStmtTest {
 
-    private static String runningDir = "fe/mocked/ShowCreateViewStmtTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -31,7 +29,7 @@ public class ShowCreateViewStmtTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -63,8 +61,6 @@ public class ShowCreateViewStmtTest {
         } catch (Exception ex) {
 
         }
-
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     @Test
