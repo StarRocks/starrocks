@@ -53,7 +53,7 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(0).getType().isNull()) {
                 Preconditions.checkState(functionCallExpr.getChild(0).getType().isArrayType());
                 ArrayType arrayType = (ArrayType) functionCallExpr.getChild(0).getType();
-                if (!arrayType.hasNumericItem() && !arrayType.isNullTypeItem()) {
+                if (!arrayType.hasNumericItem() && !arrayType.isBooleanType() && !arrayType.isNullTypeItem()) {
                     throw new SemanticException("array_difference function only support numeric array types");
                 }
             }
