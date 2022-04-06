@@ -65,16 +65,12 @@ public class TableRelation extends Relation {
     }
 
     @Override
-    public TableName getAlias() {
+    public TableName getResolveTableName() {
         if (alias != null) {
             return alias;
         } else {
             return name;
         }
-    }
-
-    public TableName getAliasWithoutNameRewrite() {
-        return alias;
     }
 
     public boolean isMetaQuery() {

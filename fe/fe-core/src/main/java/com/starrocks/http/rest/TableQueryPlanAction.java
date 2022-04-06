@@ -230,7 +230,7 @@ public class TableQueryPlanAction extends RestBaseAction {
 
         // check consistent http requested resource with sql referenced
         // if consistent in this way, can avoid check privilege
-        TableName tableAndDb = stmt.getRelation().getAlias();
+        TableName tableAndDb = stmt.getRelation().getResolveTableName();
         if (!(tableAndDb.getDb().equals(requestDb) && tableAndDb.getTbl().equals(requestTable))) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "requested database and table must consistent with sql: request [ "

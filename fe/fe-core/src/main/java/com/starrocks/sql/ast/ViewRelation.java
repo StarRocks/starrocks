@@ -11,11 +11,6 @@ public class ViewRelation extends Relation {
 
     public ViewRelation(TableName name, View view, QueryStatement queryStatement) {
         this.name = name;
-        if (name != null) {
-            this.alias = name;
-        } else {
-            this.alias = null;
-        }
         this.view = view;
         this.queryStatement = queryStatement;
         // The order by is meaningless in subquery
@@ -25,12 +20,21 @@ public class ViewRelation extends Relation {
         }
     }
 
+    public View getView() {
+        return view;
+    }
+
     public TableName getName() {
         return name;
     }
 
-    public View getView() {
-        return view;
+    @Override
+    public TableName getResolveTableName() {
+        if (alias != null) {
+            return alias;
+        } else {
+            return name;
+        }
     }
 
     public QueryStatement getQueryStatement() {

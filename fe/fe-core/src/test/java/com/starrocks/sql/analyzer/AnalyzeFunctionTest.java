@@ -17,20 +17,11 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeFunctionTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeFunction/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -169,6 +160,10 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select year('2022-01-01 00:00:00')");
 
         analyzeSuccess("select password('root')");
+
+        analyzeSuccess("select like(ta, ta) from tall");
+        analyzeSuccess("select regexp(ta, ta) from tall");
+        analyzeSuccess("select rlike(ta, ta) from tall");
     }
 
     @Test

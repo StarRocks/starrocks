@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -27,20 +28,10 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeExprTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeExpr/" + UUID.randomUUID() + "/";
-
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     /**
@@ -55,7 +46,6 @@ public class AnalyzeExprTest {
         analyzeFail("select v_int -> 'k1' from tjson");
         analyzeFail("select v_json -> 1 from tjson");
         analyzeFail("select v_json -> k1 from tjson");
-
     }
 
     @Test
@@ -76,7 +66,23 @@ public class AnalyzeExprTest {
         Assert.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
         Assert.assertEquals(expected, callOperator.toString());
-
     }
 
+    @Test
+    public void testQuotedToString() {
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                " select (select 1 as v),v1 from t0")).getQueryRelation();
+        Assert.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testExpressionPreceding() {
+        String sql = "select v2&~v1|v3^1 from t0";
+        StatementBase statementBase = analyzeSuccess(sql);
+        Assert.assertTrue(AST2SQL.toString(statementBase).contains("(v2 & (~v1)) | (v3 ^ 1)"));
+
+        sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
+        statementBase = analyzeSuccess(sql);
+        Assert.assertTrue(AST2SQL.toString(statementBase).contains("((((v1 * v1) / v1) % v1) + v1) - (v1 DIV v1)"));
+    }
 }

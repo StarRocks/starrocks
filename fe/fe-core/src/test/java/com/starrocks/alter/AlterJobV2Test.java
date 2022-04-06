@@ -41,10 +41,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public class AlterJobV2Test {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static final String runningDir = "fe/mocked/AlterJobV2Test/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
 
     @BeforeClass
@@ -52,7 +48,7 @@ public class AlterJobV2Test {
         FeConstants.default_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -64,11 +60,6 @@ public class AlterJobV2Test {
                         "CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable(
                         "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {

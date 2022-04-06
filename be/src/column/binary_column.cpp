@@ -532,6 +532,49 @@ std::string BinaryColumnBase<T>::debug_item(uint32_t idx) const {
     return s;
 }
 
+size_t find_first_overflow_point(const BinaryColumnBase<uint32_t>::Offsets& offsets, size_t start, size_t end) {
+    for (size_t i = start; i < end; i++) {
+        if (offsets[i] > offsets[i + 1]) {
+            return i + 1;
+        }
+    }
+    return end;
+}
+
+template <typename T>
+StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
+    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
+
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        if (_offsets.size() > Column::MAX_CAPACITY_LIMIT) {
+            return Status::InternalError("column size exceed the limit");
+        } else if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
+            auto new_column = BinaryColumnBase<uint64_t>::create();
+            new_column->get_offset().resize(_offsets.size());
+            new_column->get_bytes().swap(_bytes);
+
+            size_t base = 0;
+            size_t start = 0;
+            size_t end = _offsets.size();
+
+            // TODO: There may be better implementations which improve performance
+            while (start < end) {
+                size_t mid = find_first_overflow_point(_offsets, start, end);
+                for (size_t i = start; i < mid; i++) {
+                    new_column->get_offset()[i] = static_cast<uint64_t>(_offsets[i]) + base;
+                }
+                base += Column::MAX_CAPACITY_LIMIT;
+                start = mid;
+            }
+            return new_column;
+        } else {
+            return nullptr;
+        }
+    } else {
+        return nullptr;
+    }
+}
+
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
 
