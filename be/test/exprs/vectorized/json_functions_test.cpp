@@ -7,6 +7,7 @@
 
 #include "butil/time.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace vectorized {
