@@ -36,7 +36,6 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
-            _wait_times[instance_id.lo] = TimeTrace{};
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -82,7 +81,6 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
     }
-    request.enqueue_nanos = MonotonicNanos();
     {
         auto& instance_id = request.fragment_instance_id;
         std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
@@ -100,7 +98,21 @@ bool SinkBuffer::is_full() const {
     for (auto& [_, buffer] : _buffers) {
         buffer_size += buffer.size();
     }
-    return buffer_size > max_buffer_size;
+    bool is_full = buffer_size > max_buffer_size;
+
+    if (is_full && _last_full_timestamp == -1) {
+        _last_full_timestamp = MonotonicNanos();
+    }
+    if (!is_full && _last_full_timestamp != -1) {
+        _full_time += (MonotonicNanos() - _last_full_timestamp);
+        _last_full_timestamp = -1;
+    }
+
+    return is_full;
+}
+
+void SinkBuffer::set_finishing() {
+    _pending_timestamp = MonotonicNanos();
 }
 
 bool SinkBuffer::is_finished() const {
@@ -120,7 +132,12 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
     COUNTER_SET(network_timer, _network_time());
-    COUNTER_SET(wait_timer, _wait_time());
+
+    // WaitTime consists two parts
+    // 1. buffer full time
+    // 2. pending finish time
+    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
@@ -156,31 +173,16 @@ int64_t SinkBuffer::_network_time() {
     return max;
 }
 
-int64_t SinkBuffer::_wait_time() {
-    int64_t max = 0;
-    for (auto& [_, time_trace] : _wait_times) {
-        double average_concurrency =
-                static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
-        int64_t average_accumulated_time =
-                static_cast<int64_t>(time_trace.accumulated_time / std::max(1.0, average_concurrency));
-        if (average_accumulated_time > max) {
-            max = average_accumulated_time;
-        }
-    }
-    return max;
-}
-
 void SinkBuffer::cancel_one_sinker() {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
     }
 }
 
-void SinkBuffer::_update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
-                              const int64_t receive_timestamp) {
+void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
+                                      const int64_t receive_timestamp) {
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
     _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
-    _wait_times[instance_id.lo].update(MonotonicNanos() - enqueue_nanos, concurrency);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
@@ -283,7 +285,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), request.enqueue_nanos, GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
@@ -310,7 +312,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
                 _process_send_window(ctx.instance_id, ctx.sequence);
-                _update_time(ctx.instance_id, ctx.enqueue_nanos, ctx.send_timestamp, result.receive_timestamp());
+                _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
                 _try_to_send_rpc(ctx.instance_id);
             }
             --_total_in_flight_rpc;

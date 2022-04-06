@@ -58,7 +58,6 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
-    _merge_chunk_source_profiles();
     do_close(state);
     Operator::close(state);
 }
@@ -126,6 +125,7 @@ bool ScanOperator::is_finished() const {
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    _merge_chunk_source_profiles();
     return Status::OK();
 }
 
