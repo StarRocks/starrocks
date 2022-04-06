@@ -724,22 +724,22 @@ void StorageEngine::_do_manual_compact() {
     for (auto data_dir : data_dirs) {
         uint64_t live_sst_files_size_before = 0;
         if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
-            LOG(WARNING) << "get_live_sst_files_size failed";
+            LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
             continue;
         }
         if (live_sst_files_size_before > config::rocksdb_manual_compact_live_sst_files_size) {
             Status s = data_dir->get_meta()->compact();
             if (!s.ok()) {
-                LOG(WARNING) << "manual compact meta failed: " << s;
+                LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
             } else {
-                LOG(INFO) << "manual compact meta successfully:";
-                LOG(INFO) << data_dir->get_meta()->get_stats();
                 uint64_t live_sst_files_size_after = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
-                    LOG(WARNING) << "get_live_sst_files_size failed";
+                    LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
                 }
-                LOG(INFO) << "live_sst_files_size_before: " << live_sst_files_size_before
-                          << " live_sst_files_size_after: " << live_sst_files_size_after;
+                LOG(INFO) << "data dir " << data_dir->path() << " manual compact meta successfully, "
+                          << "live_sst_files_size_before: " << live_sst_files_size_before
+                          << " live_sst_files_size_after: " << live_sst_files_size_after
+                          << data_dir->get_meta()->get_stats();
             }
         }
     }
