@@ -9,6 +9,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
@@ -29,6 +32,9 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionT
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -66,19 +72,19 @@ public class Optimizer {
         // Phase 1: none
         // Phase 2: rewrite based on memo and group
         Memo memo = new Memo();
-        memo.init(logicOperatorTree);
+        memo.init(logicOperatorTree); //平铺logicOperatorTree
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext); //构建上下文
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
         // directly from memo.
-        logicalRuleRewrite(memo, rootTaskContext);
+        logicalRuleRewrite(memo, rootTaskContext); //逻辑改写
 
         // collect all olap scan operator
-        collectAllScanOperators(memo, rootTaskContext);
+        collectAllScanOperators(memo, rootTaskContext); //将逻辑计划树平铺，形成集合
 
         // Currently, we cache output columns in logic property.
         // We derive logic property Bottom Up firstly when new group added to memo,
@@ -86,21 +92,68 @@ public class Optimizer {
         // So after column prune rewrite, the output columns for each operator maybe change,
         // but the logic property is cached and never change.
         // So we need to explicitly derive all group logic property again
-        memo.deriveAllGroupLogicalProperty();
+        memo.deriveAllGroupLogicalProperty(); //派生所有逻辑属性，包含有多少个tablet，是否在一个tablet中进行
 
         // Phase 3: optimize based on memo and group
-        memoOptimize(connectContext, memo, rootTaskContext);
+        memoOptimize(connectContext, memo, rootTaskContext); //展开所有可能的表达式（逻辑或物理）
 
         OptExpression result;
         if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
-            result = extractBestPlan(requiredProperty, memo.getRootGroup());
+            result = extractBestPlan(requiredProperty, memo.getRootGroup()); //根据分布式enforcement以及统计信息获取最优计划
         } else {
             // extract the nth execution plan
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
         }
+        result = physicalRuleRewrite(rootTaskContext, result); //改写物理计划
+        //rewrite predicate
+        result = predicateRewrite(result);
 
-        return physicalRuleRewrite(rootTaskContext, result);
+        return result;
+    }
+
+    private OptExpression predicateRewrite(OptExpression optExpression) {
+        // process PhysicalOlapScanOperator, iterator
+        if(optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            PhysicalOlapScanOperator op = (PhysicalOlapScanOperator) optExpression.getOp();
+            ScalarOperator predicate = op.getPredicate();
+            //check predicate type
+            if(predicate == null || !(predicate instanceof CompoundPredicateOperator)) {
+                return optExpression;
+            }
+            CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
+            //reorder predicate
+            predicateRewrite(compoundPredicateOperator.getChildren(), optExpression.getStatistics());
+        } else {
+            List<OptExpression> inputs = optExpression.getInputs();
+            for (int i = 0; i < inputs.size(); i++) {
+                predicateRewrite(inputs.get(i));
+            }
+        }
+        return optExpression;
+    }
+
+    private void predicateRewrite(List<ScalarOperator> children, Statistics statistics) {
+        if(children == null || children.size() == 0 ) {
+            return;
+        }
+        if(children.size() == 2){
+            ColumnStatistic leftColumnStatistics = ExpressionStatisticCalculator.calculate(children.get(0), statistics);
+            ColumnStatistic rightColumnStatistics = ExpressionStatisticCalculator.calculate(children.get(1), statistics);
+            predicateRewrite(children.get(0).getChildren(), statistics);
+            predicateRewrite(children.get(1).getChildren(), statistics);
+            //todo compare left and right, if left selectivity > right selectivity, swap it
+            // only use averageRowSize now
+            if(leftColumnStatistics.getAverageRowSize() > rightColumnStatistics.getAverageRowSize()) {
+                ScalarOperator tempScalarOperator = children.get(0);
+                children.set(0,children.get(1));
+                children.set(1,tempScalarOperator);
+            }
+        } else if(children.size() == 1){
+            predicateRewrite(children.get(0).getChildren(), statistics);
+        } else {
+            // must not here
+        }
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
