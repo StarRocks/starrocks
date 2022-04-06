@@ -866,6 +866,18 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
+                "  `v_int`  bigint NULL COMMENT \"\",\n" +
+                "  `v_json` json NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v_int`)\n" +
+                "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
     }
 

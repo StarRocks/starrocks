@@ -127,4 +127,10 @@ public class AnalyzeJoinTest {
         //Full outer does not support BROADCAST
         analyzeFail("select v1 from t0 full outer join [broadcast] t1 on t0.v1 = t1.v4");
     }
+
+    @Test
+    public void testJoinPreceding() {
+        QueryStatement query = ((QueryStatement) analyzeSuccess("select * from t0,t1 inner join t2 on v4 = v7"));
+        System.out.println(AST2SQL.toString(query));
+    }
 }

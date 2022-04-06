@@ -48,10 +48,6 @@ public class CTERelation extends Relation {
         return resolvedInFromClause;
     }
 
-    public TableName getAliasWithoutNameRewrite() {
-        return alias;
-    }
-
     @Override
     public String toString() {
         return name == null ? String.valueOf(cteId) : name;
@@ -63,7 +59,7 @@ public class CTERelation extends Relation {
     }
 
     @Override
-    public TableName getAlias() {
+    public TableName getResolveTableName() {
         if (alias != null) {
             return alias;
         } else {
