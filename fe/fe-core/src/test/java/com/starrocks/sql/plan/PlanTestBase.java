@@ -54,7 +54,7 @@ public class PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
-        UtFrameUtils.createMinStarRocksCluster("");
+        UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -860,6 +860,18 @@ public class PlanTestBase {
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
+                "  `v_int`  bigint NULL COMMENT \"\",\n" +
+                "  `v_json` json NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v_int`)\n" +
+                "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +

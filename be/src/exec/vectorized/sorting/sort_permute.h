@@ -20,7 +20,12 @@ enum CompareStrategy {
 struct PermutationItem {
     uint32_t chunk_index;
     uint32_t index_in_chunk;
+    // TODO: remove this field
     uint32_t permutation_index;
+
+    PermutationItem() = default;
+    PermutationItem(uint32_t ci, uint32_t ii, uint32_t pi)
+            : chunk_index(ci), index_in_chunk(ii), permutation_index(pi) {}
 };
 
 // Permutate items in a single chunk, so `chunk_index` is unnecessary

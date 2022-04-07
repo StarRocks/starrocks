@@ -45,8 +45,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ColocateTableTest {
-    private static String runningDir = "fe/mocked/ColocateTableTest" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static String dbName = "testDb";
     private static String fullDbName = "default_cluster:" + dbName;
@@ -60,15 +58,9 @@ public class ColocateTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Before

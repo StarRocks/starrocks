@@ -43,6 +43,8 @@ public:
     // Remove all records and reset the delete state.
     void reset();
 
+    Status upgrade_if_overflow();
+
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }

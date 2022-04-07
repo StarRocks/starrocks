@@ -224,7 +224,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testTwoJoinRootGreedy2() throws Exception {
         connectContext.getSessionVariable().disableDPJoinReorder();
         connectContext.getSessionVariable().enableGreedyJoinReorder();
-        String sql = "select * from t1 " +
+        String sql = "select t0.v1 from t1 " +
                 "join t3 on t1.v4 = t3.v1 " +
                 "join t0 on t1.v4 = t0.v2 " +
                 "join (select * from t1 join t3 on t1.v4 = t3.v1 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
@@ -451,7 +451,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testTwoJoinRootDP2() throws Exception {
         connectContext.getSessionVariable().enableDPJoinReorder();
         connectContext.getSessionVariable().disableGreedyJoinReorder();
-        String sql = "select * from t1 " +
+        String sql = "select t0.v1 from t1 " +
                 "join t3 on t1.v4 = t3.v1 " +
                 "join t0 on t1.v4 = t0.v2 " +
                 "join (select * from t1 join t3 on t1.v4 = t3.v1 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +

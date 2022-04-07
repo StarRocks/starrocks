@@ -148,6 +148,16 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
 }
 
 // NOLINTNEXTLINE
+TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
+    auto c = HyperLogLogColumn::create();
+    c->append(HyperLogLog());
+
+    auto ret = c->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+}
+
+// NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_reset_column) {
     auto c = HyperLogLogColumn::create();
 

@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 
 public class WorkGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
-    private static String runningDir = "fe/mocked/WorkGroupStmtTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
     private String createRg1Sql = "create resource_group rg1\n" +
             "to\n" +
@@ -98,14 +97,9 @@ public class WorkGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         FeConstants.default_scheduler_interval_millisecond = 1;
         starRocksAssert = new StarRocksAssert(ctx);

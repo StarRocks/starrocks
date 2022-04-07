@@ -4,6 +4,7 @@ package com.starrocks.external.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
@@ -61,6 +62,11 @@ public class Utils {
                     values.add(HiveMetaClient.HUDI_PARTITION_NULL_VALUE);
                 } else {
                     values.add(HiveMetaClient.PARTITION_NULL_VALUE);
+                }
+            } else if (value instanceof BoolLiteral) {
+                if (!isHudiTable) {
+                    BoolLiteral boolValue = ((BoolLiteral) value);
+                    values.add(String.valueOf(boolValue.getValue()));
                 }
             } else {
                 values.add(value.getStringValue());
