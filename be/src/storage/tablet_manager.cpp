@@ -286,14 +286,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
     return nullptr;
 }
 
-static std::string _gen_tablet_dir(const std::string& dir, int16_t shard_id, int64_t tablet_id) {
-    std::string path = dir;
-    path = path_util::join_path_segments(path, DATA_PREFIX);
-    path = path_util::join_path_segments(path, std::to_string(shard_id));
-    path = path_util::join_path_segments(path, std::to_string(tablet_id));
-    return path;
-}
-
 TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreateTabletReq& request,
                                                                     bool is_schema_change, const Tablet* base_tablet,
                                                                     const std::vector<DataDir*>& data_dirs) {
@@ -305,18 +297,12 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        std::string tablet_dir = _gen_tablet_dir(data_dir->path(), tablet_meta->shard_id(), request.tablet_id);
-        std::string schema_hash_dir =
-                path_util::join_path_segments(tablet_dir, std::to_string(request.tablet_schema.schema_hash));
-
-        st = FileUtils::create_dir(schema_hash_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
+        st = FileUtils::create_dir(new_tablet->schema_hash_path());
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to create " << schema_hash_dir << ": " << st.to_string();
+            LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
         }
-
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
-        DCHECK(new_tablet != nullptr);
         return new_tablet;
     }
     return nullptr;
