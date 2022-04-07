@@ -39,11 +39,6 @@ public class JsonTypeTest extends PlanTestBase {
         );
     }
 
-    @AfterClass
-    public static void afterClass() {
-        PlanTestBase.tearDown();
-    }
-
     @Test
     public void testJoin() {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
