@@ -117,6 +117,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // for chunk arrival and blocked on receive queues of its exchange node, so among
     // threads allocated for a query in the old execution engine, only small number of
     // them do the real work on core.
+    public static final String ENABLE_PIPELINE = "enable_pipeline";
+
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
@@ -194,8 +196,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
-    @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
-    private boolean enablePipelineEngine = false;
+    @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
+    private boolean enablePipelineEngine = true;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
