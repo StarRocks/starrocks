@@ -25,9 +25,9 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "common/version.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/types.pb.h"
-#include "gen_cpp/version.h"
 #include "util/cpu_info.h"
 
 #define PRECISION 2

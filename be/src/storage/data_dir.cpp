@@ -32,8 +32,8 @@
 #include <sstream>
 #include <utility>
 
+#include "common/version.h"
 #include "env/env.h"
-#include "gen_cpp/version.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
