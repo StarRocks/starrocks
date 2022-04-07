@@ -35,6 +35,7 @@
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
 #include "storage/fs/fs_util.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
@@ -69,6 +70,7 @@ class PagePointer;
 class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
+class Segment;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -83,13 +85,9 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker,
-                                                          std::shared_ptr<fs::BlockManager> block_mgr,
-                                                          ColumnMetaPB* meta, const std::string& file_name,
-                                                          uint32_t storage_format_version, bool kept_in_memory);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
 
-    ColumnReader(const private_type&, MemTracker* mem_tracker, std::shared_ptr<fs::BlockManager> block_mgr,
-                 const std::string& file_name, uint32_t storage_format_version, bool kept_in_memory);
+    ColumnReader(const private_type&, Segment* segment);
 
     ~ColumnReader();
 
@@ -126,7 +124,6 @@ public:
     bool has_all_dict_encoded() const { return _flags[kHasAllDictEncodedPos]; }
     bool all_dict_encoded() const { return _flags[kAllDictEncodedPos]; }
 
-    size_t num_rows() const { return _num_rows; }
     uint64_t total_mem_footprint() const { return _total_mem_footprint; }
 
     int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
@@ -150,9 +147,17 @@ public:
     Status bloom_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                         vectorized::SparseRange* ranges);
 
-    uint32_t version() const { return _storage_format_version; }
-
     Status load_ordinal_index_once();
+
+    inline const std::string& file_name() const { return _segment->file_name(); }
+
+    inline MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
+
+    inline fs::BlockManager* block_manager() const { return _segment->block_manager(); }
+    
+    inline bool keep_in_memory() const { return _segment->keep_in_memory(); }
+
+    inline uint32_t num_rows() const { return _segment->num_rows(); }
 
 private:
     struct private_type {
@@ -206,18 +211,16 @@ private:
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
-    MemTracker* _mem_tracker = nullptr;
-
+    // Pointer to its father segment, as the column reader 
+    // is never released before the end of the parent's life cycle, 
+    // so here we just use a normal pointer
+    Segment* _segment;
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
-    int32_t _column_length = 0;
     FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
-    std::shared_ptr<fs::BlockManager> _block_mgr;
-    uint64_t _num_rows = 0;
     uint64_t _total_mem_footprint = 0;
-    const std::string& _file_name;
 
     // initialized in init(), used for create PageDecoder
     const EncodingInfo* _encoding_info = nullptr;
@@ -244,8 +247,6 @@ private:
 
     std::bitset<16> _flags;
 
-    uint32_t _storage_format_version;
-    bool _kept_in_memory;
 };
 
 } // namespace starrocks
