@@ -1135,4 +1135,8 @@ public class PlanTestBase {
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
     }
+
+    public static void assertContains(String text, String pattern) {
+        Assert.assertTrue(text, text.contains(pattern));
+    }
 }
