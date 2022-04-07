@@ -146,8 +146,7 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof UpdateStmt;
+                || statement instanceof ShowTableStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -164,7 +163,6 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof UpdateStmt;
+                || statement instanceof ShowWorkGroupStmt;
     }
 }
