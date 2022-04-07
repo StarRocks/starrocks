@@ -32,16 +32,16 @@ private:
         explicit CompressedBuffer(size_t buff_size)
                 : _compressed_data(BitUtil::round_up(buff_size, CACHELINE_SIZE)), _offset(0), _limit(0) {}
 
-        inline Slice read_buffer() const { return Slice(&_compressed_data[_offset], _limit - _offset); }
+        Slice read_buffer() const { return Slice(&_compressed_data[_offset], _limit - _offset); }
 
-        inline Slice write_buffer() const { return Slice(&_compressed_data[_limit], _compressed_data.size() - _limit); }
+        Slice write_buffer() const { return Slice(&_compressed_data[_limit], _compressed_data.size() - _limit); }
 
-        inline void skip(size_t n) {
+        void skip(size_t n) {
             _offset += n;
             assert(_offset <= _limit);
         }
 
-        inline Status read(SequentialFile* f) {
+        Status read(SequentialFile* f) {
             if (_offset > 0) {
                 // Copy the bytes between the buffer's current offset and limit to the beginning of
                 // the buffer.
@@ -59,7 +59,7 @@ private:
             return Status::OK();
         }
 
-        inline size_t available() const { return _limit - _offset; }
+        size_t available() const { return _limit - _offset; }
 
     private:
         raw::RawVector<uint8_t> _compressed_data;
