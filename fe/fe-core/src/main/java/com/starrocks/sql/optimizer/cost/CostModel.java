@@ -281,6 +281,8 @@ public class CostModel {
             CostEstimate result;
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
+            // set network start cost 1 at least
+            // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
                 case ANY:
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
