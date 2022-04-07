@@ -43,6 +43,8 @@
 #include "storage/rowset/vectorized/segment_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/type_utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
@@ -188,7 +190,12 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& sche
                                                   const vectorized::SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates) {
+    ObjectPool pool;
+    std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>> predicates_for_zone_map_filter;
+    RETURN_IF_ERROR(vectorized::ZonemapPredicatesRewriter::rewrite_predicate_map(&pool, read_options.predicates,
+                                                                                 &predicates_for_zone_map_filter));
+
+    for (const auto& pair : predicates_for_zone_map_filter) {
         ColumnId column_id = pair.first;
         if (_column_readers[column_id] == nullptr || !_column_readers[column_id]->has_zone_map()) {
             continue;
