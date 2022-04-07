@@ -191,8 +191,8 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         auto wg_it = _workgroups.find(*it);
         DCHECK(wg_it != _workgroups.end());
         if (wg_it->second->is_removable()) {
-            _workgroups.erase(wg_it);
             _sum_cpu_limit -= wg_it->second->cpu_limit();
+            _workgroups.erase(wg_it);
             _workgroup_expired_versions.erase(it++);
         } else {
             ++it;
