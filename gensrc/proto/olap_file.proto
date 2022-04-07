@@ -287,6 +287,7 @@ message TabletMetaPB {
     optional RowsetTypePB preferred_rowset_type = 16;
     optional TabletTypePB tablet_type = 17;
     optional TabletUpdatesPB updates = 50; // used for new updatable tablet
+    optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
 }
 
 message OLAPIndexHeaderMessage {

@@ -787,6 +787,7 @@ public class RestoreJob extends AbstractJob {
                             indexMeta.getSchema(), bfColumns, bfFpp, null,
                             localTbl.getCopiedIndexes(),
                             localTbl.isInMemory(),
+                            localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()));
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);

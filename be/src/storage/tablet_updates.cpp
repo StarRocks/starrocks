@@ -757,6 +757,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
+    index.prepare(version);
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
@@ -769,6 +770,23 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         delete_op += one_delete->size();
         index.erase(*one_delete, &new_deletes);
     }
+
+    PersistentIndexMetaPB index_meta;
+    st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+    if (!st.ok() && !st.is_not_found()) {
+        std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+    st = index.commit(&index_meta);
+    if (!st.ok()) {
+        std::string msg = Substitute("primary index commit failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource
     // update state only used once, so delete it
@@ -862,7 +880,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     {
         std::lock_guard wl(_lock);
         // 4. write meta
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs);
+        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
+                                                    index_meta, _tablet.get_enable_persistent_index());
         if (!st.ok()) {
             std::string msg = Substitute("_apply_rowset_commit error: write meta failed: $0 $1", st.to_string(),
                                          _debug_string(false));
@@ -881,6 +900,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         _next_log_id++;
         _apply_version_idx++;
         _apply_version_changed.notify_all();
+    }
+
+    st = index.on_commited();
+    if (!st.ok()) {
+        std::string msg = Substitute("primary index on_commit failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
     }
     _update_total_stats(version_info.rowsets);
     int64_t t_write = MonotonicMillis();
@@ -1173,6 +1200,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
+    index.prepare(version);
     int64_t t_load = MonotonicMillis();
     // 2. iterator new rowset's pks, update primary index, generate delvec
     size_t total_deletes = 0;
@@ -1204,11 +1232,27 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     manager->index_cache().release(index_entry);
     int64_t t_index_delvec = MonotonicMillis();
 
+    PersistentIndexMetaPB index_meta;
+    st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+    if (!st.ok() && !st.is_not_found()) {
+        std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+    st = index.commit(&index_meta);
+    if (!st.ok()) {
+        std::string msg = Substitute("primary index commit failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+
     {
         std::lock_guard wl(_lock);
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs);
+                                                    delvecs, index_meta, _tablet.get_enable_persistent_index());
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = Substitute("_apply_compaction_commit error: write meta failed: $0 $1", st.to_string(),
@@ -1229,6 +1273,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _apply_version_idx++;
         _apply_version_changed.notify_all();
     }
+
+    st = index.on_commited();
+    if (!st.ok()) {
+        std::string msg = Substitute("primary index on_commit failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+
     {
         // Update the stats of affected rowsets.
         std::lock_guard lg(_rowset_stats_lock);
