@@ -6686,7 +6686,7 @@ public class Catalog {
         db.readLock();
         try {
             Table tbl = db.getTable(tableName);
-            if (!(tbl instanceof HiveMetaStoreTable)) {
+            if (tbl == null || !(tbl instanceof HiveMetaStoreTable)) {
                 throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
             table = (HiveMetaStoreTable) tbl;
