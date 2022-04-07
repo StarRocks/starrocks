@@ -92,6 +92,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/opcode/builtin_functions.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_constants.cpp
+    ${GEN_CPP_DIR}/version.cpp
 )
 
 # keep everything in one library, the object files reference

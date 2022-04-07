@@ -13,7 +13,7 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "gen_cpp/version.h"
+#include "common/version.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
