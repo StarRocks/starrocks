@@ -64,8 +64,8 @@ static int schema_num_children(const tparquet::SchemaElement& schema) {
 void SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info,
                                      bool is_nullable, ParquetField* field) {
     field->name = t_schema.name;
+    field->schema_element = t_schema;
     field->is_nullable = is_nullable;
-    field->logical_type = t_schema.logicalType;
     field->physical_type = t_schema.type;
     field->type_length = t_schema.type_length;
     field->scale = t_schema.scale;

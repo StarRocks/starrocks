@@ -33,12 +33,12 @@ struct LevelInfo {
 
 struct ParquetField {
     std::string name;
+    tparquet::SchemaElement schema_element;
 
     // Used to identify if this field is a nested field.
     TypeDescriptor type;
     bool is_nullable;
 
-    tparquet::LogicalType logical_type;
     // Only valid when this field is a leaf node
     tparquet::Type::type physical_type;
     // If type is FIXED_LEN_BYTE_ARRAY, this is the byte length of the vales.

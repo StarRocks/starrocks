@@ -37,23 +37,10 @@ public:
 
 class Int64ToDateTimeConverter : public ColumnConverter {
 public:
-    Int64ToDateTimeConverter(bool is_adjusted_to_utc, const tparquet::TimeUnit& time_unit)
-            : _is_adjusted_to_utc(is_adjusted_to_utc) {
-        if (time_unit.__isset.MILLIS) {
-            _scale = 1000;
-            _denominator = 1;
-        } else if (time_unit.__isset.MICROS) {
-            _scale = 1;
-            _denominator = 1;
-        } else if (time_unit.__isset.NANOS) {
-            _scale = 1;
-            _denominator = 1000;
-        }
-    }
-
+    Int64ToDateTimeConverter() = default;
     ~Int64ToDateTimeConverter() override = default;
 
-    Status init(const std::string& timezone);
+    Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
     Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
         return _convert_to_timestamp_column(src, dst);
     }
@@ -64,26 +51,75 @@ private:
     // When Hive stores a timestamp value into Parquet format, it converts local time
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
-    vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) {
+    [[nodiscard]] vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) const {
         return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
     }
 
 private:
-    bool _is_adjusted_to_utc;
+    bool _is_adjusted_to_utc = false;
     int _offset = 0;
-    int _scale;
-    int _denominator;
+
+    int64_t _second_mask = 0;
+    int64_t _scale_to_nano_factor = 0;
 };
 
-Status Int64ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
-        return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
+Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparquet::SchemaElement& schema_element) {
+    DCHECK_EQ(schema_element.type, tparquet::Type::INT64);
+
+    if (schema_element.__isset.logicalType) {
+        if (!schema_element.logicalType.__isset.TIMESTAMP) {
+            std::stringstream ss;
+            schema_element.logicalType.printTo(ss);
+            return Status::InternalError(
+                    strings::Substitute("expect parquet logical type is TIMESTAMP, actual is $0", ss.str()));
+        }
+
+        _is_adjusted_to_utc = schema_element.logicalType.TIMESTAMP.isAdjustedToUTC;
+
+        const auto& time_unit = schema_element.logicalType.TIMESTAMP.unit;
+        if (time_unit.__isset.MILLIS) {
+            _second_mask = 1000;
+            _scale_to_nano_factor = 1000000;
+        } else if (time_unit.__isset.MICROS) {
+            _second_mask = 1000000;
+            _scale_to_nano_factor = 1000;
+        } else if (time_unit.__isset.NANOS) {
+            _second_mask = 1000000000;
+            _scale_to_nano_factor = 1;
+        } else {
+            std::stringstream ss;
+            time_unit.printTo(ss);
+            return Status::InternalError(strings::Substitute("unexpected time unit $0", ss.str()));
+        }
+    } else if (schema_element.__isset.converted_type) {
+        _is_adjusted_to_utc = true;
+
+        const auto& converted_type = schema_element.converted_type;
+        if (converted_type == tparquet::ConvertedType::TIMESTAMP_MILLIS) {
+            _second_mask = 1000;
+            _scale_to_nano_factor = 1000000;
+        } else if (converted_type == tparquet::ConvertedType::TIMESTAMP_MICROS) {
+            _second_mask = 1000000;
+            _scale_to_nano_factor = 1000;
+        } else {
+            return Status::InternalError(
+                    strings::Substitute("unexpected converted type $0", tparquet::to_string(converted_type)));
+        }
+    } else {
+        return Status::InternalError(strings::Substitute("can not convert parquet type $0 to date time",
+                                                         tparquet::to_string(schema_element.type)));
     }
 
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
+    if (_is_adjusted_to_utc) {
+        cctz::time_zone ctz;
+        if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+            return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
+        }
+
+        const auto tp = std::chrono::system_clock::now();
+        const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+        _offset = al.offset;
+    }
 
     return Status::OK();
 }
@@ -110,8 +146,10 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            vectorized::Timestamp timestamp = src_data[i] * _scale / _denominator;
-            dst_data[i].set_timestamp(_is_adjusted_to_utc ? _utc_to_local(timestamp) : timestamp);
+            vectorized::Timestamp timestamp = vectorized::timestamp::of_epoch_second(
+                    static_cast<int>(src_data[i] / _second_mask),
+                    static_cast<int>((src_data[i] % _second_mask) * _scale_to_nano_factor));
+            dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
@@ -134,7 +172,7 @@ private:
     // When Hive stores a timestamp value into Parquet format, it converts local time
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
-    vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) {
+    [[nodiscard]] vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) const {
         return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
     }
 
@@ -402,7 +440,7 @@ private:
 
 class ScalarColumnReader : public ColumnReader {
 public:
-    ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
+    explicit ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ScalarColumnReader() override = default;
 
     Status init(int chunk_size, RandomAccessFile* file, const ParquetField* field,
@@ -473,7 +511,7 @@ private:
 // TODO(zc): Use the registration mechanism instead
 Status ScalarColumnReader::_init_convert_info() {
     tparquet::Type::type parquet_type = _field->physical_type;
-    const auto& parquet_logical_type = _field->logical_type;
+    const auto& schema_element = _field->schema_element;
     PrimitiveType col_type = _col_type.type;
 
     _need_convert = false;
@@ -565,11 +603,10 @@ Status ScalarColumnReader::_init_convert_info() {
             break;
 
         case PrimitiveType::TYPE_DATETIME: {
-            DCHECK(parquet_logical_type.__isset.TIMESTAMP);
-            auto converter = std::make_unique<Int64ToDateTimeConverter>(parquet_logical_type.TIMESTAMP.isAdjustedToUTC,
-                                                                        parquet_logical_type.TIMESTAMP.unit);
-            RETURN_IF_ERROR(converter->init(_opts.timezone));
+            auto converter = std::make_unique<Int64ToDateTimeConverter>();
+            RETURN_IF_ERROR(converter->init(_opts.timezone, schema_element));
             _converter = std::move(converter);
+            break;
         }
         default:
             break;
@@ -701,7 +738,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
 
 class ListColumnReader : public ColumnReader {
 public:
-    ListColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
+    explicit ListColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ListColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> element_reader) {
