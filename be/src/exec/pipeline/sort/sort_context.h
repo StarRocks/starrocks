@@ -172,7 +172,7 @@ private:
             }
         }
 
-        inline bool operator()(const DataSegment* a, const DataSegment* b) {
+        bool operator()(const DataSegment* a, const DataSegment* b) {
             // We used different index pattern for topn and full sort.
             if (_is_topn) {
                 return a->compare_at(a->_next_output_row, *b, b->_next_output_row, _sort_order_flag, _null_first_flag) >
