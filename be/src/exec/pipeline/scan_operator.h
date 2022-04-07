@@ -41,10 +41,6 @@ public:
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
     virtual int64_t get_cpu_cost() const override { return _total_cost_cpu_time_ns; }
-    virtual int64_t get_io_cost() const override { return _total_scan_bytes; }
-
-protected:
-    ScanNode* _scan_node = nullptr;
 
 private:
     // This method is only invoked when current morsel is reached eof

@@ -53,8 +53,6 @@ public:
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
     ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
 
-    double get_big_query_limit() const { return _big_query_limit; }
-
     int64_t id() const { return _id; }
 
     int64_t version() const { return _version; }
@@ -126,14 +124,14 @@ public:
     int64_t total_cpu_cost() const { return _total_cpu_cost.load(); }
     void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
-    int64_t total_io_cost() const { return _total_io_cost; }
-    void incr_total_io_cost(int64_t io_cost) { _total_io_cost += io_cost; }
-
     bool is_big_query(const QueryContext& query_context);
-    bool is_check_big_query() { return _big_query_limit == 1 ? false : true; }
     void incr_cur_query_num() { _cur_query_num++; }
     void decr_cur_query_num() { _cur_query_num--; }
     int64_t get_cur_query_num() const { return _cur_query_num; }
+
+    int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
+    int64_t big_query_cpu_core_second_limit() const { return _big_query_cpu_core_second_limit; }
+    int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
 
     // return true if current workgroup is removable:
     // 1. is already marked del
@@ -156,7 +154,11 @@ private:
     double _memory_limit;
     size_t _concurrency;
     WorkGroupType _type;
-    double _big_query_limit = 1;
+
+    // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
+    int64_t _big_query_mem_limit = 500;
+    int64_t _big_query_scan_rows_limit = 0;
+    int64_t _big_query_cpu_core_second_limit = 0;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
@@ -181,7 +183,7 @@ private:
     double _cur_select_factor = 0;
 
     std::atomic<int64_t> _total_cpu_cost = 0;
-    std::atomic<int64_t> _total_io_cost = 0;
+
     double _cpu_actual_use_ratio = 0;
 
     std::atomic<int64_t> _cur_query_num = 0;

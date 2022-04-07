@@ -43,8 +43,16 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
         _version = twg.version;
     }
 
-    if (twg.__isset.big_query_limit) {
-        _big_query_limit = twg.big_query_limit;
+    if (twg.__isset.big_query_mem_limit) {
+        _big_query_mem_limit = twg.big_query_mem_limit;
+    }
+
+    if (twg.__isset.big_query_scan_rows_limit) {
+        _big_query_scan_rows_limit = twg.big_query_scan_rows_limit;
+    }
+
+    if (twg.__isset.big_query_cpu_core_second_limit) {
+        _big_query_cpu_core_second_limit = twg.big_query_cpu_core_second_limit * NANOS_PER_SEC;
     }
 }
 
@@ -67,7 +75,9 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_mem_limit(_memory_limit);
     twg.__set_concurrency_limit(_concurrency);
     twg.__set_num_drivers(_acc_num_drivers);
-    twg.__set_big_query_limit(_big_query_limit);
+    twg.__set_big_query_mem_limit(_big_query_mem_limit);
+    twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
+    twg.__set_big_query_cpu_core_second_limit(_big_query_cpu_core_second_limit);
     return twg;
 }
 
@@ -193,29 +203,23 @@ bool WorkGroup::is_big_query(const QueryContext& query_context) {
     }
 
     // If there is only one query, do not check the big query
-    int64_t time_now = MonotonicNanos();
-    if (time_now - query_context.query_begin_time() <= config::min_execute_time * NANOS_PER_SEC) {
-        return false;
+    // int64_t time_now = MonotonicNanos();
+    // if (time_now - query_context.query_begin_time() <= config::min_execute_time * NANOS_PER_SEC) {
+    //    return false;
+    //}
+
+    if (_big_query_cpu_core_second_limit) {
+        int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
+        if (wg_growth_cpu_use_cost > _big_query_cpu_core_second_limit) {
+            return true;
+        }
     }
 
-    // check cpu
-    int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.get_init_wg_cpu_cost();
-    if (wg_growth_cpu_use_cost == 0) {
-        return false;
-    }
+    // just for debug
+    LOG(WARNING) << "query_context.cur_scan_rows_num() " << query_context.cur_scan_rows_num();
 
-    double cpu_use_ratio = (double)(query_context.get_cpu_cost() / wg_growth_cpu_use_cost);
-    if (cpu_use_ratio > _big_query_limit) {
-        return true;
-    }
-    // check io
-    int64_t wg_growth_cpu_io_cost = total_io_cost() - query_context.get_init_wg_io_cost();
-    if (wg_growth_cpu_io_cost == 0) {
-        return false;
-    }
-
-    double io_use_ratio = (double)(query_context.get_io_cost() / wg_growth_cpu_io_cost);
-    if (io_use_ratio > _big_query_limit) {
+    // Check scan rows number
+    if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
         return true;
     }
 

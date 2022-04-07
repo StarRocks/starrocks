@@ -189,7 +189,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
                 // for big query check
                 _total_cost_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                _total_io_bytes += _chunk_sources[chunk_source_index]->last_acquired_bytes();
+                _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
             }
 
             _num_running_io_tasks--;

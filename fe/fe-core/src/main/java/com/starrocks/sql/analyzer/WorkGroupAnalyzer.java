@@ -118,19 +118,30 @@ public class WorkGroupAnalyzer {
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_LIMIT)) {
-                double bigQueryLimit;
-                if (value.endsWith("%")) {
-                    value = value.substring(0, value.length() - 1);
-                    bigQueryLimit = Double.parseDouble(value) / 100;
-                } else {
-                    bigQueryLimit = Double.parseDouble(value);
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_MEM_LIMIT)) {
+                long bigQueryMemLimit = Long.parseLong(value);
+                if (bigQueryMemLimit < 0) {
+                    throw new SemanticException("big_query_mem_limit should greater than 0 or equal to 0");
                 }
+                workgroup.setBigQueryMemLimit(bigQueryMemLimit);
+                continue;
+            }
 
-                if (bigQueryLimit <= 0.5 || bigQueryLimit >= 1.0) {
-                    throw new SemanticException("big_query_limit should range from 0.5(exclude) to 1.00(exclude)");
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_SCAN_ROWS_LIMIT)) {
+                long bigQueryScanRowsLimit = Long.parseLong(value);
+                if (bigQueryScanRowsLimit < 0) {
+                    throw new SemanticException("big_query_scan_rows_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryLimit(bigQueryLimit);
+                workgroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                continue;
+            }
+
+            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_CORE_SECOND_LIMIT)) {
+                long bigQueryCpuCoreSecondLimit = Long.parseLong(value);
+                if (bigQueryCpuCoreSecondLimit < 0) {
+                    throw new SemanticException("big_query_cpu_core_second_limit should greater than 0 or equal to 0");
+                }
+                workgroup.setBigQueryCpuCoreSecondLimit(bigQueryCpuCoreSecondLimit);
                 continue;
             }
 

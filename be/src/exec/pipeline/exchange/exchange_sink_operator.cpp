@@ -584,8 +584,6 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     VLOG_ROW << "chunk data size " << chunk_size;
 
     COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_size * num_receivers);
-
-    _total_io_bytes += chunk_size * num_receivers;
     return Status::OK();
 }
 

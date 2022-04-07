@@ -75,7 +75,6 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
 
             if (tmp_chunk) {
                 _num_rows_input += tmp_chunk->num_rows();
-                _total_io_bytes += tmp_chunk->bytes_usage();
             } else {
                 break;
             }

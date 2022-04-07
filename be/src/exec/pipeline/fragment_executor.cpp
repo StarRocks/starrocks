@@ -129,9 +129,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         DCHECK(wg != nullptr);
 
         // init query context
-        if (!existing_query_ctx && wg->is_check_big_query()) {
+        if (!existing_query_ctx) {
             _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
-            _query_ctx->set_init_wg_io_cost(wg->total_io_cost());
             _query_ctx->init_query_begin_time();
             wg->incr_cur_query_num();
         }
@@ -158,13 +157,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
 
-    if (wg && wg->is_check_big_query()) {
-        int64_t limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * wg->get_mem_limit() *
-                        wg->get_big_query_limit();
-        _query_ctx->init_mem_tracker(wg->mem_tracker(), limit);
-        runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker());
+    if (wg) {
+        int64_t mem_limit = wg->big_query_mem_limit();
+        if (mem_limit && mem_limit < wg->mem_tracker()->limit()) {
+            _query_ctx->init_mem_tracker(wg->mem_tracker(), mem_limit);
+            runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker());
+        } else {
+            runtime_state->init_mem_trackers(query_id, wg->mem_tracker());
+        }
     } else {
-        runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
+        runtime_state->init_mem_trackers(query_id, nullptr);
     }
     runtime_state->set_be_number(backend_num);
     runtime_state->set_query_ctx(_query_ctx);

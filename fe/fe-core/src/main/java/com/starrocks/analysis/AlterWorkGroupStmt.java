@@ -62,9 +62,11 @@ public class AlterWorkGroupStmt extends DdlStmt {
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&
                     changedProperties.getConcurrencyLimit() == null &&
-                    changedProperties.getBigQueryLimit() == null) {
+                    changedProperties.getBigQueryCpuCoreSecondLimit() == null &&
+                    changedProperties.getBigQueryMemLimit() == null && 
+                    changedProperties.getBigQueryScanRowsLimit() == null) {
                 throw new SemanticException(
-                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit', 'big_query_limit' should be specified");
+                        "At least one of ('cpu_core_limit', 'mem_limit', 'concurrency_limit','big_query_mem_limit' , 'big_query_scan_rows_limit', 'big_query_cpu_core_second_limit', hould be specified");
             }
         }
     }

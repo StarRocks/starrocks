@@ -28,9 +28,17 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
+    virtual int64_t get_last_scan_rows_num() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
 protected:
     MorselQueue* _morsel_queue;
     ChunkSourcePtr _chunk_source;
+
+    int64_t _last_scan_rows_num = 0;
 };
 
 class SourceOperatorFactory : public OperatorFactory {
