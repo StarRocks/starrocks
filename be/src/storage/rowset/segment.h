@@ -139,15 +139,15 @@ public:
         return size;
     }
 
-    inline MemTracker* mem_tracker() const { return _mem_tracker; }
+    MemTracker* mem_tracker() const { return _mem_tracker; }
 
-    inline fs::BlockManager* block_manager() const { return _block_mgr.get(); }
+    fs::BlockManager* block_manager() const { return _block_mgr.get(); }
 
-    inline bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
+    bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
 
-    inline const std::string& file_name() const { return _fname; }
+    const std::string& file_name() const { return _fname; }
 
-    inline uint32_t num_rows() const { return _num_rows; }
+    uint32_t num_rows() const { return _num_rows; }
 
 private:
     Segment(const Segment&) = delete;
