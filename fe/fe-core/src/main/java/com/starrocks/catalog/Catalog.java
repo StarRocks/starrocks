@@ -811,9 +811,7 @@ public class Catalog {
     }
 
     private void writeUnlock() {
-        if (this.rwLock.writeLock().isHeldByCurrentThread()) {
-            this.rwLock.writeLock().unlock();
-        }
+        this.rwLock.writeLock().unlock();
     }
 
     public String getBdbDir() {
@@ -2725,12 +2723,12 @@ public class Catalog {
     }
 
     public void replayCreateDb(Database db) {
-        tryReadLock(true);
+        tryWriteLock(true);
         try {
             unprotectCreateDb(db);
             LOG.info("finish replay create db, name: {}, id: {}", db.getFullName(), db.getId());
         } finally {
-            readUnlock();
+            writeUnlock();
         }
     }
 
