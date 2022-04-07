@@ -35,7 +35,7 @@ public:
     void set_enable_trace(bool enable) {
         _enable_trace.store(enable);
         if (!enable) {
-            _clean_events();
+            _clean_events(true);
         }
     }
     bool enable_trace() const { return _enable_trace; }
@@ -45,7 +45,7 @@ public:
 
 private:
     static void _clean_thread_func(RuntimeFilterCache* cache);
-    void _clean_events();
+    void _clean_events(bool force);
     void _clean_filters();
     const size_t _num_slots;
     const size_t _slot_mask;

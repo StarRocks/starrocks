@@ -122,17 +122,17 @@ void RuntimeFilterCache::_clean_thread_func(RuntimeFilterCache* cache) {
     Thread::set_thread_name(cache->clean_thread(), "rf_cache_clr");
     while (!cache->is_stopped()) {
         cache->_clean_filters();
-        cache->_clean_events();
+        cache->_clean_events(false);
         std::this_thread::sleep_for(milliseconds(100));
     }
 }
-void RuntimeFilterCache::_clean_events() {
+void RuntimeFilterCache::_clean_events(bool force) {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _event_mutexes[i];
         auto& map = _event_maps[i];
         std::unique_lock write_lock(mutex);
         for (auto it = map.begin(); it != map.end();) {
-            if (it->second->is_expired()) {
+            if (force || it->second->is_expired()) {
                 it = map.erase(it);
             } else {
                 ++it;
@@ -183,6 +183,7 @@ JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filt
 }
 
 void RuntimeFilterCache::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {
+    if (!_enable_trace) return;
     const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
     auto& mutex = _event_mutexes[slot_idx];
     auto& map = _event_maps[slot_idx];

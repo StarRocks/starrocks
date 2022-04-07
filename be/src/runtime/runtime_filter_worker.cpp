@@ -26,7 +26,7 @@ public:
     int64_t seq = 0;
 };
 
-static const int default_send_rpc_runtime_filter_timeout_ms = 1000;
+static constexpr int default_send_rpc_runtime_filter_timeout_ms = 1000;
 
 static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
@@ -108,9 +108,15 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
                 filter, reinterpret_cast<uint8_t*>(rf_data->data()));
         rf_data->resize(actual_size);
 
+        auto passthrough_delivery = actual_size <= config::deliver_broadcast_rf_passthrough_bytes_limit;
         if (directly_send_broadcast_grf) {
-            state->exec_env()->runtime_filter_worker()->send_broadcast_runtime_filter(
-                    std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms);
+            auto sender_id =
+                    std::min_element(rf_desc->broadcast_grf_senders().begin(), rf_desc->broadcast_grf_senders().end(),
+                                     [](const auto& a, const auto& b) { return a.lo < b.lo; });
+            if (passthrough_delivery || *sender_id == state->fragment_instance_id()) {
+                state->exec_env()->runtime_filter_worker()->send_broadcast_runtime_filter(
+                        std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms);
+            }
         } else {
             state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params),
                                                                                  rf_desc->merge_nodes(), timeout_ms);
@@ -472,12 +478,17 @@ static inline Status receive_total_runtime_filter_pipeline(
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
     if (!query_ctx) {
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+    }
+    // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
+    query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    if (!query_ctx) {
         return Status::OK();
     }
-    // QueryContext is already destructed or invalid, so do nothing.
+    // the query is already finished, so it is needless to cache rf.
     if (query_ctx->is_finished() || query_ctx->is_expired()) {
         return Status::OK();
     }
+
     auto& probe_finst_ids = params.probe_finst_ids();
     for (auto finst_id_it = probe_finst_ids.begin(); finst_id_it != probe_finst_ids.end(); finst_id_it++) {
         auto& pb_finst_id = *finst_id_it;
@@ -490,6 +501,10 @@ static inline Status receive_total_runtime_filter_pipeline(
         // we conservatively consider that global rf arrives in advance, so cache it for later use.
         if (!fragment_ctx) {
             ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+        }
+        // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
+        fragment_ctx = query_ctx->fragment_mgr()->get(finst_id);
+        if (!fragment_ctx) {
             continue;
         }
         // FragmentContext is already destructed or invalid, so do nothing.
@@ -563,7 +578,6 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
 void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
         PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
-    DCHECK(!destinations.empty());
     std::random_device rd;
     std::mt19937 rand(rd());
     std::shuffle(destinations.begin(), destinations.end(), rand);
@@ -573,18 +587,76 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
     TNetworkAddress local;
     local.hostname = BackendOptions::get_localhost();
     local.port = config::brpc_port;
-    for (auto i = 1; i < destinations.size(); ++i) {
+    // put the local destination to the last
+    const auto last_dest_idx = destinations.size() - 1;
+    for (auto i = 0; i < destinations.size() - 1; ++i) {
         if (destinations[i].address == local) {
-            std::swap(destinations[i], destinations[0]);
+            std::swap(destinations[i], destinations[last_dest_idx]);
             break;
         }
     }
+    auto& last_dest = destinations[last_dest_idx];
+    if (last_dest.address == local) {
+        _deliver_broadcast_runtime_filter_local(params, last_dest);
+        destinations.resize(last_dest_idx);
+    }
+
+    if (destinations.empty()) {
+        return;
+    }
+
+    auto passthrough_delivery = params.data().size() <= config::deliver_broadcast_rf_passthrough_bytes_limit;
+    if (passthrough_delivery) {
+        _deliver_broadcast_runtime_filter_passthrough(std::move(params), std::move(destinations), timeout_ms);
+    } else {
+        _deliver_broadcast_runtime_filter_relay(std::move(params), std::move(destinations), timeout_ms);
+    }
+}
+
+void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRuntimeFilterParams&& request,
+                                                                  std::vector<TRuntimeFilterDestination>&& destinations,
+                                                                  int timeout_ms) {
+    DCHECK(!destinations.empty());
+    request.clear_probe_finst_ids();
+    request.clear_forward_targets();
+    auto first_dest = destinations[0];
+    for (const auto& id : first_dest.finstance_ids) {
+        auto* finst_id = request.add_probe_finst_ids();
+        finst_id->set_hi(id.hi);
+        finst_id->set_lo(id.lo);
+    }
+    for (auto i = 1; i < destinations.size(); ++i) {
+        auto& rest_dest = destinations[i];
+        auto* forward_target = request.add_forward_targets();
+        forward_target->set_host(rest_dest.address.hostname);
+        forward_target->set_port(rest_dest.address.port);
+        for (const auto& id : rest_dest.finstance_ids) {
+            auto* finst_id = forward_target->add_probe_finst_ids();
+            finst_id->set_hi(id.hi);
+            finst_id->set_lo(id.lo);
+        }
+    }
+
+    auto* rpc_closure = new RuntimeFilterRpcClosure();
+    rpc_closure->ref();
+    doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
+    _exec_env->add_rf_event(request.query_id(), request.filter_id(), first_dest.address.hostname,
+                            "DELIVER_BROADCAST_RF_RELAY");
+    send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
+    brpc::Join(rpc_closure->cntl.call_id());
+    rpc_closure->unref();
+}
+
+void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
+        PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
+    DCHECK(!destinations.empty());
 
     size_t k = 0;
-    static constexpr size_t NUM_INFLIGHT_RPC = 10;
+    std::vector<RuntimeFilterRpcClosure*> rpc_closures(config::deliver_broadcast_rf_passthrough_inflight_num);
     while (k < destinations.size()) {
-        auto num_inflight = std::min(destinations.size() - k, NUM_INFLIGHT_RPC);
-        std::vector<RuntimeFilterRpcClosure*> rpc_closures(num_inflight);
+        auto num_inflight =
+                std::min<size_t>(destinations.size() - k, config::deliver_broadcast_rf_passthrough_inflight_num);
+        rpc_closures.resize(num_inflight);
         auto start_idx = k;
         k += num_inflight;
         for (auto i = 0; i < num_inflight; ++i) {
@@ -602,15 +674,29 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
                 finst_id->set_lo(id.lo);
             }
             _exec_env->add_rf_event(request.query_id(), request.filter_id(), dest.address.hostname,
-                                    "SEND_BROADCAST_RF_RPC");
+                                    "DELIVER_BROADCAST_RF_PASSTHROUGH");
             send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
         }
 
         for (auto& rpc_closure : rpc_closures) {
             brpc::Join(rpc_closure->cntl.call_id());
             rpc_closure->unref();
+            delete rpc_closure;
         }
     }
+}
+
+void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& param,
+                                                                  const TRuntimeFilterDestination& local_dest) {
+    param.clear_forward_targets();
+    param.clear_probe_finst_ids();
+    for (auto& id : local_dest.finstance_ids) {
+        auto* finst_id = param.add_probe_finst_ids();
+        finst_id->set_hi(id.hi);
+        finst_id->set_lo(id.lo);
+    }
+    _exec_env->add_rf_event(param.query_id(), param.filter_id(), "DELIVER_BROADCAST_RF_LOCAL");
+    _receive_total_runtime_filter(param, nullptr);
 }
 
 void RuntimeFilterWorker::execute() {

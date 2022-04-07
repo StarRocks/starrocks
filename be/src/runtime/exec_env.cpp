@@ -237,7 +237,7 @@ const std::string& ExecEnv::token() const {
 }
 
 void ExecEnv::add_rf_event(const TUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg) {
-    _runtime_filter_cache->add_rf_event(query_id, filter_id, strings::Substitute("$0($1)", msg, network));
+    _runtime_filter_cache->add_rf_event(query_id, filter_id, strings::Substitute("$0($1)", std::move(msg), network));
 }
 void ExecEnv::add_rf_event(const PUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg) {
     TUniqueId tquery_id;

@@ -128,6 +128,13 @@ private:
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
                                                       std::vector<TRuntimeFilterDestination>&& destinations,
                                                       int timeout_ms);
+    void _deliver_broadcast_runtime_filter_passthrough(PTransmitRuntimeFilterParams&& params,
+                                                       std::vector<TRuntimeFilterDestination>&& destinations,
+                                                       int timeout_ms);
+    void _deliver_broadcast_runtime_filter_relay(PTransmitRuntimeFilterParams&& params,
+                                                 std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms);
+    void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
+                                                 const TRuntimeFilterDestination& destinations);
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;
