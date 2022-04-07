@@ -50,13 +50,13 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, const Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(const private_type&, Segment* segment)
+ColumnReader::ColumnReader(const private_type&, const Segment* segment)
         : _zone_map_index(), _ordinal_index(), _bitmap_index(), _bloom_filter_index(), _segment(segment) {
     mem_tracker()->consume(sizeof(ColumnReader));
 }

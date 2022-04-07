@@ -85,9 +85,9 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, Segment* segment);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, const Segment* segment);
 
-    ColumnReader(const private_type&, Segment* segment);
+    ColumnReader(const private_type&, const Segment* segment);
 
     ~ColumnReader();
 
@@ -244,7 +244,7 @@ private:
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
-    Segment* _segment;
+    const Segment* _segment = nullptr;
 
     std::bitset<16> _flags;
 };
