@@ -275,6 +275,8 @@ public:
 
     Status create_dir_if_missing(const std::string& dirname, bool* created) override;
 
+    Status create_dir_recursive(const std::string& dirname) override;
+
     Status delete_dir(const std::string& dirname) override;
 
     Status delete_dir_recursive(const std::string& dirname) override;
@@ -452,6 +454,10 @@ Status EnvS3::create_dir_if_missing(const std::string& dirname, bool* created) {
         st = Status::OK();
     }
     return st;
+}
+
+Status EnvS3::create_dir_recursive(const std::string& dirname) {
+    return create_dir_if_missing(dirname, nullptr);
 }
 
 StatusOr<bool> EnvS3::is_directory(const std::string& path) {

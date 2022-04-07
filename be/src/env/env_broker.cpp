@@ -386,7 +386,7 @@ StatusOr<std::unique_ptr<RandomRWFile>> EnvBroker::new_random_rw_file(const std:
 
 StatusOr<std::unique_ptr<RandomRWFile>> EnvBroker::new_random_rw_file(const RandomRWFileOptions& opts,
                                                                       const std::string& path) {
-    return Status::NotSupported("BrokerEnv::new_random_rw_file");
+    return Status::NotSupported("EnvBroker::new_random_rw_file");
 }
 
 Status EnvBroker::path_exists(const std::string& path) {
@@ -447,19 +447,27 @@ Status EnvBroker::_delete_file(const std::string& path) {
 }
 
 Status EnvBroker::create_dir(const std::string& dirname) {
-    return Status::NotSupported("BrokerEnv::create_dir");
+    return Status::NotSupported("EnvBroker::create_dir");
 }
 
 Status EnvBroker::create_dir_if_missing(const std::string& dirname, bool* created) {
-    return Status::NotSupported("BrokerEnv::create_dir_if_missing");
+    return Status::NotSupported("EnvBroker::create_dir_if_missing");
+}
+
+Status EnvBroker::create_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("EnvBroker::create_dir_recursive");
 }
 
 Status EnvBroker::delete_dir(const std::string& dirname) {
-    return Status::NotSupported("BrokerEnv::delete_dir");
+    return Status::NotSupported("EnvBroker::delete_dir");
+}
+
+Status EnvBroker::delete_dir_recursive(const std::string& dirname) {
+    return Status::NotSupported("EnvBroker::delete_dir_recursive");
 }
 
 Status EnvBroker::sync_dir(const std::string& dirname) {
-    return Status::NotSupported("BrokerEnv::sync_dir");
+    return Status::NotSupported("EnvBroker::sync_dir");
 }
 
 StatusOr<bool> EnvBroker::is_directory(const std::string& path) {
@@ -469,7 +477,7 @@ StatusOr<bool> EnvBroker::is_directory(const std::string& path) {
 }
 
 Status EnvBroker::canonicalize(const std::string& path, std::string* file) {
-    return Status::NotSupported("BrokerEnv::canonicalize");
+    return Status::NotSupported("EnvBroker::canonicalize");
 }
 
 StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
@@ -479,15 +487,15 @@ StatusOr<uint64_t> EnvBroker::get_file_size(const std::string& path) {
 }
 
 StatusOr<uint64_t> EnvBroker::get_file_modified_time(const std::string& path) {
-    return Status::NotSupported("BrokerEnv::get_file_modified_time");
+    return Status::NotSupported("EnvBroker::get_file_modified_time");
 }
 
 Status EnvBroker::rename_file(const std::string& src, const std::string& target) {
-    return Status::NotSupported("BrokerEnv::rename_file");
+    return Status::NotSupported("EnvBroker::rename_file");
 }
 
 Status EnvBroker::link_file(const std::string& old_path, const std::string& new_path) {
-    return Status::NotSupported("BrokerEnv::link_file");
+    return Status::NotSupported("EnvBroker::link_file");
 }
 
 Status EnvBroker::_list_file(const std::string& path, TBrokerFileStatus* stat) {
