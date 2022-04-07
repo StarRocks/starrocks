@@ -33,6 +33,7 @@ struct LevelInfo {
 
 struct ParquetField {
     std::string name;
+    tparquet::SchemaElement schema_element;
 
     // Used to identify if this field is a nested field.
     TypeDescriptor type;
