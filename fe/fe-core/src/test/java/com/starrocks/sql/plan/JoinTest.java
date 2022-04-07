@@ -2186,7 +2186,6 @@ public class JoinTest extends PlanTestBase {
             sessionVariable.setEnablePipelineEngine(true);
             sessionVariable.setPipelineDop(0);
             sessionVariable.setParallelExecInstanceNum(1);
-
             FeConstants.runningUnitTest = true;
 
             // Case 1: local bucket shuffle join should use fragment instance parallel.
@@ -2222,13 +2221,10 @@ public class JoinTest extends PlanTestBase {
             assertContains(fragmentString, "join op: INNER JOIN (BUCKET_SHUFFLE)");
             Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
             Assert.assertEquals(1, fragment.getPipelineDop());
-
-
         } finally {
             sessionVariable.setEnablePipelineEngine(enablePipeline);
             sessionVariable.setPipelineDop(pipelineDop);
             sessionVariable.setParallelExecInstanceNum(parallelExecInstanceNum);
-
             FeConstants.runningUnitTest = false;
         }
     }

@@ -1490,9 +1490,11 @@ public class PlanFragmentBuilder {
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
                     ConnectContext.get().getSessionVariable().getPipelineDop() == 0);
         }
+
         /**
          * Broadcast join and duplicate join should use pipeline parallel not fragment instance parallel,
          * because there is no local shuffle for these joins.
+         *
          * @param fragment The fragment which needs to estimate DOP.
          */
         private void estimateDopOfBroadcastAndReplicatedJoinInPipeline(PlanFragment fragment) {
@@ -1506,15 +1508,15 @@ public class PlanFragmentBuilder {
 
         /**
          * Local bucket shuffle join and colocate join should use fragment instance parallel not pipeline parallel,
-         * to avoid local shuffle and too large in-filter in left scan node.
+         * to avoid local shuffle and too large in-filter in the left scan node.
+         *
          * @param fragment The fragment which needs to estimate DOP.
          */
         private void estimateDopOfColocateAndLocalBucketJoinInPipeline(PlanFragment fragment) {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(1);
-            fragment.setParallelExecNum(fragment.getParallelExecNum());
+            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
             fragment.setDopEstimated();
         }
 
