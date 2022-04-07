@@ -431,12 +431,34 @@ struct THashJoinNode {
 }
 
 struct TMergeJoinNode {
-  // anything from the ON, USING or WHERE clauses that's an equi-join predicate
-  1: required list<TEqJoinCondition> cmp_conjuncts
+    1: required TJoinOp join_op
 
-  // anything from the ON or USING clauses (but *not* the WHERE clause) that's not an
-  // equi-join predicate
-  2: optional list<Exprs.TExpr> other_join_conjuncts
+    // anything from the ON, USING or WHERE clauses that's an equi-join predicate
+    2: required list<TEqJoinCondition> eq_join_conjuncts
+
+    // anything from the ON or USING clauses (but *not* the WHERE clause) that's not an
+    // equi-join predicate
+    3: optional list<Exprs.TExpr> other_join_conjuncts
+    4: optional bool is_push_down
+
+    // If true, this join node can (but may choose not to) generate slot filters
+    // after constructing the build side that can be applied to the probe side.
+    5: optional bool add_probe_filters
+
+    // Mark left anti join whether rewritten from not in
+    20: optional bool is_rewritten_from_not_in
+
+    // for profiling
+    21: optional string sql_join_predicates
+    22: optional string sql_predicates
+
+    // runtime filters built by this node.
+    50: optional list<TRuntimeFilterDescription> build_runtime_filters;
+    51: optional bool build_runtime_filters_from_planner;
+
+    52: optional TJoinDistributionMode distribution_mode;
+    53: optional list<Exprs.TExpr> partition_exprs
+    54: optional list<Types.TSlotId> output_columns
 }
 
 enum TAggregationOp {

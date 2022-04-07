@@ -23,7 +23,7 @@ import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -221,7 +221,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (!OperatorType.PHYSICAL_HASH_JOIN.equals(groupExpression.getOp().getOpType())) {
             return true;
         }
-        PhysicalHashJoinOperator node = (PhysicalHashJoinOperator) groupExpression.getOp();
+        PhysicalJoinOperator node = (PhysicalJoinOperator) groupExpression.getOp();
         // If broadcast child has hint, need to change the cost to zero
         double childCost = childBestExpr.getCost(inputProperty);
         if (node.getJoinHint().equalsIgnoreCase("BROADCAST")

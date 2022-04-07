@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementation
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -128,6 +129,7 @@ public class RuleSet {
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
             new HashJoinImplementationRule(),
+            new MergeJoinImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),

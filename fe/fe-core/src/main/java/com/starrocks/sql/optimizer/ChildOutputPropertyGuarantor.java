@@ -18,6 +18,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -27,7 +29,7 @@ import java.util.List;
 
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
-public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, ExpressionContext>  {
+public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, ExpressionContext> {
     private PhysicalPropertySet requirements;
     // children best group expression
     private List<GroupExpression> childrenBestExprList;
@@ -219,6 +221,15 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
 
     @Override
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
 
         String hint = node.getJoinHint();
@@ -307,5 +318,4 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
 
         return visitOperator(node, context);
     }
-
 }

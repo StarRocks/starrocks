@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -318,6 +319,36 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashJoin(PhysicalHashJoinOperator join, ExpressionContext context) {
+            Preconditions.checkState(context.arity() == 2);
+            // For broadcast join, use leftExecInstanceNum as right child real destinations num.
+            int leftExecInstanceNum = context.getChildLeftMostScanTabletsNum(0);
+            context.getChildLogicalProperty(1).setLeftMostScanTabletsNum(leftExecInstanceNum);
+
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            Statistics leftStatistics = context.getChildStatistics(0);
+            Statistics rightStatistics = context.getChildStatistics(1);
+
+            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
+                    rightStatistics.getUsedColumns(),
+                    Utils.extractConjuncts(join.getOnPredicate()));
+
+            if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
+                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                        rightStatistics.getOutputSize(context.getChildOutputColumns(1))
+                                * Constants.CrossJoinCostPenalty, 0);
+            } else {
+                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                        rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
+            }
+        }
+
+        // TODO: 4/7/22 mergejoin 
+        @Override
+        public CostEstimate visitPhysicalMergeJoin(PhysicalMergeJoinOperator join, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
             // For broadcast join, use leftExecInstanceNum as right child real destinations num.
             int leftExecInstanceNum = context.getChildLeftMostScanTabletsNum(0);

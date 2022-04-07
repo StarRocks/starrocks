@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
@@ -200,6 +201,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalHashJoin(PhysicalHashJoinOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 
