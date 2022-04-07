@@ -2192,12 +2192,13 @@ public class JoinTest extends PlanTestBase {
             String sql = "select a.v1 from t0 a join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1";
             ExecPlan plan = getExecPlan(sql);
             PlanFragment fragment = plan.getFragments().get(1);
-            assertContains(fragment.getExplainString(TExplainLevel.NORMAL),  "join op: INNER JOIN (BUCKET_SHUFFLE)");
+            assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "join op: INNER JOIN (BUCKET_SHUFFLE)");
             Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
             Assert.assertEquals(1, fragment.getPipelineDop());
 
             // Case 2: colocate join should use fragment instance parallel.
-            sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
+            sql = "select * from colocate1 left join colocate2 " +
+                    "on colocate1.k1=colocate2.k1 and colocate1.k2=colocate2.k2;";
             plan = getExecPlan(sql);
             fragment = plan.getFragments().get(1);
             assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "join op: LEFT OUTER JOIN (COLOCATE)");
@@ -2213,7 +2214,9 @@ public class JoinTest extends PlanTestBase {
             Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
 
             // Case 4: local bucket shuffle join succeeded by broadcast should use fragment instance parallel.
-            sql = "select a.v1 from t0 a join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1 join [broadcast] t0 c on a.v1 = c.v2";
+            sql = "select a.v1 from t0 a " +
+                    "join [bucket] t0 b on a.v1 = b.v2 and a.v2 = b.v1 " +
+                    "join [broadcast] t0 c on a.v1 = c.v2";
             plan = getExecPlan(sql);
             fragment = plan.getFragments().get(1);
             String fragmentString = fragment.getExplainString(TExplainLevel.NORMAL);
