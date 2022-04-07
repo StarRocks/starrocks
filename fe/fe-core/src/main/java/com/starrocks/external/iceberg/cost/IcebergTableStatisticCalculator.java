@@ -2,7 +2,6 @@
 
 package com.starrocks.external.iceberg.cost;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -48,22 +47,82 @@ public class IcebergTableStatisticCalculator {
     public static Statistics getTableStatistics(List<Expression> icebergPredicates,
                                                 Table icebergTable,
                                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        IcebergTableStatisticCalculator calculator = new IcebergTableStatisticCalculator(icebergTable);
+        List<Types.NestedField> columns = icebergTable.schema().columns();
+        IcebergFileStats icebergFileStats = calculator.generateIcebergFileStats(icebergPredicates, columns);
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeTableStatistics(icebergPredicates, colRefToColumnMetaMap);
+                .makeTableStatistics(icebergFileStats, columns, colRefToColumnMetaMap);
     }
 
     public static List<ColumnStatistic> getColumnStatistics(List<Expression> icebergPredicates,
                                                             Table icebergTable,
                                                             Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        return new IcebergTableStatisticCalculator(icebergTable)
-                .makeColumnStatistics(icebergPredicates, colRefToColumnMetaMap);
+        IcebergTableStatisticCalculator calculator = new IcebergTableStatisticCalculator(icebergTable);
+        List<Types.NestedField> columns = icebergTable.schema().columns();
+        IcebergFileStats icebergFileStats = calculator.generateIcebergFileStats(icebergPredicates, columns);
+        return calculator.makeColumnStatistics(icebergFileStats, columns, colRefToColumnMetaMap);
     }
 
-    private List<ColumnStatistic> makeColumnStatistics(List<Expression> icebergPredicates,
-                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    public IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
+                                                     List<Types.NestedField> columns) {
+        Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
+        if (!snapshot.isPresent()) {
+            return null;
+        }
+
+        Map<Integer, Type.PrimitiveType> idToTypeMapping = columns.stream()
+                .filter(column -> column.type().isPrimitiveType())
+                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+        List<PartitionField> partitionFields = icebergTable.spec().fields();
+
+        Set<Integer> identityPartitionIds = IcebergUtil.getIdentityPartitions(icebergTable.spec()).keySet().stream()
+                .map(PartitionField::sourceId)
+                .collect(toSet());
+
+        List<Types.NestedField> nonPartitionPrimitiveColumns = columns.stream()
+                .filter(column -> !identityPartitionIds.contains(column.fieldId()) && column.type().isPrimitiveType())
+                .collect(toImmutableList());
+
+        TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
+                snapshot.get(), icebergPredicates, true);
+
+        IcebergFileStats icebergFileStats = null;
+        try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {
+            for (FileScanTask fileScanTask : fileScanTasks) {
+                DataFile dataFile = fileScanTask.file();
+                if (icebergFileStats == null) {
+                    icebergFileStats = new IcebergFileStats(
+                            idToTypeMapping,
+                            nonPartitionPrimitiveColumns,
+                            dataFile.partition(),
+                            dataFile.recordCount(),
+                            dataFile.fileSizeInBytes(),
+                            IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
+                            IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
+                            dataFile.nullValueCounts(),
+                            dataFile.columnSizes());
+                } else {
+                    icebergFileStats.incrementFileCount();
+                    icebergFileStats.incrementRecordCount(dataFile.recordCount());
+                    icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
+                    updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                            dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                    updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
+                            dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
+                    icebergFileStats.updateNullCount(dataFile.nullValueCounts());
+                    updateColumnSizes(icebergFileStats, dataFile.columnSizes());
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return icebergFileStats;
+    }
+
+    public List<ColumnStatistic> makeColumnStatistics(IcebergFileStats icebergFileStats,
+                                                      List<Types.NestedField> columns,
+                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         List<ColumnStatistic> columnStatistics = new ArrayList<>();
-        List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
         if (icebergFileStats == null) {
             columnStatistics.add(ColumnStatistic.unknown());
         } else {
@@ -89,11 +148,10 @@ public class IcebergTableStatisticCalculator {
         return columnStatistics;
     }
 
-    private Statistics makeTableStatistics(List<Expression> icebergPredicates,
-                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    public Statistics makeTableStatistics(IcebergFileStats icebergFileStats,
+                                          List<Types.NestedField> columns,
+                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         LOG.debug("Begin to make iceberg table statistics!");
-        List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
         if (icebergFileStats == null) {
             return Statistics.builder().build();
         }
@@ -123,18 +181,7 @@ public class IcebergTableStatisticCalculator {
         return statisticsBuilder.build();
     }
 
-    public List<Type> partitionTypes(List<PartitionField> partitionFields,
-                                     Map<Integer, Type.PrimitiveType> idToTypeMapping) {
-        ImmutableList.Builder<Type> partitionTypeBuilder = ImmutableList.builder();
-        for (PartitionField partitionField : partitionFields) {
-            Type.PrimitiveType sourceType = idToTypeMapping.get(partitionField.sourceId());
-            Type type = partitionField.transform().getResultType(sourceType);
-            partitionTypeBuilder.add(type);
-        }
-        return partitionTypeBuilder.build();
-    }
-
-    public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes) {
+    private void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes) {
         Map<Integer, Long> columnSizes = icebergFileStats.getColumnSizes();
         if (!icebergFileStats.hasValidColumnMetrics() || columnSizes == null || addedColumnSizes == null) {
             return;
@@ -196,62 +243,6 @@ public class IcebergTableStatisticCalculator {
                 }
             }
         }
-    }
-
-    public IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
-                                                      List<Types.NestedField> columns) {
-        Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable, true);
-        if (!snapshot.isPresent()) {
-            return null;
-        }
-
-        Map<Integer, Type.PrimitiveType> idToTypeMapping = columns.stream()
-                .filter(column -> column.type().isPrimitiveType())
-                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-        List<PartitionField> partitionFields = icebergTable.spec().fields();
-
-        Set<Integer> identityPartitionIds = IcebergUtil.getIdentityPartitions(icebergTable.spec()).keySet().stream()
-                .map(PartitionField::sourceId)
-                .collect(toSet());
-
-        List<Types.NestedField> nonPartitionPrimitiveColumns = columns.stream()
-                .filter(column -> !identityPartitionIds.contains(column.fieldId()) && column.type().isPrimitiveType())
-                .collect(toImmutableList());
-
-        TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicates, true);
-
-        IcebergFileStats icebergFileStats = null;
-        try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {
-            for (FileScanTask fileScanTask : fileScanTasks) {
-                DataFile dataFile = fileScanTask.file();
-                if (icebergFileStats == null) {
-                    icebergFileStats = new IcebergFileStats(
-                            idToTypeMapping,
-                            nonPartitionPrimitiveColumns,
-                            dataFile.partition(),
-                            dataFile.recordCount(),
-                            dataFile.fileSizeInBytes(),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.lowerBounds()),
-                            IcebergFileStats.toMap(idToTypeMapping, dataFile.upperBounds()),
-                            dataFile.nullValueCounts(),
-                            dataFile.columnSizes());
-                } else {
-                    icebergFileStats.incrementFileCount();
-                    icebergFileStats.incrementRecordCount(dataFile.recordCount());
-                    icebergFileStats.incrementSize(dataFile.fileSizeInBytes());
-                    updateSummaryMin(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.lowerBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    updateSummaryMax(icebergFileStats, partitionFields, IcebergFileStats.toMap(idToTypeMapping,
-                            dataFile.upperBounds()), dataFile.nullValueCounts(), dataFile.recordCount());
-                    icebergFileStats.updateNullCount(dataFile.nullValueCounts());
-                    updateColumnSizes(icebergFileStats, dataFile.columnSizes());
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return icebergFileStats;
     }
 
     private ColumnStatistic generateColumnStatistic(IcebergFileStats icebergFileStats,

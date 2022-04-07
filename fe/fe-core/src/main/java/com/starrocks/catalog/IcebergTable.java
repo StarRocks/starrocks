@@ -16,6 +16,9 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -290,5 +293,18 @@ public class IcebergTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public Statistics getTableStats(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        return IcebergUtil.getTableStatistics(this, colRefToColumnMetaMap);
+    }
+
+    public List<ColumnStatistic> getColumnStats(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        return IcebergUtil.getColumnStatistics(this, colRefToColumnMetaMap);
+    }
+
+    @Override
+    public void onDrop() {
+        Catalog.getCurrentCatalog().getIcebergRepository().clearCache();
     }
 }

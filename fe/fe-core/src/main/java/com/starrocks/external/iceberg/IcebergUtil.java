@@ -3,8 +3,14 @@
 package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HdfsFileFormat;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionField;
@@ -153,5 +159,19 @@ public class IcebergUtil {
             }
         }
         return columns.build();
+    }
+
+    public static Statistics getTableStatistics(
+            IcebergTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        return Catalog.getCurrentCatalog().getIcebergRepository().getMetaCache()
+                .getTableStatistics(new IcebergTableKey(table.getResourceName(), table.getDb(),
+                        table.getTable()), colRefToColumnMetaMap);
+    }
+
+    public static List<ColumnStatistic> getColumnStatistics(
+            IcebergTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        return Catalog.getCurrentCatalog().getIcebergRepository().getMetaCache()
+                .getColumnStatistics(new IcebergTableKey(table.getResourceName(), table.getDb(),
+                        table.getTable()), colRefToColumnMetaMap);
     }
 }

@@ -401,8 +401,7 @@ public class Utils {
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
-                    List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            new ArrayList<>(), table.getIcebergTable(),
+                    List<ColumnStatistic> columnStatisticList = table.getColumnStats(
                             scanOperator.getColRefToColumnMetaMap());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {
