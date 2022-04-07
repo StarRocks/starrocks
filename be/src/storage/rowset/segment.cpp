@@ -67,8 +67,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::s
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, 
-                                            mem_tracker), DeleterWithMemTracker<Segment>(mem_tracker));
+    auto segment = std::shared_ptr<Segment>(
+            new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, mem_tracker),
+            DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
     RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));

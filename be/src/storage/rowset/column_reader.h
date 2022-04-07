@@ -35,12 +35,12 @@
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
 #include "storage/fs/fs_util.h"
-#include "storage/rowset/segment.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/ordinal_page_index.h" // for OrdinalPageIndexIterator
 #include "storage/rowset/page_handle.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/vectorized/range.h"
 #include "util/once.h"
@@ -154,7 +154,7 @@ public:
     inline MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
 
     inline fs::BlockManager* block_manager() const { return _segment->block_manager(); }
-    
+
     inline bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
     inline uint32_t num_rows() const { return _segment->num_rows(); }
@@ -211,10 +211,6 @@ private:
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
-    // Pointer to its father segment, as the column reader 
-    // is never released before the end of the parent's life cycle, 
-    // so here we just use a normal pointer
-    Segment* _segment;
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
@@ -245,8 +241,12 @@ private:
     StarRocksCallOnce<Status> _bitmap_index_once;
     StarRocksCallOnce<Status> _bloomfilter_index_once;
 
-    std::bitset<16> _flags;
+    // Pointer to its father segment, as the column reader
+    // is never released before the end of the parent's life cycle,
+    // so here we just use a normal pointer
+    Segment* _segment;
 
+    std::bitset<16> _flags;
 };
 
 } // namespace starrocks

@@ -141,7 +141,7 @@ public:
 
     inline MemTracker* mem_tracker() const { return _mem_tracker; }
 
-    inline fs::BlockManager* block_manager() const { return _block_mgr.get();}
+    inline fs::BlockManager* block_manager() const { return _block_mgr.get(); }
 
     inline bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
 

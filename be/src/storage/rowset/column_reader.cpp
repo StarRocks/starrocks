@@ -57,11 +57,7 @@ StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta,
 }
 
 ColumnReader::ColumnReader(const private_type&, Segment* segment)
-        : _zone_map_index(),
-          _ordinal_index(),
-          _bitmap_index(),
-          _bloom_filter_index(),
-          _segment(segment) {
+        : _zone_map_index(), _ordinal_index(), _bitmap_index(), _bloom_filter_index(), _segment(segment) {
     mem_tracker()->consume(sizeof(ColumnReader));
 }
 
