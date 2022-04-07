@@ -149,15 +149,15 @@ public:
 
     Status load_ordinal_index_once();
 
-    inline const std::string& file_name() const { return _segment->file_name(); }
+    const std::string& file_name() const { return _segment->file_name(); }
 
-    inline MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
+    MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
 
-    inline fs::BlockManager* block_manager() const { return _segment->block_manager(); }
+    fs::BlockManager* block_manager() const { return _segment->block_manager(); }
 
-    inline bool keep_in_memory() const { return _segment->keep_in_memory(); }
+    bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
-    inline uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t num_rows() const { return _segment->num_rows(); }
 
 private:
     struct private_type {
