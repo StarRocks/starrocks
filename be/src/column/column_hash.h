@@ -284,7 +284,7 @@ inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed
     uint64_t hash = _mm_crc32_u64(seed, value0);
     hash = _mm_crc32_u64(hash, value1);
 #elif defined(__x86_64__)
-    hash = crc32(seed, (const unsigned char*)&value0, sizeof(uint64_t));
+    uint64_t hash = crc32(seed, (const unsigned char*)&value0, sizeof(uint64_t));
     hash = crc32(hash, (const unsigned char*)&value1, sizeof(uint64_t));
 #elif defined(__aarch64__)
     uint64_t hash = __crc32cd(seed, value0);

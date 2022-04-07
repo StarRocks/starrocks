@@ -298,7 +298,7 @@ CONF_mInt32(update_compaction_trace_threshold, "20");
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_mBool(enable_compaction, "true");
-CONF_Bool(enable_new_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "false");
 CONF_mInt32(max_compaction_task_num, "4");
 // < 0 means no limit
 CONF_mInt32(max_cumulative_compaction_task, "-1");

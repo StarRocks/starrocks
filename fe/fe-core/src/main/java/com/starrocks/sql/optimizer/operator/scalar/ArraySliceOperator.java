@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
@@ -11,12 +12,10 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY_SLICE;
 
 public class ArraySliceOperator extends ScalarOperator {
-    private final Type type;
-    private final List<ScalarOperator> arguments;
+    private List<ScalarOperator> arguments;
 
     public ArraySliceOperator(Type type, List<ScalarOperator> arguments) {
         super(ARRAY_SLICE, type);
-        this.type = type;
         this.arguments = arguments;
     }
 
@@ -50,6 +49,16 @@ public class ArraySliceOperator extends ScalarOperator {
         ColumnRefSet usedColumns = new ColumnRefSet();
         arguments.forEach(arg -> usedColumns.union(arg.getUsedColumns()));
         return usedColumns;
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        ArraySliceOperator operator = (ArraySliceOperator) super.clone();
+        // Deep copy here
+        List<ScalarOperator> newArguments = Lists.newArrayList();
+        this.arguments.forEach(p -> newArguments.add(p.clone()));
+        operator.arguments = newArguments;
+        return operator;
     }
 
     @Override

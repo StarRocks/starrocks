@@ -7,7 +7,7 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "exprs/expr_context.h"
-#include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -90,9 +90,9 @@ public:
         _chunk_2 = std::make_shared<Chunk>(columns_2, map);
         _chunk_3 = std::make_shared<Chunk>(columns_3, map);
 
-        auto* expr1 = new SlotRef(TypeDescriptor(TYPE_VARCHAR), 0, 2); // refer to region
-        auto* expr2 = new SlotRef(TypeDescriptor(TYPE_VARCHAR), 0, 1); // refer to nation
-        auto* expr3 = new SlotRef(TypeDescriptor(TYPE_INT), 0, 0);     // refer to cust_key
+        auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
+        auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation
+        auto* expr3 = new ColumnRef(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
         _exprs.push_back(expr1);
         _exprs.push_back(expr2);
         _exprs.push_back(expr3);

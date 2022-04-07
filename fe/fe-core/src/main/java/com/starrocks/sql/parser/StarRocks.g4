@@ -24,6 +24,7 @@ statement
         properties?
         AS queryStatement                                                               #createTableAsSelect
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
@@ -236,6 +237,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList
@@ -305,16 +307,21 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | columnReference                                                                     #columnRef
     | primaryExpression ARROW string                                                      #arrowExpression
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | '(' expression ')'                                                                  #parenthesizedExpression
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
+    | CAST '(' expression AS type ')'                                                     #cast
+    ;
+
+functionCall
+    : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
-    | CAST '(' expression AS type ')'                                                     #cast
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
 aggregationFunction
@@ -492,7 +499,7 @@ nonReserved
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN
     | GLOBAL
     | HASH | HOUR
     | INTERVAL

@@ -177,8 +177,6 @@ public:
 
     size_t memory_usage() const override { return _data->memory_usage() + sizeof(size_t); }
 
-    size_t shrink_memory_usage() const override { return _data->shrink_memory_usage() + sizeof(size_t); }
-
     size_t container_memory_usage() const override { return _data->container_memory_usage(); }
 
     size_t element_memory_usage() const override { return _data->element_memory_usage(); }

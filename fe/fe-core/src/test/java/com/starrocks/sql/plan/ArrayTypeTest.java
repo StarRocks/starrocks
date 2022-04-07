@@ -175,4 +175,13 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_difference"));
     }
+
+    @Test
+    public void testArrayClone() throws Exception {
+        String sql = "select array_contains([v],1), array_contains([v],2) from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  8:Project\n" +
+                "  |  <slot 8> : array_contains(ARRAY<bigint(20)>[7: expr], 1)\n" +
+                "  |  <slot 9> : array_contains(ARRAY<bigint(20)>[7: expr], 2)"));
+    }
 }
