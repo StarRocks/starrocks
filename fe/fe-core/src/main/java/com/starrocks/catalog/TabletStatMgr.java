@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Table.TableType;
@@ -121,17 +122,55 @@ public class TabletStatMgr extends MasterDaemon {
         TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
 
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
-            if (invertedIndex.getTabletMeta(entry.getKey()) == null) {
+            long tabletId = entry.getKey();
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null) {
                 // the replica is obsolete, ignore it.
                 continue;
             }
-            Replica replica = invertedIndex.getReplica(entry.getKey(), beId);
-            if (replica == null) {
-                // replica may be deleted from catalog, ignore it.
-                continue;
+
+            TTabletStat tabletStat = entry.getValue();
+            if (tabletMeta.isUseStarOS()) {
+                Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+                if (db == null) {
+                    continue;
+                }
+                db.writeLock();
+                try {
+                    Table table = db.getTable(tabletMeta.getTableId());
+                    if (table == null || !(table instanceof OlapTable)) {
+                        continue;
+                    }
+                    OlapTable olapTable = (OlapTable) table;
+                    Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
+                    if (partition == null) {
+                        continue;
+                    }
+                    MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                    if (index == null) {
+                        continue;
+                    }
+                    Tablet tablet = index.getTablet(tabletId);
+                    if (tablet == null) {
+                        continue;
+                    }
+
+                    Preconditions.checkState(tablet instanceof StarOSTablet);
+                    StarOSTablet starOSTablet = (StarOSTablet) tablet;
+                    starOSTablet.setDataSize(tabletStat.getData_size());
+                    starOSTablet.setRowCount(tabletStat.getRow_num());
+                } finally {
+                    db.writeUnlock();
+                }
+            } else {
+                Replica replica = invertedIndex.getReplica(entry.getKey(), beId);
+                if (replica == null) {
+                    // replica may be deleted from catalog, ignore it.
+                    continue;
+                }
+                // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+                replica.updateStat(tabletStat.getData_size(), tabletStat.getRow_num());
             }
-            // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
-            replica.updateStat(entry.getValue().getData_size(), entry.getValue().getRow_num());
         }
     }
 }

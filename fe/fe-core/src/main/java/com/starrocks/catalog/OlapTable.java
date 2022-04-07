@@ -1208,6 +1208,7 @@ public class OlapTable extends Table {
             }
             copied.setState(OlapTableState.NORMAL);
             for (Partition partition : copied.getPartitions()) {
+                boolean useStarOS = partition.isUseStarOS();
                 // remove shadow index from partition
                 for (MaterializedIndex deleteIndex : shadowIndex) {
                     partition.deleteRollupIndex(deleteIndex.getId());
@@ -1215,6 +1216,9 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
+                    if (useStarOS) {
+                        continue;
+                    }
                     for (Tablet tablet : idx.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             replica.setState(ReplicaState.NORMAL);
