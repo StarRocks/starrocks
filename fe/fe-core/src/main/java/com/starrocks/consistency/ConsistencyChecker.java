@@ -279,6 +279,11 @@ public class ConsistencyChecker extends MasterDaemon {
                         Queue<MetaObject> partitionQueue =
                                 new PriorityQueue<>(Math.max(table.getAllPartitions().size(), 1), COMPARATOR);
                         for (Partition partition : table.getPartitions()) {
+                            if (partition.isUseStarOS()) {
+                                // replicas are managed by StarOS and cloud storage.
+                                continue;
+                            }
+
                             // check partition's replication num. if 1 replication. skip
                             if (table.getPartitionInfo().getReplicationNum(partition.getId()) == (short) 1) {
                                 LOG.debug("partition[{}]'s replication num is 1. ignore", partition.getId());
