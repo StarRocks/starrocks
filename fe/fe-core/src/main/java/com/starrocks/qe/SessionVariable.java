@@ -805,6 +805,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableResourceGroup = enableResourceGroup;
     }
 
+    public void setPipelineDop(int pipelineDop) {
+        this.pipelineDop = pipelineDop;
+    }
+
     public int getPipelineDop() {
         return this.pipelineDop;
     }

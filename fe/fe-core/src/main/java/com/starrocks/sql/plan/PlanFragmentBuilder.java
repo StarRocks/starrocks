@@ -1485,24 +1485,38 @@ public class PlanFragmentBuilder {
             }
         }
 
-        private void estimateDopOfBroadcastJoinInPipeline(PlanFragment fragment) {
-            if (ConnectContext.get() == null ||
-                    !ConnectContext.get().getSessionVariable().isEnablePipelineEngine() ||
-                    ConnectContext.get().getSessionVariable().getPipelineDop() > 0) {
-                return;
-            }
-            if (fragment.isDopEstimated()) {
-                return;
-            }
-            Preconditions.checkArgument(fragment.getPlanRoot() instanceof HashJoinNode);
-            HashJoinNode hashJoinNode = (HashJoinNode) fragment.getPlanRoot();
-            HashJoinNode.DistributionMode distributionMode = hashJoinNode.getDistributionMode();
-            if (!distributionMode.equals(HashJoinNode.DistributionMode.BROADCAST) &&
-                    !distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
+        private boolean isDopAutoEstimate() {
+            return (ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
+                    ConnectContext.get().getSessionVariable().getPipelineDop() == 0);
+        }
+
+        /**
+         * Broadcast join and duplicate join should use pipeline parallel not fragment instance parallel,
+         * because there is no local shuffle for these joins.
+         *
+         * @param fragment The fragment which needs to estimate DOP.
+         */
+        private void estimateDopOfBroadcastAndReplicatedJoinInPipeline(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
             fragment.setPipelineDop(fragment.getParallelExecNum());
             fragment.setParallelExecNum(1);
+            fragment.setDopEstimated();
+        }
+
+        /**
+         * Local bucket shuffle join and colocate join should use fragment instance parallel not pipeline parallel,
+         * to avoid local shuffle and too large in-filter in the left scan node.
+         *
+         * @param fragment The fragment which needs to estimate DOP.
+         */
+        private void estimateDopOfColocateAndLocalBucketJoinInPipeline(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
             fragment.setDopEstimated();
         }
 
@@ -1708,7 +1722,7 @@ public class PlanFragmentBuilder {
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
+                    estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1752,7 +1766,11 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    estimateDopOfBroadcastJoinInPipeline(leftFragment);
+                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
+                        estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
+                    } else {
+                        estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
+                    }
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     setJoinPushDown(hashJoinNode);
@@ -1784,12 +1802,14 @@ public class PlanFragmentBuilder {
                     // distributionMode is BUCKET_SHUFFLE
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeBucketShufflePlanFragment(context, rightFragment,
+                        leftFragment = computeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeBucketShufflePlanFragment(context, leftFragment,
+                        leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
+                    estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
+                    return leftFragment;
                 }
             }
         }
