@@ -126,6 +126,8 @@ public:
 
     Status create_dir_if_missing(const std::string& dirname, bool* created) override;
 
+    Status create_dir_recursive(const std::string& dirname) override;
+
     Status delete_dir(const std::string& dirname) override;
 
     Status delete_dir_recursive(const std::string& dirname) override;

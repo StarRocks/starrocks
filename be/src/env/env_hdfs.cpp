@@ -153,6 +153,10 @@ public:
         return Status::NotSupported("EnvHdfs::create_dir_if_missing");
     }
 
+    Status create_dir_recursive(const std::string& dirname) override {
+        return Status::NotSupported("EnvHdfs::create_dir_recursive");
+    }
+
     Status delete_dir(const std::string& dirname) override { return Status::NotSupported("EnvHdfs::delete_dir"); }
 
     Status delete_dir_recursive(const std::string& dirname) override {

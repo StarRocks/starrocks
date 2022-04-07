@@ -612,6 +612,15 @@ public:
         return s;
     }
 
+    Status create_dir_recursive(const std::string& dirname) override {
+        std::error_code ec;
+        auto r = std::filesystem::create_directories(dirname, ec);
+        if (r == static_cast<std::uintmax_t>(-1)) {
+            return io_error(fmt::format("create {} recursive", dirname), ec.value());
+        }
+        return Status::OK();
+    }
+
     // Delete the specified directory.
     Status delete_dir(const std::string& dirname) override {
         if (rmdir(dirname.c_str()) != 0) {
