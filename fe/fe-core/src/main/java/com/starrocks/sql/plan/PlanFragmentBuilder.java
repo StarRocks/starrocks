@@ -1402,29 +1402,10 @@ public class PlanFragmentBuilder {
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
-                    List<Integer> leftOnPredicateColumns = new ArrayList<>();
-                    List<Integer> rightOnPredicateColumns = new ArrayList<>();
-                    JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
-                            leftOnPredicateColumns, rightOnPredicateColumns);
-
-                    List<ScalarOperator> leftPredicates = leftOnPredicateColumns.stream()
-                            .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
-                    List<Expr> leftJoinExprs =
-                            leftPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                    .collect(Collectors.toList());
-
-                    List<ScalarOperator> rightPredicates = rightOnPredicateColumns.stream()
-                            .map(columnRefFactory::getColumnRef).collect(Collectors.toList());
-                    List<Expr> rightJoinExprs =
-                            rightPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                    .collect(Collectors.toList());
-
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                            Expr.cloneList(leftJoinExprs, null));
-                    DataPartition rhsJoinPartition =
-                            new DataPartition(TPartitionType.HASH_PARTITIONED, rightJoinExprs);
+                            leftFragment.getDataPartition().getPartitionExprs());
+                    DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                            rightFragment.getDataPartition().getPartitionExprs());
 
                     leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
                     rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
