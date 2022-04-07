@@ -271,7 +271,6 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
 
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
-
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.

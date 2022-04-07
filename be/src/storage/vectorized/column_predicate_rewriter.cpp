@@ -160,7 +160,7 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
             if (PredicateType::kGT == pred->type() && iter != sorted_dicts.end() && iter->first == value) {
                 iter++;
             }
-            while (iter < sorted_dicts.end()) {
+            while (iter != sorted_dicts.end()) {
                 str_codewords.push_back(std::to_string(iter->second));
                 iter++;
             }
@@ -389,6 +389,44 @@ void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
 
     pred_rewrite(_predicates.non_vec_preds());
     pred_rewrite(_predicates.vec_preds());
+}
+
+Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool,
+                                                        const std::unordered_map<ColumnId, PredicateList>& src,
+                                                        std::unordered_map<ColumnId, PredicateList>* dst) {
+    DCHECK(dst != nullptr);
+    for (auto& [cid, preds] : src) {
+        dst->insert({cid, {}});
+        auto& preds_after_rewrite = dst->at(cid);
+        RETURN_IF_ERROR(rewrite_predicate_list(pool, preds, &preds_after_rewrite));
+    }
+    return Status::OK();
+}
+
+Status ZonemapPredicatesRewriter::rewrite_predicate_list(ObjectPool* pool, const PredicateList& src,
+                                                         PredicateList* dst) {
+    DCHECK(dst != nullptr);
+    for (auto& pred : src) {
+        if (pred->is_expr_predicate()) {
+            std::vector<const ColumnExprPredicate*> new_preds;
+            RETURN_IF_ERROR(_rewrite_column_expr_predicates(pool, pred, &new_preds));
+            if (!new_preds.empty()) {
+                dst->insert(dst->end(), new_preds.begin(), new_preds.end());
+            } else {
+                dst->emplace_back(pred);
+            }
+        } else {
+            dst->emplace_back(pred);
+        }
+    }
+    return Status::OK();
+}
+
+Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
+                                                                  std::vector<const ColumnExprPredicate*>* new_preds) {
+    DCHECK(new_preds != nullptr);
+    const ColumnExprPredicate* column_expr_pred = static_cast<const ColumnExprPredicate*>(pred);
+    return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 
 } // namespace starrocks::vectorized
