@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -104,9 +105,17 @@ public class ReorderJoinRule extends Rule {
                 // but the upstream node does depend on this input,
                 // so we need to restore this expression at this position
                 if (!newRootInputColumns.contains(id) && expressionKeys.contains(id)) {
-                    projectMap.put(
-                            context.getColumnRefFactory().getColumnRef(id),
-                            multiJoinNode.getExpressionMap().get(context.getColumnRefFactory().getColumnRef(id)));
+                    ScalarOperator scalarOperator =
+                            multiJoinNode.getExpressionMap().get(context.getColumnRefFactory().getColumnRef(id));
+                    // The expression map in multiJoinNode could have map like this :
+                    //  21 -> cast(20 as varchar)
+                    //  20 -> constant operator
+                    // The expression map key 21 should use replaceColumnRewriter to rewrite the value instead of use
+                    // its value cast operator directly.
+                    ReplaceColumnRefRewriter replaceColumnRefRewriter =
+                            new ReplaceColumnRefRewriter(multiJoinNode.getExpressionMap(), true);
+                    projectMap.put(context.getColumnRefFactory().getColumnRef(id),
+                            scalarOperator.clone().accept(replaceColumnRefRewriter, null));
                 }
             }
             joinExpr.getOp().setProjection(new Projection(projectMap, commonProjectMap));
@@ -281,7 +290,7 @@ public class ReorderJoinRule extends Rule {
 
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
-                                (LogicalJoinOperator) optExpression.getOp())
+                        (LogicalJoinOperator) optExpression.getOp())
                         .setProjection(null).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();

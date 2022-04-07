@@ -497,4 +497,13 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("17:CROSS JOIN"));
     }
+
+    @Test
+    public void testInsertWithMultiJoin() throws Exception {
+        String sql = "insert into test_all_type(t1b, t1c, t1d, t1a) select v1,v4,v7,t1b from (" +
+                "select v1,v4 from t0 join t1 on v1 = v4 ) a join (" +
+                "select t1a, null as t1b,v7 from test_all_type join t2 on t1a = v7) b on v1 = t1a";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 27> : CAST(NULL AS VARCHAR(20))"));
+    }
 }
