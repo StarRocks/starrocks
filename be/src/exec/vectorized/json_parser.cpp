@@ -26,6 +26,12 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
 }
 
 Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     try {
         if (_doc_stream_itr != _doc_stream.end()) {
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
@@ -36,7 +42,9 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
                 return Status::DataQualityError(err_msg);
             }
 
-            *row = doc.get_object();
+            _curr = doc.get_object();
+            *row = _curr;
+            _curr_ready = true;
             return Status::OK();
         }
         return Status::EndOfFile("all documents of the stream are iterated");
@@ -57,6 +65,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 }
 
 Status JsonDocumentStreamParser::advance() noexcept {
+    _curr_ready = false;
     if (++_doc_stream_itr != _doc_stream.end()) {
         return Status::OK();
     }
@@ -86,6 +95,12 @@ Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexc
 }
 
 Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all values of the array are iterated");
@@ -99,7 +114,10 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
+        _curr = val.get_object();
+        *row = _curr;
+        _curr_ready = true;
+
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to iterate json array as object. error: $0",
@@ -109,6 +127,7 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
 }
 
 Status JsonArrayParser::advance() noexcept {
+    _curr_ready = false;
     try {
         if (++_array_itr == _array.end()) {
             return Status::EndOfFile("all values of the array are iterated");
@@ -122,6 +141,12 @@ Status JsonArrayParser::advance() noexcept {
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(row));
 
     // json root filter.
@@ -136,7 +161,10 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
+        _curr = val.get_object();
+        *row = _curr;
+        _curr_ready = true;
+
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to iterate document stream as object with json root. error: $0",
@@ -145,7 +173,18 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
     }
 }
 
+Status JsonDocumentStreamParserWithRoot::advance() noexcept {
+    _curr_ready = false;
+    return this->JsonDocumentStreamParser::advance();
+}
+
 Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(row));
     simdjson::ondemand::value val;
     // json root filter.
@@ -158,13 +197,21 @@ Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noe
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
+        _curr = val.get_object();
+        *row = _curr;
+        _curr_ready = true;
+
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to iterate json array as object with json root. error: $0",
                                            simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
+}
+
+Status JsonArrayParserWithRoot::advance() noexcept {
+    _curr_ready = false;
+    return this->JsonArrayParser::advance();
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
@@ -197,6 +244,12 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(uint8_t* data, size_t len
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all documents of the stream are iterated");
@@ -211,7 +264,10 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
+        _curr = val.get_object();
+        *row = _curr;
+        _curr_ready = true;
+
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
@@ -222,6 +278,8 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
 }
 
 Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
+    _curr_ready = false;
+
     if (++_array_itr == _array.end()) {
         do {
             // forward document stream parser.
@@ -285,6 +343,12 @@ Status ExpandedJsonArrayParserWithRoot::parse(uint8_t* data, size_t len, size_t 
 }
 
 Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
+    if (UNLIKELY(_curr_ready)) {
+        _curr.reset();
+        *row = _curr;
+        return Status::OK();
+    }
+
     try {
         if (_array_itr == _array.end()) {
             return Status::EndOfFile("all documents of the stream are iterated");
@@ -299,7 +363,10 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
             return Status::DataQualityError(err_msg);
         }
 
-        *row = val.get_object();
+        _curr = val.get_object();
+        *row = _curr;
+        _curr_ready = true;
+
         return Status::OK();
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to iterate json array as object with json root. error: $0",
@@ -309,6 +376,8 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
 }
 
 Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
+    _curr_ready = false;
+
     if (++_array_itr == _array.end()) {
         do {
             // forward document stream parser.
