@@ -668,8 +668,28 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testJoin() throws Exception {
-        String sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select *\n" +
+                "from(\n" +
+                "        select S_SUPPKEY,\n" +
+                "            S_NATIONKEY\n" +
+                "        from supplier\n" +
+                "    ) l\n" +
+                "    right outer join [shuffle] (\n" +
+                "        select S_SUPPKEY,\n" +
+                "            max(S_ADDRESS) as MS\n" +
+                "        from supplier_nullable\n" +
+                "        group by S_SUPPKEY\n" +
+                "    ) r on l.S_SUPPKEY = r.S_SUPPKEY\n" +
+                "    and l.S_NATIONKEY = r.MS;";
+        plan = getVerboseExplain(sql);
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 21: S_ADDRESS"));
+
+        sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>"));
