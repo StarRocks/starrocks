@@ -188,7 +188,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
 
                 // for big query check
-                _total_cost_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
+                COUNTER_UPDATE(_total_cost_cpu_time_ns_counter,
+                               _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
                 _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
             }
 

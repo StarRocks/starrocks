@@ -138,12 +138,11 @@ public:
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
 
-    // 1. The different operators have their own independent logic for calculating Cost
-    // 2. Cost rappresenta un overhead dell'operatore in un ciclo di esecuzione
-    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns; }
+    // The different operators have their own independent logic for calculating Cost
+    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns_counter->value(); }
     virtual int64_t get_last_growth_cpu_time_ns() {
-        int64_t growth_time = _total_cost_cpu_time_ns - _last_growth_cpu_time_ns;
-        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns;
+        int64_t growth_time = _total_cost_cpu_time_ns_counter->value() - _last_growth_cpu_time_ns;
+        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns_counter->value();
         return growth_time;
     }
 
@@ -186,7 +185,7 @@ protected:
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 
-    std::atomic<int64_t> _total_cost_cpu_time_ns = 0;
+    RuntimeProfile::Counter* _total_cost_cpu_time_ns_counter = nullptr;
     int64_t _last_growth_cpu_time_ns = 0;
 
 private:
