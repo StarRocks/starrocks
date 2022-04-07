@@ -55,6 +55,8 @@ public class TableProperty implements Writable {
 
     private boolean isInMemory = false;
 
+    private boolean enablePersistentIndex = false;
+
     /*
      * the default storage format of this table.
      * DEFAULT: depends on BE's config 'default_rowset_type'
@@ -130,6 +132,11 @@ public class TableProperty implements Writable {
                 TStorageFormat.DEFAULT.name()));
         return this;
     }
+    public TableProperty buildEnablePersistentIndex() {
+        enablePersistentIndex = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
+        return this;
+    }
 
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
@@ -153,6 +160,10 @@ public class TableProperty implements Writable {
 
     public boolean isInMemory() {
         return isInMemory;
+    }
+
+    public boolean enablePersistentIndex() {
+        return enablePersistentIndex;
     }
 
     public TStorageFormat getStorageFormat() {
@@ -186,6 +197,7 @@ public class TableProperty implements Writable {
                 .buildDynamicProperty()
                 .buildReplicationNum()
                 .buildInMemory()
-                .buildStorageFormat();
+                .buildStorageFormat()
+                .buildEnablePersistentIndex();
     }
 }

@@ -8,6 +8,7 @@
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/olap_common.h"
+#include "storage/persistent_index.h"
 #include "storage/vectorized/chunk_iterator.h"
 
 namespace starrocks {
@@ -75,6 +76,14 @@ public:
 
     void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
+    Status prepare(const EditVersion& version);
+
+    Status commit(PersistentIndexMetaPB* index_meta);
+
+    Status on_commited();
+
+    Status abort();
+
     // [not thread-safe]
     std::size_t memory_usage() const;
 
@@ -94,6 +103,21 @@ private:
 
     Status _do_load(Tablet* tablet);
 
+    Status _build_persistent_values(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                    uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* values);
+
+    Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
+
+    void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                       DeletesMap* deletes);
+
+    void _erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes);
+
+    void _get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const;
+
+    void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                   const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
@@ -101,6 +125,7 @@ private:
     vectorized::Schema _pk_schema;
     FieldType _enc_pk_type = OLAP_FIELD_TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
+    std::unique_ptr<PersistentIndex> _persistent_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
