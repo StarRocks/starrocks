@@ -149,14 +149,11 @@ public:
             dest_path = data_dir_1;
         }
         EngineStorageMigrationTask migration_task(12345, 1111, dest_path);
-        std::cout << "start to migration to dest data dir:" << dest_path->path() << std::endl;
         ASSERT_OK(migration_task.execute());
-        std::cout << "migration to data dir 2 success" << std::endl;
+        // sleep 2 second for add latency for load
         sleep(2);
-        std::cout << "start to migration to source data dir:" << source_path->path() << std::endl;
         EngineStorageMigrationTask migration_task_2(12345, 1111, source_path);
         ASSERT_OK(migration_task_2.execute());
-        std::cout << "migration to data dir 1 success" << std::endl;
     }
 };
 
@@ -174,7 +171,6 @@ int main(int argc, char** argv) {
         exit(-1);
     }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be.conf";
-    std::cout << "conffile:" << conffile << std::endl;
     if (!starrocks::config::init(conffile.c_str(), false)) {
         fprintf(stderr, "error read config file. \n");
         return -1;
