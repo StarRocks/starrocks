@@ -727,7 +727,7 @@ void StorageEngine::_do_manual_compact() {
             LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
             continue;
         }
-        if (live_sst_files_size_before > config::rocksdb_manual_compact_live_sst_files_size) {
+        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
             Status s = data_dir->get_meta()->compact();
             if (!s.ok()) {
                 LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
