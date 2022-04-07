@@ -1511,13 +1511,6 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            Preconditions.checkArgument(fragment.getPlanRoot() instanceof HashJoinNode);
-            HashJoinNode hashJoinNode = (HashJoinNode) fragment.getPlanRoot();
-            HashJoinNode.DistributionMode distributionMode = hashJoinNode.getDistributionMode();
-            if (!distributionMode.equals(HashJoinNode.DistributionMode.BROADCAST) &&
-                    !distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
-                return;
-            }
             fragment.setPipelineDop(fragment.getParallelExecNum());
             fragment.setParallelExecNum(1);
             fragment.setDopEstimated();
