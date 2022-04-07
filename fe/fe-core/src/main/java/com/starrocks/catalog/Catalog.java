@@ -2544,10 +2544,19 @@ public class Catalog {
 
             fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
+            BDBHA bdbha = (BDBHA) haProtocol;
             if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
-                ((BDBHA) getHaProtocol()).addHelperSocket(host, editLogPort);
+                bdbha.addHelperSocket(host, editLogPort);
                 helperNodes.add(Pair.create(host, editLogPort));
             }
+
+            // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
+            // will remain in bdb.
+            // So we should remove those nodes before joining the group,
+            // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
+            // xxx. It conflicts with the socket already used by the member: xxxx)
+            bdbha.removeNodeIfExist(host, editLogPort);
+
             editLog.logAddFrontend(fe);
         } finally {
             unlock();
