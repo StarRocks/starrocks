@@ -2,6 +2,7 @@
 
 #include <benchmark/benchmark.h>
 #include <gtest/gtest.h>
+#include <testutil/assert.h>
 
 #include <random>
 
@@ -15,6 +16,8 @@
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "runtime/vectorized/chunk_cursor.h"
+#include "runtime/vectorized/sorted_chunks_merger.h"
 
 namespace starrocks::vectorized {
 
@@ -29,6 +32,20 @@ public:
     }
 
     void TearDown() { _runtime_state.reset(); }
+
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
+                                                                                 int slot_index) {
+        DCHECK_EQ(TYPE_INT, type_desc.type);
+
+        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
+
+        for (int i = 0; i < config::vector_chunk_size; i++) {
+            column->append_datum(Datum((int32_t)i));
+        }
+
+        return {column, std::move(expr)};
+    }
 
     static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(TypeDescriptor type_desc, int slot_index,
                                                                           bool low_card, bool nullable) {
@@ -237,6 +254,102 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     suite.TearDown();
 }
 
+static void do_merge_bench(benchmark::State& state, int num_runs) {
+    ChunkSorterBase suite;
+    suite.SetUp();
+    RuntimeState* runtime_state = suite._runtime_state.get();
+
+    constexpr int num_columns = 3;
+    Columns columns;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<bool> asc_arr;
+    std::vector<bool> null_first;
+    Chunk::SlotHashMap map;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+
+    for (int i = 0; i < num_columns; i++) {
+        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        columns.push_back(column);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        asc_arr.push_back(true);
+        null_first.push_back(true);
+        map[i] = i;
+    }
+    ChunkPtr chunk = std::make_shared<Chunk>(columns, map);
+
+    int64_t num_rows = 0;
+    for (auto _ : state) {
+        SortedChunksMerger merger(runtime_state, true);
+        ChunkSuppliers chunk_suppliers;
+        ChunkProbeSuppliers chunk_probe_suppliers;
+        ChunkHasSuppliers chunk_has_suppliers;
+        int num_chunks = 8 * num_runs;
+        int chunk_input_idx = 0;
+        int chunk_probe_idx = 0;
+        for (int i = 0; i < num_runs; i++) {
+            ChunkSupplier chunk_supplier = [&](Chunk** output) -> Status {
+                if (chunk_input_idx++ > num_chunks) {
+                    *output = nullptr;
+                } else {
+                    state.PauseTiming();
+                    auto cloned = chunk->clone_unique();
+                    for (auto& col : cloned->columns()) {
+                        Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
+                        int start = chunk_input_idx * config::vector_chunk_size;
+                        for (auto& x : intcolumn->get_data()) {
+                            x += start;
+                        }
+                    }
+                    *output = cloned.release();
+                    state.ResumeTiming();
+                }
+                return Status::OK();
+            };
+            ChunkProbeSupplier chunk_probe_supplier = [&](Chunk** output) -> bool {
+                if (chunk_probe_idx++ > num_chunks) {
+                    *output = nullptr;
+                    return true;
+                } else {
+                    state.PauseTiming();
+                    auto cloned = chunk->clone_unique();
+                    for (auto& col : cloned->columns()) {
+                        Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
+                        int start = chunk_input_idx * config::vector_chunk_size;
+                        for (auto& x : intcolumn->get_data()) {
+                            x += start;
+                        }
+                    }
+                    *output = cloned.release();
+                    state.ResumeTiming();
+
+                    return false;
+                }
+            };
+            ChunkHasSupplier chunk_has_supplier = [&]() -> bool { return true; };
+            chunk_suppliers.emplace_back(chunk_supplier);
+            chunk_probe_suppliers.emplace_back(chunk_probe_supplier);
+            chunk_has_suppliers.emplace_back(chunk_has_supplier);
+        }
+
+        ASSERT_OK(merger.init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers, &sort_exprs,
+                                           &asc_arr, &null_first));
+
+        merger.is_data_ready();
+        std::atomic<bool> eos{false};
+        bool should_exit{false};
+        while (!eos && !should_exit) {
+            ChunkPtr chunk;
+            ASSERT_OK(merger.get_next_for_pipeline(&chunk, &eos, &should_exit));
+            num_rows += chunk->num_rows();
+        }
+    }
+    state.SetItemsProcessed(num_rows);
+
+    suite.TearDown();
+}
+
 // Sort full data: ORDER BY
 static void BM_fullsort_row_wise(benchmark::State& state) {
     do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1));
@@ -311,6 +424,9 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
     params.max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(params.limit);
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
 }
+static void BM_merge_heap(benchmark::State& state) {
+    do_merge_bench(state, state.range(0));
+}
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
     // num_chunks
@@ -358,6 +474,9 @@ BENCHMARK(BM_topn_limit_mergesort_colwise)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_colwise_nullable)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
+
+// Merge
+BENCHMARK(BM_merge_heap)->DenseRange(1, 32, 2);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {
