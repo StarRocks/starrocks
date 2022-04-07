@@ -29,7 +29,7 @@ Release date: Octorber 22, 2021
 
 * Support setting interval flush StarRocks-DataX Writer.
 
-### Bugfix
+### Bug Fixes
 
 * Fix the issue that the dynamic partition table cannot be created automatically after the data recovery operation is completed. [# 337](https://github.com/StarRocks/starrocks/issues/337)
 * Fix the problem of error reported by row_number function after CBO is opened.
@@ -47,7 +47,7 @@ Release date: November 2, 2021
 * Add monitoring of slow queries. [# 502](https://github.com/StarRocks/starrocks/pull/502) [# 891](https://github.com/StarRocks/starrocks/pull/891)
 * Optimize the fetching of Hive external metadata to achieve parallel fetching.[# 425](https://github.com/StarRocks/starrocks/pull/425) [# 451](https://github.com/StarRocks/starrocks/pull/451)
 
-### BugFix
+### Bug Fixes
 
 * Fix the problem of Thrift protocol compatibility, so that the Hive external table can be connected with Kerberos. [# 184](https://github.com/StarRocks/starrocks/pull/184) [# 947](https://github.com/StarRocks/starrocks/pull/947) [# 995](https://github.com/StarRocks/starrocks/pull/995) [# 999](https://github.com/StarRocks/starrocks/pull/999)
 * Fix several bugs in view creation. [# 972](https://github.com/StarRocks/starrocks/pull/972) [# 987](https://github.com/StarRocks/starrocks/pull/987)[# 1001](https://github.com/StarRocks/starrocks/pull/1001)
@@ -61,7 +61,7 @@ Release date: November 20, 2021
 
 * bucket shuffle join support right join and full outer join [# 1209](https://github.com/StarRocks/starrocks/pull/1209)  [# 31234](https://github.com/StarRocks/starrocks/pull/1234)
 
-### Major Bugfix
+### Bug Fixes
 
 * Fix the problem that repeat node cannot do predicate push-down[# 1410](https://github.com/StarRocks/starrocks/pull/1410) [# 1417](https://github.com/StarRocks/starrocks/pull/1417)
 * Repair the problem that routine load may lost data when the cluster alter master node during import.[# 1074](https://github.com/StarRocks/starrocks/pull/1074) [# 1272](https://github.com/StarRocks/starrocks/pull/1272)
@@ -77,7 +77,7 @@ Release date: November 30, 2021
 
 * Upgrade jprotobuf version to improve security [# 1506](https://github.com/StarRocks/starrocks/issues/1506)
 
-### Major Bugfix
+### Bug Fixes
 
 * Fix some problems with group by result correctness
 * Fix some problems with grouping sets[# 1395](https://github.com/StarRocks/starrocks/issues/1395) [# 1119](https://github.com/StarRocks/starrocks/pull/1119)
@@ -94,7 +94,7 @@ Release date: December 9, 2021
 * Support cast(varchar as bitmap) [# 1941](https://github.com/StarRocks/starrocks/pull/1941)
 * Update access policy of hive external table [# 1394](https://github.com/StarRocks/starrocks/pull/1394) [# 1807](https://github.com/StarRocks/starrocks/pull/1807)
 
-### Bugfix
+### Bug Fixes
 
 * Fix the bug of wrong query result with predicate Cross Join [# 1918](https://github.com/StarRocks/starrocks/pull/1918)
 * Fix the bug of decimal type and time type conversion [# 1709](https://github.com/StarRocks/starrocks/pull/1709) [# 1738](https://github.com/StarRocks/starrocks/pull/1738)
@@ -105,12 +105,23 @@ Release date: December 9, 2021
 
 Release date: December 20, 2021
 
-### Imporvement
+### Improvement
 
 * A plan to optimize shuffle join [# 2184](https://github.com/StarRocks/starrocks/pull/2184)
 * Optimize multiple large file imports [# 2067](https://github.com/StarRocks/starrocks/pull/2067)
 
-### Bugfix
+### Bug Fixes
 
 * Upgrade Log4j2 to 2.17.0, fix security vulnerabilities[# 2284](https://github.com/StarRocks/starrocks/pull/2284)[# 2290](https://github.com/StarRocks/starrocks/pull/2290)
 * Fix the problem of empty partition in Hive external table[# 707](https://github.com/StarRocks/starrocks/pull/707)[# 2082](https://github.com/StarRocks/starrocks/pull/2082)
+
+## 1.19.7
+
+Release date: March 18, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+* dataformat will produce different results in different versions. [#4165](https://github.com/StarRocks/starrocks/pull/4165)
+* BE nodes may fail because Parquet files are deleted by mistake during data loading. [#3521](https://github.com/StarRocks/starrocks/pull/3521)
