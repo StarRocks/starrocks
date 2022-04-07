@@ -693,7 +693,13 @@ public class ReportHandler extends Daemon {
         int addToMetaCounter = 0;
         int maxTaskSendPerBe = Config.max_agent_tasks_send_per_be;
         AgentBatchTask batchTask = new AgentBatchTask();
+        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null || tabletMeta.isUseStarOS()) {
+                continue;
+            }
+
             TTablet backendTablet = backendTablets.get(tabletId);
             for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
                 boolean needDelete = false;
