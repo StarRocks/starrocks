@@ -65,8 +65,9 @@ enum class JoinHashMapType {
 enum class JoinMatchFlag { NORMAL, ALL_NOT_MATCH, ALL_MATCH_ONE, MOST_MATCH_ONE };
 
 struct JoinKeyDesc {
-    PrimitiveType type;
+    const TypeDescriptor* type = nullptr;
     bool is_null_safe_equal;
+    ColumnRef* col_ref = nullptr;
 };
 
 struct HashTableSlotDescriptor {
@@ -577,7 +578,7 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
-    void append_chunk(RuntimeState* state, const ChunkPtr& chunk);
+    void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
