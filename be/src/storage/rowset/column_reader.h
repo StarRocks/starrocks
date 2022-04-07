@@ -149,6 +149,12 @@ public:
 
     Status load_ordinal_index_once();
 
+    uint32_t num_rows() const { return _segment->num_rows(); }
+
+    // this function is just used for unit test
+    uint32_t num_rows_from_meta_pb(const ColumnMetaPB* meta) const { return meta->num_rows(); }
+
+private:
     const std::string& file_name() const { return _segment->file_name(); }
 
     MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
@@ -157,9 +163,6 @@ public:
 
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
-    uint32_t num_rows() const { return _segment->num_rows(); }
-
-private:
     struct private_type {
         private_type(int) {}
     };
