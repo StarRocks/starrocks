@@ -23,6 +23,7 @@
   + [Routine Load](/loading/RoutineLoad.md)
   + [Spark Load](/loading/SparkLoad.md)
   + [Insert Into导入](/loading/InsertInto.md)
+  + [主键模型导入](/loading/PrimaryKeyLoad.md)
   + [导入过程中完成数据转换](/loading/Etl_in_loading.md)
   + [Json数据导入](/loading/Json_loading.md)
   + [Flink connector](/loading/Flink-connector-starrocks.md)
