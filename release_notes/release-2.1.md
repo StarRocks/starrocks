@@ -24,7 +24,7 @@ Release date: February 24, 2022
 - DEFAULT CURRENT_TIMESTAMP is supported in the `create table` statement.
 - StarRocks supports the loading of CSV files with multiple delimiters.
 
-### BugFix
+### Bug Fixes
 
 The following bugs are fixed:
 
@@ -46,7 +46,7 @@ flink-connector-starrocks is now available for Flink to read StarRocks data in b
 
 Release date: March 14, 2022
 
-### BugFix
+### Bug Fixes
 
 The following bugs are fixed:
 
@@ -56,3 +56,16 @@ The following bugs are fixed:
 - A deadlock problem may occur when an FE node collects information to build a global dictionary for low-cardinality optimization. [#3839]( https://github.com/StarRocks/starrocks/issues/3839)
 - Query fails when BE nodes are in suspended animation due to deadlock.
 - BI tools cannot connect to StarRocks when  the show variables command fails.[#3708](https://github.com/StarRocks/starrocks/issues/3708)
+
+## 2.1.3
+
+Release date: March 19, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The problem of possible data loss due to BE failure (solved by using Batch publish version). [#3140](https://github.com/StarRocks/starrocks/issues/3140)
+- Some queries may cause memory limit exceeded errors due to inappropriate execution plans.
+- The checksum between replicas may be inconsistent in different compaction processes. [#3438](https://github.com/StarRocks/starrocks/issues/3438)
+- Query may fail in some situation when JSON reorder projection is not processed correctly. [#4056](https://github.com/StarRocks/starrocks/pull/4056)
