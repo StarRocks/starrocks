@@ -3853,6 +3853,7 @@ public class Catalog {
                         null,
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
+                        table.enablePersistentIndex(),
                         table.getPartitionInfo().getTabletType(partition.getId()));
                 tasks.add(task);
             } else {
@@ -3876,6 +3877,7 @@ public class Catalog {
                             null,
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
+                            table.enablePersistentIndex(),
                             table.getPartitionInfo().getTabletType(partition.getId()));
                     tasks.add(task);
                 }
@@ -4054,6 +4056,10 @@ public class Catalog {
         boolean isInMemory =
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         olapTable.setIsInMemory(isInMemory);
+
+        boolean enablePersistentIndex =
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+        olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -4665,6 +4671,10 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
+
+            // enable_persistent_index
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).append("\" = \"");
+            sb.append(olapTable.enablePersistentIndex()).append("\"");            
 
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();

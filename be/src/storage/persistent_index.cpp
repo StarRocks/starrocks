@@ -655,6 +655,17 @@ public:
         return Status::OK();
     }
 
+    Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) {
+        const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            const auto& key = fkeys[replace_idxes[i]];
+            const auto v = values[replace_idxes[i]];
+            uint64_t hash = FixedKeyHash<KeySize>()(key);
+            _map.emplace_with_hash(hash, key, v);
+        }
+        return Status::OK();
+    }
+
     size_t dump_bound() { return _map.dump_bound(); }
 
     bool dump(phmap::BinaryOutputArchive& ar_out) { return _map.dump(ar_out); }
@@ -664,6 +675,8 @@ public:
     size_t capacity() { return _map.capacity(); }
 
     void reserve(size_t size) { _map.reserve(size); }
+
+    size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + sizeof(IndexValue)); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool without_null) const override {
@@ -1124,7 +1137,6 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     // create new _index_block from the new snapshot file
     if (!_flushed) {
         std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-        std::string l0_index_file_path_tmp = l0_index_file_path + ".tmp";
         fs::CreateBlockOptions wblock_opts({l0_index_file_path});
         wblock_opts.mode = Env::MUST_EXIST;
         RETURN_IF_ERROR(_block_mgr->create_block(wblock_opts, &_index_block));
@@ -1235,8 +1247,12 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
             status = load(index_meta);
-            LOG(INFO) << "load persistent index #tablet:" << tablet->tablet_id() << " #version:" << version.to_string()
-                      << " #status: " << status.to_string() << " #cost_time:" << timer.elapsed_time() / 1000000 << "ms";
+            LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
+                      << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                      << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                      << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+                      << " memory: " << memory_usage() << " status: " << status.to_string()
+                      << " time:" << timer.elapsed_time() / 1000000 << "ms";
             return status;
         }
     }
@@ -1327,7 +1343,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     RETURN_IF_ERROR(_build_commit(tablet, index_meta));
     LOG(INFO) << "build persistent index finish tablet: " << tablet->tablet_id() << " version:" << apply_version
               << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
-              << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
+              << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
@@ -1505,6 +1523,37 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     _size -= num_erased;
     if (!_dump_snapshot) {
         RETURN_IF_ERROR(_append_wal(n, keys, nullptr));
+    }
+    return Status::OK();
+}
+
+Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
+                                    const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed) {
+    std::vector<IndexValue> found_values;
+    found_values.reserve(n);
+    RETURN_IF_ERROR(get(n, keys, found_values.data()));
+    uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
+    std::vector<size_t> replace_idxes;
+    for (size_t i = 0; i < n; ++i) {
+        if (values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+            replace_idxes.emplace_back(i);
+        } else {
+            failed->emplace_back(rowid_start + i);
+        }
+    }
+    RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
+    _dump_snapshot |= _can_dump_directly();
+    if (!_dump_snapshot) {
+        // write wal
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+        }
+        RETURN_IF_ERROR(_index_block->append(fixed_buf));
+        _page_size += fixed_buf.size();
     }
     return Status::OK();
 }
