@@ -265,12 +265,12 @@ public class BDBJEJournal implements Journal {
     public synchronized void open() {
         if (bdbEnvironment == null) {
             File dbEnv = new File(environmentPath);
-            bdbEnvironment = new BDBEnvironment();
             Pair<String, Integer> helperNode = Catalog.getCurrentCatalog().getHelperNode();
             String helperHostPort = helperNode.first + ":" + helperNode.second;
+            bdbEnvironment = new BDBEnvironment(dbEnv, selfNodeName, selfNodeHostPort,
+                    helperHostPort, Catalog.getCurrentCatalog().isElectable());
             try {
-                bdbEnvironment.setup(dbEnv, selfNodeName, selfNodeHostPort,
-                        helperHostPort, Catalog.getCurrentCatalog().isElectable());
+                bdbEnvironment.setup();
             } catch (Exception e) {
                 LOG.error("catch an exception when setup bdb environment. will exit.", e);
                 System.exit(-1);
@@ -314,16 +314,8 @@ public class BDBJEJournal implements Journal {
                 NetworkRestoreConfig config = new NetworkRestoreConfig();
                 config.setRetainLogFiles(false);
                 restore.execute(insufficientLogEx, config);
-                if (!bdbEnvironment.close()) {
-                    LOG.error("close bdb environment failed, will exit");
-                    // NOTE: System.exit will trigger BDBEnvironment.close(),
-                    // because BDBEnvironment.close() has been registered in shutdown hook,
-                    // so in this case BDBEnvironment.close() will be called twice.
-                    // But it is ok.
-                    System.exit(-1);
-                }
-                bdbEnvironment.setup(new File(environmentPath), selfNodeName, selfNodeHostPort,
-                        helperNode.first + ":" + helperNode.second, Catalog.getCurrentCatalog().isElectable());
+                bdbEnvironment.close();
+                bdbEnvironment.setup();
             }
         }
     }
