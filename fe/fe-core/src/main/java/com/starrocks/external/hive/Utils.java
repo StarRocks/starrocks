@@ -64,10 +64,8 @@ public class Utils {
                     values.add(HiveMetaClient.PARTITION_NULL_VALUE);
                 }
             } else if (value instanceof BoolLiteral) {
-                if (!isHudiTable) {
-                    BoolLiteral boolValue = ((BoolLiteral) value);
-                    values.add(String.valueOf(boolValue.getValue()));
-                }
+                BoolLiteral boolValue = ((BoolLiteral) value);
+                values.add(String.valueOf(boolValue.getValue()));
             } else {
                 values.add(value.getStringValue());
             }
