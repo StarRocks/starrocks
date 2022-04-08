@@ -1470,6 +1470,7 @@ public class PlanFragmentBuilder {
             sortNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(sortNode);
+            estimateDopOfTopN(inputFragment);
             return inputFragment;
         }
 
@@ -1489,6 +1490,15 @@ public class PlanFragmentBuilder {
             return (ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
                     ConnectContext.get().getSessionVariable().getPipelineDop() == 0);
+        }
+
+        private void estimateDopOfTopN(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.setPipelineDop(fragment.getParallelExecNum());
+            fragment.setParallelExecNum(1);
+            fragment.setDopEstimated();
         }
 
         /**
