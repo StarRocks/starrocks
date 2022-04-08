@@ -233,6 +233,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -6212,6 +6213,29 @@ public class Catalog {
                 properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
     }
 
+    public void modifyTableEnablePersistentIndexMeta(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildEnablePersistentIndex();
+        /*
+        // need to update partition info meta
+        for (Partition partition : table.getPartitions()) {
+            table.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
+        }
+        */
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyInMemory(info);
+
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
@@ -6232,6 +6256,14 @@ public class Catalog {
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         editLog.logModifyInMemory(info);
+    }
+
+    public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties, TTabletMetaType metaType) {
+        if (metaType == TTabletMetaType.INMEMORY) {
+            modifyTableInMemoryMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.ENABLEPERSISTENTINDEX) {
+            modifyTableEnablePersistentIndexMeta(db, table, properties);
+        }
     }
 
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
@@ -6304,6 +6336,9 @@ public class Catalog {
                             partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
                         }
                     }
+                } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
+                    // TODO
+                    // set partition info 
                 }
             }
         } finally {

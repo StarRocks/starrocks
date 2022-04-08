@@ -317,6 +317,9 @@ public class ReportHandler extends Daemon {
         // 10. send set tablet in memory to be
         handleSetTabletInMemory(backendId, backendTablets);
 
+        // 11. send set tablet enable persistent index to be
+        handleSetTabletEnablePersistentIndex(backendId, backendTablets);
+
         final SystemInfoService currentSystemInfo = Catalog.getCurrentSystemInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
@@ -964,7 +967,54 @@ public class ReportHandler extends Daemon {
         // When report, needn't synchronous
         if (!tabletToInMemory.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory);
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory, 
+                                                                         TTabletMetaType.INMEMORY);
+            batchTask.addTask(task);
+            AgentTaskExecutor.submit(batchTask);
+        }
+    }
+
+    private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetEnable_persistent_index()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                boolean beEnablePersistentIndex = tabletInfo.enable_persistent_index;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = Catalog.getCurrentCatalog().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
+                    if (beEnablePersistentIndex != feEnablePersistentIndex) {
+                        tabletToEnablePersistentIndex.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
+                                                                                feEnablePersistentIndex));
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        }
+        
+        LOG.info("find [{}] tablets need set enable persistent index meta", tabletToEnablePersistentIndex.size());
+        if (!tabletToEnablePersistentIndex.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
+                                                                         TTabletMetaType.ENABLEPERSISTENTINDEX);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }

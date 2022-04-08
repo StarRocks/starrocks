@@ -195,6 +195,7 @@ public class OperationType {
     public static final short OP_ADD_PARTITIONS = 10002;
     public static final short OP_FINISH_MULTI_DELETE = 10003;
     public static final short OP_ERASE_MULTI_TABLES = 10004;
+    public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;

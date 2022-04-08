@@ -52,6 +52,7 @@
 #include "storage/task/engine_clone_task.h"
 #include "storage/task/engine_publish_version_task.h"
 #include "storage/task/engine_storage_migration_task.h"
+#include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/file_utils.h"
 #include "util/monotime.h"
@@ -1023,6 +1024,18 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
                     break;
                 case TTabletMetaType::INMEMORY:
                     // This property is no longer supported.
+                    break;
+                case TTabletMetaType::ENABLEPERSISTENTINDEX:
+                    VLOG(1) << "update tablet:" << tablet->tablet_id()
+                            << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
+                    tablet->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+                    // TODO
+                    // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
+                    // So even though `enable_persistent_index` change successfully, it may not take effect immediately
+                    // because the primary index is available in cache
+                    // This is acceptable so far. If you want to take effect immediately, you could restart be
+                    auto manager = StorageEngine::instance()->update_manager();
+                    manager->index_cache().remove_by_key(tablet->tablet_id());
                     break;
                 }
             }
