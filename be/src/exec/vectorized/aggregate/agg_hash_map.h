@@ -343,7 +343,13 @@ struct AggHashMapWithOneStringKey {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
             auto key = column->get_slice(i);
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) { ctor(key, allocate_func()); });
+            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                uint8_t* pos = pool->allocate(key.size);
+                strings::memcpy_inlined(pos, key.data, key.size);
+                Slice pk{pos, key.size};
+                AggDataPtr pv = allocate_func();
+                ctor(pk, pv);
+            });
             (*agg_states)[i] = iter->second;
         }
     }
