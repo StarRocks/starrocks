@@ -508,4 +508,16 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
     }
 }
 
+StatusOr<ColumnPtr> ArrayColumn::downgrade() {
+    auto ret = _elements->downgrade();
+    if (!ret.ok()) {
+        return ret;
+    } else if (ret.value() != nullptr) {
+        _elements = ret.value();
+        return nullptr;
+    } else {
+        return nullptr;
+    }
+}
+
 } // namespace starrocks::vectorized

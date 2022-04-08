@@ -116,6 +116,17 @@ public:
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
     virtual StatusOr<ColumnPtr> upgrade_if_overflow() = 0;
 
+    // Downgrade the column from large column to normal column.
+    // Return internal error if downgrade failed.
+    // Return null, if the column is already normal column, no need to downgrade.
+    // Return the new normal column, if downgrade success
+    // Current, only support downgrade LargeBinaryColumn to BinaryColumn
+    virtual StatusOr<ColumnPtr> downgrade() = 0;
+
+    // Check if the column contains large column.
+    // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
+    virtual bool has_large_column() const = 0;
+
     virtual void resize_uninitialized(size_t n) { resize(n); }
 
     // Assign specified idx element to the column container content,

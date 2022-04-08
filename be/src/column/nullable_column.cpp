@@ -367,4 +367,16 @@ StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
     }
 }
 
+StatusOr<ColumnPtr> NullableColumn::downgrade() {
+    auto ret = _data_column->downgrade();
+    if (!ret.ok()) {
+        return ret;
+    } else if (ret.value() != nullptr) {
+        _data_column = ret.value();
+        return nullptr;
+    } else {
+        return nullptr;
+    }
+}
+
 } // namespace starrocks::vectorized

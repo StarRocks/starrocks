@@ -88,4 +88,16 @@ StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
     }
 }
 
+StatusOr<ColumnPtr> ConstColumn::downgrade() {
+    auto ret = _data->downgrade();
+    if (!ret.ok()) {
+        return ret;
+    } else if (ret.value() != nullptr) {
+        _data = ret.value();
+        return nullptr;
+    } else {
+        return nullptr;
+    }
+}
+
 } // namespace starrocks::vectorized

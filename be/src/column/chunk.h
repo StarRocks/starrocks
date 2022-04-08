@@ -45,6 +45,10 @@ public:
 
     Status upgrade_if_overflow();
 
+    Status downgrade();
+
+    bool has_large_column() const;
+
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }

@@ -158,6 +158,17 @@ TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+TEST(ObjectColumnTest, test_object_column_downgrade) {
+    auto c = HyperLogLogColumn::create();
+    c->append(HyperLogLog());
+
+    auto ret = c->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_FALSE(c->has_large_column());
+}
+
+// NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_reset_column) {
     auto c = HyperLogLogColumn::create();
 

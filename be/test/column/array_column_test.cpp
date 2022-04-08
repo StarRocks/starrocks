@@ -67,6 +67,37 @@ PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
+    auto offsets = UInt32Column::create();
+    auto elements = BinaryColumn::create();
+    elements->append("1");
+    elements->append("2");
+    offsets->append(2);
+    auto column = ArrayColumn::create(elements, offsets);
+    ASSERT_FALSE(column->has_large_column());
+    auto ret = column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    offsets = UInt32Column::create();
+    auto large_elements = LargeBinaryColumn::create();
+    column = ArrayColumn::create(large_elements, offsets);
+    for (size_t i = 0; i < 10; i++) {
+        large_elements->append(std::to_string(i));
+        offsets->append(i+1);
+    }
+    ASSERT_TRUE(column->has_large_column());
+    ret = column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_FALSE(column->has_large_column());
+    ASSERT_EQ(column->size(), 10);
+    for (size_t i = 0; i < 10; i++) {
+        ASSERT_EQ(column->get(i).get_array()[0].get_slice(), Slice(std::to_string(i)));
+    }
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     auto offsets = UInt32Column::create();
     auto elements = Int32Column::create();
