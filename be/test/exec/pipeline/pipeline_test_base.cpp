@@ -84,7 +84,6 @@ void PipelineTestBase::_prepare() {
     ASSERT_TRUE(_pipeline_builder != nullptr);
     _pipelines.clear();
     _pipeline_builder(_fragment_ctx->runtime_state());
-    _pipelines[_pipelines.size() - 1]->set_root();
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
@@ -94,7 +93,6 @@ void PipelineTestBase::_prepare() {
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        const bool is_root = pipeline->is_root();
 
         LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
@@ -102,14 +100,9 @@ void PipelineTestBase::_prepare() {
         if (pipeline->source_operator_factory()->with_morsels()) {
             // TODO(hcf) missing branch of with_morsels()
         } else {
-            if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
-            }
-
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i);
                 drivers.emplace_back(driver);
             }
         }
