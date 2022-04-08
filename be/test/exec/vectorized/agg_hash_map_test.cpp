@@ -6,7 +6,13 @@
 
 #include <any>
 
+#include "column/column_helper.h"
+#include "column/datum.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
+#include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -178,6 +184,57 @@ TEST(HashMapTest, Basic) {
     else {
         std::cout << "shouldn't go here!"
                   << "\n";
+    }
+}
+
+TEST(HashMapTest, Insert) {
+    // Test AggHashMapWithSerializedKeyFixedSize
+    {
+        const int chunk_size = 64;
+        using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
+        using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
+        TestAggHashMapKey key(chunk_size);
+        key.has_null_column = true;
+        key.fixed_byte_size = 8;
+        MemPool pool;
+        // chunk size
+        // key columns
+        const int num_rows = 32;
+        std::vector<std::pair<PrimitiveType, bool>> types = {{TYPE_INT, true}, {TYPE_INT, false}};
+        Columns key_columns;
+        Buffer<AggDataPtr> agg_states(chunk_size);
+        for (auto type : types) {
+            key_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(type.first), type.second));
+            for (int i = 0; i < num_rows; ++i) {
+                key_columns.back()->append_datum(Datum(rand() % 16000));
+            }
+            key_columns.back()->append_default();
+        }
+        key.compute_agg_states(
+                key_columns[0]->size(), key_columns, &pool, [&]() { return pool.allocate(16); }, &agg_states);
+        using TestHashMapKey = TestAggHashMap::key_type;
+        std::vector<TestHashMapKey> resv;
+        for (auto [key, _] : key.hash_map) {
+            resv.emplace_back(key);
+        }
+        Columns res_columns;
+        for (auto type : types) {
+            res_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(type.first), type.second));
+        }
+        key.insert_keys_to_columns(resv, res_columns, resv.size());
+        auto& l = down_cast<Int32Column*>(down_cast<NullableColumn*>(res_columns[0].get())->data_column().get())
+                          ->get_data();
+        auto& r = down_cast<Int32Column*>(down_cast<NullableColumn*>(key_columns[0].get())->data_column().get())
+                          ->get_data();
+        std::set<int32_t> keys_sets;
+        for (int i = 0; i < r.size(); i++) {
+            keys_sets.insert(r[i]);
+        }
+        std::set<int32_t> res_sets;
+        for (int i = 0; i < l.size(); i++) {
+            res_sets.insert(l[i]);
+        }
+        ASSERT_EQ(res_sets.size(), keys_sets.size());
     }
 }
 
