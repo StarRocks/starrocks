@@ -567,16 +567,14 @@ void HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
     for (auto& ctx : _build_expr_ctxs) {
         const TypeDescriptor& data_type = ctx->root()->type();
         ColumnPtr key_column = ctx->evaluate(chunk.get());
-        if (key_column->is_constant()) {
-            if (key_column->is_nullable()) {
-                ColumnPtr column = ColumnHelper::create_column(data_type, true);
-                column->append_nulls(num_rows);
-                _key_columns.emplace_back(column);
-            } else {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
-                const_column->data_column()->assign(num_rows, 0);
-                _key_columns.emplace_back(const_column->data_column());
-            }
+        if (key_column->only_null()) {
+            ColumnPtr column = ColumnHelper::create_column(data_type, true);
+            column->append_nulls(num_rows);
+            _key_columns.emplace_back(column);
+        } else if (key_column->is_constant()) {
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
+            const_column->data_column()->assign(num_rows, 0);
+            _key_columns.emplace_back(const_column->data_column());
         } else {
             _key_columns.emplace_back(key_column);
         }
