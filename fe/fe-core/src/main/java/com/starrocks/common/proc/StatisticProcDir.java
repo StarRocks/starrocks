@@ -234,7 +234,7 @@ public class StatisticProcDir implements ProcDirInterface {
         }
 
         if (catalog.getDb(dbId) == null) {
-            throw new AnalysisException("Invalid db id : " + dbIdStr);
+            throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 
         return new IncompleteTabletsProcNode(unhealthyTabletIds.get(dbId),
