@@ -71,7 +71,7 @@ public:
         _schema_hash = 368169781;
         _tablet_data_path = tmp_data_path + "/" + std::to_string(0) + "/" + std::to_string(_tablet_id) + "/" +
                             std::to_string(_schema_hash);
-        _tablet_mgr.reset(new TabletManager(_mem_tracker.get(), 1));
+        _tablet_mgr.reset(new TabletManager(_mem_tracker.get(), 1, MetaCache_Type::METACACHE_LRU, NULL));
     }
 
     virtual void TearDown() {
@@ -120,8 +120,9 @@ TEST_F(TabletMgrTest, CreateTablet) {
     data_dirs.push_back(_data_dir);
     Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
-    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
-    ASSERT_TRUE(tablet != nullptr);
+    auto st = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(st.ok());
+    TabletSharedPtr tablet = st.value();
     // check dir exist
     bool dir_exist = FileUtils::check_exist(tablet->schema_hash_path());
     ASSERT_TRUE(dir_exist);
@@ -146,15 +147,19 @@ TEST_F(TabletMgrTest, DropTablet) {
     data_dirs.push_back(_data_dir);
     Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
-    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+    auto st = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(st.ok());
+    TabletSharedPtr tablet = st.value();
     ASSERT_TRUE(tablet != nullptr);
 
     // drop exist tablet will be success
     auto drop_st = _tablet_mgr->drop_tablet(111, kMoveFilesToTrash);
     ASSERT_TRUE(drop_st.ok());
-    tablet = _tablet_mgr->get_tablet(111);
-    ASSERT_TRUE(tablet == nullptr);
-    tablet = _tablet_mgr->get_tablet(111, true);
+    st = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(!st.ok());
+    st = _tablet_mgr->get_tablet(111, true);
+    ASSERT_TRUE(st.ok());
+    tablet = st.value();
     ASSERT_TRUE(tablet != nullptr);
 
     // check dir exist
@@ -166,7 +171,9 @@ TEST_F(TabletMgrTest, DropTablet) {
     // because tablet ptr referenced it
     Status trash_st = _tablet_mgr->start_trash_sweep();
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
-    tablet = _tablet_mgr->get_tablet(111, true);
+    st = _tablet_mgr->get_tablet(111, true);
+    ASSERT_TRUE(st.ok());
+    tablet = st.value();
     ASSERT_TRUE(tablet != nullptr);
     dir_exist = FileUtils::check_exist(tablet_path);
     ASSERT_TRUE(dir_exist);
@@ -175,7 +182,9 @@ TEST_F(TabletMgrTest, DropTablet) {
     tablet.reset();
     trash_st = _tablet_mgr->start_trash_sweep();
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
-    tablet = _tablet_mgr->get_tablet(111, true);
+    st = _tablet_mgr->get_tablet(111, true);
+    ASSERT_TRUE(st.ok());
+    tablet = st.value();
     ASSERT_TRUE(tablet == nullptr);
     dir_exist = FileUtils::check_exist(tablet_path);
     ASSERT_TRUE(!dir_exist);
@@ -263,7 +272,9 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
         TCreateTabletReq create_tablet_req = get_create_tablet_request(i, 3333);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(create_tablet_req, data_dirs);
         ASSERT_TRUE(create_st.ok());
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(i);
+        auto st = StorageEngine::instance()->tablet_manager()->get_tablet(i);
+        ASSERT_TRUE(st.ok());
+        TabletSharedPtr tablet = st.value();
         ASSERT_TRUE(tablet != nullptr);
     }
 

@@ -86,28 +86,27 @@ Status RowsetMetaManager::traverse_rowset_metas(
     return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
 }
 
-Status RowsetMetaManager::traverse_rowset_metas_for_tabletuid(KVStore* meta,TabletUid tablet_uid,std::vector<RowsetMetaSharedPtr> & dir_rowset_metas) {
-
+Status RowsetMetaManager::traverse_rowset_metas_for_tabletuid(KVStore* meta, TabletUid tablet_uid,
+                                                              std::vector<RowsetMetaSharedPtr> * dir_rowset_metas) {
     auto traverse_rowset_meta_func = [&dir_rowset_metas](std::string_view key, std::string_view value) -> bool {
-      std::string key_str(key);
-      std::string value_str(value);
+        std::string key_str(key);
+        std::string value_str(value);
 
-      RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-      bool parsed = rowset_meta->init(value_str);
-      if (!parsed) {
-          LOG(WARNING) << "parse rowset meta string failed";
-          return true;
-      }
-      if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
-          LOG(FATAL) << "must change V1 format to V2 format."
-                     << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                     << ", schema_hash: " << rowset_meta->tablet_schema_hash()
-                     << ", rowset_id:" << rowset_meta->rowset_id();
-      }
-      dir_rowset_metas.push_back(rowset_meta);
-      return true;
+        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+        bool parsed = rowset_meta->init(value_str);
+        if (!parsed) {
+            LOG(WARNING) << "parse rowset meta string failed";
+            return true;
+        }
+        LOG_IF(FATAL,rowset_meta->rowset_type() != BETA_ROWSET) << "must change V1 format to V2 format."
+                       << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
+                       << ", schema_hash: " << rowset_meta->tablet_schema_hash()
+                       << ", rowset_id:" << rowset_meta->rowset_id();
+        dir_rowset_metas->push_back(rowset_meta);
+        return true;
     };
-    auto st = meta->iterate(META_COLUMN_FAMILY_INDEX,ROWSET_PREFIX + tablet_uid.to_string(),traverse_rowset_meta_func);
+    auto st =
+            meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX + tablet_uid.to_string(), traverse_rowset_meta_func);
     return st;
 }
 

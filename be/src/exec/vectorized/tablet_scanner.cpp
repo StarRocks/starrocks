@@ -107,7 +107,7 @@ Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+    ASSIGN_OR_RETURN(_tablet, StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err));
     if (!_tablet) {
         auto msg = strings::Substitute("Not found tablet. tablet_id: $0, error: $1", tablet_id, err);
         LOG(WARNING) << msg;

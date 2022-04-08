@@ -303,7 +303,9 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
     request.tablet_schema.columns.push_back(k3);
     auto st = StorageEngine::instance()->create_tablet(request);
     CHECK(st.ok()) << st.to_string();
-    return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    CHECK(st.ok()) << st.to_string();
+    return res.value();
 }
 
 RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,

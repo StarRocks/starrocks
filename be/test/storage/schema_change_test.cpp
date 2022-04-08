@@ -55,7 +55,7 @@ class SchemaChangeTest : public testing::Test {
         AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
         Status res = engine->create_tablet(create_tablet_req);
         ASSERT_TRUE(res.ok());
-        TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+        ASSIGN_OR_ABORT(TabletSharedPtr tablet,engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id));
         vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         for (size_t i = 0; i < 4; ++i) {
@@ -435,8 +435,8 @@ TEST_F(SchemaChangeTest, convert_from) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1001);
+    ASSIGN_OR_ABORT(TabletSharedPtr new_tablet,  engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id));
+    ASSIGN_OR_ABORT(TabletSharedPtr base_tablet,engine->tablet_manager()->get_tablet(1001));
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     auto indexs = chunk_changer.get_mutable_selected_column_indexs();
@@ -490,9 +490,9 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1003);
+    ASSIGN_OR_ABORT(TabletSharedPtr new_tablet,engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
+                                         create_tablet_req.tablet_schema.schema_hash));
+    ASSIGN_OR_ABORT(TabletSharedPtr base_tablet,engine->tablet_manager()->get_tablet(1003));
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     auto indexs = chunk_changer.get_mutable_selected_column_indexs();
@@ -559,8 +559,8 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1101);
+    ASSIGN_OR_ABORT(TabletSharedPtr new_tablet,engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id));
+    ASSIGN_OR_ABORT(TabletSharedPtr base_tablet,engine->tablet_manager()->get_tablet(1101));
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     auto indexs = chunk_changer.get_mutable_selected_column_indexs();
@@ -615,9 +615,9 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1103);
+    ASSIGN_OR_ABORT(TabletSharedPtr new_tablet,engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
+                                                 create_tablet_req.tablet_schema.schema_hash));
+    ASSIGN_OR_ABORT(TabletSharedPtr base_tablet,engine->tablet_manager()->get_tablet(1103));
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     auto indexs = chunk_changer.get_mutable_selected_column_indexs();
@@ -683,9 +683,10 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     AddColumn(&create_tablet_req, "v1", TPrimitiveType::BIGINT, false, TKeysType::AGG_KEYS);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1203);
+    ASSIGN_OR_ABORT(TabletSharedPtr new_tablet ,
+            engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
+                                                   create_tablet_req.tablet_schema.schema_hash));
+    ASSIGN_OR_ABORT(TabletSharedPtr base_tablet, engine->tablet_manager()->get_tablet(1203));
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     auto indexs = chunk_changer.get_mutable_selected_column_indexs();

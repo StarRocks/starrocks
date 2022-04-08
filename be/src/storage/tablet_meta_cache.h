@@ -6,8 +6,8 @@
 #include "common/statusor.h"
 #include "env/env.h"
 #include "env/env_s3.h"
-#include "lru_cache.h"
 #include "storage/tablet.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

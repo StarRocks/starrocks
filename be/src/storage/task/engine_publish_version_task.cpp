@@ -42,8 +42,8 @@ Status EnginePublishVersionTask::finish() {
             << "tablet_id=" << _tablet_info.tablet_id << ", schema_hash=" << _tablet_info.schema_hash
             << ", version=" << _version << ", transaction_id=" << _transaction_id;
 
-    TabletSharedPtr tablet =
-            StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
+    ASSIGN_OR_RETURN(TabletSharedPtr tablet, StorageEngine::instance()->tablet_manager()->get_tablet(
+                                                     _tablet_info.tablet_id, _tablet_info.tablet_uid));
 
     if (tablet == nullptr) {
         LOG(WARNING) << "Not found tablet to publish_version. tablet_id: " << _tablet_info.tablet_id

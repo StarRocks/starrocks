@@ -78,7 +78,7 @@ Status EngineCloneTask::execute() {
         tls_thread_status.set_mem_tracker(prev_tracker);
         tablet_manager->unregister_clone_tablet(_clone_req.tablet_id);
     });
-    auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, false);
+    ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(_clone_req.tablet_id, false));
     if (tablet != nullptr) {
         std::shared_lock rlock(tablet->get_migration_lock(), std::try_to_lock);
         if (!rlock.owns_lock()) {

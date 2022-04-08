@@ -545,15 +545,15 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
         // each tablet
         for (auto& tablet_info : tablet_infos) {
             // should use tablet uid to ensure clean txn correctly
-            TabletSharedPtr tablet =
-                    _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
+            auto st = _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
             // The tablet may be dropped or altered, leave a INFO log and go on process other tablet
-            if (tablet == nullptr) {
+            if (!st.ok()) {
                 LOG(INFO) << "tablet is no longer exist, tablet_id=" << tablet_info.first.tablet_id
                           << " schema_hash=" << tablet_info.first.schema_hash
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
+            TabletSharedPtr tablet = st.value();
             StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
@@ -827,10 +827,11 @@ void StorageEngine::_clean_unused_rowset_metas() {
             return true;
         }
 
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
-        if (tablet == nullptr) {
+        auto st = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
+        if (!st.ok()) {
             return true;
         }
+        TabletSharedPtr tablet = st.value();
         if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE && (!tablet->rowset_meta_is_useful(rowset_meta))) {
             LOG(INFO) << "rowset meta is useless any more, remote it. rowset_id=" << rowset_meta->rowset_id();
             invalid_rowset_metas.push_back(rowset_meta);
@@ -851,7 +852,11 @@ void StorageEngine::_clean_unused_txns() {
     std::set<TabletInfo> tablet_infos;
     _txn_manager->get_all_related_tablets(&tablet_infos);
     for (auto& tablet_info : tablet_infos) {
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
+        auto st = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
+        if (!st.ok()) {
+            continue;
+        }
+        TabletSharedPtr tablet = st.value();
         if (tablet == nullptr) {
             // TODO(ygl) :  should check if tablet still in meta, it's a improvement
             // case 1: tablet still in meta, just remove from memory
@@ -1043,8 +1048,9 @@ Status StorageEngine::execute_task(EngineTask* task) {
             }
         });
         for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
+            auto st = _tablet_manager->get_tablet(tablet_info.tablet_id);
+            if (st.ok()) {
+                TabletSharedPtr tablet = st.value();
                 tablet->obtain_header_wrlock();
                 ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
                 related_tablets.push_back(tablet);
@@ -1075,8 +1081,9 @@ Status StorageEngine::execute_task(EngineTask* task) {
             }
         });
         for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
-            if (tablet != nullptr) {
+            auto st = _tablet_manager->get_tablet(tablet_info.tablet_id);
+            if (st.ok()) {
+                TabletSharedPtr tablet = st.value();
                 tablet->obtain_header_wrlock();
                 ScopedCleanup release_guard([&]() { tablet->release_header_lock(); });
                 related_tablets.push_back(tablet);

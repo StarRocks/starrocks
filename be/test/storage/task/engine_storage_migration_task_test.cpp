@@ -46,7 +46,7 @@ public:
         auto res = StorageEngine::instance()->create_tablet(request);
         ASSERT_TRUE(res.ok()) << res.to_string();
         TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
-        TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
+        ASSIGN_OR_ABORT(TabletSharedPtr tablet ,tablet_manager->get_tablet(12345));
         ASSERT_TRUE(tablet != nullptr);
         const TabletSchema& tablet_schema = tablet->tablet_schema();
 
@@ -66,8 +66,8 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
 
         // add rowset to tablet
-        auto st = tablet->add_rowset(src_rowset, true);
-        ASSERT_TRUE(st.ok()) << st;
+        res = tablet->add_rowset(src_rowset, true);
+        ASSERT_TRUE(res.ok()) << res;
         sleep(2);
     }
 
@@ -135,7 +135,7 @@ public:
 
     void do_cycle_migration() {
         TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
-        TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
+        ASSIGN_OR_ABORT(TabletSharedPtr tablet,tablet_manager->get_tablet(12345));
         ASSERT_TRUE(tablet != nullptr);
         ASSERT_EQ(tablet->tablet_id(), 12345);
         DataDir* source_path = tablet->data_dir();

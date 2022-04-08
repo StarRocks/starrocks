@@ -83,10 +83,10 @@ public:
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
-    TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+    StatusOr<TabletSharedPtr> get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
 
-    TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
-                               std::string* err = nullptr);
+    StatusOr<TabletSharedPtr> get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
+                                         std::string* err = nullptr);
 
     // Extract tablet_id and schema_hash from given path.
     //
@@ -203,8 +203,8 @@ private:
 
     Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
-    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool need_load);
-    TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
+    StatusOr<TabletSharedPtr> _get_tablet_unlocked(TTabletId tablet_id, bool need_load);
+    StatusOr<TabletSharedPtr> _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
 
     TabletSharedPtr _internal_create_tablet_unlocked(AlterTabletType alter_type, const TCreateTabletReq& request,
                                                      bool is_schema_change, const Tablet* base_tablet,

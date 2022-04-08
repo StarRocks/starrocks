@@ -86,11 +86,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
         LOG(WARNING) << "Invalid snapshot format. version=" << request.preferred_snapshot_format;
         return Status::InvalidArgument("invalid snapshot_format");
     }
-    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
-    if (tablet == nullptr) {
-        LOG(WARNING) << "make_snapshot fail to get tablet. tablet:" << request.tablet_id;
-        return Status::RuntimeError("tablet not found");
-    }
+    ASSIGN_OR_RETURN(auto tablet, StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id));
     int64_t timeout_s = request.__isset.timeout ? request.timeout : config::snapshot_expire_time_sec;
 
     StatusOr<std::string> res;

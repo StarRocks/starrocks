@@ -66,7 +66,7 @@ void DeltaWriter::_garbage_collection() {
 Status DeltaWriter::_init() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
+    ASSIGN_OR_RETURN(_tablet, tablet_mgr->get_tablet(_opt.tablet_id, false));
     if (_tablet == nullptr) {
         _set_state(kUninitialized);
         std::stringstream ss;
@@ -110,7 +110,7 @@ Status DeltaWriter::_init() {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
+            ASSIGN_OR_RETURN(new_tablet, tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash));
             if (new_tablet == nullptr) {
                 _set_state(kAborted);
                 return Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
