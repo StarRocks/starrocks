@@ -49,6 +49,10 @@ public class FrontendOptions {
 
     public static void init() throws UnknownHostException {
         localAddr = null;
+        if (Config.enable_fqdn) {
+            localAddr = InetAddress.getLocalHost();
+            return;
+        }
         if (!"0.0.0.0".equals(Config.frontend_address)) {
             if (!InetAddressValidator.getInstance().isValidInet4Address(Config.frontend_address)) {
                 throw new UnknownHostException("invalid frontend_address: " + Config.frontend_address);
@@ -103,6 +107,9 @@ public class FrontendOptions {
     }
 
     public static String getLocalHostAddress() {
+        if (Config.enable_fqdn) {
+            return localAddr.getCanonicalHostName();
+        }
         return localAddr.getHostAddress();
     }
 

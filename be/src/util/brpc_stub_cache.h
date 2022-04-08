@@ -28,6 +28,7 @@
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
+#include "util/network_util.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
 
@@ -70,22 +71,38 @@ public:
         return stub;
     }
 
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) {
+    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
+
+    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
-        if (str2endpoint(taddr.hostname.c_str(), taddr.port, &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, hostname=" << taddr.hostname;
+        std::string realhost;
+        realhost = host;
+        if (!hostname_is_ip(host)) {
+            realhost = hostname_to_ip(host);
+            if (realhost == "") {
+                LOG(WARNING) << "failed to get ip from host";
+                return nullptr;
+            }
+        }
+        if (str2endpoint(realhost.c_str(), port, &endpoint)) {
+            LOG(WARNING) << "unknown endpoint, host = " << host;
             return nullptr;
         }
         return get_stub(endpoint);
     }
 
-    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
-        butil::EndPoint endpoint;
-        if (str2endpoint(host.c_str(), port, &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, hostname=" << host;
-            return nullptr;
+    std::string hostname_to_ip(const std::string& host) {
+        std::vector<std::string> addresses;
+        Status status = hostname_to_ip_addrs(host, &addresses);
+        if (!status.ok()) {
+            LOG(WARNING) << "status of hostname_to_ip_addrs was not ok";
+            return "";
         }
-        return get_stub(endpoint);
+        if (addresses.size() != 1) {
+            LOG(WARNING) << "the number of addresses could only be equal to 1, failed to get ip from host";
+            return "";
+        }
+        return addresses[0];
     }
 
 private:

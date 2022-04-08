@@ -30,6 +30,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Frontend;
+import com.starrocks.utframe.UtFrameUtils;
+
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
@@ -202,5 +205,12 @@ public class GlobalStateMgrTest {
         dis.close();
 
         deleteDir(dir);
+    }
+
+    @Test
+    public void testGetFeByHost() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost("127.0.0.1");
+        Assert.assertNotNull(fe);
     }
 }

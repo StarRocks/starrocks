@@ -45,6 +45,8 @@ private:
 // is returned, addresses may still be of zero length.
 Status hostname_to_ip_addrs(const std::string& name, std::vector<std::string>* addresses);
 
+bool hostname_is_ip(const std::string& hostname);
+
 // Finds the first non-localhost IP address in the given list. Returns
 // true if such an address was found, false otherwise.
 bool find_first_non_localhost(const std::vector<std::string>& addresses, std::string* addr);
