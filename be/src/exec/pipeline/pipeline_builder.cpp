@@ -150,7 +150,6 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
     _context.add_pipeline(operators);
-    _context.get_pipelines().back()->set_root();
     return _context.get_pipelines();
 }
 
