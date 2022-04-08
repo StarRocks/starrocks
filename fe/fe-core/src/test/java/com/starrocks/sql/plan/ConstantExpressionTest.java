@@ -137,6 +137,26 @@ public class ConstantExpressionTest extends PlanTestBase {
         testFragmentPlanContainsConstExpr(
                 "select 1 / 10.0;",
                 "0.1");
+
+        testFragmentPlanContainsConstExpr(
+                "select 1 ^ 0;",
+                "1");
+
+        testFragmentPlanContainsConstExpr(
+                "select 1 & 0;",
+                "0");
+
+        testFragmentPlanContainsConstExpr(
+                "select 1 | 0;",
+                "1");
+
+        testFragmentPlanContainsConstExpr(
+                "select 10 % 3;",
+                "1");
+
+        testFragmentPlanContainsConstExpr(
+                "select 3 DIV 2;",
+                "1");
     }
 
     @Test

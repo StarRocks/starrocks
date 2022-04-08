@@ -509,7 +509,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testLargeIntMod() throws Exception {
         String sql = "select -123 % 100000000000000000000000000000000000";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("-123 % 100000000000000000000000000000000000"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : -123\n" +
+                "  |  "));
     }
 
     @Test
