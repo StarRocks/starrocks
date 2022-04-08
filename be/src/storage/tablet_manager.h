@@ -230,9 +230,9 @@ private:
     Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
-    StatusOr<TabletSharedPtr> _get_from_metacache(int64_t tabletid);
-    Status _put_into_metacache_ifabsent(int64_t tabletid, TabletSharedPtr tabletPtr);
-    Status _put_into_metacache(int64_t tabletid, TabletSharedPtr tabletPtr);
+    TabletSharedPtr _get_from_metacache(int64_t tabletid);
+    bool _put_into_metacache_ifabsent(TabletSharedPtr tabletPtr);
+    bool _put_into_metacache(TabletSharedPtr tabletPtr);
     MemTracker* _mem_tracker = nullptr;
 
     std::vector<std::shared_ptr<TabletsShard>> _tablets_shards;

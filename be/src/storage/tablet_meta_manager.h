@@ -76,6 +76,7 @@ struct MetaStoreStats {
 
 // Helper Class for managing tablet headers of one root path.
 class TabletMetaManager {
+    using TabletSharedPtr = std::shared_ptr<Tablet>;
 public:
     static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb, string* json_meta);
 
@@ -97,8 +98,8 @@ public:
 
     static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
-    static Status traverse_for_tablet(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func,
-                                      int64_t tabletid);
+    static StatusOr<TabletSharedPtr> traverse_for_tablet(TabletManager * tablet_manager,DataDir * data_dir,
+                                                                            int64_t tablet_id) ;
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 

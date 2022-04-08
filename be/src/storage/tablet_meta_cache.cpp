@@ -5,25 +5,25 @@
 #include "env/env_s3.h"
 
 namespace starrocks {
-StatusOr<TabletSharedPtr> LRUTabletMetaCache::get(int64_t tabletid) {
-    auto it = tabletmap.find(tabletid);
+TabletSharedPtr LRUTabletMetaCache::get(int64_t tablet_id) {
+    auto it = tabletmap.find(tablet_id);
     if (it != tabletmap.end()) {
         return it->second;
     }
-    return Status::NotFound("Not found");
+    return nullptr;
 }
 
-Status LRUTabletMetaCache::put(int64_t tabletid, const TabletSharedPtr& meta) {
-    auto [it, inserted] = tabletmap.emplace(tabletid, meta);
+bool LRUTabletMetaCache::put(const TabletSharedPtr& meta) {
+    auto [it, inserted] = tabletmap.emplace(meta->tablet_id(), meta);
     if (inserted) {
-        return Status::OK();
+        return true;
     }
-    return Status::InternalError(fmt::format("tablet {} already exist in map", tabletid));
+    return false;
 }
 
-Status LRUTabletMetaCache::remove(int64_t tabletid) {
-    tabletmap.erase(tabletid);
-    return Status::OK();
+bool LRUTabletMetaCache::remove(int64_t tablet_id) {
+    tabletmap.erase(tablet_id);
+    return true;
 }
 
 } // namespace starrocks

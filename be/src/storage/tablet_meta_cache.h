@@ -17,18 +17,18 @@ enum MetaCache_Type {
 
 class TabletMetaCache {
 public:
-    virtual StatusOr<TabletSharedPtr> get(int64_t tabletid) = 0;
-    virtual Status put(int64_t tabletid, const TabletSharedPtr& tabletptr) = 0;
-    virtual Status remove(int64_t tabletid) = 0;
+    virtual TabletSharedPtr get(int64_t tablet_id) = 0;
+    virtual bool put(const TabletSharedPtr& tabletptr) = 0;
+    virtual bool remove(int64_t tablet_id) = 0;
 };
 
 class LRUTabletMetaCache : public TabletMetaCache {
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
 
 public:
-    StatusOr<TabletSharedPtr> get(int64_t tabletid);
-    Status put(int64_t tabletid, const TabletSharedPtr& tabletptr);
-    Status remove(int64_t tabletid);
+    TabletSharedPtr get(int64_t tablet_id);
+    bool put(const TabletSharedPtr& tabletptr);
+    bool remove(int64_t tablet_id);
 
 private:
     TabletMap tabletmap;

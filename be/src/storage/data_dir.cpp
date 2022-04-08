@@ -486,71 +486,24 @@ Status DataDir::load() {
     return Status::OK();
 }
 
-StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tabletid) {
-    if (_storage_medium == TStorageMedium::S3) {
-        return Status::IOError("");
-    }
-    LOG(INFO) << "start to load tablets from " << _path;
-    LOG(INFO) << "begin loading tablet from meta";
-    // load tablet
-    // create tablet from tablet meta and add it to tablet mgr
+StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tablet_id) {
+    // load tablet create tablet from tablet meta and add it to tablet mgr
     TabletSharedPtr tablet = nullptr;
-    auto load_tablet_func = [this, &tablet](int64_t tablet_id, int32_t schema_hash, const std::string& value) -> bool {
-        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false,
-                                                         false, false);
-        if (st.ok()) {
-            tablet = st.value();
-            return false;
-        }
-        return true;
-    };
-
-    TabletMetaManager::traverse_for_tablet(_kv_store, load_tablet_func, tabletid);
-    if (!tablet) {
-        LOG(ERROR) << "load tablets from header failed"
-                   << ", loaded tablet: " << tabletid << ", path: " << _path;
-        return Status::NotFound("Not found in " + _path);
+    auto st = TabletMetaManager::traverse_for_tablet(_tablet_manager,this,tablet_id);
+    if(!st.ok()){
+        return Status::InternalError("load failed");
     }
     TabletUid tablet_uid = tablet->tablet_uid();
 
-    // load rowset meta from meta env and create rowset
-    // COMMITTED: add to txn manager
-    // VISIBLE: add to tablet
-    // if one rowset load failed, then the total data dir will not be loaded
-    std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
-    LOG(INFO) << "begin loading rowset from meta";
-    auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                const std::string& meta_str) -> bool {
-        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-        bool parsed = rowset_meta->init(meta_str);
-        if (!parsed) {
-            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
-            // return false will break meta iterator, return true to skip this error
-            return true;
-        }
-        if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
-            LOG(FATAL) << "must change V1 format to V2 format."
-                       << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                       << ", schema_hash: " << rowset_meta->tablet_schema_hash()
-                       << ", rowset_id:" << rowset_meta->rowset_id();
-        }
-        dir_rowset_metas.push_back(rowset_meta);
-        return true;
-    };
+    std::vector<RowsetMetaSharedPtr>  dir_rowset_metas;
+    auto load_rowset_st = RowsetMetaManager::traverse_rowset_metas_for_tabletuid(_kv_store, tablet_uid,dir_rowset_metas);
 
-    Status load_rowset_status =
-            RowsetMetaManager::traverse_rowset_metas_for_tabletuid(_kv_store, load_rowset_func, tablet_uid);
-
-    if (!load_rowset_status.ok()) {
+    if (!load_rowset_st.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path;
     }
 
-    // traverse rowset
-    // 1. add committed rowset to txn map
-    // 2. add visible rowset to tablet
-    // ignore any errors when load tablet or rowset, because fe will repair them after report
     for (const auto& rowset_meta : dir_rowset_metas) {
         RowsetSharedPtr rowset;
         Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
