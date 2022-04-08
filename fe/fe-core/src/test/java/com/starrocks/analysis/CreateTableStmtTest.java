@@ -113,7 +113,7 @@ public class CreateTableStmtTest {
         List<AlterClause> ops = Lists.newArrayList();
         ops.add(new AddRollupClause("index1", Lists.newArrayList("col1", "col2"), null, "table1", null));
         ops.add(new AddRollupClause("index2", Lists.newArrayList("col2", "col3"), null, "table1", null));
-        CreateTableStmt stmt = new CreateTableStmt(false, false, tblName, cols, "olap",
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblName, cols, "olap", null,
                 new KeysDesc(KeysType.AGG_KEYS, colsName), null,
                 hashDistributioin, null, null, "", ops);
         stmt.analyze(analyzer);

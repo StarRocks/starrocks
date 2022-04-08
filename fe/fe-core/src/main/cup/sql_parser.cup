@@ -313,8 +313,7 @@ nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_o
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String opt_charset_name;
-nonterminal String user, opt_user;
+nonterminal String user, opt_user, opt_charset_name;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
@@ -1186,7 +1185,7 @@ create_stmt ::=
         RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns RPAREN opt_engine:engineName
+            LPAREN column_definition_list:columns RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -1195,24 +1194,11 @@ create_stmt ::=
             opt_properties:tblProperties
             opt_ext_properties:extProperties
     {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, keys, partition,
+        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, charsetName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName
-            opt_keys:keys
-            opt_comment:tableComment
-            opt_partition:partition
-            opt_distribution:distribution
-            opt_rollup:index
-            opt_properties:tblProperties
-            opt_ext_properties:extProperties
-    {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, keys, partition,
-        distribution, tblProperties, extProperties, tableComment, index);
-    :}
-    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName RPAREN opt_charset_name:charsetName
+            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -2708,7 +2694,9 @@ old_or_new_charset_name_or_default ::=
 
 opt_charset_name ::=
     {: RESULT = null; :}
-    | KW_CHARSET EQUAL ident:charsetName
+    | KW_DEFAULT KW_CHARSET EQUAL ident:charsetName
+    {: RESULT = charsetName; :}
+    | KW_DEFAULT KW_CHARSET ident:charsetName
     {: RESULT = charsetName; :}
     ;
 

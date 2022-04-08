@@ -134,34 +134,15 @@ public class CreateTableStmt extends DdlStmt {
                            TableName tableName,
                            List<ColumnDef> columnDefinitions,
                            String engineName,
+                           String charsetName,
                            KeysDesc keysDesc,
                            PartitionDesc partitionDesc,
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> ops) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
+        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
                 distributionDesc, properties, extProperties, comment, ops);
-    }
-
-//    public CreateTableStmt(boolean ifNotExists,
-//                           boolean isExternal,
-//                           TableName tableName,
-//                           List<ColumnDef> columnDefinitions,
-//                           String engineName,
-//                           String charsetName,
-//                           KeysDesc keysDesc,
-//                           PartitionDesc partitionDesc,
-//                           DistributionDesc distributionDesc,
-//                           Map<String, String> properties,
-//                           Map<String, String> extProperties,
-//                           String comment, List<AlterClause> ops) {
-//        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
-//                distributionDesc, properties, extProperties, comment, ops);
-//    }
-
-    public CreateTableStmt(Boolean ifNotExists, Boolean isExternal, TableName name, ArrayList<ColumnDef> columns, ArrayList<IndexDef> indexes, String engineName, KeysDesc keys, PartitionDesc partition, DistributionDesc distribution, Map<String, String> tblProperties, Map<String, String> extProperties, String tableComment, List<AlterClause> index) {
-        super();
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -177,7 +158,6 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> properties,
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> rollupAlterClauseList) {
-//        String charsetName1 = String.valueOf(charsetName);
         this.tableName = tableName;
         if (columnDefinitions == null) {
             this.columnDefs = Lists.newArrayList();
