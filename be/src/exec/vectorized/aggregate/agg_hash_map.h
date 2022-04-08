@@ -669,7 +669,12 @@ struct AggHashMapWithSerializedKeyFixedSize {
     AggDataPtr get_null_key_data() { return nullptr; }
 
     template <typename Func>
-    void compute_agg_prefetch(size_t chunk_size, Buffer<AggDataPtr>* agg_states, Func&& allocate_func) {
+    void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                              Func&& allocate_func) {
+        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
+        }
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 caches[i].key.u.size = slice_sizes[i];
@@ -695,10 +700,14 @@ struct AggHashMapWithSerializedKeyFixedSize {
     }
 
     template <typename Func>
-    void compute_agg_noprefetch(size_t chunk_size, Buffer<AggDataPtr>* agg_states, Func&& allocate_func) {
+    void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
+                                Func&& allocate_func) {
         FixedSizeSliceKey key;
         constexpr int key_size = sizeof(FixedSizeSliceKey);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, key_size);
+        }
         if (!has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 memcpy(key.u.data, buffer + i * key_size, key_size);
@@ -732,14 +741,10 @@ struct AggHashMapWithSerializedKeyFixedSize {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
 
-        for (const auto& key_column : key_columns) {
-            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
-        }
-
         if (hash_map.bucket_count() < prefetch_threhold) {
-            compute_agg_noprefetch(chunk_size, agg_states, allocate_func);
+            compute_agg_noprefetch(chunk_size, key_columns, agg_states, allocate_func);
         } else {
-            compute_agg_prefetch(chunk_size, agg_states, allocate_func);
+            compute_agg_prefetch(chunk_size, key_columns, agg_states, allocate_func);
         }
     }
 
