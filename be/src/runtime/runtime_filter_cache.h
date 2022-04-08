@@ -47,6 +47,7 @@ private:
     static void _clean_thread_func(RuntimeFilterCache* cache);
     void _clean_events(bool force);
     void _clean_filters();
+    size_t _slot_idx(const TUniqueId& query_id);
     const size_t _num_slots;
     const size_t _slot_mask;
     std::vector<std::shared_mutex> _mutexes;

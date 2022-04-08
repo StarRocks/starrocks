@@ -79,7 +79,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
                                rf_desc->sender_finst_id() == state->fragment_instance_id();
         if (!need_sender_grf) continue;
 
-        VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. broadcast join filter_id = " << rf_desc->filter_id()
+        VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. join filter_id = " << rf_desc->filter_id()
                   << ", finst_id = " << state->fragment_instance_id();
 
         // rf metadata

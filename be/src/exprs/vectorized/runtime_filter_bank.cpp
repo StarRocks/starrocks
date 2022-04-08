@@ -229,6 +229,7 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(de
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept
         : _descriptors(std::move(that._descriptors)),
           _wait_timeout_ms(that._wait_timeout_ms),
+          _scan_wait_timeout_ms(that._scan_wait_timeout_ms),
           _eval_context(that._eval_context) {}
 
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,

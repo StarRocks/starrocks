@@ -154,8 +154,11 @@ void RuntimeFilterCache::_clean_filters() {
         }
     }
 }
+size_t RuntimeFilterCache::_slot_idx(const TUniqueId& query_id) {
+    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+}
 void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id, const JoinRuntimeFilterPtr& filter) {
-    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _mutexes[slot_idx];
     auto& map = _filter_maps[slot_idx];
     _cache_times.fetch_add(1);
@@ -168,7 +171,7 @@ void RuntimeFilterCache::put_if_absent(const TUniqueId& query_id, int filter_id,
 }
 
 JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_id) {
-    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _mutexes[slot_idx];
     auto& map = _filter_maps[slot_idx];
     std::shared_lock read_lock(mutex);
@@ -184,7 +187,7 @@ JoinRuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filt
 
 void RuntimeFilterCache::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {
     if (!_enable_trace) return;
-    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _event_mutexes[slot_idx];
     auto& map = _event_maps[slot_idx];
     std::unique_lock write_lock(mutex);
@@ -208,7 +211,7 @@ std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_
 }
 
 void RuntimeFilterCache::remove(const TUniqueId& query_id) {
-    const auto slot_idx = std::hash<size_t>()(query_id.lo) & _slot_mask;
+    const auto slot_idx = _slot_idx(query_id);
     auto& mutex = _mutexes[slot_idx];
     auto& map = _filter_maps[slot_idx];
     std::unique_lock write_lock(mutex);
