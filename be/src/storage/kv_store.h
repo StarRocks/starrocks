@@ -65,9 +65,11 @@ public:
                          const std::string& upper_bound,
                          std::function<bool(std::string_view, std::string_view)> const& func);
 
-    Status compact(uint64_t* size_before, uint64_t* size_after);
+    Status compact();
 
     std::string get_stats();
+
+    bool get_live_sst_files_size(uint64_t* live_sst_files_size);
 
     std::string get_root_path();
 
