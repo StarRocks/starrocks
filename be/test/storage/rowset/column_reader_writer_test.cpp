@@ -43,6 +43,8 @@
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -66,6 +68,47 @@ protected:
 
     void TearDown() override {}
 
+    std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<fs::FileBlockManager>& block_mgr,
+                                                  const std::string& fname) {
+        int tablet_id = 1;
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = 0;
+        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+
+        auto st = StorageEngine::instance()->create_tablet(request);
+        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        std::vector<int32_t> column_indexes;
+        std::shared_ptr<TabletSchema> tablet_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+
+        MemTracker* mem_tracker = _tablet_meta_mem_tracker.get();
+        return std::shared_ptr<Segment>(
+                new Segment(Segment::private_type(0), block_mgr, fname, 1, tablet_schema.get(), mem_tracker),
+                DeleterWithMemTracker<Segment>(mem_tracker));
+    }
+
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
     void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
                             const std::string null_ratio = "0") {
@@ -82,6 +125,7 @@ protected:
 
         const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
                                                       version, adaptive, null_encoding, null_ratio);
+        auto segment = create_dummy_segment(block_mgr, fname);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -134,7 +178,7 @@ protected:
             std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
             StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
+            auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -337,6 +381,7 @@ protected:
 
         // delete test file.
         const std::string fname = TEST_DIR + "/test_array_int.data";
+        auto segment = create_dummy_segment(block_mgr, fname);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -383,7 +428,7 @@ protected:
 
         // read and check
         {
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
+            auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -416,8 +461,7 @@ protected:
                 ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
             }
 
-            // check num
-            ASSERT_EQ(2, reader->num_rows());
+            ASSERT_EQ(2, reader->num_rows_from_meta_pb(&meta));
             ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
@@ -665,6 +709,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
     ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
+    auto segment = create_dummy_segment(block_mgr, fname);
 
     // write data
     {
@@ -706,10 +751,10 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, 1, false);
+        auto res = ColumnReader::create(&meta, segment.get());
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
-        ASSERT_EQ(1024, reader->num_rows());
+        ASSERT_EQ(1024, reader->num_rows_from_meta_pb(&meta));
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
 }
