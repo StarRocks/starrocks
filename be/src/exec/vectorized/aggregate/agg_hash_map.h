@@ -702,31 +702,20 @@ struct AggHashMapWithSerializedKeyFixedSize {
     template <typename Func>
     void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
                                 Func&& allocate_func) {
-        FixedSizeSliceKey key;
         constexpr int key_size = sizeof(FixedSizeSliceKey);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, key_size);
         }
-        if (!has_null_column) {
+        FixedSizeSliceKey* key = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * key_size, key_size);
-                auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
-                    AggDataPtr pv = allocate_func();
-                    ctor(key, pv);
-                });
-                (*agg_states)[i] = iter->second;
+                key[i].u.size = slice_sizes[i];
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * key_size, key_size);
-                key.u.size = slice_sizes[i];
-                auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
-                    AggDataPtr pv = allocate_func();
-                    ctor(key, pv);
-                });
-                (*agg_states)[i] = iter->second;
-            }
+        }
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto iter = hash_map.lazy_emplace(key[i], [&](const auto& ctor) { ctor(key[i], allocate_func()); });
+            (*agg_states)[i] = iter->second;
         }
     }
 
