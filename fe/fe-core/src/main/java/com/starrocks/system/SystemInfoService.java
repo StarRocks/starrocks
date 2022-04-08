@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.UpdateBackendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -38,6 +39,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -167,6 +169,26 @@ public class SystemInfoService {
 
         // backends is changed, regenerated tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
+    }
+
+    public void updateBackendAddress(UpdateBackendAddressClause updateBackendAddressClause) throws DdlException {
+        Pair<String, Integer> discardedHostAndPort = updateBackendAddressClause.getDiscardedHostPort();
+        Pair<String, Integer> newlyEffectiveHostAndPort = updateBackendAddressClause.getNewlyEffectiveHostPort();
+        if (getBackendWithHeartbeatPort(discardedHostAndPort.first, discardedHostAndPort.second) == null) {
+            throw new DdlException("backend does not exists[" + 
+                discardedHostAndPort.first + ":" + 
+                discardedHostAndPort.second + "]");
+        }
+        // update idToBackend
+        Backend preUpdateBackend = getBackendWithHeartbeatPort(discardedHostAndPort.first, discardedHostAndPort.second);
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        Backend updateBackend = copiedBackends.get(preUpdateBackend.getId());
+        updateBackend.setHost(newlyEffectiveHostAndPort.first);
+        updateBackend.setHeartbeatPort(newlyEffectiveHostAndPort.second);
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -669,7 +691,9 @@ public class SystemInfoService {
                 // will throw
                 // UnknownHostException
                 InetAddress inetAddress = InetAddress.getByName(host);
-                host = inetAddress.getHostAddress();
+                if (!Config.enable_fqdn) {
+                    host = inetAddress.getHostAddress();
+                }
             }
 
             // validate port
@@ -747,6 +771,7 @@ public class SystemInfoService {
             return;
         }
         memoryBe.setBePort(be.getBePort());
+        memoryBe.setHost(be.getHost());
         memoryBe.setAlive(be.isAlive());
         memoryBe.setDecommissioned(be.isDecommissioned());
         memoryBe.setHttpPort(be.getHttpPort());

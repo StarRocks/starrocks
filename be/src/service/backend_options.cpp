@@ -17,6 +17,9 @@
 
 #include "service/backend_options.h"
 
+#include <netdb.h>
+#include <unistd.h>
+
 #include <algorithm>
 
 #include "common/config.h"
@@ -34,6 +37,28 @@ std::string BackendOptions::_s_localhost;
 std::vector<CIDR> BackendOptions::_s_priority_cidrs;
 
 bool BackendOptions::init() {
+    if (config::enable_fqdn) {
+        char name[HOST_NAME_MAX];
+        int ret = gethostname(name, HOST_NAME_MAX);
+        if (ret != 0) {
+            LOG(FATAL) << "failed to get hostname: errno: " << ret;
+            return false;
+        }
+        struct addrinfo* pAI;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_flags = AI_CANONNAME;
+        int rc = getaddrinfo(name, NULL, &hints, &pAI);
+        if (rc != 0) {
+            LOG(FATAL) << "failed to get addrinfo: errno: " << rc;
+            return false;
+        }
+        _s_localhost = pAI->ai_canonname;
+        LOG(INFO) << "local host =" << _s_localhost;
+        freeaddrinfo(pAI);
+        return true;
+    }
+
     if (!analyze_priority_cidrs()) {
         return false;
     }

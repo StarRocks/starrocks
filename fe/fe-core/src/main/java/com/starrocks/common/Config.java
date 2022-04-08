@@ -1499,4 +1499,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+    
+    /**
+     * A flag to determine if fqdn is used
+     * default is false
+     */
+    @ConfField
+    public static boolean enable_fqdn = false;
 }
