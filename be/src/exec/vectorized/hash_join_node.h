@@ -59,6 +59,8 @@ private:
     Status _probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk, bool& eos);
     Status _probe_remain(ChunkPtr* chunk, bool& eos);
 
+    void _evaluate_build_keys(const ChunkPtr& chunk);
+
     void _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);

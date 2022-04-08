@@ -181,11 +181,6 @@ private:
         }
     }
 
-    void _prepare_build_key_columns() {
-        SCOPED_TIMER(_build_conjunct_evaluate_timer);
-        _prepare_key_columns(_ht.get_key_columns(), _ht.get_build_chunk(), _build_expr_ctxs);
-    }
-
     void _prepare_probe_key_columns() {
         SCOPED_TIMER(_probe_conjunct_evaluate_timer);
         _prepare_key_columns(_key_columns, _probe_input_chunk, _probe_expr_ctxs);
