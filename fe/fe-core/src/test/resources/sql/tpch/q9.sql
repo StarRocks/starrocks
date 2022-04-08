@@ -42,7 +42,7 @@ TOP-N (order by [[53: N_NAME ASC NULLS FIRST, 57: year DESC NULLS LAST]])
                         EXCHANGE BROADCAST
                             INNER JOIN (join-predicate [52: N_NATIONKEY = 14: S_NATIONKEY] post-join-predicate [null])
                                 SCAN (columns[52: N_NATIONKEY, 53: N_NAME] predicate[null])
-                                EXCHANGE BROADCAST
+                                EXCHANGE SHUFFLE[14]
                                     INNER JOIN (join-predicate [11: S_SUPPKEY = 21: L_SUPPKEY] post-join-predicate [null])
                                         SCAN (columns[11: S_SUPPKEY, 14: S_NATIONKEY] predicate[null])
                                         EXCHANGE SHUFFLE[21]

@@ -498,14 +498,28 @@ public class JoinTest extends PlanTestBase {
         };
 
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 3\n" +
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: 4: v4, 5: v5, 10: cast\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
                 "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 7: v1\n" +
+                "  |  equal join conjunct: 5: v5 = 7: v1\n" +
+                "  |  equal join conjunct: 10: cast = 8: v2\n" +
+                "  |  other join predicates: 4: v4 >= 7: v1, 5: v5 > 7: v1\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
                 "  1:EMPTYSET"));
     }
 
