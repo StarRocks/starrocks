@@ -70,7 +70,7 @@ public class UDFTest extends PlanTestBase {
         sql = "select table_function from tab0, table_function(c_0_3 + 3)";
         explain = getVerboseExplain(sql);
         Assert.assertTrue(
-                explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as BIGINT) + 3 as VARCHAR)"));
+                explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as SMALLINT) + 3 as VARCHAR)"));
 
     }
 }
