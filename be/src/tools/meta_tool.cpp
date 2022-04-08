@@ -186,16 +186,23 @@ void delete_rowset_meta(DataDir* data_dir) {
 }
 
 void compact_meta(DataDir* data_dir) {
-    uint64_t size_before = 0;
-    uint64_t size_after = 0;
-    Status s = data_dir->get_meta()->compact(&size_before, &size_after);
+    uint64_t live_sst_files_size_before = 0;
+    uint64_t live_sst_files_size_after = 0;
+    if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+        std::cout << "data dir " << data_dir->path() << " get_live_sst_files_size failed" << std::endl;
+    }
+    auto s = data_dir->get_meta()->compact();
     if (!s.ok()) {
-        std::cout << "compact meta failed:" << s << std::endl;
+        std::cout << "data dir " << data_dir->path() << " compact meta failed: " << s << std::endl;
         return;
     }
-    std::cout << "compact meta successfully" << std::endl;
-    std::cout << data_dir->get_meta()->get_stats() << std::endl;
-    std::cout << "size before: " << size_before << " after: " << size_after << std::endl;
+    if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+        std::cout << "data dir " << data_dir->path() << " get_live_sst_files_size failed" << std::endl;
+    }
+    std::cout << "data dir " << data_dir->path() << " compact meta successfully, "
+              << "live_sst_files_size_before: " << live_sst_files_size_before
+              << " live_sst_files_size_after: " << live_sst_files_size_after << data_dir->get_meta()->get_stats()
+              << std::endl;
 }
 
 void get_meta_stats(DataDir* data_dir) {
