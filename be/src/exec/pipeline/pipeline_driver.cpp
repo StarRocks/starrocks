@@ -302,23 +302,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     _update_overhead_timer();
 
-    // last root driver cancel the all drivers' execution and notify FE the
-    // fragment's completion but do not unregister the FragmentContext because
-    // some non-root drivers maybe has pending io io tasks hold the reference to
-    // object owned by FragmentContext.
-    if (is_root()) {
-        if (_fragment_ctx->count_down_root_drivers()) {
-            _fragment_ctx->finish();
-            auto status = _fragment_ctx->final_status();
-            _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status,
-                                                                                             true);
-        }
-    }
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
-        _fragment_ctx->destroy_pass_through_chunk_buffer();
+        _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
