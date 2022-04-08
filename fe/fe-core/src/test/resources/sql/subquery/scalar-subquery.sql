@@ -321,20 +321,19 @@ CROSS JOIN (join-predicate [null] post-join-predicate [4: sum < multiply(105, 8:
 select v1 from t0,t1 where v1 between (select v4 from t1) and (select v4 from t1)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 <= 11: v4])
-    ASSERT LE 1
-        EXCHANGE GATHER
-            SCAN (columns[11: v4] predicate[null])
-    EXCHANGE BROADCAST
-        CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 >= 7: v4])
+    CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 >= 7: v4])
+        CROSS JOIN (join-predicate [null] post-join-predicate [null])
+            SCAN (columns[1: v1] predicate[null])
+            EXCHANGE BROADCAST
+                SCAN (columns[4: v4] predicate[null])
+        EXCHANGE BROADCAST
             ASSERT LE 1
                 EXCHANGE GATHER
                     SCAN (columns[7: v4] predicate[null])
-            EXCHANGE BROADCAST
-                CROSS JOIN (join-predicate [null] post-join-predicate [null])
-                    SCAN (columns[4: v4] predicate[null])
-                    EXCHANGE BROADCAST
-                        SCAN (columns[1: v1] predicate[null])
-[end]
+    EXCHANGE BROADCAST
+        ASSERT LE 1
+            EXCHANGE GATHER
+                SCAN (columns[11: v4] predicate[null])[end]
 
 [sql]
 select * from t0 where v3 = (select * from (values(2)) t);
