@@ -73,7 +73,6 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
-            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
