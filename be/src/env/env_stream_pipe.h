@@ -10,6 +10,7 @@ class StreamLoadPipe;
 // Since the StreamPipe does not have the standard
 // SequentialFile interface. The StreamPipeSequentialFile
 // is used to wrap the memory to provide the sequential API.
+// TODO: remove this class
 class StreamPipeSequentialFile : public io::InputStream {
 public:
     explicit StreamPipeSequentialFile(std::shared_ptr<StreamLoadPipe> file);

@@ -26,7 +26,8 @@ Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* bu
 }
 
 Status StreamPipeSequentialFile::skip(int64_t n) {
-    return _file->seek(n);
+    std::unique_ptr<char[]> buf(new char[n]);
+    return read(buf.get(), n).status();
 }
 
 } // namespace starrocks
