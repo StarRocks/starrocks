@@ -67,7 +67,6 @@ using starrocks::ColumnReader;
 using starrocks::BinaryPlainPageDecoder;
 using starrocks::PageHandle;
 using starrocks::PagePointer;
-using starrocks::ColumnReaderOptions;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
 

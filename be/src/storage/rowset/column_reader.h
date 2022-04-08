@@ -40,6 +40,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/ordinal_page_index.h" // for OrdinalPageIndexIterator
 #include "storage/rowset/page_handle.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/vectorized/range.h"
 #include "util/once.h"
@@ -69,16 +70,7 @@ class PagePointer;
 class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
-
-struct ColumnReaderOptions {
-    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    // version in SegmentFooterPB
-    uint32_t storage_format_version = 1;
-    // whether verify checksum when read page
-    bool verify_checksum = true;
-    // for in memory olap table, use DURABLE CachePriority in page cache
-    bool kept_in_memory = false;
-};
+class Segment;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -93,11 +85,9 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
-                                                          ColumnMetaPB* meta, const std::string& file_name);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, const Segment* segment);
 
-    ColumnReader(MemTracker* mem_tracker, const private_type&, const ColumnReaderOptions& opts,
-                 const std::string& file_name);
+    ColumnReader(const private_type&, const Segment* segment);
 
     ~ColumnReader();
 
@@ -134,7 +124,6 @@ public:
     bool has_all_dict_encoded() const { return _flags[kHasAllDictEncodedPos]; }
     bool all_dict_encoded() const { return _flags[kAllDictEncodedPos]; }
 
-    size_t num_rows() const { return _num_rows; }
     uint64_t total_mem_footprint() const { return _total_mem_footprint; }
 
     int32_t num_data_pages() { return _ordinal_index.reader ? _ordinal_index.reader->num_data_pages() : 0; }
@@ -158,11 +147,22 @@ public:
     Status bloom_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                         vectorized::SparseRange* ranges);
 
-    uint32_t version() const { return _opts.storage_format_version; }
-
     Status load_ordinal_index_once();
 
+    uint32_t num_rows() const { return _segment->num_rows(); }
+
+    // this function is just used for unit test
+    uint32_t num_rows_from_meta_pb(const ColumnMetaPB* meta) const { return meta->num_rows(); }
+
 private:
+    const std::string& file_name() const { return _segment->file_name(); }
+
+    MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
+
+    fs::BlockManager* block_manager() const { return _segment->block_manager(); }
+
+    bool keep_in_memory() const { return _segment->keep_in_memory(); }
+
     struct private_type {
         private_type(int) {}
     };
@@ -214,18 +214,12 @@ private:
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
-    MemTracker* _mem_tracker = nullptr;
-
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
-    int32_t _column_length = 0;
     FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
-    ColumnReaderOptions _opts;
-    uint64_t _num_rows = 0;
     uint64_t _total_mem_footprint = 0;
-    const std::string& _file_name;
 
     // initialized in init(), used for create PageDecoder
     const EncodingInfo* _encoding_info = nullptr;
@@ -249,6 +243,11 @@ private:
     StarRocksCallOnce<Status> _zonemap_index_once;
     StarRocksCallOnce<Status> _bitmap_index_once;
     StarRocksCallOnce<Status> _bloomfilter_index_once;
+
+    // Pointer to its father segment, as the column reader
+    // is never released before the end of the parent's life cycle,
+    // so here we just use a normal pointer
+    const Segment* _segment = nullptr;
 
     std::bitset<16> _flags;
 };
