@@ -82,7 +82,7 @@ HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: 
 |  <slot 24> : 24: L_QUANTITY
 |
 13:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
@@ -106,7 +106,7 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 12
-UNPARTITIONED
+BUCKET_SHUFFLE_HASH_PARTITIONED: 10: O_ORDERKEY
 
 11:Project
 |  <slot 1> : 1: C_CUSTKEY
@@ -116,7 +116,7 @@ UNPARTITIONED
 |  <slot 14> : 14: O_ORDERDATE
 |
 10:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
@@ -140,7 +140,7 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 09
-UNPARTITIONED
+BUCKET_SHUFFLE_HASH_PARTITIONED: 11: O_CUSTKEY
 
 8:Project
 |  <slot 10> : 10: O_ORDERKEY
@@ -149,7 +149,7 @@ UNPARTITIONED
 |  <slot 14> : 14: O_ORDERDATE
 |
 7:HASH JOIN
-|  join op: LEFT SEMI JOIN (BROADCAST)
+|  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 10: O_ORDERKEY = 37: L_ORDERKEY
@@ -173,7 +173,7 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 06
-UNPARTITIONED
+BUCKET_SHUFFLE_HASH_PARTITIONED: 37: L_ORDERKEY
 
 5:Project
 |  <slot 37> : 37: L_ORDERKEY

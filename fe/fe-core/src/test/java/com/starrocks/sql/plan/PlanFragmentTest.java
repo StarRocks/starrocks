@@ -4654,15 +4654,9 @@ public class PlanFragmentTest extends PlanTestBase {
         };
 
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 3\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: 4: v4, 5: v5, 10: cast\n" +
-                "\n" +
-                "  1:EMPTYSET"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("1:EMPTYSET"));
+        Assert.assertTrue(plan.contains("4:HASH JOIN"));
         Config.enable_decimal_v3 = false;
     }
 
