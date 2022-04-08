@@ -183,8 +183,13 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     }
     param->predicate_slots = predicate_slots;
 
-    for (auto i = 0; i < _probe_expr_ctxs.size(); i++) {
-        param->join_keys.emplace_back(JoinKeyDesc{_probe_expr_ctxs[i]->root()->type().type, _is_null_safes[i]});
+    for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
+        Expr* expr = _build_expr_ctxs[i]->root();
+        if (expr->is_slotref()) {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], down_cast<ColumnRef*>(expr)});
+        } else {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], nullptr});
+        }
     }
 }
 
@@ -227,14 +232,18 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
+            SCOPED_TIMER(_build_conjunct_evaluate_timer);
+            _evaluate_build_keys(chunk);
+        }
+
+        {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk));
+            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
         }
     }
 
     {
-        // build hash table: compute key columns, and then build the hash table.
         RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
@@ -526,41 +535,19 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 }
 
 Status HashJoinNode::_build(RuntimeState* state) {
-    {
-        SCOPED_TIMER(_build_conjunct_evaluate_timer);
-        // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
-        // Splice the Chunks from Scan on the right table into a big Chunk
-        // In some scenarios, such as when the left and right tables are selected incorrectly
-        // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
-        // which will cause the output of wrong data.
-        // Currently, a defense needs to be added.
-        // After a better solution is available, the BigChunk mechanism can be removed.
-        if (_ht.get_build_chunk()->reach_capacity_limit()) {
-            return Status::InternalError("Total size of single column exceed the limit of hash join");
-        }
-
-        for (auto& _build_expr_ctx : _build_expr_ctxs) {
-            const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
-            ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());
-            if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                ColumnPtr column = ColumnHelper::create_column(data_type, true);
-                column->append_nulls(_ht.get_build_chunk()->num_rows());
-                _ht.get_key_columns().emplace_back(column);
-            } else if (column_ptr->is_constant()) {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(_ht.get_build_chunk()->num_rows(), 0);
-                _ht.get_key_columns().emplace_back(const_column->data_column());
-            } else {
-                _ht.get_key_columns().emplace_back(column_ptr);
-            }
-        }
+    // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
+    // Splice the Chunks from Scan on the right table into a big Chunk
+    // In some scenarios, such as when the left and right tables are selected incorrectly
+    // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
+    // which will cause the output of wrong data.
+    // Currently, a defense needs to be added.
+    // After a better solution is available, the BigChunk mechanism can be removed.
+    if (_ht.get_build_chunk()->reach_capacity_limit()) {
+        return Status::InternalError("Total size of single column exceed the limit of hash join");
     }
-
-    {
-        SCOPED_TIMER(_build_ht_timer);
-        TRY_CATCH_BAD_ALLOC(_ht.build(state));
-    }
-
+    // build hash table
+    SCOPED_TIMER(_build_ht_timer);
+    TRY_CATCH_BAD_ALLOC(_ht.build(state));
     return Status::OK();
 }
 
@@ -572,6 +559,26 @@ static inline bool check_chunk_zero_and_create_new(ChunkPtr* chunk) {
         return true;
     }
     return false;
+}
+
+void HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
+    _key_columns.resize(0);
+    size_t num_rows = chunk->num_rows();
+    for (auto& ctx : _build_expr_ctxs) {
+        const TypeDescriptor& data_type = ctx->root()->type();
+        ColumnPtr key_column = ctx->evaluate(chunk.get());
+        if (key_column->only_null()) {
+            ColumnPtr column = ColumnHelper::create_column(data_type, true);
+            column->append_nulls(num_rows);
+            _key_columns.emplace_back(column);
+        } else if (key_column->is_constant()) {
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
+            const_column->data_column()->assign(num_rows, 0);
+            _key_columns.emplace_back(const_column->data_column());
+        } else {
+            _key_columns.emplace_back(key_column);
+        }
+    }
 }
 
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,

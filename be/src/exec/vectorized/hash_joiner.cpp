@@ -133,8 +133,13 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     }
     param->predicate_slots = predicate_slots;
 
-    for (auto i = 0; i < _probe_expr_ctxs.size(); i++) {
-        param->join_keys.emplace_back(JoinKeyDesc{_probe_expr_ctxs[i]->root()->type().type, _is_null_safes[i]});
+    for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
+        Expr* expr = _build_expr_ctxs[i]->root();
+        if (expr->is_slotref()) {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], down_cast<ColumnRef*>(expr)});
+        } else {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], nullptr});
+        }
     }
 }
 Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
@@ -148,9 +153,13 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
         return Status::NotSupported(strings::Substitute("row count of right table in hash join > $0", UINT32_MAX));
     }
     {
+        SCOPED_TIMER(_build_conjunct_evaluate_timer);
+        _prepare_key_columns(_key_columns, chunk, _build_expr_ctxs);
+    }
+    {
         // copy chunk of right table
         SCOPED_TIMER(_copy_right_table_chunk_timer);
-        TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk));
+        TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
     }
     return Status::OK();
 }
@@ -304,26 +313,19 @@ bool HashJoiner::_has_null(const ColumnPtr& column) {
 }
 
 Status HashJoiner::_build(RuntimeState* state) {
-    {
-        SCOPED_TIMER(_build_conjunct_evaluate_timer);
-        // Currently, in order to implement simplicity, HashJoiner uses BigChunk,
-        // Splice the Chunks from Scan on the right table into a big Chunk
-        // In some scenarios, such as when the left and right tables are selected incorrectly
-        // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
-        // which will cause the output of wrong data.
-        // Currently, a defense needs to be added.
-        // After a better solution is available, the BigChunk mechanism can be removed.
-        if (_ht.get_build_chunk()->reach_capacity_limit()) {
-            return Status::InternalError("Total size of single column exceed the limit of hash join");
-        }
-        TRY_CATCH_BAD_ALLOC(_prepare_build_key_columns());
+    // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
+    // Splice the Chunks from Scan on the right table into a big Chunk
+    // In some scenarios, such as when the left and right tables are selected incorrectly
+    // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
+    // which will cause the output of wrong data.
+    // Currently, a defense needs to be added.
+    // After a better solution is available, the BigChunk mechanism can be removed.
+    if (_ht.get_build_chunk()->reach_capacity_limit()) {
+        return Status::InternalError("Total size of single column exceed the limit of hash join");
     }
 
-    {
-        SCOPED_TIMER(_build_ht_timer);
-        TRY_CATCH_BAD_ALLOC(_ht.build(state));
-    }
-
+    SCOPED_TIMER(_build_ht_timer);
+    TRY_CATCH_BAD_ALLOC(_ht.build(state));
     return Status::OK();
 }
 
