@@ -689,6 +689,8 @@ CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
 
+CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
+
 } // namespace config
 
 } // namespace starrocks

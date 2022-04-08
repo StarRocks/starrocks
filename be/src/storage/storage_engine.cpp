@@ -714,7 +714,35 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
+    _do_manual_compact();
+
     return res;
+}
+
+void StorageEngine::_do_manual_compact() {
+    auto data_dirs = get_stores();
+    for (auto data_dir : data_dirs) {
+        uint64_t live_sst_files_size_before = 0;
+        if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+            LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+            continue;
+        }
+        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
+            Status s = data_dir->get_meta()->compact();
+            if (!s.ok()) {
+                LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
+            } else {
+                uint64_t live_sst_files_size_after = 0;
+                if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                }
+                LOG(INFO) << "data dir " << data_dir->path() << " manual compact meta successfully, "
+                          << "live_sst_files_size_before: " << live_sst_files_size_before
+                          << " live_sst_files_size_after: " << live_sst_files_size_after
+                          << data_dir->get_meta()->get_stats();
+            }
+        }
+    }
 }
 
 void StorageEngine::_clean_unused_rowset_metas() {
