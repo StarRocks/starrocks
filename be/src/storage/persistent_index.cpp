@@ -20,8 +20,8 @@
 #include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
-#include "util/murmur_hash3.h"
 #include "util/raw_container.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -83,17 +83,11 @@ bool operator==(const FixedKey<KeySize>& lhs, const FixedKey<KeySize>& rhs) {
 
 template <size_t KeySize>
 struct FixedKeyHash {
-    uint64_t operator()(const FixedKey<KeySize>& k) const {
-        uint64_t ret;
-        murmur_hash3_x64_64(k.data, KeySize, seed0, &ret);
-        return ret;
-    }
+    uint64_t operator()(const FixedKey<KeySize>& k) const { return XXH3_64bits(k.data, KeySize); }
 };
 
 uint64_t key_index_hash(const void* data, size_t len) {
-    uint64_t ret;
-    murmur_hash3_x64_64(data, len, seed0, &ret);
-    return ret;
+    return XXH3_64bits(data, len);
 }
 
 static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size_t size, size_t usage_percent) {
