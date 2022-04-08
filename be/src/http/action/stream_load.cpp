@@ -431,10 +431,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     } else {
         request.__set_strip_outer_array(false);
     }
-    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
-        request.__set_partial_update(true);
-    } else {
-        request.__set_partial_update(false);
+    if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {
+            request.__set_partial_update(false);
+        } else if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "true")) {
+            request.__set_partial_update(true);
+        } else {
+            return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
+        }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
