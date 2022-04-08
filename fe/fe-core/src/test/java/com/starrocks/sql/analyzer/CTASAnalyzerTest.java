@@ -27,9 +27,6 @@ import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.
 
 
 public class CTASAnalyzerTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/CTASAnalyzerTest/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -39,7 +36,7 @@ public class CTASAnalyzerTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -176,11 +173,6 @@ public class CTASAnalyzerTest {
                         "    \"replication_num\" = \"1\",\n" +
                         "    \"storage_format\" = \"v2\"\n" +
                         ");");
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     @Test

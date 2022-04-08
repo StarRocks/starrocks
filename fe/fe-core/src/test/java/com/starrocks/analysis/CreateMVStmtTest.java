@@ -21,6 +21,8 @@ public class CreateMVStmtTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+
         Deencapsulation.setField(Config.class, "enable_materialized_view", true);
         // create connect context
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();

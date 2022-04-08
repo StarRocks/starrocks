@@ -45,17 +45,13 @@ import java.util.ArrayList;
 import java.util.Map;
 
 public class QueryPlannerTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/QueryPlannerTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -82,12 +78,6 @@ public class QueryPlannerTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test

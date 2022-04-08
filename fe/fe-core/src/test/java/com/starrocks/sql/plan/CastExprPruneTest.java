@@ -48,11 +48,6 @@ public class CastExprPruneTest extends PlanTestBase {
                 "properties(\"replication_num\"=\"1\") ;");
     }
 
-    @AfterClass
-    public static void afterClass() {
-        PlanTestBase.tearDown();
-    }
-
     @Test
     public void testQuery() throws Exception {
         String sql = "SELECT DISTINCT subt2.c_2_0 FROM tab0, " +

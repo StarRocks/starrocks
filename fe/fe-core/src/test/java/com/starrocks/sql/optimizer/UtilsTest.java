@@ -61,8 +61,6 @@ public class UtilsTest {
             + "\"storage_format\" = \"V2\"\n"
             + ");";
 
-    private static String runningDir = "fe/mocked/UtilsTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -75,7 +73,7 @@ public class UtilsTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

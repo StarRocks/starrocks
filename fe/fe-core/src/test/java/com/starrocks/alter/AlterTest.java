@@ -56,8 +56,6 @@ import java.util.UUID;
 
 public class AlterTest {
 
-    private static String runningDir = "fe/mocked/AlterTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -67,7 +65,7 @@ public class AlterTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -143,8 +141,6 @@ public class AlterTest {
         } catch (Exception ex) {
 
         }
-
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {

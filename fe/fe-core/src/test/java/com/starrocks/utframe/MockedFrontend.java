@@ -179,9 +179,11 @@ public class MockedFrontend {
     private static class FERunnable implements Runnable {
         private final MockedFrontend frontend;
         private final String[] args;
+        private final boolean startBDB;
 
-        public FERunnable(MockedFrontend frontend, String[] args) {
+        public FERunnable(MockedFrontend frontend, boolean startBDB, String[] args) {
             this.frontend = frontend;
+            this.startBDB = startBDB;
             this.args = args;
         }
 
@@ -209,7 +211,27 @@ public class MockedFrontend {
                 FrontendOptions.init();
                 ExecuteEnv.setup();
 
+<<<<<<< HEAD
                 // init catalog and wait it be ready
+=======
+                if (!startBDB) {
+                    // init catalog and wait it be ready
+                    new MockUp<JournalFactory>() {
+                        @Mock
+                        public Journal create(String name) {
+                            return new MockJournal();
+                        }
+                    };
+                }
+
+                new MockUp<NetUtils>() {
+                    @Mock
+                    public boolean isPortUsing(String host, int port) {
+                        return false;
+                    }
+                };
+
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
                 Catalog.getCurrentCatalog().initialize(args);
                 Catalog.getCurrentCatalog().waitForReady();
 
@@ -223,21 +245,35 @@ public class MockedFrontend {
     }
 
     // must call init() before start.
+<<<<<<< HEAD
     public void start(String[] args) throws FeStartException, NotInitException {
         if (!isInit) {
             throw new NotInitException("fe process is not initialized");
         }
         Thread feThread = new Thread(new FERunnable(this, args), FE_PROCESS);
+=======
+    public void start(boolean startBDB, String[] args) throws FeStartException, NotInitException {
+        initLock.lock();
+        if (!isInit) {
+            throw new NotInitException("fe process is not initialized");
+        }
+        initLock.unlock();
+
+        Thread feThread = new Thread(new FERunnable(this, startBDB, args), FE_PROCESS);
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
         feThread.start();
         waitForCatalogReady();
         System.out.println("Fe process is started");
     }
 
     private void waitForCatalogReady() throws FeStartException {
-        int retry = 0;
-        while (!Catalog.getCurrentCatalog().isReady() && retry++ < 120) {
+        while (!Catalog.getCurrentCatalog().isReady()) {
             try {
                 Thread.sleep(1000);
+<<<<<<< HEAD
+=======
+                System.out.println("catalog is not ready, wait for 1 second");
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

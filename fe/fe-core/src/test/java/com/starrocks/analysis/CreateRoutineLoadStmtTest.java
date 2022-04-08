@@ -53,8 +53,6 @@ public class CreateRoutineLoadStmtTest {
 
     private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadStmtTest.class);
 
-    private static String runningDir = "fe/mocked/CreateRoutineLoadStmtTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -64,18 +62,13 @@ public class CreateRoutineLoadStmtTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test");
-    }
-
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     @Test

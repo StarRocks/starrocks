@@ -38,17 +38,9 @@ import java.util.UUID;
 
 public class AuditEventProcessorTest {
 
-    private static String runningDir = "fe/mocked/AuditProcessorTest/" + UUID.randomUUID().toString() + "/";
-
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
+        UtFrameUtils.createMinStarRocksCluster();
     }
 
     @Test

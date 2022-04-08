@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlProto;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -34,11 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class ConnectSchedulerTest {
     private static final Logger LOG = LoggerFactory.getLogger(ConnectScheduler.class);
-    private static AtomicLong succSubmit;
     @Mocked
     SocketChannel socketChannel;
     @Mocked
@@ -48,7 +45,6 @@ public class ConnectSchedulerTest {
 
     @Before
     public void setUp() throws Exception {
-        succSubmit = new AtomicLong(0);
         new Expectations() {
             {
                 channel.getRemoteIp();
@@ -68,13 +64,6 @@ public class ConnectSchedulerTest {
 
     @Test
     public void testProcessException(@Mocked ConnectProcessor processor) throws Exception {
-        new Expectations() {
-            {
-                processor.loop();
-                result = new RuntimeException("failed");
-            }
-        };
-
         ConnectScheduler scheduler = new ConnectScheduler(10);
 
         ConnectContext context = new ConnectContext(socketChannel);

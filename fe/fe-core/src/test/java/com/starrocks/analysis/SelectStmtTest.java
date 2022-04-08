@@ -35,20 +35,14 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class SelectStmtTest {
-    private static String runningDir = "fe/mocked/DemoTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "

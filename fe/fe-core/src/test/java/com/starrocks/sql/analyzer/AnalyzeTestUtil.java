@@ -25,6 +25,10 @@ public class AnalyzeTestUtil {
 
     public static void init() throws Exception {
         // create connect context
+<<<<<<< HEAD
+=======
+        UtFrameUtils.createMinStarRocksCluster();
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);

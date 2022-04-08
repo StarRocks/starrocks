@@ -214,8 +214,13 @@ public class UtFrameUtils {
         return statementBases;
     }
 
+<<<<<<< HEAD
     public static void startFEServer(String runningDir) throws EnvVarNotSetException, IOException,
             FeStartException, NotInitException, DdlException, InterruptedException {
+=======
+    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
+            FeStartException, NotInitException {
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -230,12 +235,43 @@ public class UtFrameUtils {
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
         // set additional fe config
+<<<<<<< HEAD
         feConfMap.put("edit_log_port", String.valueOf(fe_edit_log_port));
+=======
+
+        if (startBDB) {
+            feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
+        }
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
-        frontend.start(new String[0]);
+        frontend.start(startBDB, new String[0]);
     }
 
+    public static void createMinStarRocksCluster(boolean startBDB) {
+        try {
+            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            addMockBackend(10001);
+
+            // sleep to wait first heartbeat
+            int retry = 0;
+            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+                    retry++ < 600) {
+                Thread.sleep(100);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void createMinStarRocksClusterWithBDB() {
+        createMinStarRocksCluster(true);
+    }
+
+<<<<<<< HEAD
     public static void createMinStarRocksCluster(String runningDir) throws EnvVarNotSetException, IOException,
             FeStartException, NotInitException, DdlException, InterruptedException {
         startFEServer(runningDir);
@@ -247,6 +283,10 @@ public class UtFrameUtils {
                 retry++ < 600) {
             Thread.sleep(1000);
         }
+=======
+    public static void createMinStarRocksCluster() {
+        createMinStarRocksCluster(false);
+>>>>>>> ffe46259 (BugFix: Fix bug of master exit wrong when adding follower (#4428) (#4867))
     }
 
     public static void addMockBackend(int backendId) throws IOException {

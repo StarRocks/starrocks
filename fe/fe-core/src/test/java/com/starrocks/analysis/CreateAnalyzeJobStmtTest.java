@@ -16,17 +16,11 @@ import java.io.StringReader;
 import java.util.UUID;
 
 public class CreateAnalyzeJobStmtTest {
-    private static String runningDir = "fe/mocked/CreateAnalyzeJobStmtTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
-
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
 
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "create table db.tbl(kk1 int, kk2 varchar(32), kk3 int, kk4 int) "
                 + "AGGREGATE KEY(kk1, kk2,kk3,kk4) distributed by hash(kk1) buckets 3 properties('replication_num' = "
                 + "'1');";

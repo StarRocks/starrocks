@@ -52,9 +52,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/StatisticsCalculatorTest/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext connectContext;
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
@@ -62,7 +59,7 @@ public class StatisticsCalculatorTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
@@ -71,12 +68,6 @@ public class StatisticsCalculatorTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test

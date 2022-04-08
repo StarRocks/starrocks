@@ -3787,13 +3787,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Database db = catalog.getDb("default_cluster:test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
-        new Expectations(olapTable1) {
-            {
-                olapTable1.getRowCount();
-                result = 2L;
-                minTimes = 0;
-            }
-        };
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +

@@ -23,20 +23,14 @@ import java.util.List;
 import java.util.UUID;
 
 public class SelectStmtWithDecimalTypesTest {
-    private static String runningDir = "fe/mocked/DecimalDemoTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "" +
                 "CREATE TABLE if not exists db1.decimal_table\n" +
                 "(\n" +
