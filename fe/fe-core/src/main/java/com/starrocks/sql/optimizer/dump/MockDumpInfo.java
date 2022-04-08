@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 public class MockDumpInfo implements DumpInfo {
@@ -16,6 +17,10 @@ public class MockDumpInfo implements DumpInfo {
 
     @Override
     public void addTable(String dbName, Table table) {
+    }
+
+    @Override
+    public void addView(View view) {
     }
 
     @Override
