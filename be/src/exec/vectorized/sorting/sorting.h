@@ -51,4 +51,7 @@ void build_tie_for_column(const ColumnPtr column, Tie* tie);
 void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
 
+Status merge_sorted_chunks_two_way(const Chunk* left, const Chunk* right, Permutation* output);
+Status merge_sorted_chunks(const std::vector<ChunkPtr>& chunks, Chunk* output);
+
 } // namespace starrocks::vectorized
