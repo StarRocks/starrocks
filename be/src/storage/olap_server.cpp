@@ -122,6 +122,11 @@ Status StorageEngine::start_bg_threads() {
             compaction_scheduler.schedule();
         });
         Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+        LOG(INFO) << "compaction scheduler started";
+
+        _compaction_checker_thread = std::thread([this] { compaction_check(); });
+        Thread::set_thread_name(_compaction_checker_thread, "compact_check");
+        LOG(INFO) << "compaction checker started";
     }
 
     int32_t update_compaction_num_threads_per_disk =
