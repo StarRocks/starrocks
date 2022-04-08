@@ -531,8 +531,7 @@ public:
 
     Status create_dir_recursive(const std::string& dirname) override {
         std::error_code ec;
-        auto r = std::filesystem::create_directories(dirname, ec);
-        if (r == static_cast<std::uintmax_t>(-1)) {
+        if (!std::filesystem::create_directories(dirname, ec)) {
             return io_error(fmt::format("create {} recursive", dirname), ec.value());
         }
         return Status::OK();
