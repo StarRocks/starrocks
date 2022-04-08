@@ -14,12 +14,10 @@ import java.util.UUID;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeShowTest {
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeShow/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
