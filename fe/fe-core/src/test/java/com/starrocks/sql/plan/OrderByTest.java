@@ -2,9 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-<<<<<<< HEAD
-public class OrderByTest extends PlanTestBase {
-=======
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
@@ -116,5 +113,4 @@ public class OrderByTest extends PlanTestBase {
         }
 
     }
->>>>>>> 0755005d (Estimate DOP of TopN (#4816))
 }
