@@ -132,7 +132,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         if (!existing_query_ctx) {
             _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
             _query_ctx->init_query_begin_time();
-            wg->incr_cur_query_num();
+            int64_t mem_limit = wg->big_query_mem_limit();
+            if (mem_limit && mem_limit < wg->mem_tracker()->limit()) {
+                _query_ctx->init_mem_tracker(wg->mem_tracker(), mem_limit);
+            }
+
+            wg->incr_num_queries();
         }
     }
 
@@ -158,9 +163,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     runtime_state->set_func_version(func_version);
 
     if (wg) {
-        int64_t mem_limit = wg->big_query_mem_limit();
-        if (mem_limit && mem_limit < wg->mem_tracker()->limit()) {
-            _query_ctx->init_mem_tracker(wg->mem_tracker(), mem_limit);
+        if (_query_ctx->mem_tracker() != nullptr) {
             runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker());
         } else {
             runtime_state->init_mem_trackers(query_id, wg->mem_tracker());

@@ -125,9 +125,9 @@ public:
     void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
 
     bool is_big_query(const QueryContext& query_context);
-    void incr_cur_query_num() { _cur_query_num++; }
-    void decr_cur_query_num() { _cur_query_num--; }
-    int64_t get_cur_query_num() const { return _cur_query_num; }
+    void incr_num_queries() { _num_queries++; }
+    void decr_num_queries() { _num_queries--; }
+    int64_t num_queries() const { return _num_queries; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
     int64_t big_query_cpu_core_second_limit() const { return _big_query_cpu_core_second_limit; }
@@ -186,7 +186,7 @@ private:
 
     double _cpu_actual_use_ratio = 0;
 
-    std::atomic<int64_t> _cur_query_num = 0;
+    std::atomic<int64_t> _num_queries = 0;
 };
 
 class WorkerOwnerManager {

@@ -199,7 +199,7 @@ void WorkGroup::estimate_trend_factor_period() {
 
 bool WorkGroup::is_big_query(const QueryContext& query_context) {
     // If there is only one query, skip it
-    if (_cur_query_num <= 1) {
+    if (_num_queries <= 1) {
         return false;
     }
 
