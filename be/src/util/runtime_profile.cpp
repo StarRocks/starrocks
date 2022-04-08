@@ -58,7 +58,8 @@ const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 // NOLINTNEXTLINE
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
 
-const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {"DegreeOfParallelism"};
+const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
+        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
@@ -987,6 +988,9 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
         return;
     }
 
+    static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    static const std::string MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+
     // all metrics will be merged into the first profile
     auto* profile0 = profiles[0];
 
@@ -1018,6 +1022,11 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
         }
 
         for (auto& [name, type] : counter_types) {
+            // We don't need to calculate sum or average of counter's extra info (min value and max value)
+            if (name.rfind(MERGED_INFO_PREFIX_MIN, 0) == 0 || name.rfind(MERGED_INFO_PREFIX_MAX, 0) == 0) {
+                continue;
+            }
+
             std::vector<std::tuple<Counter*, Counter*, Counter*>> counters;
             for (auto j = 0; j < profiles.size(); j++) {
                 auto* profile = profiles[j];
@@ -1035,8 +1044,8 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                     return;
                 }
 
-                auto* min_counter = profile->get_counter(strings::Substitute("__MIN_OF_$0", name));
-                auto* max_counter = profile->get_counter(strings::Substitute("__MAX_OF_$0", name));
+                auto* min_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name));
+                auto* max_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name));
                 counters.push_back(std::make_tuple(counter, min_counter, max_counter));
             }
             const auto merged_info = merge_isomorphic_counters(type, counters);
@@ -1056,15 +1065,19 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             const auto diff = max_value - min_value;
             if (is_average_type(counter0->type())) {
                 if ((diff > 5'000'000L && diff > merged_value / 5)) {
-                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
-                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    auto* min_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name),
+                                                              type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name),
+                                                              type, name);
                     min_counter->set(min_value);
                     max_counter->set(max_value);
                 }
             } else {
                 if (diff > min_value) {
-                    auto* min_counter = profile0->add_counter(strings::Substitute("__MIN_OF_$0", name), type, name);
-                    auto* max_counter = profile0->add_counter(strings::Substitute("__MAX_OF_$0", name), type, name);
+                    auto* min_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name),
+                                                              type, name);
+                    auto* max_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name),
+                                                              type, name);
                     min_counter->set(min_value);
                     max_counter->set(max_value);
                 }
