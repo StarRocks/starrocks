@@ -8,7 +8,7 @@
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment_rewriter.h"
-#include "storage/rowset/vectorized/rowset_options.h"
+#include "src/storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/vectorized/chunk_helper.h"

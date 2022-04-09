@@ -10,7 +10,7 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "storage/rowset/vectorized/rowset_options.h"
+#include "src/storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"

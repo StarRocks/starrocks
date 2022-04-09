@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/vectorized/segment_chunk_iterator_adapter.h"
+#include "segment_chunk_iterator_adapter.h"
 
 #include "storage/vectorized/chunk_helper.h"
 

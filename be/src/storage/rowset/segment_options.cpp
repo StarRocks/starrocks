@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/vectorized/segment_options.h"
+#include "segment_options.h"
 
 namespace starrocks::vectorized {
 

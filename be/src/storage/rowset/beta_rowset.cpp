@@ -29,8 +29,8 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/rowset/vectorized/segment_options.h"
+#include "rowset_options.h"
+#include "segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"

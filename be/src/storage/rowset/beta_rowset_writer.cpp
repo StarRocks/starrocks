@@ -37,7 +37,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/vectorized/segment_options.h"
+#include "segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/aggregate_iterator.h"
 #include "storage/vectorized/chunk_helper.h"
