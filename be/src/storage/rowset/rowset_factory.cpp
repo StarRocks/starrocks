@@ -25,9 +25,9 @@
 
 #include "beta_rowset.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "rowset_writer_adapter.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/rowset/vectorized/rowset_writer_adapter.h"
 #include "storage/vectorized/type_utils.h"
 
 namespace starrocks {

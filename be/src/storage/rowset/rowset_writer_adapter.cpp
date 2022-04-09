@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/vectorized/rowset_writer_adapter.h"
+#include "rowset_writer_adapter.h"
 
 #include "storage/rowset/rowset_factory.h"
 #include "storage/uint24.h"
