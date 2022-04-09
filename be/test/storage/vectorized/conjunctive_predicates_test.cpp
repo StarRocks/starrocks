@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "exec/vectorized/olap_scan_prepare.h"
-#include "exprs/slot_ref.h"
 #include "exprs/vectorized/binary_predicate.h"
+#include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -300,9 +300,9 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
         Expr* expr = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
-        SlotRef* slot_ref = _pool.add(new SlotRef(slot));
+        ColumnRef* column_ref = _pool.add(new ColumnRef(slot));
         Expr* col2 = type_dispatch_basic(ptype, MockConstExprBuilder(), &_pool);
-        expr->_children.push_back(slot_ref);
+        expr->_children.push_back(column_ref);
         expr->_children.push_back(col2);
 
         return expr;
