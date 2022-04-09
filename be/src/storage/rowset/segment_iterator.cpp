@@ -19,7 +19,7 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "segment_options.h"
 #include "simd/simd.h"
-#include "src/storage/rowset/rowid_column_iterator.h"
+#include "storage/rowset/rowid_column_iterator.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/bitmap_index_reader.h"
