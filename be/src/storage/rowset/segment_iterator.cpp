@@ -19,7 +19,6 @@
 #include "runtime/external_scan_context_mgr.h"
 #include "segment_options.h"
 #include "simd/simd.h"
-#include "storage/rowset/rowid_column_iterator.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -28,7 +27,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
-#include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
@@ -42,7 +41,6 @@
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
-#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {

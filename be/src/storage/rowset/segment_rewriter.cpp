@@ -4,13 +4,11 @@
 
 #include "env/env.h"
 #include "gen_cpp/segment.pb.h"
-#include "gutil/strings/substitute.h"
 #include "storage/fs/block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "util/crc32c.h"
 #include "util/filesystem_util.h"
 #include "util/slice.h"
 
