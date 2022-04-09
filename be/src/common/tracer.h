@@ -17,13 +17,31 @@ struct TracerOptions {
     int jaeger_server_port;
 };
 
-/*
- * Support trace and export to jaeger.
- * Use example:
- *    std::unique_ptr<Tracer> tracer = std::make_unique<Tracer>("BasicTest");
- *    auto f1_span = tracer->start_trace("span1");
- *    auto f2_span = tracer->add_span("span2", f1_span);
- *    f2_span->End();
+/**
+ * Handles span creation and provides a compatible interface to `opentelemetry::trace::Tracer`.
+ *
+ * Spans are organized in a hierarchy. Once a new span is created, through calling `startSpan()`,
+ * it will be added as a child to the active span, and replaces its parent as the new active span.
+ * When there is no active span, the newly created span is considered as the root span.
+ *
+ * Once the root span goes out of scope, the collected trace is serialized into a BSON object, and
+ * may be retrieved through `getLatestTrace()`. The trace object remains valid until a new root span
+ * is created. This interface is not compatible with `opentelemetry::trace::Tracer`, and fills the
+ * gap for `opentelemetry` exporters.
+ *
+ * Here is an example on how to create spans and retrieve traces:
+ * ```
+ * std::shared_ptr<Tracer> tracer;
+ *
+ * void f1(std::shared_ptr<Tracer> tracer) {
+ *     auto root = tracer->start_trace("root");
+ *     sleepFor(Milliseconds(1));
+ *     {
+ *         auto child = tracer->add_span("child");
+ *         sleepFor(Milliseconds(2));
+ *     }
+ * }
+ * ```
  *
  */
 class Tracer {
