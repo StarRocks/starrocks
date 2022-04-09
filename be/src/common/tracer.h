@@ -20,14 +20,9 @@ struct TracerOptions {
 /**
  * Handles span creation and provides a compatible interface to `opentelemetry::trace::Tracer`.
  *
- * Spans are organized in a hierarchy. Once a new span is created, through calling `startSpan()`,
+ * Spans are organized in a hierarchy. Once a new span is created, through calling `start_trace()`,
  * it will be added as a child to the active span, and replaces its parent as the new active span.
  * When there is no active span, the newly created span is considered as the root span.
- *
- * Once the root span goes out of scope, the collected trace is serialized into a BSON object, and
- * may be retrieved through `getLatestTrace()`. The trace object remains valid until a new root span
- * is created. This interface is not compatible with `opentelemetry::trace::Tracer`, and fills the
- * gap for `opentelemetry` exporters.
  *
  * Here is an example on how to create spans and retrieve traces:
  * ```
