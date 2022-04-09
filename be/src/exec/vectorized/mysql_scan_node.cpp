@@ -10,7 +10,6 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
-#include "exprs/slot_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/date_value.hpp"

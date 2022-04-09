@@ -31,7 +31,6 @@ set(EXPR_FILES
   base64.cpp
   expr_context.cpp
   expr.cpp
-  slot_ref.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
   vectorized/arithmetic_expr.cpp

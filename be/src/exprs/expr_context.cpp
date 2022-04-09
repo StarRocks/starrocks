@@ -27,7 +27,7 @@
 #include <sstream>
 
 #include "exprs/expr.h"
-#include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
@@ -139,13 +139,6 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     (*new_ctx)->_opened = true;
 
     return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
-}
-
-bool ExprContext::is_nullable() {
-    if (_root->is_slotref()) {
-        return SlotRef::is_nullable(_root);
-    }
-    return false;
 }
 
 Status ExprContext::get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val) {
