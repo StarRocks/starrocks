@@ -5,6 +5,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
+#include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -70,7 +71,16 @@ public:
                 // TODO: optimize the compare
                 int x = 0;
                 if (lhs < lhs_end && rhs < rhs_end) {
-                    x = left_col->compare_at(left_range.first, right_range.first, *right_col, 1);
+                    // TODO: avoid specialization
+                    if constexpr (std::is_same_v<FixedLengthColumn<int32_t>, ColumnType> ||
+                                  std::is_same_v<FixedLengthColumnBase<int32_t>, ColumnType>) {
+                        auto& left_data = left_col->get_data();
+                        auto& right_data = right_col->get_data();
+                        x = SorterComparator<int32_t>::compare(left_data[left_range.first],
+                                                               right_data[right_range.first]);
+                    } else {
+                        x = left_col->compare_at(left_range.first, right_range.first, *right_col, 1);
+                    }
                 } else if (lhs < lhs_end) {
                     x = -1;
                 } else if (rhs < rhs_end) {
@@ -78,13 +88,17 @@ public:
                 }
 
                 if (x <= 0) {
+#ifndef NDEBUG
                     fmt::print("merge left [{}, {}]\n", left_range.first, left_range.second);
+#endif
                     lhs = left_range.second;
                     for (size_t i = left_range.first; i < left_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kLeftIndex, i);
                     }
                 } else if (x >= 0) {
+#ifndef NDEBUG
                     fmt::print("merge right [{}, {}]\n", right_range.first, right_range.second);
+#endif
                     rhs = right_range.second;
                     for (size_t i = right_range.first; i < right_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kRightIndex, i);
@@ -92,8 +106,10 @@ public:
                 }
 
                 if (x == 0) {
+#ifndef NDEBUG
                     fmt::print("merge equal [{}, {}) + [{}, {})\n", left_range.first, left_range.second,
                                right_range.first, right_range.second);
+#endif
                     next_ranges.emplace_back(left_range, right_range);
                 }
             }
@@ -115,8 +131,17 @@ public:
     std::pair<size_t, size_t> fetch_left(const ColumnType* left_col, size_t lhs, size_t lhs_end) {
         size_t first = lhs;
         size_t last = lhs + 1;
-        while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, 1) == 0) {
-            last++;
+        // TODO: avoid specialization
+        if constexpr (std::is_same_v<FixedLengthColumnBase<int32_t>, ColumnType> ||
+                      std::is_same_v<FixedLengthColumn<int32_t>, ColumnType>) {
+            auto& left_data = left_col->get_data();
+            while (last < lhs_end && left_data[last - 1] == left_data[last]) {
+                last++;
+            }
+        } else {
+            while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, 1) == 0) {
+                last++;
+            }
         }
         return {first, last};
     }
@@ -125,8 +150,17 @@ public:
     std::pair<size_t, size_t> fetch_right(const ColumnType* right_col, size_t rhs, size_t rhs_end) {
         size_t first = rhs;
         size_t last = rhs + 1;
-        while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, 1) == 0) {
-            last++;
+        // TODO: avoid specialization
+        if constexpr (std::is_same_v<FixedLengthColumnBase<int32_t>, ColumnType> ||
+                      std::is_same_v<FixedLengthColumn<int32_t>, ColumnType>) {
+            auto& left_data = right_col->get_data();
+            while (last < rhs_end && left_data[last - 1] == left_data[last]) {
+                last++;
+            }
+        } else {
+            while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, 1) == 0) {
+                last++;
+            }
         }
         return {first, last};
     }

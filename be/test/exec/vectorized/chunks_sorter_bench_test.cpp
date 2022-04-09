@@ -13,6 +13,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -36,12 +37,22 @@ public:
     static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
                                                                                  int slot_index) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
+        using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
         ColumnPtr column = ColumnHelper::create_column(type_desc, false);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
-        for (int i = 0; i < config::vector_chunk_size; i++) {
-            column->append_datum(Datum((int32_t)i));
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        UniformInt uniform_int;
+        uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
+
+        std::vector<int32_t> elements(config::vector_chunk_size);
+        std::generate(elements.begin(), elements.end(), [&]() { return uniform_int(rng); });
+        std::sort(elements.begin(), elements.end());
+
+        for (int32_t x : elements) {
+            column->append_datum(Datum((int32_t)x));
         }
 
         return {column, std::move(expr)};
@@ -350,6 +361,51 @@ static void do_merge_bench(benchmark::State& state, int num_runs) {
     suite.TearDown();
 }
 
+static void do_merge_two_way(benchmark::State& state, int num_runs) {
+    ChunkSorterBase suite;
+    suite.SetUp();
+
+    constexpr int num_columns = 3;
+    Columns columns;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<bool> asc_arr;
+    std::vector<bool> null_first;
+    Chunk::SlotHashMap map;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+
+    for (int i = 0; i < num_columns; i++) {
+        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        columns.push_back(column);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        asc_arr.push_back(true);
+        null_first.push_back(true);
+        map[i] = i;
+    }
+    ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
+    ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
+
+    int64_t num_rows = 0;
+    for (auto _ : state) {
+        ChunkPtr merged(chunk1->clone_unique().release());
+        for (int i = 1; i < num_runs; i++) {
+            Permutation perm;
+            if (i % 2 == 0) {
+                merge_sorted_chunks_two_way(merged.get(), chunk1.get(), &perm);
+                append_by_permutation(merged.get(), {merged, chunk1}, perm);
+            } else {
+                merge_sorted_chunks_two_way(merged.get(), chunk2.get(), &perm);
+                append_by_permutation(merged.get(), {merged, chunk2}, perm);
+            }
+        }
+        num_rows += merged->num_rows();
+    }
+
+    state.SetItemsProcessed(num_rows);
+    suite.TearDown();
+}
+
 // Sort full data: ORDER BY
 static void BM_fullsort_row_wise(benchmark::State& state) {
     do_bench(state, FullSort, RowWise, TYPE_INT, state.range(0), state.range(1));
@@ -424,8 +480,13 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
     params.max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(params.limit);
     do_bench(state, MergeSort, ColumnWise, TYPE_INT, 4096, 2, params);
 }
+
+// Merge sorted runs
 static void BM_merge_heap(benchmark::State& state) {
     do_merge_bench(state, state.range(0));
+}
+static void BM_merge_vertical(benchmark::State& state) {
+    do_merge_two_way(state, state.range(0));
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -476,7 +537,8 @@ BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {1
 BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 
 // Merge
-BENCHMARK(BM_merge_heap)->DenseRange(1, 32, 2);
+BENCHMARK(BM_merge_heap)->DenseRange(2, 32, 2);
+BENCHMARK(BM_merge_vertical)->DenseRange(2, 32, 2);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {
