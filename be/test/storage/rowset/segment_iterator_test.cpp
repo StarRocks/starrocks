@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/vectorized/segment_iterator.h"
+#include "storage/rowset/segment_iterator.h"
 
 #include <memory>
 #include <string>
@@ -15,7 +15,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
-#include "storage/rowset/vectorized/segment_options.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
