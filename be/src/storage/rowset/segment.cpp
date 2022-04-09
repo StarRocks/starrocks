@@ -335,11 +335,11 @@ Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
     return _column_readers[cid]->new_iterator(iter);
 }
 
-Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter) {
+StatusOr<std::unique_ptr<BitmapIndexIterator>> Segment::new_bitmap_index_iterator(uint32_t cid) {
     if (_column_readers[cid] != nullptr && _column_readers[cid]->has_bitmap_index()) {
-        return _column_readers[cid]->new_bitmap_index_iterator(iter);
+        return _column_readers[cid]->new_bitmap_index_iterator();
     }
-    return Status::OK();
+    return Status::InternalError(fmt::format("bitmap index iterator not found for cid: ", cid));
 }
 
 } // namespace starrocks

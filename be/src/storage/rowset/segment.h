@@ -99,7 +99,7 @@ public:
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
     Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
 
-    Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);
+    StatusOr<std::unique_ptr<BitmapIndexIterator>> new_bitmap_index_iterator(uint32_t cid);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 

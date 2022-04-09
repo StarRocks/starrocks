@@ -12,21 +12,18 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "fmt/compile.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "gutil/map_util.h"
 #include "gutil/stl_util.h"
-#include "runtime/external_scan_context_mgr.h"
 #include "simd/simd.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
-#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
@@ -42,7 +39,6 @@
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
-#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
@@ -236,7 +232,7 @@ private:
     vectorized::SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
-    std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    std::unordered_map<ColumnId, std::unique_ptr<BitmapIndexIterator>> _bitmap_index_iterators;
 
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
@@ -1237,12 +1233,13 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
-    _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     for (const auto& pair : _opts.predicates) {
-        ColumnId cid = pair.first;
-        if (_bitmap_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_bitmap_index_iterator(cid, &_bitmap_index_iterators[cid]));
-            _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
+        const ColumnId cid = pair.first;
+        if (!ContainsKey(_bitmap_index_iterators, cid)) {
+            ASSIGN_OR_RETURN(std::unique_ptr<BitmapIndexIterator> bitmap_index_iterator,
+                             _segment->new_bitmap_index_iterator(cid));
+            _bitmap_index_iterators[cid] = std::move(bitmap_index_iterator);
+            _has_bitmap_index = true;
         }
     }
     return Status::OK();
@@ -1268,10 +1265,11 @@ Status SegmentIterator::_apply_bitmap_index() {
     size_t mul_selected = 1;
     size_t mul_cardinality = 1;
     for (auto& [cid, pred_list] : _opts.predicates) {
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[cid];
-        if (bitmap_iter == nullptr) {
+        auto bitmap_iter_ptr = FindOrNull(_bitmap_index_iterators, cid);
+        if (bitmap_iter_ptr == nullptr) {
             continue;
         }
+        BitmapIndexIterator* bitmap_iter = bitmap_iter_ptr->get();
         size_t cardinality = bitmap_iter->bitmap_nums();
         SparseRange selected(0, cardinality);
         bool has_is_null = false;
@@ -1316,7 +1314,11 @@ Status SegmentIterator::_apply_bitmap_index() {
 
     for (size_t i = 0; i < bitmap_columns.size(); i++) {
         Roaring roaring;
-        BitmapIndexIterator* bitmap_iter = _bitmap_index_iterators[bitmap_columns[i]];
+        auto bitmap_iter_ptr = FindOrNull(_bitmap_index_iterators, bitmap_columns[i]);
+        if (bitmap_iter_ptr == nullptr) {
+            continue;
+        }
+        BitmapIndexIterator* bitmap_iter = bitmap_iter_ptr->get();
         if (bitmap_iter->has_null_bitmap() && !has_is_null_predicate[i]) {
             Roaring null_bitmap;
             RETURN_IF_ERROR(bitmap_iter->read_null_bitmap(&null_bitmap));
@@ -1376,10 +1378,7 @@ void SegmentIterator::close() {
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
-
-    for (auto* iter : _bitmap_index_iterators) {
-        delete iter;
-    }
+    STLClearObject(&_bitmap_index_iterators);
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late

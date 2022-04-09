@@ -95,9 +95,8 @@ public:
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_iterator()
     Status new_iterator(ColumnIterator** iterator);
 
-    // Caller should free returned iterator after unused.
-    // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
-    Status new_bitmap_index_iterator(BitmapIndexIterator** iterator);
+    // Create a new bitmap index iterator.
+    StatusOr<std::unique_ptr<BitmapIndexIterator>> new_bitmap_index_iterator();
 
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
