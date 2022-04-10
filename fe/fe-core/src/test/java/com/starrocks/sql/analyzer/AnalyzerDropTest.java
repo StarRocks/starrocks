@@ -8,7 +8,7 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class DropStmtAnalyzerTest{
+public class AnalyzerDropTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -19,8 +19,10 @@ public class DropStmtAnalyzerTest{
     @Test
     public void testDropTables() {
         analyzeSuccess("drop table if exists test1 force");
-        analyzeSuccess("drop table test1");
-        analyzeFail("drop table if test1");
+        analyzeSuccess("drop table if exists test1");
+        analyzeSuccess("drop table test1 force");
+        analyzeSuccess("drop table db1.test1");
+        analyzeFail("drop table exists test1");
     }
 
 
