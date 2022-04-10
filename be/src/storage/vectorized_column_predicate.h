@@ -13,8 +13,8 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
+#include "runtime/decimalv3.h"
 #include "runtime/primitive_type.h"
-#include "storage/decimalv3.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/types.h"
