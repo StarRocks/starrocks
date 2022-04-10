@@ -23,16 +23,13 @@
 
 #include <signal.h>
 
-#include <algorithm>
 #include <memory>
 #include <vector>
 
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
-#include "src/util/defer_op.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -41,6 +38,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
 #include "storage/wrapper_field.h"
+#include "util/defer_op.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
