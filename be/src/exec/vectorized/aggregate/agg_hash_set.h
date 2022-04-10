@@ -454,19 +454,16 @@ struct AggHashSetOfSerializedKeyFixedSize {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
 
-        FixedSizeSliceKey key;
+        FixedSizeSliceKey* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
 
-        if (!has_null_column) {
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                hash_set.insert(key);
+                key[i].u.size = slice_sizes[i];
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                key.u.size = slice_sizes[i];
-                hash_set.insert(key);
-            }
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            hash_set.insert(key[i]);
         }
     }
 
