@@ -352,6 +352,7 @@ struct SortedChunkStream {
     ChunkProbeSupplier get_probe_supplier() {
         return [&](Chunk** output) {
             if (supplier_index + 1 >= chunks.size()) return false;
+            // TODO: optimize memory copy
             *output = chunks[++supplier_index]->clone_unique().release();
             CHECK(!(*output)->is_empty());
             return true;

@@ -41,6 +41,7 @@ public:
     template <class ColumnType>
     void do_merge() {
         std::vector<EqualRange> next_ranges;
+        next_ranges.reserve(_equal_ranges->size());
         auto left_col = down_cast<const ColumnType*>(_left_col);
         auto right_col = down_cast<const ColumnType*>(_right_col);
 
@@ -84,7 +85,8 @@ public:
                     for (size_t i = left_range.first; i < left_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kLeftIndex, i);
                     }
-                } else if (x >= 0) {
+                }
+                if (x >= 0) {
 #ifndef NDEBUG
                     fmt::print("merge right [{}, {}]\n", right_range.first, right_range.second);
 #endif
@@ -337,14 +339,13 @@ public:
         size_t res = 0;
         std::pair<size_t, size_t> search_range = run.range;
 
-        int num_columns = run.num_columns();
-        for (int i = 0; i < num_columns; i++) {
+        for (int i = 0; i < run.num_columns(); i++) {
             auto& lhs_col = *run.get_column(i);
             auto& rhs_col = *cut.first.get_column(i);
             size_t lower = lower_bound(lhs_col, search_range, rhs_col, cut.second);
             size_t upper = upper_bound(lhs_col, search_range, rhs_col, cut.second);
+            res = upper;
             if (upper - lower <= 1) {
-                res = upper;
                 break;
             }
             search_range = {lower, upper};

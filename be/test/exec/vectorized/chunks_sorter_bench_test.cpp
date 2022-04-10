@@ -307,7 +307,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 if (chunk_input_index[i]++ > num_chunks_per_run) {
                     *output = nullptr;
                 } else {
-                    state.PauseTiming();
+                    // state.PauseTiming();
                     auto cloned = base_chunk->clone_unique();
                     for (auto& col : cloned->columns()) {
                         Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
@@ -317,7 +317,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                         }
                     }
                     *output = cloned.release();
-                    state.ResumeTiming();
+                    // state.ResumeTiming();
                 }
                 return Status::OK();
             };
@@ -326,7 +326,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                     *output = nullptr;
                     return false;
                 } else {
-                    state.PauseTiming();
+                    // state.PauseTiming();
                     auto cloned = base_chunk->clone_unique();
                     for (auto& col : cloned->columns()) {
                         Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
@@ -336,7 +336,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                         }
                     }
                     *output = cloned.release();
-                    state.ResumeTiming();
+                    // state.ResumeTiming();
 
                     return true;
                 }
@@ -361,6 +361,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
             }
         } else {
             std::deque<SortedChunkStream> streams;
+            // state.PauseTiming();
             for (int i = 0; i < num_runs; i++) {
                 SortedChunkStream stream;
                 Chunk* chunk = nullptr;
@@ -371,6 +372,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 }
                 streams.push_back(stream);
             }
+            // state.ResumeTiming();
 
             while (streams.size() > 1) {
                 SortedChunkStream left_stream = streams.front();

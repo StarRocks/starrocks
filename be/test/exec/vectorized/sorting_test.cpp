@@ -164,9 +164,7 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
 TEST(MergeTest, merge_sorted_stream) {
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
-    constexpr int chunk_size = 10;
     constexpr int num_chunks_per_run = 4;
-    Columns columns;
     std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
     std::vector<bool> asc_arr;
@@ -175,8 +173,6 @@ TEST(MergeTest, merge_sorted_stream) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
     for (int i = 0; i < num_columns; i++) {
-        auto column = build_sorted_column(type_desc, i, i * 10, 10, i);
-        columns.push_back(column);
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -184,31 +180,30 @@ TEST(MergeTest, merge_sorted_stream) {
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
 
     ChunkSuppliers chunk_suppliers;
     ChunkProbeSuppliers chunk_probe_suppliers;
     ChunkHasSuppliers chunk_has_suppliers;
     std::vector<int> chunk_probe_index(num_runs, 0);
-    for (int i = 0; i < num_runs; i++) {
+    std::vector<int> chunk_run_max(num_runs, 0);
+    for (int run = 0; run < num_runs; run++) {
         ChunkSupplier chunk_supplier = [&](Chunk** output) -> Status {
             CHECK(false) << "unreachable";
             return Status::OK();
         };
-        ChunkProbeSupplier chunk_probe_supplier = [&, i](Chunk** output) -> bool {
-            if (chunk_probe_index[i]++ > num_chunks_per_run) {
+        ChunkProbeSupplier chunk_probe_supplier = [&, run](Chunk** output) -> bool {
+            if (chunk_probe_index[run]++ > num_chunks_per_run) {
                 *output = nullptr;
                 return false;
             } else {
-                auto cloned = base_chunk->clone_unique();
-                for (auto& col : cloned->columns()) {
-                    Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
-                    int start = chunk_probe_index[i] * chunk_size;
-                    for (auto& x : intcolumn->get_data()) {
-                        x += start;
-                    }
+                Columns columns;
+                for (int col_idx = 0; col_idx < num_columns; col_idx++) {
+                    auto column =
+                            build_sorted_column(type_desc, col_idx, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
+                    columns.push_back(column);
                 }
-                *output = cloned.release();
+                ChunkUniquePtr chunk = std::make_unique<Chunk>(columns, map);
+                *output = chunk.release();
 
                 return true;
             }
@@ -220,12 +215,17 @@ TEST(MergeTest, merge_sorted_stream) {
     }
 
     std::deque<SortedChunkStream> streams;
-    for (int i = 0; i < num_runs; i++) {
+    for (int run = 0; run < num_runs; run++) {
         SortedChunkStream stream;
         Chunk* chunk = nullptr;
-        while (chunk_probe_suppliers[i](&chunk)) {
+        int row = 0;
+        while (chunk_probe_suppliers[run](&chunk)) {
             if (chunk == nullptr) break;
             stream.chunks.push_back(ChunkPtr{chunk});
+            for (int k = 0; k < chunk->num_rows(); k++) {
+                row++;
+                fmt::print("run {} index {} row {}: {}\n", run, k, row, chunk->debug_row(k));
+            }
         }
         streams.push_back(stream);
     }
@@ -257,8 +257,16 @@ TEST(MergeTest, merge_sorted_stream) {
     fmt::print("merge {} stream of {} rows\n", num_runs, streams[0].num_rows());
 
     ASSERT_EQ(1, streams.size());
-    for (auto& chunk : streams[0].chunks) {
+    for (int c = 0; c < streams[0].chunks.size(); c++) {
+        auto& chunk = streams[0].chunks[c];
+        if (c > 0) {
+            fmt::print("sorted row {}: {}\n", c * chunk->num_rows(), chunk->debug_row(0));
+            auto& last_chunk = streams[0].chunks[c - 1];
+            int x = compare_chunk_row(*last_chunk, *chunk, last_chunk->num_rows() - 1, 0);
+            ASSERT_LE(x, 0);
+        }
         for (int i = 1; i < chunk->num_rows(); i++) {
+            fmt::print("sorted row {}: {}\n", c * chunk->num_rows() + i, chunk->debug_row(i));
             int x = compare_chunk_row(*chunk, *chunk, i - 1, i);
             ASSERT_LE(x, 0);
         }
