@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 // DROP TABLE
 public class DropTableStmt extends DdlStmt {
@@ -72,16 +73,6 @@ public class DropTableStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            tableName.setDb(analyzer.getDefaultDb());
-        }
-        tableName.analyze(analyzer);
-
-        // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
-                tableName.getTbl(), PrivPredicate.DROP)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-        }
     }
 
     @Override
@@ -94,5 +85,10 @@ public class DropTableStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropTableStmt(this, context);
     }
 }

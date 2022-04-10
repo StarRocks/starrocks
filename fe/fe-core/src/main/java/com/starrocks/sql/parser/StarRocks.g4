@@ -35,6 +35,7 @@ statement
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
+    | DROP TABLE (IF EXISTS)? qualifiedName (FORCE)?                                    #dropTable
     ;
 
 explainDesc

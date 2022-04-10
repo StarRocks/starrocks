@@ -9,6 +9,7 @@ import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
@@ -94,6 +95,12 @@ public class Analyzer {
         @Override
         public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStatement(DdlStmt statement, ConnectContext session) {
+            DropStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
