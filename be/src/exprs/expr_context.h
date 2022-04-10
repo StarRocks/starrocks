@@ -103,8 +103,6 @@ public:
 
     bool closed() { return _closed; }
 
-    bool is_nullable();
-
     bool opened() { return _opened; }
 
     /// If 'expr' is constant, evaluates it with no input row argument and returns the

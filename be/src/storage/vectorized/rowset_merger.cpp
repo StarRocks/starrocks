@@ -6,9 +6,8 @@
 
 #include "gutil/stl_util.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/beta_rowset_writer.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/empty_iterator.h"

@@ -13,7 +13,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/vectorized/rowset_options.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 #include "storage/update_manager.h"

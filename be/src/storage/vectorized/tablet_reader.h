@@ -6,7 +6,7 @@
 
 #include "column/chunk.h"
 #include "storage/rowset/rowset.h"
-#include "storage/rowset/vectorized/rowset_options.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/delete_predicates.h"
 #include "storage/vectorized/row_source_mask.h"
