@@ -155,7 +155,8 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt;
+                || statement instanceof ShowTableStmt
+                || statement instanceof DropTableStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {

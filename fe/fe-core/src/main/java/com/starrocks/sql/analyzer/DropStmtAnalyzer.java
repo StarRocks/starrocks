@@ -28,9 +28,13 @@ public class DropStmtAnalyzer {
             String db = statement.getDbName();
             db = getFullDatabaseName(db, context);
             statement.setDb(db);
+            String tableName = statement.getTableName();
+            if (Strings.isNullOrEmpty(tableName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
+            }
             // check access
             if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), db,
-                    statement.getTableName(), PrivPredicate.DROP)) {
+                    tableName, PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
             }
             return null;

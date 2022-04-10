@@ -21,12 +21,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
-import mockit.Expectations;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,66 +35,50 @@ import org.junit.Test;
 public class DropTableStmtTest {
     private TableName tbl;
     private TableName noDbTbl;
-    private Analyzer analyzer;
-    @Mocked
-    private Analyzer noDbAnalyzer;
-
     @Mocked
     private Auth auth;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         tbl = new TableName("db1", "table1");
         noDbTbl = new TableName("", "table1");
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-
-        new Expectations() {
-            {
-                noDbAnalyzer.getDefaultDb();
-                minTimes = 0;
-                result = "";
-
-                noDbAnalyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-            }
-        };
-
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setCluster("testCluster");
         MockedAuth.mockedAuth(auth);
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         DropTableStmt stmt = new DropTableStmt(false, tbl, true);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testCluster:db1", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertEquals("DROP TABLE `testCluster:db1`.`table1`", stmt.toString());
     }
 
     @Test
-    public void testDefaultNormal() throws UserException, AnalysisException {
+    public void testDefaultNormal() {
         DropTableStmt stmt = new DropTableStmt(false, noDbTbl, true);
-        stmt.analyze(analyzer);
+        ctx.setDatabase("testDb");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("testCluster:testDb", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertEquals("DROP TABLE `testCluster:testDb`.`table1`", stmt.toSql());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoDbFail() throws UserException, AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoDbFail() {
         DropTableStmt stmt = new DropTableStmt(false, noDbTbl, true);
-        stmt.analyze(noDbAnalyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoTableFail() throws UserException, AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoTableFail() {
         DropTableStmt stmt = new DropTableStmt(false, new TableName("db1", ""), true);
-        stmt.analyze(noDbAnalyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("table1", stmt.getTableName());
         Assert.fail("No Exception throws.");
     }
 
