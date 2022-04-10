@@ -12,9 +12,9 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
+#include "storage/vectorized_column_predicate.h"
 #include "storage/zone_map_detail.h"
 #include "util/string_parser.hpp"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 class BloomFilter;
