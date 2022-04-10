@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "merge_iterator.h"
+#include "storage/merge_iterator.h"
 
+#include <boost/heap/skew_heap.hpp>
 #include <memory>
 #include <queue>
 #include <vector>
 
-#include "boost/heap/skew_heap.hpp"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "storage/chunk_helper.h"

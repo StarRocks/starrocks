@@ -8,8 +8,8 @@
 #include "gutil/casts.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
+#include "storage/vectorized_column_predicate.h"
 #include "util/string_parser.hpp"
-#include "vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

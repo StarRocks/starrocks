@@ -9,8 +9,8 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/tablet_schema.h"
-#include "type_utils.h"
-#include "vectorized_column_predicate.h"
+#include "storage/type_utils.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

@@ -28,7 +28,7 @@
 #include <string>
 
 #include "common/status.h"
-#include "compaction.h"
+#include "storage/compaction.h"
 #include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"

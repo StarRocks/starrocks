@@ -14,7 +14,7 @@
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
 #include "util/string_parser.hpp"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 class BloomFilter;

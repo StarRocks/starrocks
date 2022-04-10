@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "column_predicate_rewriter.h"
+#include "storage/column_predicate_rewriter.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -22,7 +22,7 @@
 #include "storage/column_expr_predicate.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;

@@ -10,8 +10,8 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
-#include "storage/tablet_updates.h"
 #include "storage/tablet_reader.h"
+#include "storage/tablet_updates.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 

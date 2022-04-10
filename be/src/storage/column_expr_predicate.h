@@ -3,7 +3,7 @@
 
 #include "storage/olap_common.h"
 #include "storage/types.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 class ZoneMapDetail;

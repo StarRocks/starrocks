@@ -12,7 +12,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
-#include "union_iterator.h"
+#include "storage/union_iterator.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 

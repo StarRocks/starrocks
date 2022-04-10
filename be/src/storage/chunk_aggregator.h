@@ -7,10 +7,10 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "column_aggregate_func.h"
-#include "row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/column_aggregate_func.h"
+#include "storage/row_source_mask.h"
 
 namespace starrocks::vectorized {
 

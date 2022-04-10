@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "projection_iterator.h"
+#include "storage/projection_iterator.h"
 
 #include <unordered_set>
 

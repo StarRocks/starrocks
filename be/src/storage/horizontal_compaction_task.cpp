@@ -12,8 +12,8 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "tablet_reader.h"
-#include "tablet_reader_params.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "util/time.h"
 #include "util/trace.h"
 

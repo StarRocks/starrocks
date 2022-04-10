@@ -9,7 +9,7 @@
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

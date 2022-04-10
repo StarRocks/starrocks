@@ -12,7 +12,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 
