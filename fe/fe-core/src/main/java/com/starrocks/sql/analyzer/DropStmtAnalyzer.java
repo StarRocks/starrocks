@@ -27,7 +27,7 @@ public class DropStmtAnalyzer {
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext context) {
             String db = statement.getDbName();
             db = getFullDatabaseName(db, context);
-
+            statement.setDb(db);
             // check access
             if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), db,
                     statement.getTableName(), PrivPredicate.DROP)) {

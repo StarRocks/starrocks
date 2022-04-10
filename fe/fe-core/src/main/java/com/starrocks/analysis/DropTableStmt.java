@@ -71,6 +71,10 @@ public class DropTableStmt extends DdlStmt {
         return this.forceDrop;
     }
 
+    public void setDb(String db) {
+        tableName.setDb(db);
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
     }
