@@ -2,9 +2,9 @@
 
 #include "rowset_update_state.h"
 
-#include "chunk_helper.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"

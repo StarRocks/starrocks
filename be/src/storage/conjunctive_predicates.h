@@ -2,10 +2,11 @@
 
 #pragma once
 
+#include <butil/containers/flat_map.h>
+
 #include <vector>
 
-#include "butil/containers/flat_map.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

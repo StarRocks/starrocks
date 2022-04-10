@@ -1,6 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include <algorithm>
 #include <cstdint>
 #include <sstream>
 #include <vector>
@@ -8,7 +7,7 @@
 #include "column/datum.h"
 #include "runtime/global_dicts.h"
 #include "storage/column_operator_predicate.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

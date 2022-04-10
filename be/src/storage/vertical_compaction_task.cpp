@@ -4,19 +4,19 @@
 
 #include <vector>
 
-#include "chunk_helper.h"
 #include "column/schema.h"
-#include "row_source_mask.h"
 #include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
+#include "storage/row_source_mask.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
-#include "tablet_reader.h"
-#include "tablet_reader_params.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "util/time.h"
 #include "util/trace.h"
 

@@ -1,7 +1,7 @@
 
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "column_expr_predicate.h"
+#include "storage/column_expr_predicate.h"
 
 #include "column/column_helper.h"
 #include "exprs/expr.h"

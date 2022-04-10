@@ -5,12 +5,12 @@
 #include <memory>
 #include <vector>
 
-#include "chunk_helper.h"
-#include "chunk_iterator.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "column_aggregate_func.h"
 #include "row_source_mask.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 
 namespace starrocks::vectorized {
 

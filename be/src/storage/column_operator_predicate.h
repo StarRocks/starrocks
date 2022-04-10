@@ -3,7 +3,7 @@
 #pragma once
 
 #include "column/nullable_column.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 // Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,

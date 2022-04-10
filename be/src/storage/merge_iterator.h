@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "row_source_mask.h"
 #include "storage/chunk_iterator.h"
+#include "storage/row_source_mask.h"
 
 namespace starrocks::vectorized {
 

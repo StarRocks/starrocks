@@ -3,7 +3,7 @@
 #pragma once
 
 #include "column/field.h"
-#include "column_aggregator.h"
+#include "storage/column_aggregator.h"
 
 namespace starrocks::vectorized {
 class ColumnAggregatorFactory {

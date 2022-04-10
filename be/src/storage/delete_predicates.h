@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "disjunctive_predicates.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/disjunctive_predicates.h"
 
 namespace starrocks::vectorized {
 

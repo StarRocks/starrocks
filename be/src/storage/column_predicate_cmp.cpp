@@ -2,21 +2,19 @@
 
 #include <cstdint>
 #include <functional>
-#include <utility>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
-#include "range.h"
 #include "storage/olap_common.h" // ColumnId
+#include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
+#include "storage/zone_map_detail.h"
 #include "util/string_parser.hpp"
 #include "vectorized_column_predicate.h"
-#include "zone_map_detail.h"
 
 namespace starrocks {
 class BloomFilter;

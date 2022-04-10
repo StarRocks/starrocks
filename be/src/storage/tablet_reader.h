@@ -11,7 +11,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
-#include "tablet_reader_params.h"
+#include "storage/tablet_reader_params.h"
 
 namespace starrocks::vectorized {
 

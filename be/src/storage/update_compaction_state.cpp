@@ -2,7 +2,7 @@
 
 #include "storage/update_compaction_state.h"
 
-#include "chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"

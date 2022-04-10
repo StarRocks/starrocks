@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "tablet_reader.h"
+#include "storage/tablet_reader.h"
 
 #include "column/datum_convert.h"
 #include "common/status.h"
@@ -16,8 +16,8 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/types.h"
-#include "union_iterator.h"
-#include "vectorized_column_predicate.h"
+#include "storage/union_iterator.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

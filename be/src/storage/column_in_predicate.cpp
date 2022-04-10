@@ -2,12 +2,11 @@
 
 #include <type_traits>
 
-#include "column/binary_column.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
-#include "in_predicate_utils.h"
 #include "roaring/roaring.hh"
+#include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "vectorized_column_predicate.h"

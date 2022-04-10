@@ -5,8 +5,8 @@
 #include <limits>
 #include <memory>
 
-#include "chunk_helper.h"
 #include "gutil/endian.h"
+#include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/rowset_update_state.h"

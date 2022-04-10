@@ -3,10 +3,10 @@
 
 #include <vector>
 
-#include "chunk_helper.h"
 #include "column/schema.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"

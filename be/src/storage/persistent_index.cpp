@@ -5,8 +5,8 @@
 #include <cstring>
 #include <numeric>
 
-#include "chunk_helper.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/fs_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"

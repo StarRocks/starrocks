@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "delta_writer.h"
+#include "storage/delta_writer.h"
 
-#include "memtable.h"
 #include "runtime/current_thread.h"
+#include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"

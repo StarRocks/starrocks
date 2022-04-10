@@ -21,7 +21,6 @@
 
 #include "storage/types.h"
 
-#include "convert_helper.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/date_value.hpp"
@@ -30,6 +29,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/vectorized/time_types.h"
 #include "storage/collection.h"
+#include "storage/convert_helper.h"
 #include "storage/decimal12.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_common.h"

@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "push_handler.h"
+#include "storage/push_handler.h"
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -8,11 +8,11 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "schema_change.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "util/defer_op.h"
 

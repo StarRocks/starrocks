@@ -11,7 +11,7 @@
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_factory.h"
-#include "tablet_reader.h"
+#include "storage/tablet_reader.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/trace.h"

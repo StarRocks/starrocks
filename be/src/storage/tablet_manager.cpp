@@ -27,15 +27,12 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <cstdlib>
 #include <ctime>
 #include <memory>
 
 #include "env/env.h"
 #include "runtime/current_thread.h"
-#include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"

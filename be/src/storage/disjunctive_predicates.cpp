@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "disjunctive_predicates.h"
+#include "storage/disjunctive_predicates.h"
 
 #include "column/chunk.h"
 

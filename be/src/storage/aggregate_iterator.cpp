@@ -1,14 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "aggregate_iterator.h"
+#include "storage/aggregate_iterator.h"
 
 #include <memory>
 
-#include "chunk_aggregator.h"
-#include "chunk_helper.h"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "storage/chunk_aggregator.h"
+#include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {

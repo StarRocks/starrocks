@@ -31,12 +31,12 @@
 #include <random>
 #include <set>
 
-#include "base_compaction.h"
 #include "common/status.h"
 #include "cumulative_compaction.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
+#include "storage/base_compaction.h"
 #include "storage/data_dir.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"

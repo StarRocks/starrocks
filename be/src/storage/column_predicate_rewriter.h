@@ -6,11 +6,11 @@
 
 #include "column/schema.h"
 #include "common/object_pool.h"
-#include "conjunctive_predicates.h"
+#include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 class ColumnExprPredicate;

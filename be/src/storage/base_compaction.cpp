@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "base_compaction.h"
+#include "storage/base_compaction.h"
 
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.cpp"

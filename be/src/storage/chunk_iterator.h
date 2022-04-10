@@ -6,8 +6,8 @@
 
 #include "column/chunk.h"
 #include "column/schema.h"
-#include "row_source_mask.h"
-#include "tablet_reader_params.h"
+#include "storage/row_source_mask.h"
+#include "storage/tablet_reader_params.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

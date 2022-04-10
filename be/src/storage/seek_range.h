@@ -2,12 +2,13 @@
 
 #pragma once
 
+#include <glog/logging.h> // CHECK_EQ
+
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "glog/logging.h" // CHECK_EQ
-#include "seek_tuple.h"
+#include "storage/seek_tuple.h"
 
 namespace starrocks::vectorized {
 

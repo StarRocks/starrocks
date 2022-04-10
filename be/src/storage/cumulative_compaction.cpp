@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "cumulative_compaction.h"
+#include "storage/cumulative_compaction.h"
 
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"

@@ -1,13 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "chunk_aggregator.h"
+#include "storage/chunk_aggregator.h"
 
-#include "column/column_helper.h"
-#include "column/nullable_column.h"
-#include "column_aggregate_func.h"
 #include "common/config.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "gutil/casts.h"
+#include "storage/column_aggregate_func.h"
 
 namespace starrocks::vectorized {
 

@@ -5,7 +5,6 @@
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
-#include "roaring/roaring.hh"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "vectorized_column_predicate.h"

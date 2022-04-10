@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "column_or_predicate.h"
+#include "storage/column_or_predicate.h"
 
 #include "common/object_pool.h"
 

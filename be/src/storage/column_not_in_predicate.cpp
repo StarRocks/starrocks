@@ -1,15 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include <type_traits>
 #include <utility>
 
-#include "column/binary_column.h"
 #include "column/column.h"
 #include "column/hash_set.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
-#include "in_predicate_utils.h"
-#include "roaring/roaring.hh"
+#include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "util/string_parser.hpp"
 #include "vectorized_column_predicate.h"

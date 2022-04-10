@@ -5,8 +5,6 @@
 #include <ctime>
 #include <memory>
 
-#include "chunk_helper.h"
-#include "chunk_iterator.h"
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -18,6 +16,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "schema_change.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
 #include "storage/rowset/default_value_column_iterator.h"

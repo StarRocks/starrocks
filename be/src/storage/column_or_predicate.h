@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

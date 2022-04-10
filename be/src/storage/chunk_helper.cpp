@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 #include "column/chunk.h"
 #include "column/column_pool.h"
@@ -8,8 +8,8 @@
 #include "column/type_traits.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
+#include "storage/type_utils.h"
 #include "storage/types.h"
-#include "type_utils.h"
 #include "util/metrics.h"
 
 namespace starrocks::vectorized {

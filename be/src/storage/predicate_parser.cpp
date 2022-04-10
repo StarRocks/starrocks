@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "predicate_parser.h"
+#include "storage/predicate_parser.h"
 
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"

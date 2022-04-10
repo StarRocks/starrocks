@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "schema_change.h"
+#include "storage/schema_change.h"
 
 #include <signal.h>
 

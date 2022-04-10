@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "compaction.h"
+#include "storage/compaction.h"
 
 namespace starrocks::vectorized {
 

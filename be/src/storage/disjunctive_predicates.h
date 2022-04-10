@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "storage/conjunctive_predicates.h"
-#include "vectorized_column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

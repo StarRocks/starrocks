@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "meta_reader.h"
+#include "storage/meta_reader.h"
 
 #include <vector>
 
