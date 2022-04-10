@@ -76,7 +76,7 @@ static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, i
     return column;
 }
 
-TEST(MergeTest, merge_sorter_cursor_two_way) {
+TEST(MergeTest, merge_sorted_cursor_two_way) {
     constexpr int num_columns = 3;
     constexpr int num_chunks = 3;
     constexpr int chunk_size = 10;
@@ -144,8 +144,8 @@ TEST(MergeTest, merge_sorter_cursor_two_way) {
     ChunkCursor right_cursor(right_chunk_supplier, right_chunk_probe_supplier, right_chunk_has_supplier, &sort_exprs,
                              &asc_arr, &null_first, true);
     std::vector<ChunkPtr> output_chunks;
-    ChunkConsumer consumer = [&](ChunkPtr chunk) {
-        output_chunks.push_back(chunk);
+    ChunkConsumer consumer = [&](Chunk* chunk) {
+        output_chunks.push_back(ChunkPtr(chunk));
         return Status::OK();
     };
     merge_sorted_cursor_two_way(left_cursor, right_cursor, consumer);
@@ -157,6 +157,110 @@ TEST(MergeTest, merge_sorter_cursor_two_way) {
                 int x = compare_chunk_row(*chunk, *chunk, i - 1, i);
                 ASSERT_LE(x, 0);
             }
+        }
+    }
+}
+
+TEST(MergeTest, merge_sorted_stream) {
+    constexpr int num_columns = 3;
+    constexpr int num_runs = 4;
+    constexpr int chunk_size = 10;
+    constexpr int num_chunks_per_run = 4;
+    Columns columns;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<bool> asc_arr;
+    std::vector<bool> null_first;
+    Chunk::SlotHashMap map;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+
+    for (int i = 0; i < num_columns; i++) {
+        auto column = build_sorted_column(type_desc, i, i * 10, 10, i);
+        columns.push_back(column);
+        auto expr = std::make_unique<ColumnRef>(type_desc, i);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        asc_arr.push_back(true);
+        null_first.push_back(true);
+        map[i] = i;
+    }
+    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
+
+    ChunkSuppliers chunk_suppliers;
+    ChunkProbeSuppliers chunk_probe_suppliers;
+    ChunkHasSuppliers chunk_has_suppliers;
+    std::vector<int> chunk_probe_index(num_runs, 0);
+    for (int i = 0; i < num_runs; i++) {
+        ChunkSupplier chunk_supplier = [&](Chunk** output) -> Status {
+            CHECK(false) << "unreachable";
+            return Status::OK();
+        };
+        ChunkProbeSupplier chunk_probe_supplier = [&, i](Chunk** output) -> bool {
+            if (chunk_probe_index[i]++ > num_chunks_per_run) {
+                *output = nullptr;
+                return false;
+            } else {
+                auto cloned = base_chunk->clone_unique();
+                for (auto& col : cloned->columns()) {
+                    Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
+                    int start = chunk_probe_index[i] * chunk_size;
+                    for (auto& x : intcolumn->get_data()) {
+                        x += start;
+                    }
+                }
+                *output = cloned.release();
+
+                return true;
+            }
+        };
+        ChunkHasSupplier chunk_has_supplier = [&]() -> bool { return true; };
+        chunk_suppliers.emplace_back(chunk_supplier);
+        chunk_probe_suppliers.emplace_back(chunk_probe_supplier);
+        chunk_has_suppliers.emplace_back(chunk_has_supplier);
+    }
+
+    std::deque<SortedChunkStream> streams;
+    for (int i = 0; i < num_runs; i++) {
+        SortedChunkStream stream;
+        Chunk* chunk = nullptr;
+        while (chunk_probe_suppliers[i](&chunk)) {
+            if (chunk == nullptr) break;
+            stream.chunks.push_back(ChunkPtr{chunk});
+        }
+        streams.push_back(stream);
+    }
+
+    while (streams.size() > 1) {
+        SortedChunkStream left_stream = streams.front();
+        streams.pop_front();
+        SortedChunkStream right_stream = streams.front();
+        streams.pop_front();
+        CHECK(!right_stream.chunks.empty());
+        ChunkCursor left(
+                left_stream.get_supplier(), left_stream.get_probe_supplier(), []() { return true; }, &sort_exprs,
+                &asc_arr, &null_first, true);
+        ChunkCursor right(
+                right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; }, &sort_exprs,
+                &asc_arr, &null_first, true);
+        SortedChunkStream merged;
+        Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
+            CHECK(!chunk->is_empty());
+            merged.chunks.push_back(ChunkPtr(chunk));
+            fmt::print("merge chunk {} rows\n", chunk->num_rows());
+            return Status::OK();
+        });
+        fmt::print("generate merged stream with {} chunks and {} rows\n", merged.chunks.size(), merged.num_rows());
+        CHECK(st.ok());
+        CHECK(!merged.chunks.empty());
+        streams.push_back(merged);
+    }
+    fmt::print("merge {} stream of {} rows\n", num_runs, streams[0].num_rows());
+
+    ASSERT_EQ(1, streams.size());
+    for (auto& chunk : streams[0].chunks) {
+        for (int i = 1; i < chunk->num_rows(); i++) {
+            int x = compare_chunk_row(*chunk, *chunk, i - 1, i);
+            ASSERT_LE(x, 0);
         }
     }
 }

@@ -157,6 +157,8 @@ void ChunkCursor::next_chunk_for_pipeline() {
     if (_current_chunk == nullptr) {
         return;
     }
+    DCHECK(!!_current_chunk);
+    DCHECK(!_current_chunk->is_empty());
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {

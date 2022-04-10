@@ -54,33 +54,7 @@ void append_by_permutation(Column* dst, const Columns& columns, const Permutatio
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
 void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
 
-struct SortedRun {
-    ChunkPtr chunk;
-    std::pair<size_t, size_t> range;
-
-    SortedRun() = default;
-    ~SortedRun() = default;
-    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), range(0, ichunk->num_rows()) {}
-    SortedRun(ChunkPtr ichunk, std::pair<size_t, size_t> irange) : chunk(ichunk), range(irange) {}
-    SortedRun(ChunkPtr ichunk, size_t start, size_t end) : chunk(ichunk), range(start, end) {}
-    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), range(rhs.range) {}
-    SortedRun& operator=(const SortedRun& rhs) {
-        if (&rhs == this) return *this;
-        chunk = rhs.chunk;
-        range = rhs.range;
-        return *this;
-    }
-
-    size_t num_columns() const { return chunk->num_columns(); }
-    size_t num_rows() const { return range.second - range.first; }
-    const Column* get_column(int index) const { return chunk->get_column_by_index(index).get(); }
-    bool empty() const { return range.second == range.first; }
-    void reset() {
-        chunk->reset();
-        range = {};
-    }
-};
-
+struct SortedRun;
 Status merge_sorted_chunks_two_way(const SortedRun& left_run, const SortedRun& right_run, Permutation* output);
 Status merge_sorted_chunks_two_way(const ChunkPtr left, const ChunkPtr right, Permutation* output);
 Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor, ChunkConsumer output);

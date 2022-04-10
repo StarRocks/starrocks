@@ -18,7 +18,7 @@ namespace vectorized {
 typedef std::function<Status(Chunk**)> ChunkSupplier;
 typedef std::vector<ChunkSupplier> ChunkSuppliers;
 
-typedef std::function<Status(ChunkPtr)> ChunkConsumer;
+typedef std::function<Status(Chunk*)> ChunkConsumer;
 
 // A chunk supplier signal EOS by outputting a NULL Chunk.
 typedef std::function<bool(Chunk**)> ChunkProbeSupplier;

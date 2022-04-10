@@ -222,17 +222,34 @@ public:
         // 2. Cutoff the chunk based on tail
         // 3. Merge two chunks and output
         // 4. Move to next
+
+        SortedRun left_chunk;
+        SortedRun right_chunk;
+
         left_cursor.next_chunk_for_pipeline();
         right_cursor.next_chunk_for_pipeline();
+        if (left_cursor.has_next()) {
+            left_chunk = SortedRun(left_cursor.get_current_chunk());
+        }
+        if (right_cursor.has_next()) {
+            right_chunk = SortedRun(right_cursor.get_current_chunk());
+        }
 
-        SortedRun left_chunk(left_cursor.get_current_chunk());
-        SortedRun right_chunk(right_cursor.get_current_chunk());
         while (!left_chunk.empty() || !right_chunk.empty()) {
             if (left_chunk.empty()) {
-                RETURN_IF_ERROR(output(right_chunk.chunk));
+                // TODO: avoid copy
+                if (right_chunk.num_rows() == right_chunk.chunk->num_rows()) {
+                    RETURN_IF_ERROR(output(right_chunk.chunk->clone_unique().release()));
+                } else {
+                    RETURN_IF_ERROR(output(right_chunk.clone_chunk().release()));
+                }
                 right_chunk.reset();
             } else if (right_chunk.empty()) {
-                RETURN_IF_ERROR(output(left_chunk.chunk));
+                if (left_chunk.num_rows() == left_chunk.chunk->num_rows()) {
+                    RETURN_IF_ERROR(output(left_chunk.chunk->clone_unique().release()));
+                } else {
+                    RETURN_IF_ERROR(output(left_chunk.clone_chunk().release()));
+                }
                 left_chunk.reset();
             } else {
                 int tail_cmp = compare_tail(left_chunk, right_chunk);
@@ -247,18 +264,21 @@ public:
                     RETURN_IF_ERROR(merge_sorted_chunks_two_way(left_chunk, right_1, &perm));
                     trim_permutation(left_chunk, right_1, perm);
                     DCHECK_EQ(left_chunk.num_rows() + right_1.num_rows(), perm.size());
-                    ChunkPtr merged = left_chunk.chunk->clone_empty(perm.size());
+                    std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
                     append_by_permutation(merged.get(), {left_chunk.chunk, right_1.chunk}, perm);
 
-                    // Output
-                    RETURN_IF_ERROR(output(merged));
 
                     left_chunk.reset();
                     right_chunk = right_2;
+#ifndef NDEBUG
                     fmt::print("merge right chunk [0, {})\n", right_cut);
                     for (int i = 0; i < merged->num_rows(); i++) {
                         fmt::print("merge row: {}\n", merged->debug_row(i));
                     }
+#endif
+
+                    // Output
+                    RETURN_IF_ERROR(output(merged.release()));
                 } else {
                     // Cutoff left by right tail
                     size_t left_cut = cutoff_run(left_chunk, std::make_pair(right_chunk, right_chunk.num_rows() - 1));
@@ -270,18 +290,21 @@ public:
                     RETURN_IF_ERROR(merge_sorted_chunks_two_way(right_chunk, left_1, &perm));
                     trim_permutation(left_1, right_chunk, perm);
                     DCHECK_EQ(right_chunk.num_rows() + left_1.num_rows(), perm.size());
-                    ChunkPtr merged = left_chunk.chunk->clone_empty(perm.size());
+                    std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
                     append_by_permutation(merged.get(), {right_chunk.chunk, left_1.chunk}, perm);
 
-                    // Output
-                    RETURN_IF_ERROR(output(merged));
 
                     left_chunk = left_2;
                     right_chunk.reset();
+#ifndef NDEBUG
                     fmt::print("merge left chunk [0, {})\n", left_cut);
                     for (int i = 0; i < merged->num_rows(); i++) {
                         fmt::print("merge row: {}\n", merged->debug_row(i));
                     }
+#endif
+
+                    // Output
+                    RETURN_IF_ERROR(output(merged.release()));
                 }
             }
 

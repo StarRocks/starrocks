@@ -292,4 +292,71 @@ static inline int compare_chunk_row(const Chunk& lhs, const Chunk& rhs, size_t l
     return 0;
 }
 
+struct SortedRun {
+    ChunkPtr chunk;
+    std::pair<size_t, size_t> range;
+
+    SortedRun() = default;
+    ~SortedRun() = default;
+    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), range(0, ichunk->num_rows()) {}
+    SortedRun(ChunkPtr ichunk, std::pair<size_t, size_t> irange) : chunk(ichunk), range(irange) {}
+    SortedRun(ChunkPtr ichunk, size_t start, size_t end) : chunk(ichunk), range(start, end) {}
+    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), range(rhs.range) {}
+    SortedRun& operator=(const SortedRun& rhs) {
+        if (&rhs == this) return *this;
+        chunk = rhs.chunk;
+        range = rhs.range;
+        return *this;
+    }
+
+    size_t num_columns() const { return chunk->num_columns(); }
+    size_t num_rows() const { return range.second - range.first; }
+    const Column* get_column(int index) const { return chunk->get_column_by_index(index).get(); }
+    bool empty() const { return range.second == range.first; }
+    void reset() {
+        chunk->reset();
+        range = {};
+    }
+    ChunkUniquePtr clone_chunk() {
+        ChunkUniquePtr cloned = chunk->clone_empty(num_rows());
+        cloned->append(*chunk, range.first, num_rows());
+        return cloned;
+    }
+};
+
+struct SortedChunkStream {
+    std::vector<ChunkPtr> chunks;
+    int supplier_index = -1;
+
+    SortedChunkStream() = default;
+    ~SortedChunkStream() = default;
+    SortedChunkStream(const SortedChunkStream& rhs) = default;
+
+    size_t num_rows() const {
+        size_t res = 0;
+        for (auto& chunk : chunks) {
+            res += chunk->num_rows();
+        }
+        return res;
+    }
+
+    ChunkSupplier get_supplier() {
+        return [&](Chunk** output) {
+            if (supplier_index + 1 >= chunks.size()) return Status::EndOfFile("end");
+            *output = chunks[++supplier_index].get();
+            CHECK(!(*output)->is_empty());
+            return Status::OK();
+        };
+    }
+
+    ChunkProbeSupplier get_probe_supplier() {
+        return [&](Chunk** output) {
+            if (supplier_index + 1 >= chunks.size()) return false;
+            *output = chunks[++supplier_index]->clone_unique().release();
+            CHECK(!(*output)->is_empty());
+            return true;
+        };
+    }
+};
+
 } // namespace starrocks::vectorized

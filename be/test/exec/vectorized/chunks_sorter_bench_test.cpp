@@ -4,8 +4,11 @@
 #include <gtest/gtest.h>
 #include <testutil/assert.h>
 
+#include <memory>
+#include <numeric>
 #include <random>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config.h"
@@ -13,6 +16,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
@@ -265,7 +269,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     suite.TearDown();
 }
 
-static void do_merge_bench(benchmark::State& state, int num_runs) {
+static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merger = true) {
     ChunkSorterBase suite;
     suite.SetUp();
     RuntimeState* runtime_state = suite._runtime_state.get();
@@ -288,27 +292,26 @@ static void do_merge_bench(benchmark::State& state, int num_runs) {
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr chunk = std::make_shared<Chunk>(columns, map);
+    ChunkPtr base_chunk = std::make_shared<Chunk>(columns, map);
 
     int64_t num_rows = 0;
     for (auto _ : state) {
-        SortedChunksMerger merger(runtime_state, true);
         ChunkSuppliers chunk_suppliers;
         ChunkProbeSuppliers chunk_probe_suppliers;
         ChunkHasSuppliers chunk_has_suppliers;
-        int num_chunks = 8 * num_runs;
-        int chunk_input_idx = 0;
-        int chunk_probe_idx = 0;
+        constexpr int num_chunks_per_run = 8;
+        std::vector<int> chunk_input_index(num_runs, 0);
+        std::vector<int> chunk_probe_index(num_runs, 0);
         for (int i = 0; i < num_runs; i++) {
-            ChunkSupplier chunk_supplier = [&](Chunk** output) -> Status {
-                if (chunk_input_idx++ > num_chunks) {
+            ChunkSupplier chunk_supplier = [&, i](Chunk** output) -> Status {
+                if (chunk_input_index[i]++ > num_chunks_per_run) {
                     *output = nullptr;
                 } else {
                     state.PauseTiming();
-                    auto cloned = chunk->clone_unique();
+                    auto cloned = base_chunk->clone_unique();
                     for (auto& col : cloned->columns()) {
                         Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
-                        int start = chunk_input_idx * config::vector_chunk_size;
+                        int start = chunk_input_index[i] * config::vector_chunk_size;
                         for (auto& x : intcolumn->get_data()) {
                             x += start;
                         }
@@ -318,16 +321,16 @@ static void do_merge_bench(benchmark::State& state, int num_runs) {
                 }
                 return Status::OK();
             };
-            ChunkProbeSupplier chunk_probe_supplier = [&](Chunk** output) -> bool {
-                if (chunk_probe_idx++ > num_chunks) {
+            ChunkProbeSupplier chunk_probe_supplier = [&, i](Chunk** output) -> bool {
+                if (chunk_probe_index[i]++ > num_chunks_per_run) {
                     *output = nullptr;
-                    return true;
+                    return false;
                 } else {
                     state.PauseTiming();
-                    auto cloned = chunk->clone_unique();
+                    auto cloned = base_chunk->clone_unique();
                     for (auto& col : cloned->columns()) {
                         Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
-                        int start = chunk_input_idx * config::vector_chunk_size;
+                        int start = chunk_input_index[i] * config::vector_chunk_size;
                         for (auto& x : intcolumn->get_data()) {
                             x += start;
                         }
@@ -335,7 +338,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs) {
                     *output = cloned.release();
                     state.ResumeTiming();
 
-                    return false;
+                    return true;
                 }
             };
             ChunkHasSupplier chunk_has_supplier = [&]() -> bool { return true; };
@@ -344,16 +347,54 @@ static void do_merge_bench(benchmark::State& state, int num_runs) {
             chunk_has_suppliers.emplace_back(chunk_has_supplier);
         }
 
-        ASSERT_OK(merger.init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers, &sort_exprs,
-                                           &asc_arr, &null_first));
+        if (use_merger) {
+            SortedChunksMerger merger(runtime_state, true);
+            ASSERT_OK(merger.init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers, &sort_exprs,
+                                               &asc_arr, &null_first));
+            merger.is_data_ready();
+            std::atomic<bool> eos{false};
+            bool should_exit{false};
+            while (!eos && !should_exit) {
+                ChunkPtr chunk;
+                ASSERT_OK(merger.get_next_for_pipeline(&chunk, &eos, &should_exit));
+                num_rows += chunk->num_rows();
+            }
+        } else {
+            std::deque<SortedChunkStream> streams;
+            for (int i = 0; i < num_runs; i++) {
+                SortedChunkStream stream;
+                Chunk* chunk = nullptr;
+                while (chunk_probe_suppliers[i](&chunk)) {
+                    if (chunk == nullptr) break;
+                    DCHECK(!chunk->is_empty());
+                    stream.chunks.push_back(ChunkPtr(chunk));
+                }
+                streams.push_back(stream);
+            }
 
-        merger.is_data_ready();
-        std::atomic<bool> eos{false};
-        bool should_exit{false};
-        while (!eos && !should_exit) {
-            ChunkPtr chunk;
-            ASSERT_OK(merger.get_next_for_pipeline(&chunk, &eos, &should_exit));
-            num_rows += chunk->num_rows();
+            while (streams.size() > 1) {
+                SortedChunkStream left_stream = streams.front();
+                streams.pop_front();
+                SortedChunkStream right_stream = streams.front();
+                streams.pop_front();
+                CHECK(!right_stream.chunks.empty());
+                ChunkCursor left(
+                        left_stream.get_supplier(), left_stream.get_probe_supplier(), []() { return true; },
+                        &sort_exprs, &asc_arr, &null_first, true);
+                ChunkCursor right(
+                        right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; },
+                        &sort_exprs, &asc_arr, &null_first, true);
+                SortedChunkStream merged;
+                Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
+                    CHECK(!chunk->is_empty());
+                    merged.chunks.push_back(ChunkPtr(chunk));
+                    return Status::OK();
+                });
+                CHECK(st.ok());
+                CHECK(!merged.chunks.empty());
+                streams.push_back(merged);
+            }
+            num_rows += streams[0].num_rows();
         }
     }
     state.SetItemsProcessed(num_rows);
@@ -483,7 +524,10 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
 
 // Merge sorted runs
 static void BM_merge_heap(benchmark::State& state) {
-    do_merge_bench(state, state.range(0));
+    do_merge_bench(state, state.range(0), true);
+}
+static void BM_merge_cascades(benchmark::State& state) {
+    do_merge_bench(state, state.range(0), false);
 }
 static void BM_merge_vertical(benchmark::State& state) {
     do_merge_two_way(state, state.range(0));
@@ -538,6 +582,7 @@ BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'0
 
 // Merge
 BENCHMARK(BM_merge_heap)->DenseRange(2, 32, 2);
+BENCHMARK(BM_merge_cascades)->DenseRange(2, 32, 2);
 BENCHMARK(BM_merge_vertical)->DenseRange(2, 32, 2);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
