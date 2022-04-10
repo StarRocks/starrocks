@@ -24,12 +24,11 @@
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/del_vector.h"
+#include "storage/fs/fs_util.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
-#include "storage/vectorized_column_predicate.h"
-#include "storage/del_vector.h"
-#include "storage/fs/fs_util.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
@@ -41,6 +40,7 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
+#include "storage/vectorized_column_predicate.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
