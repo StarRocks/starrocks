@@ -18,6 +18,8 @@ namespace vectorized {
 typedef std::function<Status(Chunk**)> ChunkSupplier;
 typedef std::vector<ChunkSupplier> ChunkSuppliers;
 
+typedef std::function<Status(ChunkPtr)> ChunkConsumer;
+
 // A chunk supplier signal EOS by outputting a NULL Chunk.
 typedef std::function<bool(Chunk**)> ChunkProbeSupplier;
 typedef std::vector<ChunkProbeSupplier> ChunkProbeSuppliers;
@@ -43,13 +45,13 @@ public:
     bool has_next();
     // Move to next row for pipeline.
     void next_for_pipeline();
-    void reset_with_next_chunk_for_pipeline();
+    void next_chunk_for_pipeline();
     // Is current row valid? A new Cursor without any next() has an invalid row.
     bool is_valid() const;
     // Copy current row to the dest Chunk whose structure is as same as the source Chunk.
     bool copy_current_row_to(Chunk* dest) const;
 
-    const ChunkPtr& get_current_chunk() const { return _current_chunk; };
+    ChunkPtr get_current_chunk() { return _current_chunk; };
     int32_t get_current_position_in_chunk() const { return _current_pos; };
 
     [[nodiscard]] ChunkPtr clone_empty_chunk(size_t reserved_row_number) const;

@@ -392,10 +392,10 @@ static void do_merge_two_way(benchmark::State& state, int num_runs) {
         for (int i = 1; i < num_runs; i++) {
             Permutation perm;
             if (i % 2 == 0) {
-                merge_sorted_chunks_two_way(merged.get(), chunk1.get(), &perm);
+                merge_sorted_chunks_two_way(merged, chunk1, &perm);
                 append_by_permutation(merged.get(), {merged, chunk1}, perm);
             } else {
-                merge_sorted_chunks_two_way(merged.get(), chunk2.get(), &perm);
+                merge_sorted_chunks_two_way(merged, chunk2, &perm);
                 append_by_permutation(merged.get(), {merged, chunk2}, perm);
             }
         }

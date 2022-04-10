@@ -456,6 +456,14 @@ Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vert
 }
 
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
+    std::vector<const Chunk*> src;
+    for (auto& chunk : chunks) {
+        src.push_back(chunk.get());
+    }
+    append_by_permutation(dst, src, perm);
+}
+
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm) {
     if (chunks.empty() || perm.empty()) {
         return;
     }

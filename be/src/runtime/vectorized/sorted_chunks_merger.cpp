@@ -94,7 +94,7 @@ void SortedChunksMerger::init_for_min_heap() {
         _min_heap.reserve(_cursors.size());
         for (auto& cursor_ptr : _cursors) {
             ChunkCursor* cursor = cursor_ptr.get();
-            cursor->reset_with_next_chunk_for_pipeline();
+            cursor->next_chunk_for_pipeline();
             cursor->next_for_pipeline();
             if (cursor->is_valid()) {
                 _min_heap.push_back(cursor);
