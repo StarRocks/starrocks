@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/memtable.h"
+#include "storage/memtable.h"
 
 #include <gtest/gtest.h>
 
@@ -9,13 +9,13 @@
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/schema.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 

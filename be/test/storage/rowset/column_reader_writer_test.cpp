@@ -34,11 +34,13 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -47,8 +49,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/range.h"
 
 using std::string;
 

@@ -7,7 +7,7 @@
 #include "env/env.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/orc_proto.pb.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {

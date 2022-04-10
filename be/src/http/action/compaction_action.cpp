@@ -35,11 +35,11 @@
 #include "http/http_response.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
+#include "storage/base_compaction.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/base_compaction.h"
-#include "storage/vectorized/cumulative_compaction.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
 

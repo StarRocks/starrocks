@@ -27,9 +27,9 @@
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
+#include "storage/chunk_helper.h"
+#include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/range.h"
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
 

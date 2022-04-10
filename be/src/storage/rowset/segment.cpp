@@ -37,15 +37,15 @@
 #include "segment_chunk_iterator_adapter.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
-#include "storage/vectorized/column_predicate.h"
-#include "storage/vectorized/column_predicate_rewriter.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
+#include "storage/vectorized_column_predicate.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 

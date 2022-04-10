@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/push_handler.h"
+#include "storage/push_handler.h"
 
 #include <gtest/gtest.h>
 
@@ -9,7 +9,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
 

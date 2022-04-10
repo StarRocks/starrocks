@@ -29,11 +29,11 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;

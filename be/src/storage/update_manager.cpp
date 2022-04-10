@@ -5,13 +5,13 @@
 #include <limits>
 #include <memory>
 
+#include "chunk_helper.h"
 #include "gutil/endian.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/rowset_update_state.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"

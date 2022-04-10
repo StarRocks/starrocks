@@ -31,7 +31,9 @@
 #include <random>
 #include <set>
 
+#include "base_compaction.h"
 #include "common/status.h"
+#include "cumulative_compaction.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
@@ -44,8 +46,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/base_compaction.h"
-#include "storage/vectorized/cumulative_compaction.h"
 #include "util/file_utils.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"

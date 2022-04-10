@@ -31,7 +31,7 @@
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/vectorized/chunk_iterator.h"
+#include "storage/chunk_iterator.h"
 
 namespace starrocks {
 

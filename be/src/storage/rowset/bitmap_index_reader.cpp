@@ -23,8 +23,8 @@
 
 #include <memory>
 
+#include "storage/range.h"
 #include "storage/types.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 

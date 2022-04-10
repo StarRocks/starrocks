@@ -42,7 +42,7 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h" // for TypeInfo
-#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 #include "storage/wrapper_field.h"
 #include "util/block_compression.h"
 #include "util/json.h"

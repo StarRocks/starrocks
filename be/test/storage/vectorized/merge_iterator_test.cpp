@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/merge_iterator.h"
+#include "storage/merge_iterator.h"
 
 #include <algorithm>
 #include <memory>

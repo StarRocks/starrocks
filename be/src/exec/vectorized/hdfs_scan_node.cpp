@@ -20,7 +20,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/hdfs_util.h"
 #include "util/priority_thread_pool.hpp"

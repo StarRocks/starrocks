@@ -7,8 +7,8 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/parallel_test.h"
 
 using namespace starrocks::vectorized;

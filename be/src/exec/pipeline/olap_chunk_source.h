@@ -14,8 +14,8 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/conjunctive_predicates.h"
-#include "storage/vectorized/tablet_reader.h"
+#include "storage/conjunctive_predicates.h"
+#include "storage/tablet_reader.h"
 
 namespace starrocks {
 

@@ -43,7 +43,7 @@ DIAGNOSTIC_POP
 #include "runtime/global_dicts.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
-#include "storage/vectorized/async_delta_writer.h"
+#include "storage/async_delta_writer.h"
 #include "util/countdown_latch.h"
 
 namespace brpc {

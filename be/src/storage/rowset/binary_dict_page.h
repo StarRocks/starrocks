@@ -35,7 +35,7 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
-#include "storage/vectorized/range.h"
+#include "storage/range.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

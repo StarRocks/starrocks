@@ -26,7 +26,7 @@
 #include "storage/rowset/common.h" // ordinal_t
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/page_pointer.h"
-#include "storage/vectorized/range.h"
+#include "storage/range.h"
 
 namespace starrocks {
 class ColumnBlockView;

@@ -5,6 +5,8 @@
 #include <ctime>
 #include <memory>
 
+#include "chunk_helper.h"
+#include "chunk_iterator.h"
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -12,8 +14,10 @@
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/write_batch.h"
+#include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "schema_change.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -31,10 +35,6 @@
 #include "storage/types.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/chunk_iterator.h"
-#include "storage/vectorized/rowset_merger.h"
-#include "storage/vectorized/schema_change.h"
 #include "storage/wrapper_field.h"
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"

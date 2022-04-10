@@ -25,7 +25,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/global_dicts.h"
 #include "storage/fs/fs_util.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
 
 namespace starrocks {
 

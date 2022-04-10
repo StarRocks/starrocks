@@ -24,7 +24,7 @@
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/encoding_info.h"
-#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 

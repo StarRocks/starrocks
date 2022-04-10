@@ -21,6 +21,7 @@
 
 #include "storage/types.h"
 
+#include "convert_helper.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/date_value.hpp"
@@ -36,7 +37,6 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/uint24.h"
-#include "storage/vectorized/convert_helper.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/slice.h"

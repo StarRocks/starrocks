@@ -10,7 +10,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

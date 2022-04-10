@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 #include "column/binary_column.h"
 #include "column/chunk.h"

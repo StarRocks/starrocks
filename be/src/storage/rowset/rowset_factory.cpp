@@ -28,7 +28,7 @@
 #include "rowset_writer_adapter.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
 
 namespace starrocks {
 

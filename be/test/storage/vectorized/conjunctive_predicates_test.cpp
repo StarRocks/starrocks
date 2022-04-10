@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/conjunctive_predicates.h"
+#include "storage/conjunctive_predicates.h"
 
 #include <vector>
 
@@ -15,9 +15,9 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/column_predicate.h"
-#include "storage/vectorized/predicate_parser.h"
+#include "storage/chunk_helper.h"
+#include "storage/predicate_parser.h"
+#include "storage/vectorized_column_predicate.h"
 #include "testutil//assert.h"
 
 namespace starrocks::vectorized {

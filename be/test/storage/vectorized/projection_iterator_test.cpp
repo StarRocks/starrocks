@@ -1,13 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/projection_iterator.h"
+#include "storage/projection_iterator.h"
 
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_pool.h"
 #include "column/datum.h"
 #include "gtest/gtest.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
 

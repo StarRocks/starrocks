@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "env/env_memory.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/beta_rowset.h"
@@ -14,7 +15,6 @@
 #include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"

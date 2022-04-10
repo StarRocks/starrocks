@@ -26,7 +26,7 @@
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/parsed_page.h"
-#include "storage/vectorized/range.h"
+#include "storage/range.h"
 
 namespace starrocks {
 

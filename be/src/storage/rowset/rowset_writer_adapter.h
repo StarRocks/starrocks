@@ -4,8 +4,8 @@
 
 #include <memory>
 
+#include "src/storage/convert_helper.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/vectorized/convert_helper.h"
 
 namespace starrocks::vectorized {
 

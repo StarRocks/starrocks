@@ -8,7 +8,7 @@
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 

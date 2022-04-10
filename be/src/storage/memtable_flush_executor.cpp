@@ -23,8 +23,8 @@
 
 #include <memory>
 
+#include "memtable.h"
 #include "runtime/current_thread.h"
-#include "storage/vectorized/memtable.h"
 
 namespace starrocks {
 

@@ -13,7 +13,7 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks::pipeline {
