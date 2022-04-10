@@ -114,7 +114,7 @@ add_library(Storage STATIC
     async_delta_writer.cpp
     chunk_helper.cpp
     column_predicate_cmp.cpp
-    vectorized_column_predicate.cpp
+    column_predicate.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
     column_null_predicate.cpp
