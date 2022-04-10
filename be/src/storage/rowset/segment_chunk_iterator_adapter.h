@@ -10,8 +10,8 @@
 #include "common/status.h"
 #include "segment_options.h"
 #include "storage/tablet_schema.h"
-#include "src/storage/chunk_iterator.h"
-#include "src/storage/convert_helper.h"
+#include "storage/chunk_iterator.h"
+#include "storage/convert_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {

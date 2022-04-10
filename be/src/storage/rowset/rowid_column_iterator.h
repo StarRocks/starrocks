@@ -5,7 +5,7 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/common.h"
-#include "src/storage/range.h"
+#include "storage/range.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {

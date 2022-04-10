@@ -2,9 +2,9 @@
 
 #include "rowset_writer_adapter.h"
 
-#include "src/storage/chunk_helper.h"
-#include "src/storage/convert_helper.h"
-#include "src/storage/type_utils.h"
+#include "storage/chunk_helper.h"
+#include "storage/convert_helper.h"
+#include "storage/type_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/uint24.h"
 
