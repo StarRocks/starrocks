@@ -32,6 +32,7 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -41,7 +42,6 @@ import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jcodings.util.Hash;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -141,6 +141,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
     private Set<Integer> hashJoinNodeIds = Sets.newHashSet();
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -153,7 +154,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
         // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
         setParallelExecNumIfExists();
-        setPipelineDopIfPipelineEngineEnabled();
         setFragmentInPlanTree(planRoot);
     }
 
@@ -162,7 +162,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      * Does not traverse the children of ExchangeNodes because those must belong to a
      * different fragment.
      */
-    public void setFragmentInPlanTree(PlanNode node) {
+    private void setFragmentInPlanTree(PlanNode node) {
         if (node == null) {
             return;
         }
@@ -183,18 +183,54 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      * Assign ParallelExecNum by PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM in SessionVariable for synchronous request
      * Assign ParallelExecNum by default value for Asynchronous request
      */
-    public void setParallelExecNumIfExists() {
+    private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
             int instanceNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
-            int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
 
             if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                parallelExecNum = pipelineDop > 0 ? instanceNum : degreeOfParallelism;
+                // In pipeline engine, we prefer inter-pipeline parallelism to inter-fragment parallelism
+                // So in default case, instanceNum should be 1, and DOP should be cores/2
+                int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
+                if (pipelineDop > 0) {
+                    this.parallelExecNum = instanceNum;
+                    this.pipelineDop = pipelineDop;
+                } else {
+                    this.parallelExecNum = 1;
+                    this.pipelineDop = BackendCoreStat.getDefaultDOP();
+                }
             } else {
-                parallelExecNum = instanceNum;
+                this.parallelExecNum = instanceNum;
+                this.pipelineDop = 1;
             }
         }
+    }
+
+    /**
+     * Adapt dop according to number of backends and number of instances
+     *
+     * @param numBackends  total number of backends
+     * @param numInstances total number of fragment instances
+     */
+    public void adaptPipelineDop(int numBackends, int numInstances) {
+        Preconditions.checkState(ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
+                getPlanRoot().canUsePipeLine());
+
+        int degreeOfParallelism = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+        this.pipelineDop = Math.max(1, degreeOfParallelism / Math.max(1, numInstances / Math.max(1, numBackends)));
+        this.parallelExecNum = degreeOfParallelism / pipelineDop;
+    }
+
+    public void preferInstanceParallel() {
+        this.parallelExecNum = BackendCoreStat.getDefaultDOP();
+        this.pipelineDop = 1;
+        this.dopEstimated = true;
+    }
+
+    public void preferPipelineParallel() {
+        this.parallelExecNum = 1;
+        this.pipelineDop = BackendCoreStat.getDefaultDOP();
+        this.dopEstimated = true;
     }
 
     public ExchangeNode getDestNode() {
@@ -216,24 +252,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.parallelExecNum = parallelExecNum;
     }
 
-    public void setPipelineDopIfPipelineEngineEnabled() {
-        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-            return;
-        }
-        int dop = ConnectContext.get().getSessionVariable().getPipelineDop();
-        this.pipelineDop = dop > 0 ? dop : 1;
-    }
-
-    public void setPipelineDop(int dop) {
-        this.pipelineDop = dop;
-    }
-
     public int getPipelineDop() {
         return pipelineDop;
-    }
-
-    public void setDopEstimated() {
-        dopEstimated = true;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
