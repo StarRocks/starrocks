@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
