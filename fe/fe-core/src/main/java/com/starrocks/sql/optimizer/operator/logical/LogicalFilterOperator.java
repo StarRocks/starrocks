@@ -48,6 +48,13 @@ public class LogicalFilterOperator extends LogicalOperator {
         return visitor.visitLogicalFilter(optExpression, context);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("LogicalFilterOperator");
+        sb.append(" {").append("predicate=").append(predicate).append("}");
+        return sb.toString();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
         @Override

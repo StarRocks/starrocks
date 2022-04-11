@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
@@ -61,7 +62,10 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     @Override
     public String toString() {
-        return "LogicalProjectOperator " + columnRefMap.keySet();
+        StringBuilder sb = new StringBuilder("LogicalProjectOperator {projection=");
+        sb.append(new ArrayList<>(columnRefMap.values()));
+        sb.append("}");
+        return sb.toString();
     }
 
     @Override

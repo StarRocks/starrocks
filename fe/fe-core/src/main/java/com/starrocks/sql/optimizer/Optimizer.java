@@ -34,6 +34,8 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -42,6 +44,7 @@ import java.util.List;
  * Optimizer's entrance class
  */
 public class Optimizer {
+    private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private OptimizerContext context;
 
     public OptimizerContext getContext() {
@@ -63,12 +66,23 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
+        OptimizerTraceInfo traceInfo = new OptimizerTraceInfo(connectContext.getQueryId());
         // Phase 1: none
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} origin logicOperatorTree:\n{}",
+                    traceInfo.getTraceLogPrefix(), logicOperatorTree.explain());
+        }
         // Phase 2: rewrite based on memo and group
         Memo memo = new Memo();
         memo.init(logicOperatorTree);
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} initial root group:\n{}",
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+        }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context.setTraceInfo(traceInfo);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
 
@@ -76,6 +90,10 @@ public class Optimizer {
         // so we should always get root group and root group expression
         // directly from memo.
         logicalRuleRewrite(memo, rootTaskContext);
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} after logical rewrite, root group:\n{}",
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+        }
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -90,6 +108,10 @@ public class Optimizer {
 
         // Phase 3: optimize based on memo and group
         memoOptimize(connectContext, memo, rootTaskContext);
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} after memo optimize, root group:\n{}",
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+        }
 
         OptExpression result;
         if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
@@ -99,8 +121,17 @@ public class Optimizer {
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
         }
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} after extract best plan:\n{}", traceInfo.getTraceLogPrefix(), result.explain());
+        }
 
-        return physicalRuleRewrite(rootTaskContext, result);
+        OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
+        if (sessionVariable.isEnableOptimizerTraceLog()) {
+            LOG.info("{} final plan after physical rewrite:\n{}",
+                    traceInfo.getTraceLogPrefix(), finalPlan.explain());
+            LOG.info("{} {}", traceInfo.getTraceLogPrefix(), traceInfo.toString());
+        }
+        return finalPlan;
     }
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {

@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -62,5 +63,16 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndex);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalEsScanOperator");
+        sb.append(" {").append("selectedIndex=").append(selectedIndex)
+                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
+                .append(", predicate=").append(predicate)
+                .append(", limit=").append(limit)
+                .append("}");
+        return sb.toString();
     }
 }

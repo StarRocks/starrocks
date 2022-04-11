@@ -79,6 +79,17 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalIcebergScan(this, context);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
+        sb.append(" {").append("table=").append(((IcebergTable) table).getTable())
+                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
+                .append(", conjuncts=").append(conjuncts)
+                .append(", minmaxConjuncts=").append(minMaxConjuncts)
+                .append("}");
+        return sb.toString();
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalIcebergScanOperator, LogicalIcebergScanOperator.Builder> {
         private Table.TableType tableType;

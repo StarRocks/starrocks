@@ -50,4 +50,13 @@ public class PhysicalLimitOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), offset);
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalLimitOperator");
+        sb.append(" {limit=").append(limit)
+                .append(", offset=").append(offset)
+                .append("}");
+        return sb.toString();
+    }
 }

@@ -122,10 +122,15 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     @Override
     public String toString() {
-        return "PhysicalOlapScan" + " {" +
-                "table='" + table.getId() + '\'' +
-                ", outputColumns='" + getOutputColumns() + '\'' +
-                '}';
+        StringBuilder sb = new StringBuilder("PhysicalOlapScanOperator");
+        sb.append(" {").append("table=").append(table.getId())
+                .append(", selectedPartitionId=").append(selectedPartitionId)
+                .append(", outputColumns=").append(getOutputColumns())
+                .append(", projection=").append(projection)
+                .append(", predicate=").append(predicate)
+                .append(", limit=").append(limit)
+                .append("}");
+        return sb.toString();
     }
 
     @Override

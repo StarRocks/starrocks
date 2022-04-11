@@ -74,6 +74,17 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     }
 
     @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalTopNOperator");
+        sb.append(" {phase=").append(sortPhase)
+                .append(", orderBy=").append(orderSpec)
+                .append(", limit=").append(limit)
+                .append(", offset=").append(offset);
+        sb.append("}");
+        return sb.toString();
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalTopN(this, context);
     }

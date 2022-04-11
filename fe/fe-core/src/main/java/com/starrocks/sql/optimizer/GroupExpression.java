@@ -275,4 +275,15 @@ public class GroupExpression {
         sb.append("}");
         return sb.toString();
     }
+
+    public String toPrettyString(String headlineIndent, String detailIndent) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(detailIndent).append(op).append("\n");
+        String childHeadlineIndent = detailIndent + "->  ";
+        String childDetailIndent = detailIndent + "    ";
+        for (Group input : inputs) {
+            sb.append(input.toPrettyString(childHeadlineIndent, childDetailIndent));
+        }
+        return sb.toString();
+    }
 }

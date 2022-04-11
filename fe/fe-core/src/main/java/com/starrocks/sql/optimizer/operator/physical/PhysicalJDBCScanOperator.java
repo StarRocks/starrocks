@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -12,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 public class PhysicalJDBCScanOperator extends PhysicalScanOperator {
@@ -32,5 +34,16 @@ public class PhysicalJDBCScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalJDBCScan(optExpression, context);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalJDBCScanOperator");
+        sb.append(" {").append("table=").append(((JDBCTable) table).getJdbcTable())
+                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
+                .append(", predicate=").append(predicate)
+                .append(", limit=").append(limit)
+                .append("}");
+        return sb.toString();
     }
 }

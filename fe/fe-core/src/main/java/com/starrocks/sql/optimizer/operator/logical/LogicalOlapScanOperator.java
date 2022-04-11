@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -145,6 +146,18 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return Objects.hash(super.hashCode(), hashDistributionSpec, selectedIndexId, selectedPartitionId,
                 partitionNames,
                 selectedTabletId, hintsTabletIds);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("LogicalOlapScanOperator");
+        sb.append(" {").append("table=").append(table.getId())
+                .append(", selectedParitionId=").append(selectedPartitionId)
+                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
+                .append(", predicate=").append(predicate)
+                .append(", limit=").append(limit)
+                .append("}");
+        return sb.toString();
     }
 
     public static class Builder

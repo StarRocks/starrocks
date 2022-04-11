@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 public class PhysicalProjectOperator extends PhysicalOperator {
@@ -49,6 +50,14 @@ public class PhysicalProjectOperator extends PhysicalOperator {
     @Override
     public int hashCode() {
         return Objects.hashCode(columnRefMap, commonSubOperatorMap);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalProjectOperator {projection=");
+        sb.append(new ArrayList<>(columnRefMap.values()));
+        sb.append("}");
+        return sb.toString();
     }
 
     @Override

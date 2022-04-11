@@ -128,6 +128,17 @@ public class LogicalTopNOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("LogicalTopNOperator");
+        sb.append(" {phase=").append(sortPhase.toString())
+                .append(", orderBy=").append(orderByElements)
+                .append(", limit=").append(limit)
+                .append(", offset=").append(offset);
+        sb.append("}");
+        return sb.toString();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
         private List<Ordering> orderByElements;

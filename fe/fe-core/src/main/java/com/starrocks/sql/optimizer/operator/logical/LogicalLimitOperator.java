@@ -78,6 +78,15 @@ public class LogicalLimitOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), offset);
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("LogicalLimitOperator");
+        sb.append(" {limit=").append(limit)
+                .append(", offset=").append(offset)
+                .append("}");
+        return sb.toString();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
         private long offset = DEFAULT_OFFSET;

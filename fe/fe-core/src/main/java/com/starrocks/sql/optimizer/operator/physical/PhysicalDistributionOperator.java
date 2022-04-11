@@ -48,4 +48,13 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         return true;
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalDistributionOperator");
+        sb.append(" {distributionSpec=").append(distributionSpec)
+                .append(" ,globalDict=").append(globalDicts);
+        sb.append("}");
+        return sb.toString();
+    }
 }

@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -15,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 public class PhysicalHudiScanOperator extends PhysicalScanOperator {
@@ -86,5 +88,16 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
         predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
         predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("PhysicalHudiScanOperator");
+        sb.append(" {").append("table=").append(((HudiTable) table).getTable())
+                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
+                .append(", predicates=").append(predicates)
+                .append(", limit=").append(limit)
+                .append("}");
+        return sb.toString();
     }
 }

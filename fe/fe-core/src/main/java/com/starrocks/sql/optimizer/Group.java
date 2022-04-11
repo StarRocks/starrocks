@@ -250,4 +250,20 @@ public class Group {
         return sb.toString();
     }
 
+    public String toPrettyString() {
+        return toPrettyString("", "");
+    }
+
+    public String toPrettyString(String headlineIndent, String detailIndent) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(headlineIndent).append("Group: ").append(id).append("\n");
+        for (GroupExpression expr : logicalExpressions) {
+            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
+        }
+        for (GroupExpression expr : physicalExpressions) {
+            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
+        }
+        return sb.toString();
+    }
+
 }
