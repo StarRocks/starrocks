@@ -179,6 +179,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitDropView(StarRocksParser.DropViewContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, true, false);
+    }
+
+    @Override
     public ParseNode visitUse(StarRocksParser.UseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new UseStmt(identifier.getValue());
