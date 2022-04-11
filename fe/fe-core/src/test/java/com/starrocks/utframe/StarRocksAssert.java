@@ -163,7 +163,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
-                (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database " + dbName + ";", ctx);
+                (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().dropDb(dropDbStmt);
         return this;
     }

@@ -25,5 +25,14 @@ public class AnalyzerDropTest {
         analyzeFail("drop table exists test1");
     }
 
+    @Test
+    public void testDropView() {
+        analyzeSuccess("drop view if exists view");
+        analyzeSuccess("drop view test1");
+        analyzeSuccess("drop view db1.test1");
+        analyzeFail("drop view test1 force");
+        analyzeFail("drop view exists test1");
+    }
+
 
 }
