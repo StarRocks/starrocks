@@ -24,7 +24,6 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <boost/regex.hpp>
-#include <cerrno>
 #include <limits>
 #include <sstream>
 #include <string>

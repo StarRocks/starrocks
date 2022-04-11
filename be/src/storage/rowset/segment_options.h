@@ -7,9 +7,9 @@
 
 #include "column/datum.h"
 #include "runtime/global_dicts.h"
+#include "storage/disjunctive_predicates.h"
 #include "storage/fs/fs_util.h"
-#include "storage/vectorized/disjunctive_predicates.h"
-#include "storage/vectorized/seek_range.h"
+#include "storage/seek_range.h"
 
 namespace starrocks {
 class Condition;

@@ -14,6 +14,8 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
@@ -23,8 +25,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/chunk_iterator.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 

@@ -28,8 +28,8 @@
 
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_define.h"
+#include "storage/type_utils.h"
 #include "storage/types.h"
-#include "storage/vectorized/type_utils.h"
 #include "util/c_string.h"
 
 namespace starrocks {

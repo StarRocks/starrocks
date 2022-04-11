@@ -4,6 +4,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
@@ -11,7 +12,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"

@@ -9,7 +9,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "udf/udf.h"
 #include "util/thrift_util.h"
 

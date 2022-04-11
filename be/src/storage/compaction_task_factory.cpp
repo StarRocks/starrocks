@@ -4,16 +4,15 @@
 
 #include "column/schema.h"
 #include "runtime/exec_env.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/horizontal_compaction_task.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/tablet_reader.h"
-#include "storage/vectorized/tablet_reader_params.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "storage/vertical_compaction_task.h"
 
 namespace starrocks {
