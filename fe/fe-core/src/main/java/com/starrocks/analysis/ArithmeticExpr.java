@@ -446,11 +446,13 @@ public class ArithmeticExpr extends Expr {
             return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
         } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
                 pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t2 is INVALID TYPE:
             return t1;
         } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
                 pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t1 is INVALID TYPE:
             return t2;
-        }else {
+        } else {
             return Type.INVALID;
         }
     }
