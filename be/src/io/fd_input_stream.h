@@ -20,19 +20,11 @@ public:
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t count) override;
-
-    StatusOr<int64_t> seek(int64_t offset, int whence) override;
-
-    Status skip(int64_t count) override;
-
-    bool allows_peak() const override { return false; }
-
-    StatusOr<std::string_view> peak(int64_t nbytes) override;
-
     StatusOr<int64_t> get_size() override;
 
-    StatusOr<int64_t> position() override;
+    StatusOr<int64_t> position() override { return _offset; }
+
+    Status seek(int64_t offset) override;
 
     // closes the underlying file.
     //
@@ -56,6 +48,7 @@ public:
 private:
     int _fd;
     int _errno;
+    int64_t _offset;
     bool _close_on_delete;
     bool _is_closed;
 };

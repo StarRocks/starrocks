@@ -408,31 +408,6 @@ TEST_F(EnvMemoryTest, test_rename02) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(EnvMemoryTest, test_random_rw_file) {
-    auto file = *_env->new_random_rw_file("/a.txt");
-    EXPECT_STATUS(Status::OK(), file->write_at(10, "aaaa"));
-    EXPECT_STATUS(Status::OK(), file->write_at(0, "0123456789"));
-    EXPECT_STATUS(Status::OK(), file->write_at(5, "54321"));
-
-    std::string buff(10, '\0');
-    Slice slice1(buff.data(), 5);
-    Slice slice2(buff.data() + 5, 5);
-    ASSIGN_OR_ABORT(const uint64_t size, file->get_size());
-    EXPECT_EQ(14, size);
-
-    EXPECT_STATUS(Status::OK(), file->read_at(5, slice1));
-    EXPECT_EQ("54321", slice1);
-
-    std::vector<Slice> vec{slice1, slice2};
-    EXPECT_STATUS(Status::OK(), file->readv_at(0, vec.data(), 2));
-    EXPECT_EQ("01234", slice1);
-    EXPECT_EQ("54321", slice2);
-
-    EXPECT_STATUS(Status::IOError(""), file->read_at(10, slice1));
-    EXPECT_STATUS(Status::IOError(""), file->readv_at(5, vec.data(), 2));
-}
-
-// NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_random_access_file) {
     const std::string content = "stay hungry stay foolish";
     EXPECT_STATUS(Status::OK(), _env->append_file("/a.txt", content));
@@ -456,7 +431,7 @@ TEST_F(EnvMemoryTest, test_random_access_file) {
     ASSIGN_OR_ABORT(slice.size, f->read_at(21, slice.data, slice.size));
     EXPECT_EQ("ish", slice);
 
-    EXPECT_STATUS(Status::EndOfFile(""), f->read_at_fully(22, slice.data, slice.size));
+    EXPECT_ERROR(f->read_at_fully(22, slice.data, slice.size));
 }
 
 } // namespace starrocks

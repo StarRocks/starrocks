@@ -159,7 +159,7 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     auto res = _file->get_numeric_statistics();
     if (!res.ok()) return;
 
-    std::unique_ptr<NumericStatistics> statistics = std::move(res).value();
+    std::unique_ptr<io::NumericStatistics> statistics = std::move(res).value();
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
