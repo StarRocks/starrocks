@@ -121,62 +121,60 @@ public class BDBEnvironment {
             LOG.info("group has been reset.");
         }
 
+        // set replication config
+        replicationConfig = new ReplicationConfig();
+        replicationConfig.setNodeName(selfNodeName);
+        replicationConfig.setNodeHostPort(selfNodeHostPort);
+        replicationConfig.setHelperHosts(helperHostPort);
+        replicationConfig.setGroupName(STARROCKS_JOURNAL_GROUP);
+        replicationConfig.setConfigParam(ReplicationConfig.ENV_UNKNOWN_STATE_TIMEOUT, "10");
+        replicationConfig.setMaxClockDelta(Config.max_bdbje_clock_delta_ms, TimeUnit.MILLISECONDS);
+        replicationConfig.setConfigParam(ReplicationConfig.TXN_ROLLBACK_LIMIT,
+                String.valueOf(Config.txn_rollback_limit));
+        replicationConfig
+                .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+        replicationConfig
+                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+
+        if (isElectable) {
+            replicationConfig.setReplicaAckTimeout(Config.bdbje_replica_ack_timeout_second, TimeUnit.SECONDS);
+            replicationConfig.setConfigParam(ReplicationConfig.REPLICA_MAX_GROUP_COMMIT, "0");
+            replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
+        } else {
+            replicationConfig.setNodeType(NodeType.SECONDARY);
+            replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
+        }
+
+        java.util.logging.Logger parent = java.util.logging.Logger.getLogger("com.sleepycat.je");
+        parent.setLevel(Level.parse(Config.bdbje_log_level));
+
+        // set environment config
+        environmentConfig = new EnvironmentConfig();
+        environmentConfig.setTransactional(true);
+        environmentConfig.setAllowCreate(true);
+        environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
+        environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
+        environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
+        if (isElectable) {
+            Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
+                    getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
+            environmentConfig.setDurability(durability);
+        }
+
+        // set database config
+        dbConfig = new DatabaseConfig();
+        dbConfig.setTransactional(true);
+        if (isElectable) {
+            dbConfig.setAllowCreate(true);
+            dbConfig.setReadOnly(false);
+        } else {
+            dbConfig.setAllowCreate(false);
+            dbConfig.setReadOnly(true);
+        }
+
         // open environment and epochDB
-        long ts = System.currentTimeMillis();
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
-                LOG.info("ts: {}, iterator: {}", ts, i);
-                // set replication config
-                replicationConfig = new ReplicationConfig();
-                replicationConfig.setNodeName(selfNodeName);
-                replicationConfig.setNodeHostPort(selfNodeHostPort);
-                replicationConfig.setHelperHosts(helperHostPort);
-                replicationConfig.setGroupName(STARROCKS_JOURNAL_GROUP);
-                replicationConfig.setConfigParam(ReplicationConfig.ENV_UNKNOWN_STATE_TIMEOUT, "10");
-                replicationConfig.setMaxClockDelta(Config.max_bdbje_clock_delta_ms, TimeUnit.MILLISECONDS);
-                replicationConfig.setConfigParam(ReplicationConfig.TXN_ROLLBACK_LIMIT,
-                        String.valueOf(Config.txn_rollback_limit));
-                replicationConfig
-                        .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
-                replicationConfig
-                        .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
-
-                if (isElectable) {
-                    replicationConfig.setReplicaAckTimeout(Config.bdbje_replica_ack_timeout_second, TimeUnit.SECONDS);
-                    replicationConfig.setConfigParam(ReplicationConfig.REPLICA_MAX_GROUP_COMMIT, "0");
-                    replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
-                } else {
-                    replicationConfig.setNodeType(NodeType.SECONDARY);
-                    replicationConfig.setConsistencyPolicy(new NoConsistencyRequiredPolicy());
-                }
-
-                java.util.logging.Logger parent = java.util.logging.Logger.getLogger("com.sleepycat.je");
-                parent.setLevel(Level.parse(Config.bdbje_log_level));
-
-                // set environment config
-                environmentConfig = new EnvironmentConfig();
-                environmentConfig.setTransactional(true);
-                environmentConfig.setAllowCreate(true);
-                environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
-                environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
-                environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
-                if (isElectable) {
-                    Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
-                            getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
-                    environmentConfig.setDurability(durability);
-                }
-
-                // set database config
-                dbConfig = new DatabaseConfig();
-                dbConfig.setTransactional(true);
-                if (isElectable) {
-                    dbConfig.setAllowCreate(true);
-                    dbConfig.setReadOnly(false);
-                } else {
-                    dbConfig.setAllowCreate(false);
-                    dbConfig.setReadOnly(true);
-                }
-
                 // open the environment
                 replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
 
