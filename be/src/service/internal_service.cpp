@@ -243,7 +243,7 @@ void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcControll
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
-        auto&& query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+        auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
         if (!query_ctx) {
             LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
                                              print_id(query_id), print_id(tid));
