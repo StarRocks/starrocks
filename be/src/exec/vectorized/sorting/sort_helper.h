@@ -325,25 +325,30 @@ struct SortedRun {
 };
 
 struct SortedChunkStream {
-    std::vector<ChunkPtr> chunks;
+    std::vector<ChunkUniquePtr> chunks;
     int supplier_index = -1;
+    size_t rows = 0;
 
     SortedChunkStream() = default;
-    ~SortedChunkStream() = default;
-    SortedChunkStream(const SortedChunkStream& rhs) = default;
+    SortedChunkStream(SortedChunkStream&& other) = default;
+    SortedChunkStream(const SortedChunkStream&) = delete;
 
-    size_t num_rows() const {
-        size_t res = 0;
-        for (auto& chunk : chunks) {
-            res += chunk->num_rows();
-        }
-        return res;
+    void append_chunk(Chunk* chunk) {
+        DCHECK(!!chunk);
+        append_chunk(ChunkUniquePtr(chunk));
     }
+
+    void append_chunk(ChunkUniquePtr chunk) {
+        rows += chunk->num_rows();
+        chunks.push_back(std::move(chunk));
+    }
+
+    size_t num_rows() const { return rows; }
 
     ChunkSupplier get_supplier() {
         return [&](Chunk** output) {
             if (supplier_index + 1 >= chunks.size()) return Status::EndOfFile("end");
-            *output = chunks[++supplier_index].get();
+            *output = chunks[++supplier_index].release();
             CHECK(!(*output)->is_empty());
             return Status::OK();
         };
@@ -353,7 +358,7 @@ struct SortedChunkStream {
         return [&](Chunk** output) {
             if (supplier_index + 1 >= chunks.size()) return false;
             // TODO: optimize memory copy
-            *output = chunks[++supplier_index]->clone_unique().release();
+            *output = chunks[++supplier_index].release();
             CHECK(!(*output)->is_empty());
             return true;
         };

@@ -368,16 +368,16 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 while (chunk_probe_suppliers[i](&chunk)) {
                     if (chunk == nullptr) break;
                     DCHECK(!chunk->is_empty());
-                    stream.chunks.push_back(ChunkPtr(chunk));
+                    stream.append_chunk(chunk);
                 }
-                streams.push_back(stream);
+                streams.push_back(std::move(stream));
             }
             // state.ResumeTiming();
 
             while (streams.size() > 1) {
-                SortedChunkStream left_stream = streams.front();
+                SortedChunkStream left_stream = std::move(streams.front());
                 streams.pop_front();
-                SortedChunkStream right_stream = streams.front();
+                SortedChunkStream right_stream = std::move(streams.front());
                 streams.pop_front();
                 CHECK(!right_stream.chunks.empty());
                 ChunkCursor left(
@@ -389,12 +389,12 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 SortedChunkStream merged;
                 Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
                     CHECK(!chunk->is_empty());
-                    merged.chunks.push_back(ChunkPtr(chunk));
+                    merged.append_chunk(chunk);
                     return Status::OK();
                 });
                 CHECK(st.ok());
                 CHECK(!merged.chunks.empty());
-                streams.push_back(merged);
+                streams.push_back(std::move(merged));
             }
             num_rows += streams[0].num_rows();
         }

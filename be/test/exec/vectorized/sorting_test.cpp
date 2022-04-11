@@ -221,19 +221,19 @@ TEST(MergeTest, merge_sorted_stream) {
         int row = 0;
         while (chunk_probe_suppliers[run](&chunk)) {
             if (chunk == nullptr) break;
-            stream.chunks.push_back(ChunkPtr{chunk});
+            stream.append_chunk(chunk);
             for (int k = 0; k < chunk->num_rows(); k++) {
                 row++;
                 fmt::print("run {} index {} row {}: {}\n", run, k, row, chunk->debug_row(k));
             }
         }
-        streams.push_back(stream);
+        streams.push_back(std::move(stream));
     }
 
     while (streams.size() > 1) {
-        SortedChunkStream left_stream = streams.front();
+        SortedChunkStream left_stream = std::move(streams.front());
         streams.pop_front();
-        SortedChunkStream right_stream = streams.front();
+        SortedChunkStream right_stream = std::move(streams.front());
         streams.pop_front();
         CHECK(!right_stream.chunks.empty());
         ChunkCursor left(
@@ -245,14 +245,14 @@ TEST(MergeTest, merge_sorted_stream) {
         SortedChunkStream merged;
         Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
             CHECK(!chunk->is_empty());
-            merged.chunks.push_back(ChunkPtr(chunk));
+            merged.append_chunk(chunk);
             fmt::print("merge chunk {} rows\n", chunk->num_rows());
             return Status::OK();
         });
         fmt::print("generate merged stream with {} chunks and {} rows\n", merged.chunks.size(), merged.num_rows());
         CHECK(st.ok());
         CHECK(!merged.chunks.empty());
-        streams.push_back(merged);
+        streams.push_back(std::move(merged));
     }
     fmt::print("merge {} stream of {} rows\n", num_runs, streams[0].num_rows());
 
