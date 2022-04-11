@@ -72,8 +72,8 @@ public:
                 ordinal_t num_values, bool use_page_cache, bool kept_in_memory);
 
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
-    inline OrdinalPageIndexIterator begin();
-    inline OrdinalPageIndexIterator end();
+    OrdinalPageIndexIterator begin();
+    OrdinalPageIndexIterator end();
     ordinal_t get_first_ordinal(int page_index) const { return _ordinals[page_index]; }
 
     ordinal_t get_last_ordinal(int page_index) const { return get_first_ordinal(page_index + 1) - 1; }
@@ -118,11 +118,11 @@ private:
     int32_t _cur_idx{-1};
 };
 
-OrdinalPageIndexIterator OrdinalIndexReader::begin() {
+inline OrdinalPageIndexIterator OrdinalIndexReader::begin() {
     return OrdinalPageIndexIterator(this);
 }
 
-OrdinalPageIndexIterator OrdinalIndexReader::end() {
+inline OrdinalPageIndexIterator OrdinalIndexReader::end() {
     return OrdinalPageIndexIterator(this, _num_pages);
 }
 

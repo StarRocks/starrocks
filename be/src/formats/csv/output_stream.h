@@ -99,9 +99,9 @@ protected:
     virtual Status _sync(const char* data, size_t size) = 0;
 
 private:
-    inline size_t _free_space() const { return _end - _pos; }
+    size_t _free_space() const { return _end - _pos; }
 
-    inline Status _reserve(size_t n) {
+    Status _reserve(size_t n) {
         if (_free_space() < n) {
             RETURN_IF_ERROR(_flush());
             if (UNLIKELY(_free_space() < n)) {
@@ -111,7 +111,7 @@ private:
         return Status::OK();
     }
 
-    inline Status _flush() {
+    Status _flush() {
         Status st = _sync(_buff, _pos - _buff);
         _pos = _buff; // Don't care about the status.
         return st;
