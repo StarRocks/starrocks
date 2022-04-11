@@ -8,6 +8,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -66,15 +67,17 @@ public class ApplyRuleTask extends OptimizerTask {
             List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             newExpressions.addAll(targetExpressions);
             if (sessionVariable.isEnableOptimizerTraceLog()) {
+                OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
                 StringBuilder sb = new StringBuilder();
-                sb.append("APPLY RULE " + rule).append("\n");
+                sb.append(traceInfo.getTraceLogPrefix());
+                sb.append(" APPLY RULE " + rule).append("\n");
                 sb.append("Original Expression:\n" + extractExpr.explain());
                 sb.append("New Expressions:\n");
                 for (int i = 0; i < targetExpressions.size(); i++) {
                     sb.append(i + ":\n" + targetExpressions.get(i).explain());
                 }
                 LOG.info(sb.toString());
-                context.getOptimizerContext().getTraceInfo().recordAppliedRule(rule.toString());
+                traceInfo.recordAppliedRule(rule.toString());
             }
             extractExpr = binder.next();
         }
