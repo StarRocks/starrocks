@@ -4,20 +4,17 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
 
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
 /**
  * Predicate reorder
- * Evaluate the selectivity of left child and right child , if selectivity of right child  < left child , swap it.
+ * Evaluate the selectivity of child.
  */
 public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
     public static final PredicateReorderVisitor handler = new PredicateReorderVisitor();
@@ -40,35 +37,32 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
         private OptExpression predicateRewrite(OptExpression optExpression) {
             ScalarOperator predicate = optExpression.getOp().getPredicate();
             //check predicate type
-            if(predicate == null || !(predicate instanceof CompoundPredicateOperator)) {
+            if (predicate == null || !(predicate instanceof CompoundPredicateOperator)) {
                 return optExpression;
             }
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
             //reorder predicate
-            predicateReorder(compoundPredicateOperator.getChildren(), optExpression.getStatistics());
+            predicateReorder(compoundPredicateOperator, optExpression.getStatistics());
             return optExpression;
         }
 
-        private void predicateReorder(List<ScalarOperator> children, Statistics statistics) {
-            if(children == null || children.size() == 0 ) {
+        private void predicateReorder(ScalarOperator scalarOperator, Statistics statistics) {
+            // get conjunctive predicate
+            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(scalarOperator);
+            if (scalarOperators.size() == 0) {
                 return;
             }
-            if(children.size() == 2){
-                ColumnStatistic leftColumnStatistics = ExpressionStatisticCalculator.calculate(children.get(0), statistics);
-                ColumnStatistic rightColumnStatistics = ExpressionStatisticCalculator.calculate(children.get(1), statistics);
-                predicateReorder(children.get(0).getChildren(), statistics);
-                predicateReorder(children.get(1).getChildren(), statistics);
-                //todo compare left and right, if left selectivity > right selectivity, swap it
-                // only use averageRowSize now, need design algorithm
-                if(leftColumnStatistics.getAverageRowSize() > rightColumnStatistics.getAverageRowSize()) {
-                    ScalarOperator tempScalarOperator = children.get(0);
-                    children.set(0,children.get(1));
-                    children.set(1,tempScalarOperator);
-                }
-            } else if(children.size() == 1){
-                predicateReorder(children.get(0).getChildren(), statistics);
-            } else {
-                // must not here
+            for (ScalarOperator operator : scalarOperators) {
+                predicateReorder(operator, statistics);
+            }
+            if (scalarOperators.size() > 1) {
+                DefaultPredicateSelectivityEstimator heuristic = new DefaultPredicateSelectivityEstimator();
+                scalarOperators.sort((o1, o2) -> {
+                    if (heuristic.estimate(o1, statistics) > heuristic.estimate(o2, statistics)) {
+                        return 1;
+                    }
+                    return 0;
+                });
             }
         }
     }
