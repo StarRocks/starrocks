@@ -285,9 +285,6 @@ StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
     return nullptr;
 }
 
-template <typename T>
-StatusOr<ColumnPtr> ObjectColumn<T>::downgrade() { return nullptr; }
-
 template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;

@@ -23,9 +23,6 @@ StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
 }
 
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::downgrade() { return nullptr; }
-
-template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
     const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
     _data.insert(_data.end(), num_src._data.begin() + offset, num_src._data.begin() + offset + count);
