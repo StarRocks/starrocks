@@ -49,7 +49,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -76,7 +75,6 @@ import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
-import org.junit.Assert;
 
 import java.io.File;
 import java.io.IOException;

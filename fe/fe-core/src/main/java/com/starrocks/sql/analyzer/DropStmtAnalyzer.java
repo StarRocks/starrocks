@@ -4,11 +4,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
@@ -25,17 +23,12 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext context) {
-            String db = statement.getDbName();
-            db = getFullDatabaseName(db, context);
-            statement.setDb(db);
+            String dbName = statement.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            statement.setDbName(dbName);
             String tableName = statement.getTableName();
             if (Strings.isNullOrEmpty(tableName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
-            }
-            // check access
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), db,
-                    tableName, PrivPredicate.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
             }
             return null;
         }

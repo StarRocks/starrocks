@@ -21,13 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
 // DROP TABLE
@@ -71,8 +65,8 @@ public class DropTableStmt extends DdlStmt {
         return this.forceDrop;
     }
 
-    public void setDb(String db) {
-        tableName.setDb(db);
+    public void setDbName(String dbName) {
+        tableName.setDb(dbName);
     }
 
     @Override

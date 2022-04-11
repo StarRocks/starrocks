@@ -152,11 +152,11 @@ public class StatementPlanner {
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof DropTableStmt;
+                || statement instanceof ShowTableStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -166,6 +166,7 @@ public class StatementPlanner {
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowColumnStmt
@@ -173,7 +174,6 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof DropTableStmt;
+                || statement instanceof ShowWorkGroupStmt;
     }
 }

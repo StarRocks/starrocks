@@ -5,6 +5,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -70,7 +71,15 @@ public class PrivilegeChecker {
             }
             return null;
         }
-
+        @Override
+        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            String tableName = statement.getTableName();
+            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {

@@ -22,12 +22,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -35,8 +32,6 @@ import org.junit.Test;
 public class DropTableStmtTest {
     private TableName tbl;
     private TableName noDbTbl;
-    @Mocked
-    private Auth auth;
     private ConnectContext ctx;
 
     @Before
@@ -45,7 +40,6 @@ public class DropTableStmtTest {
         noDbTbl = new TableName("", "table1");
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setCluster("testCluster");
-        MockedAuth.mockedAuth(auth);
     }
 
     @Test
