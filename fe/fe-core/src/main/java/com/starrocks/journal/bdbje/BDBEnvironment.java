@@ -210,14 +210,7 @@ public class BDBEnvironment {
                 break;
             } catch (InsufficientLogException insufficientLogEx) {
                 LOG.warn("insufficient exception, refresh and setup again", insufficientLogEx);
-                NetworkRestore restore = new NetworkRestore();
-                NetworkRestoreConfig config = new NetworkRestoreConfig();
-                config.setRetainLogFiles(false); // delete obsolete log files.
-                // Use the members returned by insufficientLogEx.getLogProviders()
-                // to select the desired subset of members and pass the resulting
-                // list as the argument to config.setLogProviders(), if the
-                // default selection of providers is not suitable.
-                restore.execute(insufficientLogEx, config);
+                refreshLog(insufficientLogEx);
                 close();
             } catch (RollbackException exception) {
                 LOG.warn("rollback exception, setup again", exception);
@@ -236,6 +229,17 @@ public class BDBEnvironment {
                 }
             }
         }
+    }
+
+    private void refreshLog(InsufficientLogException insufficientLogEx) {
+        NetworkRestore restore = new NetworkRestore();
+        NetworkRestoreConfig config = new NetworkRestoreConfig();
+        config.setRetainLogFiles(false); // delete obsolete log files.
+        // Use the members returned by insufficientLogEx.getLogProviders()
+        // to select the desired subset of members and pass the resulting
+        // list as the argument to config.setLogProviders(), if the
+        // default selection of providers is not suitable.
+        restore.execute(insufficientLogEx, config);
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
@@ -367,10 +371,7 @@ public class BDBEnvironment {
                 break;
             } catch (InsufficientLogException e) {
                 LOG.warn("catch insufficient log exception. refresh and setup again.", e);
-                NetworkRestore restore = new NetworkRestore();
-                NetworkRestoreConfig config = new NetworkRestoreConfig();
-                config.setRetainLogFiles(false);
-                restore.execute(e, config);
+                refreshLog(e);
                 close();
                 setup();
             } catch (RollbackException exception) {
