@@ -174,6 +174,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // Check curr_op finished again
                 if (curr_op->is_finished()) {
+                    // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
@@ -313,6 +314,11 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
+            if (_fragment_ctx->enable_resource_group()) {
+                if (_workgroup) {
+                    _workgroup->decr_num_queries();
+                }
+            }
             QueryContextManager::instance()->remove(query_id);
         }
     }

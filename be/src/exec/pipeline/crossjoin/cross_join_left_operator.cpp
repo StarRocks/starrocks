@@ -305,7 +305,6 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 
 Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _probe_chunk = chunk;
-
     _select_build_chunk(0, state);
 
     return Status::OK();
