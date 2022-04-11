@@ -2,32 +2,33 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.IntervalLiteral;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
-
-import java.time.LocalDateTime;
 
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
-    private LocalDateTime startTime;
+    private long startTime;
 
-    private IntervalLiteral intervalLiteral;
+    private long step;
 
-    public AsyncRefreshSchemeDesc(LocalDateTime startTime, IntervalLiteral intervalLiteral) {
-        this.type = RefreshType.ASYNC;
+    private String timeUnit;
+
+    public AsyncRefreshSchemeDesc(long startTime, long step, String timeUnit) {
         this.startTime = startTime;
-        this.intervalLiteral = intervalLiteral;
+        this.step = step;
+        this.timeUnit = timeUnit;
     }
 
-    public LocalDateTime getStartTime() {
+    public long getStartTime() {
         return startTime;
     }
 
-    public IntervalLiteral getIntervalLiteral() {
-        return intervalLiteral;
+    public long getStep() {
+        return step;
+    }
+
+    public String getTimeUnit() {
+        return timeUnit;
     }
 
     @Override
