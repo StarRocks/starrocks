@@ -118,7 +118,7 @@ class CACHELINE_ALIGNED ColumnPool {
             _pool->_clear_from_destructor_of_local_pool();
         }
 
-        inline T* get_object() {
+        T* get_object() {
             if (_curr_free.nfree == 0) {
                 if (!_pool->_pop_free_block(&_curr_free)) {
                     return nullptr;
@@ -135,7 +135,7 @@ class CACHELINE_ALIGNED ColumnPool {
             return obj;
         }
 
-        inline void return_object(T* ptr, size_t chunk_size) {
+        void return_object(T* ptr, size_t chunk_size) {
             if (UNLIKELY(column_reserved_size(ptr) > chunk_size)) {
                 delete ptr;
                 return;
@@ -165,7 +165,7 @@ class CACHELINE_ALIGNED ColumnPool {
             delete ptr;
         }
 
-        inline void release_large_columns(size_t limit) {
+        void release_large_columns(size_t limit) {
             size_t freed_bytes = 0;
             for (size_t i = 0; i < _curr_free.nfree; i++) {
                 ASAN_UNPOISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
@@ -179,7 +179,7 @@ class CACHELINE_ALIGNED ColumnPool {
             }
         }
 
-        static inline void delete_local_pool(void* arg) { delete (LocalPool*)arg; }
+        static void delete_local_pool(void* arg) { delete (LocalPool*)arg; }
 
     private:
         ColumnPool* _pool;
@@ -196,7 +196,7 @@ public:
     }
 
     template <bool AllocOnEmpty = true>
-    inline T* get_column() {
+    T* get_column() {
         LocalPool* lp = _get_or_new_local_pool();
         if (UNLIKELY(lp == nullptr)) {
             return nullptr;
@@ -208,7 +208,7 @@ public:
         return ptr;
     }
 
-    inline void return_column(T* ptr, size_t chunk_size) {
+    void return_column(T* ptr, size_t chunk_size) {
         LocalPool* lp = _get_or_new_local_pool();
         if (LIKELY(lp != nullptr)) {
             reset_column(ptr);
@@ -220,7 +220,7 @@ public:
 
     // Destroy some objects in the *central* free list.
     // Returns the number of bytes freed to tcmalloc.
-    inline size_t release_free_columns(float free_ratio) {
+    size_t release_free_columns(float free_ratio) {
         free_ratio = std::min<float>(free_ratio, 1.0);
         int64_t now = butil::gettimeofday_s();
         std::vector<DynamicFreeBlock*> tmp;
@@ -245,14 +245,14 @@ public:
 
     // Reduce memory usage on behalf of column if its memory usage is greater
     // than or equal to |limit|.
-    inline void release_large_columns(size_t limit) {
+    void release_large_columns(size_t limit) {
         LocalPool* lp = _local_pool;
         if (lp) {
             lp->release_large_columns(limit);
         }
     }
 
-    inline void clear_columns() {
+    void clear_columns() {
         LocalPool* lp = _local_pool;
         if (lp) {
             _local_pool = nullptr;
@@ -261,7 +261,7 @@ public:
         }
     }
 
-    inline ColumnPoolInfo describe_column_pool() {
+    ColumnPoolInfo describe_column_pool() {
         ColumnPoolInfo info;
         info.local_cnt = _nlocal.load(std::memory_order_relaxed);
         if (_free_blocks.empty()) {
@@ -276,7 +276,7 @@ public:
     }
 
 private:
-    static inline void _release_free_block(DynamicFreeBlock* blk) {
+    static void _release_free_block(DynamicFreeBlock* blk) {
         for (size_t i = 0; i < blk->nfree; i++) {
             T* p = blk->ptrs[i];
             ASAN_UNPOISON_MEMORY_REGION(p, sizeof(T));
@@ -285,7 +285,7 @@ private:
         free(blk);
     }
 
-    inline LocalPool* _get_or_new_local_pool() {
+    LocalPool* _get_or_new_local_pool() {
         LocalPool* lp = _local_pool;
         if (LIKELY(lp != nullptr)) {
             return lp;
@@ -301,7 +301,7 @@ private:
         return lp;
     }
 
-    inline void _clear_from_destructor_of_local_pool() {
+    void _clear_from_destructor_of_local_pool() {
         _local_pool = nullptr;
 
         // Do nothing if there are active threads.
@@ -322,7 +322,7 @@ private:
         release_free_columns(1.0);
     }
 
-    inline bool _push_free_block(const FreeBlock& blk) {
+    bool _push_free_block(const FreeBlock& blk) {
         DynamicFreeBlock* p =
                 (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
         if (UNLIKELY(p == nullptr)) {
@@ -337,7 +337,7 @@ private:
         return true;
     }
 
-    inline bool _pop_free_block(FreeBlock* blk) {
+    bool _pop_free_block(FreeBlock* blk) {
         if (_free_blocks.empty()) {
             return false;
         }

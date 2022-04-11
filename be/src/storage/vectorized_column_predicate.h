@@ -114,17 +114,17 @@ static inline T string_to_float(const Slice& s) {
 
 class ColumnPredicateAssignOp {
 public:
-    inline static uint8_t apply(uint8_t a, uint8_t b) { return b; }
+    static uint8_t apply(uint8_t a, uint8_t b) { return b; }
 };
 
 class ColumnPredicateAndOp {
 public:
-    inline static uint8_t apply(uint8_t a, uint8_t b) { return a & b; }
+    static uint8_t apply(uint8_t a, uint8_t b) { return a & b; }
 };
 
 class ColumnPredicateOrOp {
 public:
-    inline static uint8_t apply(uint8_t a, uint8_t b) { return a | b; }
+    static uint8_t apply(uint8_t a, uint8_t b) { return a | b; }
 };
 
 // ColumnPredicate represents a predicate that can only be applied to a column.
