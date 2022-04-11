@@ -11,7 +11,7 @@
 #include "storage/rowset/bloom_filter.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <FieldType field_type, typename ItemSet>
 class ColumnInPredicate : public ColumnPredicate {
@@ -453,4 +453,4 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type_info, ColumnId 
     }
 }
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

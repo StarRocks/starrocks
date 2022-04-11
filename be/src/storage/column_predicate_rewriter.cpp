@@ -24,7 +24,7 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
 void ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
@@ -429,4 +429,4 @@ Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* po
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

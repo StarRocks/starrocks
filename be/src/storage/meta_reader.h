@@ -17,7 +17,7 @@ class RuntimeState;
 
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Tablet;
 class SegmentMetaCollecter;
@@ -132,4 +132,4 @@ private:
     ObjectPool _obj_pool;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

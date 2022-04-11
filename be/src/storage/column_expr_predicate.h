@@ -15,7 +15,7 @@ class BitmapIndexIterator;
 class ObjectPool;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Column;
 
@@ -84,4 +84,4 @@ public:
     std::string debug_string() const override;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

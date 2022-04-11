@@ -4,7 +4,7 @@
 
 #include "thrift/protocol/TDebugProtocol.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TabletReaderParams::TabletReaderParams() = default;
 
@@ -24,4 +24,4 @@ std::string TabletReaderParams::to_string() const {
     return ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

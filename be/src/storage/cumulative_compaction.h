@@ -6,7 +6,7 @@
 
 #include "storage/compaction.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CumulativeCompaction : public Compaction {
 public:
@@ -29,4 +29,4 @@ private:
     int64_t _cumulative_rowset_size_threshold;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

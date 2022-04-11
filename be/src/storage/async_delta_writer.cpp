@@ -8,7 +8,7 @@
 #include "storage/async_delta_writer_executor.h"
 #include "storage/storage_engine.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     int r = bthread::execution_queue_stop(_queue_id);
@@ -109,4 +109,4 @@ void AsyncDeltaWriter::abort() {
     _writer->abort();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

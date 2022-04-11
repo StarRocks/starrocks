@@ -14,7 +14,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          ExprContext* expr_ctx, const SlotDescriptor* slot_desc)
@@ -263,4 +263,4 @@ std::string ColumnTruePredicate::debug_string() const {
     return "(ColumnTruePredicate)";
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

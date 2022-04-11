@@ -4,7 +4,7 @@
 
 #include "storage/compaction.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // BaseCompaction is derived from Compaction.
 // BaseCompaction will implements
@@ -33,4 +33,4 @@ private:
     Status _check_rowset_overlapping(const vector<RowsetSharedPtr>& rowsets);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

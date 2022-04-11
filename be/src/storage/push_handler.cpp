@@ -16,7 +16,7 @@
 #include "storage/storage_engine.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 PushBrokerReader::~PushBrokerReader() {
     _counter.reset();
@@ -604,4 +604,4 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
              << ", processed_rows" << num_rows;
     return st;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

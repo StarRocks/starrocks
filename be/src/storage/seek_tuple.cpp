@@ -8,7 +8,7 @@
 #include "column/datum_convert.h"
 #include "storage/convert_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<FieldType>& new_types) const {
     _schema.convert_to(&new_tuple->_schema, new_types);
@@ -32,4 +32,4 @@ std::string SeekTuple::debug_string() const {
     return ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

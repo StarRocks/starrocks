@@ -18,7 +18,7 @@ class TabletColumn;
 class TypeInfo;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Schema;
 
@@ -100,4 +100,4 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

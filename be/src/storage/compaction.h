@@ -15,7 +15,7 @@
 #include "storage/utils.h"
 #include "util/semaphore.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class DataDir;
 
@@ -84,4 +84,4 @@ private:
     Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

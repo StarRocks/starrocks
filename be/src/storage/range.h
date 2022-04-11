@@ -11,7 +11,7 @@
 #include "storage/rowset/common.h"
 #include "util/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Range represent a logical contiguous range of a segment file.
 // Range contains a inclusive start row number and an exclusive end row number.
@@ -370,4 +370,4 @@ inline std::ostream& operator<<(std::ostream& os, const SparseRange& range) {
     return (os << range.to_string());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -4,7 +4,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOTE: No short-circuit.
 void ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
@@ -112,4 +112,4 @@ std::string ConjunctivePredicates::debug_string() const {
     return ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -13,7 +13,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnPredicate;
 class RowsetReadOptions;
@@ -78,4 +78,4 @@ private:
     RowSourceMaskBuffer* _mask_buffer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

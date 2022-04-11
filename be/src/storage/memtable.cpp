@@ -18,7 +18,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
@@ -36,8 +36,8 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
     _vectorized_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                        FieldType::OLAP_FIELD_TYPE_TINYINT, false);
+        auto op_column = std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN,
+                                                            FieldType::OLAP_FIELD_TYPE_TINYINT, false);
         op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
         _vectorized_schema.append(op_column);
         _has_op_slot = true;
@@ -331,4 +331,4 @@ void MemTable::_sort_column_inc() {
     CHECK(st.ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

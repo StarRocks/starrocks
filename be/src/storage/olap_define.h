@@ -140,7 +140,7 @@ private:                                 \
 #define SAFE_DELETE_ARRAY(ptr) \
     do {                       \
         if (NULL != (ptr)) {   \
-            delete[](ptr);     \
+            delete[] (ptr);    \
             (ptr) = NULL;      \
         }                      \
     } while (0)

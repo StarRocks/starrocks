@@ -12,7 +12,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ColumnExprPredicate;
 
 // For dictionary columns, predicates can be rewriten
@@ -97,4 +97,4 @@ private:
                                                   std::vector<const ColumnExprPredicate*>* new_preds);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

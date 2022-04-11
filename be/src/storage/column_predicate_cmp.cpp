@@ -27,7 +27,7 @@ class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <FieldType field_type>
 using GeEval = std::greater_equal<typename CppTypeTraits<field_type>::CppType>;
@@ -784,4 +784,4 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
     }
 }
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

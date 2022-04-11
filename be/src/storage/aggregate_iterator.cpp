@@ -11,7 +11,7 @@
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * Pre-Aggregate Iterator
@@ -47,7 +47,9 @@ public:
 
     void close() override;
 
-    size_t merged_rows() const override { return _aggregator->merged_rows(); }
+    size_t merged_rows() const override {
+        return _aggregator->merged_rows();
+    }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
@@ -68,7 +70,9 @@ public:
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
+    Status do_get_next(Chunk* chunk) override {
+        return do_get_next(chunk, nullptr);
+    }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:
@@ -163,4 +167,4 @@ ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, bool is_key) {
     return std::make_shared<AggregateIterator>(std::move(child), 0, true, is_key);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

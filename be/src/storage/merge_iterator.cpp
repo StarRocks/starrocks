@@ -11,7 +11,7 @@
 #include "common/config.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
 inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const Chunk& rhs, size_t n) {
@@ -100,11 +100,15 @@ public:
 #endif
     }
 
-    ~MergeIterator() override { close(); }
+    ~MergeIterator() override {
+        close();
+    }
 
     void close() override;
 
-    size_t merged_rows() const override { return _merged_rows; }
+    size_t merged_rows() const override {
+        return _merged_rows;
+    }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
@@ -392,4 +396,4 @@ ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

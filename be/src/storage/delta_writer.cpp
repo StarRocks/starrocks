@@ -11,7 +11,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -355,4 +355,4 @@ const char* DeltaWriter::_state_name(State state) const {
     return "";
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

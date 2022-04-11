@@ -7,7 +7,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/disjunctive_predicates.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // DeletePredicates is a set of delete predicates of different versions.
 class DeletePredicates {
@@ -32,4 +32,4 @@ private:
     std::vector<VersionAndPredicate> _version_predicates;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

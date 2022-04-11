@@ -16,7 +16,7 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Semaphore Compaction::_concurrency_sem;
 
@@ -404,4 +404,4 @@ Status Compaction::check_correctness(const Statistics& stats) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

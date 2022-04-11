@@ -12,7 +12,7 @@
 #include "storage/column_aggregate_func.h"
 #include "storage/row_source_mask.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using CompareFN = void (*)(const Column* col, uint8_t* flags);
 
@@ -114,4 +114,4 @@ private:
     bool _is_key = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

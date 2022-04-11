@@ -6,7 +6,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UnionIterator final : public ChunkIterator {
 public:
@@ -102,4 +102,5 @@ ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children) {
     return std::make_shared<UnionIterator>(std::move(children));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
+

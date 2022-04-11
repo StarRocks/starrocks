@@ -13,7 +13,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/tablet.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min"};
 
@@ -354,4 +354,4 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

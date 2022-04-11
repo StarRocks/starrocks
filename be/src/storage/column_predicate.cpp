@@ -4,7 +4,7 @@
 
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 std::ostream& operator<<(std::ostream& os, PredicateType p) {
     switch (p) {
@@ -64,4 +64,4 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
     return os;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

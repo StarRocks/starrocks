@@ -12,7 +12,7 @@ DIAGNOSTIC_POP
 
 #include "storage/delta_writer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AsyncDeltaWriterRequest;
 class CommittedRowsetInfo;
@@ -99,4 +99,4 @@ public:
     virtual void run(const Status& st, const CommittedRowsetInfo* info) = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -8,7 +8,7 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)),
@@ -162,4 +162,4 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

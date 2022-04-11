@@ -14,7 +14,7 @@ namespace starrocks {
 class Status;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Chunk;
 
@@ -178,4 +178,4 @@ inline ChunkIteratorPtr timed_chunk_iterator(const ChunkIteratorPtr& iter, Runti
     return std::make_shared<TimedChunkIterator>(iter, counter);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

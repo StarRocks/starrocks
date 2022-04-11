@@ -16,7 +16,7 @@
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class RowsetMerger {
 public:
@@ -545,4 +545,4 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -4,7 +4,7 @@
 
 #include "storage/column_aggregator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // SUM
 template <typename ColumnType, typename StateType>
@@ -557,8 +557,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
     return nullptr;
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const vectorized::FieldPtr& field) {
     FieldType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method != OLAP_FIELD_AGGREGATION_NONE) {
@@ -583,8 +582,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
     }
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(const vectorized::FieldPtr& field) {
     FieldType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method == OLAP_FIELD_AGGREGATION_NONE) {
@@ -606,4 +604,4 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         }
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

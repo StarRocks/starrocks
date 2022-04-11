@@ -10,7 +10,7 @@
 #include "storage/update_manager.h"
 #include "util/stack_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 CompactionState::CompactionState() = default;
 
@@ -137,4 +137,4 @@ Status CompactionState::_do_load(Rowset* rowset) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

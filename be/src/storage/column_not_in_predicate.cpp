@@ -11,7 +11,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <FieldType field_type>
 class ColumnNotInPredicate : public ColumnPredicate {
@@ -333,4 +333,4 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     return nullptr;
 }
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

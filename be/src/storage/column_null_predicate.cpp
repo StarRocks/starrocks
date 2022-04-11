@@ -9,7 +9,7 @@
 #include "storage/rowset/bloom_filter.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnIsNullPredicate : public ColumnPredicate {
 public:
@@ -143,4 +143,4 @@ ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type_info, ColumnI
     return new ColumnNotNullPredicate(type_info, id);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

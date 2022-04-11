@@ -2,7 +2,7 @@
 
 #include "storage/empty_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class EmptyIterator final : public ChunkIterator {
 public:
@@ -28,4 +28,4 @@ ChunkIteratorPtr new_empty_iterator(const vectorized::Schema& schema, int chunk_
     return std::make_shared<EmptyIterator>(schema, chunk_size);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

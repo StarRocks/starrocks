@@ -12,11 +12,11 @@
 #include "storage/types.h"
 #include "util/metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     TypeInfoPtr type_info = get_type_info(c);
-    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
+    starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
@@ -24,15 +24,15 @@ vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c)
 }
 
 vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
-    starrocks::vectorized::Fields fields;
+    starrocks::Fields fields;
     for (ColumnId cid = 0; cid < schema.num_columns(); ++cid) {
         auto f = convert_field(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+        fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::Schema(std::move(fields));
 }
 
-starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
+starrocks::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
     FieldType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
@@ -45,7 +45,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     } else {
         type_info = get_type_info(type);
     }
-    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
+    starrocks::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
 
     if (type == OLAP_FIELD_TYPE_ARRAY) {
@@ -67,26 +67,26 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     return f;
 }
 
-starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema) {
-    starrocks::vectorized::Fields fields;
+starrocks::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema) {
+    starrocks::Fields fields;
     for (ColumnId cid = 0; cid < schema.num_columns(); ++cid) {
         auto f = convert_field_to_format_v2(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+        fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::Schema(std::move(fields));
 }
 
-starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
-                                                                       const std::vector<ColumnId>& cids) {
-    starrocks::vectorized::Fields fields;
+starrocks::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
+                                                           const std::vector<ColumnId>& cids) {
+    starrocks::Fields fields;
     for (ColumnId cid : cids) {
         auto f = convert_field_to_format_v2(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+        fields.emplace_back(std::make_shared<starrocks::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::Schema(std::move(fields));
 }
 
-ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema) {
+ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {
     ColumnId id = 0;
     for (const auto& field : schema.fields()) {
         id = std::max(id, field->id());
@@ -329,4 +329,4 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
