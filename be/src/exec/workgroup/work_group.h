@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
@@ -24,6 +25,8 @@ using seconds = std::chrono::seconds;
 using milliseconds = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
+using pipeline::QueryContext;
 
 class WorkGroup;
 class WorkGroupManager;
@@ -46,6 +49,7 @@ public:
     void init();
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    double get_mem_limit() const { return _memory_limit; }
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
     ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
 
@@ -116,6 +120,19 @@ public:
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _vacuum_ttl;
     }
+
+    int64_t total_cpu_cost() const { return _total_cpu_cost.load(); }
+    void incr_total_cpu_cost(int64_t cpu_cost) { _total_cpu_cost.fetch_add(cpu_cost); }
+
+    bool is_big_query(const QueryContext& query_context);
+    void incr_num_queries() { _num_queries++; }
+    void decr_num_queries() { _num_queries--; }
+    int64_t num_queries() const { return _num_queries; }
+
+    int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
+    int64_t big_query_cpu_core_second_limit() const { return _big_query_cpu_core_second_limit; }
+    int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
+
     // return true if current workgroup is removable:
     // 1. is already marked del
     // 2. no pending drivers exists
@@ -137,6 +154,11 @@ private:
     double _memory_limit;
     size_t _concurrency;
     WorkGroupType _type;
+
+    // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
+    int64_t _big_query_mem_limit = 500;
+    int64_t _big_query_scan_rows_limit = 0;
+    int64_t _big_query_cpu_core_second_limit = 0;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
@@ -160,7 +182,11 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
+    std::atomic<int64_t> _total_cpu_cost = 0;
+
     double _cpu_actual_use_ratio = 0;
+
+    std::atomic<int64_t> _num_queries = 0;
 };
 
 class WorkerOwnerManager {
@@ -210,7 +236,6 @@ public:
     size_t sum_cpu_limit() const { return _sum_cpu_limit; }
     void increment_cpu_runtime_ns(int64_t cpu_runtime_ns) { _sum_cpu_runtime_ns += cpu_runtime_ns; }
     int64_t sum_cpu_runtime_ns() const { return _sum_cpu_runtime_ns; }
-
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
