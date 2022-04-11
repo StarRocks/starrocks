@@ -1195,10 +1195,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (predicateList.isEmpty()) {
             return statistics;
         }
+
+        Statistics result = statistics;
         for (ScalarOperator predicate : predicateList) {
-            statistics = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
         }
-        return statistics;
+
+        // avoid sample statistics filter all data, save one rows least
+        if (statistics.getOutputRowCount() > 0 && result.getOutputRowCount() == 0) {
+            return Statistics.buildFrom(result).setOutputRowCount(1).build();
+        }
+        return result;
     }
 
     @Override
