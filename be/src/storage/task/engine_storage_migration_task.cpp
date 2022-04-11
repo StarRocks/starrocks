@@ -135,8 +135,8 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             // If there is queries running on the tablet, should return failure
             Status st = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
             if (st.ok() || st.is_not_found()) {
-                // remove tablet from shutdown tablets successully, and continue the migration
-                LOG(INFO) << "Successfully remove stale TABLET_SHUTDOWN tablet:" << _tablet_id
+                // delete tablet from shutdown tablets successully, and continue the migration
+                LOG(INFO) << "Successfully delete stale TABLET_SHUTDOWN tablet:" << _tablet_id
                           << " from path:" << _dest_store->path();
             } else {
                 LOG(WARNING) << "delete shutdown tablet failed. st:" << st;
@@ -163,21 +163,6 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
                       << "schema_hash_path: " << schema_hash_path;
             return Status::AlreadyExist(fmt::format("Path already exist. schema_hash_path: {}", schema_hash_path));
         }
-
-        // double check
-        /*
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
-        st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
-        if (st.ok()) {
-            LOG(WARNING) << "tablet_meta already exist. tablet:" << tablet->full_name()
-                             << ", tablet state:" << new_tablet_meta->tablet_state()
-                             << ", dest path:" << _dest_store->path() << ", source path:" << tablet->data_dir()->path();
-            return Status::AlreadyExist(fmt::format("tablet_meta already exist. tablet: {}", tablet->full_name()));
-        } else if (!st.is_not_found()) {
-            LOG(WARNING) << "tablet_meta not found. tablet: " << tablet->full_name();
-            return Status::NotFound(fmt::format("tablet_meta not found. tablet: {}", tablet->full_name()));
-        }
-        */
 
         st = FileUtils::create_dir(schema_hash_path);
         if (!st.ok()) {
