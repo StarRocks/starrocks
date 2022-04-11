@@ -52,6 +52,8 @@ private:
 
 static Status io_error(const std::string& context, int err_number) {
     switch (err_number) {
+    case 0:
+        return Status::OK();
     case ENOENT:
         return Status::NotFound(fmt::format("{}: {}", context, std::strerror(err_number)));
     case EEXIST:
@@ -614,8 +616,9 @@ public:
 
     Status create_dir_recursive(const std::string& dirname) override {
         std::error_code ec;
-        auto r = std::filesystem::create_directories(dirname, ec);
-        if (r == static_cast<std::uintmax_t>(-1)) {
+        // If `dirname` already exist and is a directory, the return value would be false and ec.value() would be 0
+        (void)std::filesystem::create_directories(dirname, ec);
+        if (ec.value() != 0) {
             return io_error(fmt::format("create {} recursive", dirname), ec.value());
         }
         return Status::OK();
@@ -631,8 +634,8 @@ public:
 
     Status delete_dir_recursive(const std::string& dirname) override {
         std::error_code ec;
-        auto r = std::filesystem::remove_all(dirname, ec);
-        if (r == static_cast<std::uintmax_t>(-1)) {
+        (void)std::filesystem::remove_all(dirname, ec);
+        if (ec.value() != 0) {
             return io_error(fmt::format("remove {} recursive", dirname), ec.value());
         }
         return Status::OK();
