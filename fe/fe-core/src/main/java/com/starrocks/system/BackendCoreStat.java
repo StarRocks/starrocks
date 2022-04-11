@@ -43,4 +43,9 @@ public class BackendCoreStat {
         cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, newAvg);
         return newAvg;
     }
+
+    public static int getDefaultDOP() {
+        int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        return Math.max(1, avgNumOfCores / 2);
+    }
 }

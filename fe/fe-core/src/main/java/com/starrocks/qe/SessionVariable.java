@@ -687,8 +687,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop * parallelExecInstanceNum;
             }
-            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
-            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+            return BackendCoreStat.getDefaultDOP();
         } else {
             return parallelExecInstanceNum;
         }

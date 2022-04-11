@@ -1560,9 +1560,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1575,9 +1573,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1590,8 +1586,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
-            fragment.setDopEstimated();
+            fragment.preferInstanceParallel();
         }
 
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
