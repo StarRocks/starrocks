@@ -913,6 +913,45 @@ Status TabletManager::start_trash_sweep() {
     return Status::OK();
 }
 
+Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
+    DroppedTabletInfo to_delete;
+    {
+        std::shared_lock l(_shutdown_tablets_lock);
+        size_t num = _shutdown_tablets.count(tablet_id);
+        if (num == 0) {
+            return Status::NotFound(fmt::format("tablet: {} not found in shutdown tables", tablet_id));
+        }
+        DroppedTabletInfo& info = _shutdown_tablets[tablet_id];
+        if (info.tablet.use_count() != 1) {
+            // there is usage, can not delete it
+            return Status::NotSupported(fmt::format("used in somewhere, use count:{}", info.tablet.use_count()));
+        }
+        to_delete = info;
+    }
+    auto& tablet = to_delete.tablet;
+    Status st = Status::OK();
+    if (to_delete.flag == kMoveFilesToTrash) {
+        st = _move_tablet_directories_to_trash(tablet);
+    } else if (to_delete.flag == kDeleteFiles) {
+        st = _remove_tablet_directories(tablet);
+    } else {
+        LOG(WARNING) << "Invalid flag " << to_delete.flag;
+        return Status::NotFound(fmt::format("invalid flag: {}", to_delete.flag));
+    }
+
+    if (st.ok() || st.is_not_found()) {
+        LOG(INFO) << ((to_delete.flag == kMoveFilesToTrash) ? "Moved " : " Removed ") << tablet->tablet_id_path();
+    } else {
+        LOG(WARNING) << "Fail to remove or move " << tablet->tablet_id_path() << " :" << st;
+        return st;
+    }
+    st = _remove_tablet_meta(tablet);
+    LOG_IF(ERROR, !st.ok()) << "Fail to remove tablet meta of tablet " << tablet->tablet_id() << ", status:" << st;
+    std::unique_lock l(_shutdown_tablets_lock);
+    _shutdown_tablets.erase(tablet_id);
+    return Status::OK();
+}
+
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
     TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
