@@ -131,9 +131,6 @@ public abstract class AstVisitor<R, C> {
     public R visitShowStatement(ShowStmt statement, C context) {
         return visitStatement(statement, context);
     }
-    public R visitDropStatement(DdlStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     public R visitShowTableStmt(ShowTableStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -148,7 +145,7 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropTableStmt(DropTableStmt statement, C context) {
-        return visitDropStatement(statement, context);
+        return visitStatement(statement, context);
     }
 
     public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {
