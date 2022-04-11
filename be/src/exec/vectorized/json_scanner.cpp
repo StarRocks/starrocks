@@ -607,8 +607,8 @@ Status JsonReader::_read_and_parse_json() {
     length = nread;
 
 #else
-    // TODO: remove dynamic_cast
-    StreamPipeSequentialFile* stream_file = down_cast<StreamPipeSequentialFile*>(_file->stream().get());
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
     RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
     if (length == 0) {
