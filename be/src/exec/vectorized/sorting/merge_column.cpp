@@ -329,7 +329,7 @@ public:
     static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
         size_t start = left.range.first + right.range.first;
         size_t end = left.range.second + right.range.second;
-        std::copy(perm.begin() + start, perm.end() + end, perm.begin());
+        std::copy(perm.begin() + start, perm.begin() + end, perm.begin());
         perm.resize(end - start);
     }
 
