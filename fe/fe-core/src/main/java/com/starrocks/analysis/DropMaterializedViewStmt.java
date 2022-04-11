@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -79,6 +80,14 @@ public class DropMaterializedViewStmt extends DdlStmt {
         } else {
             return dbMvName.getDb();
         }
+    }
+
+    public TableName getDbMvName() {
+        return dbMvName;
+    }
+
+    public TableName getDbTblName() {
+        return dbTblName;
     }
 
     @Override
@@ -153,5 +162,10 @@ public class DropMaterializedViewStmt extends DdlStmt {
             stringBuilder.append(" IN `").append(dbTblName).append("`");
         }
         return stringBuilder.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropMaterializedViewStatement(this, context);
     }
 }
