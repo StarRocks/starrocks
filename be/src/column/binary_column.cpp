@@ -609,7 +609,6 @@ bool BinaryColumnBase<T>::has_large_column() const {
     }
 }
 
-
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
 
