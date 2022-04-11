@@ -27,6 +27,7 @@
 
 #include "env/env.h"
 #include "gen_cpp/Types_constants.h"
+#include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
@@ -94,10 +95,8 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 
     StatusOr<std::string> res;
     if (request.__isset.missing_version) {
-        std::stringstream ss;
-        copy(request.missing_version.begin(), request.missing_version.end(), std::ostream_iterator<int64_t>(ss, ","));
-        LOG(INFO) << "make incremental snapshot tablet_id:" << request.tablet_id << " version:" << ss.str()
-                  << " timeout:" << timeout_s;
+        LOG(INFO) << "make incremental snapshot tablet_id:" << request.tablet_id
+                  << " version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;
         res = snapshot_incremental(tablet, request.missing_version, timeout_s);
     } else if (request.__isset.version) {
         LOG(INFO) << "make full snapshot tablet_id:" << request.tablet_id << " version:" << request.version
