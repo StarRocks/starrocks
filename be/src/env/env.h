@@ -14,6 +14,8 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -87,6 +89,7 @@ public:
     virtual StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                                       const std::string& fname) = 0;
 
+    // TODO: remove this API.
     // Creates a new readable and writable file. If a file with the same name
     // already exists on disk, it is deleted.
     //
@@ -94,6 +97,7 @@ public:
     // while others are only safe for access by one thread at a time.
     virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const std::string& fname) = 0;
 
+    // TODO: remove this API.
     // Like the previous new_random_rw_file, but allows options to be specified.
     virtual StatusOr<std::unique_ptr<RandomRWFile>> new_random_rw_file(const RandomRWFileOptions& opts,
                                                                        const std::string& fname) = 0;
@@ -202,80 +206,38 @@ struct RandomRWFileOptions {
     Env::OpenMode mode = Env::CREATE_OR_OPEN_WITH_TRUNCATE;
 };
 
-// A file abstraction for reading sequentially through a file
-class SequentialFile {
+// A `SequentialFile` is an `io::InputStream` with a name.
+class SequentialFile final : public io::InputStreamWrapper {
 public:
-    SequentialFile() = default;
-    virtual ~SequentialFile() = default;
+    explicit SequentialFile(std::shared_ptr<io::InputStream> stream, std::string name)
+            : io::InputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _name(std::move(name)) {}
 
-    // Read up to "size" bytes from the file.
-    // Copies the resulting data into "data".
-    //
-    // On success, return the number of bytes read, otherwise return
-    // an error and the contents of "result" are invalid.
-    //
-    // REQUIRES: External synchronization
-    virtual StatusOr<int64_t> read(void* data, int64_t size) = 0;
+    const std::string& filename() const { return _name; }
 
-    // Skip "n" bytes from the file. This is guaranteed to be no
-    // slower that reading the same data, but may be faster.
-    //
-    // If end of file is reached, skipping will stop at the end of the
-    // file, and Skip will return OK.
-    //
-    // REQUIRES: External synchronization
-    virtual Status skip(uint64_t n) = 0;
+    std::shared_ptr<io::InputStream> stream() { return _stream; }
 
-    // Returns the filename provided when the SequentialFile was constructed.
-    virtual const std::string& filename() const = 0;
-
-    // Get statistics about the reads which this SequentialFile has done.
-    // If the SequentialFile implementation doesn't support statistics, a null pointer or
-    // an empty statistics is returned.
-    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
+private:
+    std::shared_ptr<io::InputStream> _stream;
+    std::string _name;
 };
 
-class RandomAccessFile {
+// A `RandomAccessFile` is an `io::SeekableInputStream` with a name.
+class RandomAccessFile final : public io::SeekableInputStreamWrapper {
 public:
-    RandomAccessFile() = default;
-    virtual ~RandomAccessFile() = default;
+    explicit RandomAccessFile(std::shared_ptr<io::SeekableInputStream> stream, std::string name)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _name(std::move(name)) {}
 
-    // Read up to "size" bytes from the file.
-    // Copies the resulting data into "data".
-    //
-    // Return the number of bytes read or error.
-    virtual StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const = 0;
+    std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    // Read exactly the number of "size" bytes data from given position "offset".
-    // This method does not return the number of bytes read because either
-    // (1) the entire "size" bytes is read
-    // (2) the end of the stream is reached
-    // If the eof is reached, an IO error is returned.
-    virtual Status read_at_fully(int64_t offset, void* data, int64_t size) const = 0;
+    const std::string& filename() const { return _name; }
 
-    // Reads up to the "results" aggregate size, based on each Slice's "size",
-    // from the file starting at 'offset'. The Slices must point to already-allocated
-    // buffers for the data to be written to.
-    //
-    // If an error was encountered, returns a non-OK status.
-    //
-    // This method will internally retry on EINTR and "short reads" in order to
-    // fully read the requested number of bytes. In the event that it is not
-    // possible to read exactly 'length' bytes, an IOError is returned.
-    //
-    // Safe for concurrent use by multiple threads.
-    virtual Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const = 0;
-
-    // Return the size of this file.
-    virtual StatusOr<uint64_t> get_size() const = 0;
-
-    // Return name of this file
-    virtual const std::string& filename() const = 0;
-
-    // Get statistics about the reads which this RandomAccessFile has done.
-    // If the RandomAccessFile implementation doesn't support statistics, a null pointer or
-    // an empty statistics is returned.
-    virtual StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() { return nullptr; }
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    std::string _name;
 };
 
 // A file abstraction for sequential writing.  The implementation
@@ -334,6 +296,7 @@ private:
 };
 
 // A file abstraction for random reading and writing.
+// TODO: remove this class
 class RandomRWFile {
 public:
     enum FlushMode { FLUSH_SYNC, FLUSH_ASYNC };
@@ -357,54 +320,5 @@ public:
     virtual StatusOr<uint64_t> get_size() const = 0;
     virtual const std::string& filename() const = 0;
 };
-
-class NumericStatistics {
-public:
-    NumericStatistics() = default;
-    ~NumericStatistics() = default;
-
-    NumericStatistics(const NumericStatistics&) = default;
-    NumericStatistics& operator=(const NumericStatistics&) = default;
-    NumericStatistics(NumericStatistics&&) = default;
-    NumericStatistics& operator=(NumericStatistics&&) = default;
-
-    void append(std::string_view name, int64_t value);
-
-    int64_t size() const;
-
-    const std::string& name(int64_t idx) const;
-
-    int64_t value(int64_t idx) const;
-
-    void reserve(int64_t size);
-
-private:
-    std::vector<std::string> _names;
-    std::vector<int64_t> _values;
-};
-
-inline void NumericStatistics::append(std::string_view name, int64_t value) {
-    _names.emplace_back(name);
-    _values.emplace_back(value);
-}
-
-inline int64_t NumericStatistics::size() const {
-    return static_cast<int64_t>(_names.size());
-}
-
-inline const std::string& NumericStatistics::name(int64_t idx) const {
-    assert(idx >= 0 && idx < size());
-    return _names[idx];
-}
-
-inline int64_t NumericStatistics::value(int64_t idx) const {
-    assert(idx >= 0 && idx < size());
-    return _values[idx];
-}
-
-inline void NumericStatistics::reserve(int64_t size) {
-    _names.reserve(size);
-    _values.reserve(size);
-}
 
 } // namespace starrocks

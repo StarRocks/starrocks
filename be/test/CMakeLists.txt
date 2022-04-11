@@ -20,7 +20,6 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/s3_uri_test.cpp
-        ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
@@ -119,10 +118,12 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./io/array_input_stream_test.cpp
+        ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
+        ./io/seekable_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp

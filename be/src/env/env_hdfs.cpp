@@ -2,69 +2,66 @@
 
 #include "env/env_hdfs.h"
 
+#include <fmt/format.h>
 #include <hdfs/hdfs.h>
 
 #include <atomic>
 
-#include "fmt/format.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "util/hdfs_util.h"
 
 namespace starrocks {
 
-// ==================================  HdfsRandomAccessFile  ==========================================
+// ==================================  HdfsInputStream  ==========================================
 
+// TODO: move this class to directory 'be/srcio/'
 // class for remote read hdfs file
 // Now this is not thread-safe.
-class HdfsRandomAccessFile : public RandomAccessFile {
+class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsRandomAccessFile(hdfsFS fs, hdfsFile file, const std::string& file_name)
-            : _fs(fs), _file(file), _file_name(file_name), _file_size(0) {}
+    HdfsInputStream(hdfsFS fs, hdfsFile file, const std::string& file_name)
+            : _fs(fs), _file(file), _file_name(file_name), _offset(0), _file_size(0) {}
 
-    ~HdfsRandomAccessFile() override;
+    ~HdfsInputStream() override;
 
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    StatusOr<uint64_t> get_size() const override;
-    const std::string& filename() const override { return _file_name; }
-    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override;
+    StatusOr<int64_t> read(void* data, int64_t size) override;
+    StatusOr<int64_t> get_size() override;
+    StatusOr<int64_t> position() override { return _offset; }
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
+    Status seek(int64_t offset) override;
 
 private:
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
-    mutable uint64_t _file_size;
+    int64_t _offset;
+    int64_t _file_size;
 };
 
-HdfsRandomAccessFile::~HdfsRandomAccessFile() {
+HdfsInputStream::~HdfsInputStream() {
     int r = hdfsCloseFile(_fs, _file);
     PLOG_IF(ERROR, r != 0) << "close " << _file_name << " failed";
 }
 
-StatusOr<int64_t> HdfsRandomAccessFile::read_at(int64_t offset, void* data, int64_t size) const {
+StatusOr<int64_t> HdfsInputStream::read(void* data, int64_t size) {
     if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
-        return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
+        size = std::numeric_limits<tSize>::max();
     }
-    tSize r = hdfsPread(_fs, _file, offset, data, static_cast<tSize>(size));
-    if (UNLIKELY(r == -1)) {
+    tSize r = hdfsPread(_fs, _file, _offset, data, static_cast<tSize>(size));
+    if (r == -1) {
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _file_name, get_hdfs_err_msg()));
     }
+    _offset += r;
     return r;
 }
 
-Status HdfsRandomAccessFile::read_at_fully(int64_t offset, void* data, int64_t size) const {
-    if (UNLIKELY(size > std::numeric_limits<tSize>::max())) {
-        return Status::NotSupported("read size is greater than std::numeric_limits<tSize>::max()");
-    }
-    tSize r = hdfsPreadFully(_fs, _file, offset, data, static_cast<tSize>(size));
-    if (UNLIKELY(r == -1)) {
-        return Status::IOError(fmt::format("fail to hdfsPreadFully {}: {}", _file_name, get_hdfs_err_msg()));
-    }
+Status HdfsInputStream::seek(int64_t offset) {
+    if (offset < 0) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
+    _offset = offset;
     return Status::OK();
 }
 
-StatusOr<uint64_t> HdfsRandomAccessFile::get_size() const {
+StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
         auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
         if (UNLIKELY(info == nullptr)) {
@@ -76,11 +73,11 @@ StatusOr<uint64_t> HdfsRandomAccessFile::get_size() const {
     return _file_size;
 }
 
-StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_statistics() {
+StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     struct hdfsReadStatistics* hdfs_statistics = nullptr;
     auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
     if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
-    auto statistics = std::make_unique<NumericStatistics>();
+    auto statistics = std::make_unique<io::NumericStatistics>();
     statistics->reserve(4);
     statistics->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
     statistics->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
@@ -88,14 +85,6 @@ StatusOr<std::unique_ptr<NumericStatistics>> HdfsRandomAccessFile::get_numeric_s
     statistics->append("TotalZeroCopyBytesRead", hdfs_statistics->totalZeroCopyBytesRead);
     hdfsFileFreeReadStatistics(hdfs_statistics);
     return std::move(statistics);
-}
-
-Status HdfsRandomAccessFile::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
-    for (size_t i = 0; i < res_cnt; i++) {
-        RETURN_IF_ERROR(HdfsRandomAccessFile::read_at_fully(offset, res[i].data, res[i].size));
-        offset += res[i].size;
-    }
-    return Status::OK();
 }
 
 class EnvHdfs : public Env {
@@ -207,7 +196,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvHdfs::new_random_access_file(cons
     if (file == nullptr) {
         return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
     }
-    return std::make_unique<HdfsRandomAccessFile>(handle.hdfs_fs, file, path);
+    auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
+    return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
 std::unique_ptr<Env> new_env_hdfs() {

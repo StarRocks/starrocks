@@ -1,20 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "env/compressed_file.h"
+#include "io/compressed_input_stream.h"
 
 #include <gtest/gtest.h>
 
 #include <memory>
 
-#include "env/env_memory.h"
 #include "exec/decompressor.h"
+#include "io/string_input_stream.h"
 #include "testutil/assert.h"
 #include "util/block_compression.h"
 #include "util/random.h"
 
-namespace starrocks {
+namespace starrocks::io {
 
-class CompressedSequentialFileTest : public ::testing::Test {
+class CompressedInputStreamTest : public ::testing::Test {
 protected:
     struct TestCase {
         Slice data;
@@ -32,7 +32,7 @@ protected:
         return s;
     }
 
-    std::shared_ptr<SequentialFile> LZ4F_compress_to_file(const Slice& content) {
+    std::shared_ptr<InputStream> LZ4F_compress_to_file(const Slice& content) {
         const BlockCompressionCodec* codec = nullptr;
         CHECK(get_block_compression_codec(LZ4_FRAME, &codec).ok());
         size_t max_compressed_len = codec->max_compressed_len(content.size);
@@ -40,7 +40,7 @@ protected:
         Slice buff(compressed_data);
         CHECK(codec->compress(content, &buff).ok());
         compressed_data.resize(buff.size);
-        return std::shared_ptr<SequentialFile>(new StringSequentialFile(std::move(compressed_data)));
+        return std::shared_ptr<InputStream>(new StringInputStream(std::move(compressed_data)));
     }
 
     std::shared_ptr<Decompressor> LZ4F_decompressor() {
@@ -50,8 +50,8 @@ protected:
     }
 
     void test(const TestCase& t) {
-        auto f = std::make_shared<CompressedSequentialFile>(LZ4F_compress_to_file(t.data), LZ4F_decompressor(),
-                                                            t.compressed_buff_len);
+        auto f = std::make_shared<CompressedInputStream>(LZ4F_compress_to_file(t.data), LZ4F_decompressor(),
+                                                         t.compressed_buff_len);
         std::string decompressed_data;
         std::string own_buff(t.read_buff_len, '\0');
         decompressed_data.reserve(t.data.size);
@@ -66,7 +66,7 @@ protected:
 };
 
 // NOLINTNEXTLINE
-TEST_F(CompressedSequentialFileTest, test_LZ4F) {
+TEST_F(CompressedInputStreamTest, test_LZ4F) {
     const size_t K1 = 1024;
     const size_t M1 = 1024 * 1024;
     const std::string STR_1K = random_string(K1);
@@ -87,4 +87,4 @@ TEST_F(CompressedSequentialFileTest, test_LZ4F) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::io
