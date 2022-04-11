@@ -2,6 +2,7 @@
 
 package com.starrocks.external.iceberg.cost;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -38,7 +39,7 @@ public class IcebergMetaCache {
 
     // statistic cache
     // IcebergTableKey => IcebergFileStats
-    LoadingCache<IcebergTableKey, IcebergFileStats> tableStatsCache;
+    protected LoadingCache<IcebergTableKey, IcebergFileStats> tableStatsCache;
 
     public IcebergMetaCache(Executor executor) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
@@ -86,20 +87,23 @@ public class IcebergMetaCache {
         return calculator.makeColumnStatistics(icebergFileStats, columns, colRefToColumnMetaMap);
     }
 
-    private IcebergFileStats getIcebergFileStats(Table table,
-                                                 IcebergTableStatisticCalculator calculator) {
+    @VisibleForTesting
+    public IcebergFileStats getIcebergFileStats(Table table,
+                                                IcebergTableStatisticCalculator calculator) {
         IcebergFileStats icebergFileStats = calculator.generateIcebergFileStats(
                 new ArrayList<>(), table.schema().columns()
         );
         return icebergFileStats;
     }
 
-    private IcebergTableStatisticCalculator getCalculator(Table table) {
+    @VisibleForTesting
+    public IcebergTableStatisticCalculator getCalculator(Table table) {
         IcebergTableStatisticCalculator calculator = new IcebergTableStatisticCalculator(table);
         return calculator;
     }
 
-    private org.apache.iceberg.Table getTable(IcebergTableKey key) {
+    @VisibleForTesting
+    public org.apache.iceberg.Table getTable(IcebergTableKey key) {
         Resource resource = Catalog.getCurrentCatalog().getResourceMgr()
                 .getResource(key.getResourceName());
         IcebergResource icebergResource = (IcebergResource) resource;
