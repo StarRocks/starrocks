@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/convert_helper.h"
+#include "storage/convert_helper.h"
 
 #include <gtest/gtest.h>
 #include <runtime/decimalv3.h>
@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "storage/chunk_helper.h"
 #include "storage/types.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {

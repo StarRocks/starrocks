@@ -3,12 +3,12 @@
 #include "storage/compaction_utils.h"
 
 #include "storage/base_and_cumulative_compaction_policy.h"
+#include "storage/row_source_mask.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/row_source_mask.h"
 
 namespace starrocks {
 

@@ -9,7 +9,7 @@
 #include "runtime/global_dicts.h"
 #include "storage/fs/fs_util.h"
 #include "storage/olap_common.h"
-#include "storage/vectorized/seek_range.h"
+#include "storage/seek_range.h"
 
 namespace starrocks {
 class Conditions;

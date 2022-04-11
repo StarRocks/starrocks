@@ -5,7 +5,7 @@
 
 #include "column/column_helper.h"
 #include "gtest/gtest.h"
-#include "storage/vectorized/column_aggregate_func.h"
+#include "storage/column_aggregate_func.h"
 
 namespace starrocks::vectorized {
 

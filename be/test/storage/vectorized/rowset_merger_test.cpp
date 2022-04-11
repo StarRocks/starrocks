@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/rowset_merger.h"
+#include "storage/rowset_merger.h"
 
 #include <gtest/gtest.h>
 
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_helper.h"
+#include "storage/empty_iterator.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
@@ -12,10 +14,8 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
+#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/empty_iterator.h"
-#include "storage/vectorized/union_iterator.h"
 #include "testutil/assert.h"
 
 namespace starrocks::vectorized {

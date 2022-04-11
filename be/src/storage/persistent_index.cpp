@@ -6,13 +6,13 @@
 #include <numeric>
 
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/fs_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"

@@ -4,14 +4,14 @@
 
 #include <mutex>
 
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
+#include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/tablet_reader.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 

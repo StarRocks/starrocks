@@ -2,11 +2,11 @@
 
 #include "rowset_writer_adapter.h"
 
+#include "storage/chunk_helper.h"
+#include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/type_utils.h"
 #include "storage/uint24.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/convert_helper.h"
-#include "storage/vectorized/type_utils.h"
 
 namespace starrocks::vectorized {
 
