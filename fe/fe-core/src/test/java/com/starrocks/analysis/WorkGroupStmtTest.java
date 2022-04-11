@@ -94,6 +94,9 @@ public class WorkGroupStmtTest {
             "    'cpu_core_limit' = '25',\n" +
             "    'mem_limit' = '80%',\n" +
             "    'concurrency_limit' = '10',\n" +
+            "   'big_query_mem_limit'='1024',\n" +
+            "   'big_query_scan_rows_limit'='1024',\n" +
+            "   'big_query_cpu_core_second_limit'='1024',\n" +
             "    'type' = 'normal'\n" +
             ");";
 
@@ -146,16 +149,16 @@ public class WorkGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource_groups all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|10|20.0%|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|10|20.0%|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
-                "rg1|10|20.0%|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
-                "rg1|10|20.0%|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|50.0%|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
-                "rg2|30|50.0%|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
-                "rg2|30|50.0%|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
-                "rg4|25|80.0%|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
+                "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -337,8 +340,8 @@ public class WorkGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|10|20.0%|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg3|32|80.0%|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -369,6 +372,9 @@ public class WorkGroupStmtTest {
                 "WITH (\n" +
                 "   'mem_limit'='41%',\n" +
                 "   'concurrency_limit'='23',\n" +
+                "   'big_query_mem_limit'='1024',\n" +
+                "   'big_query_scan_rows_limit'='1024',\n" +
+                "   'big_query_cpu_core_second_limit'='1024',\n" +
                 "   'cpu_core_limit'='13'\n" +
                 ")";
         String[] sqls = new String[]{alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql};
@@ -378,16 +384,16 @@ public class WorkGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("SHOW RESOURCE_GROUPS all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|21|20.0%|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|21|20.0%|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
-                "rg1|21|20.0%|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
-                "rg1|21|20.0%|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|37.0%|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
-                "rg2|30|37.0%|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
-                "rg2|30|37.0%|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
-                "rg4|13|41.0%|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
+                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
+                "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }

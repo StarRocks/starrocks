@@ -127,6 +127,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
+
+        // init query context
+        if (!existing_query_ctx) {
+            _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
+            _query_ctx->init_query_begin_time();
+            int64_t mem_limit = wg->big_query_mem_limit();
+            if (mem_limit && mem_limit < wg->mem_tracker()->limit()) {
+                _query_ctx->init_mem_tracker(wg->mem_tracker(), mem_limit);
+            }
+
+            wg->incr_num_queries();
+        }
     }
 
     int32_t degree_of_parallelism = 1;
@@ -149,7 +161,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     auto* runtime_state = _fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
+
+    if (wg) {
+        if (_query_ctx->mem_tracker() != nullptr) {
+            runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker());
+        } else {
+            runtime_state->init_mem_trackers(query_id, wg->mem_tracker());
+        }
+    } else {
+        runtime_state->init_mem_trackers(query_id, nullptr);
+    }
     runtime_state->set_be_number(backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
