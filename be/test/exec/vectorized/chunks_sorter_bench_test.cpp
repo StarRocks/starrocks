@@ -387,9 +387,9 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                         right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; },
                         &sort_exprs, &asc_arr, &null_first, true);
                 SortedChunkStream merged;
-                Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
+                Status st = merge_sorted_cursor_two_way(left, right, [&](ChunkUniquePtr chunk) {
                     CHECK(!chunk->is_empty());
-                    merged.append_chunk(chunk);
+                    merged.append_chunk(std::move(chunk));
                     return Status::OK();
                 });
                 CHECK(st.ok());

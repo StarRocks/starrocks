@@ -143,9 +143,9 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
                             &asc_arr, &null_first, true);
     ChunkCursor right_cursor(right_chunk_supplier, right_chunk_probe_supplier, right_chunk_has_supplier, &sort_exprs,
                              &asc_arr, &null_first, true);
-    std::vector<ChunkPtr> output_chunks;
-    ChunkConsumer consumer = [&](Chunk* chunk) {
-        output_chunks.push_back(ChunkPtr(chunk));
+    std::vector<ChunkUniquePtr> output_chunks;
+    ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
+        output_chunks.push_back(std::move(chunk));
         return Status::OK();
     };
     merge_sorted_cursor_two_way(left_cursor, right_cursor, consumer);
@@ -243,10 +243,9 @@ TEST(MergeTest, merge_sorted_stream) {
                 right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; }, &sort_exprs,
                 &asc_arr, &null_first, true);
         SortedChunkStream merged;
-        Status st = merge_sorted_cursor_two_way(left, right, [&](Chunk* chunk) {
+        Status st = merge_sorted_cursor_two_way(left, right, [&](ChunkUniquePtr chunk) {
             CHECK(!chunk->is_empty());
-            merged.append_chunk(chunk);
-            fmt::print("merge chunk {} rows\n", chunk->num_rows());
+            merged.append_chunk(std::move(chunk));
             return Status::OK();
         });
         fmt::print("generate merged stream with {} chunks and {} rows\n", merged.chunks.size(), merged.num_rows());

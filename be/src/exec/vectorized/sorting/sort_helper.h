@@ -318,7 +318,7 @@ struct SortedRun {
         range = {};
     }
     ChunkUniquePtr clone_chunk() {
-        ChunkUniquePtr cloned = chunk->clone_empty(num_rows());
+        ChunkUniquePtr cloned = chunk->clone_empty(num_rows() - range.first);
         cloned->append(*chunk, range.first, num_rows());
         return cloned;
     }

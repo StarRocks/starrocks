@@ -241,16 +241,16 @@ public:
             if (left_chunk.empty()) {
                 // TODO: avoid copy
                 if (right_chunk.num_rows() == right_chunk.chunk->num_rows()) {
-                    RETURN_IF_ERROR(output(right_chunk.chunk->clone_unique().release()));
+                    RETURN_IF_ERROR(output(right_chunk.chunk->clone_unique()));
                 } else {
-                    RETURN_IF_ERROR(output(right_chunk.clone_chunk().release()));
+                    RETURN_IF_ERROR(output(right_chunk.clone_chunk()));
                 }
                 right_chunk.reset();
             } else if (right_chunk.empty()) {
                 if (left_chunk.num_rows() == left_chunk.chunk->num_rows()) {
-                    RETURN_IF_ERROR(output(left_chunk.chunk->clone_unique().release()));
+                    RETURN_IF_ERROR(output(left_chunk.chunk->clone_unique()));
                 } else {
-                    RETURN_IF_ERROR(output(left_chunk.clone_chunk().release()));
+                    RETURN_IF_ERROR(output(left_chunk.clone_chunk()));
                 }
                 left_chunk.reset();
             } else {
@@ -269,7 +269,6 @@ public:
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
                     append_by_permutation(merged.get(), {left_chunk.chunk, right_1.chunk}, perm);
 
-
                     left_chunk.reset();
                     right_chunk = right_2;
 #ifndef NDEBUG
@@ -280,7 +279,7 @@ public:
 #endif
 
                     // Output
-                    RETURN_IF_ERROR(output(merged.release()));
+                    RETURN_IF_ERROR(output(std::move(merged)));
                 } else {
                     // Cutoff left by right tail
                     size_t left_cut = cutoff_run(left_chunk, std::make_pair(right_chunk, right_chunk.num_rows() - 1));
@@ -295,7 +294,6 @@ public:
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
                     append_by_permutation(merged.get(), {right_chunk.chunk, left_1.chunk}, perm);
 
-
                     left_chunk = left_2;
                     right_chunk.reset();
 #ifndef NDEBUG
@@ -306,7 +304,7 @@ public:
 #endif
 
                     // Output
-                    RETURN_IF_ERROR(output(merged.release()));
+                    RETURN_IF_ERROR(output(std::move(merged)));
                 }
             }
 
