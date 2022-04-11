@@ -209,10 +209,9 @@ public class BDBEnvironment {
 
                 // open epochDB. the first parameter null means auto-commit
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
-                LOG.info("everything is ok, break");
                 break;
             } catch (InsufficientLogException insufficientLogEx) {
-                LOG.warn("insufficient exception", insufficientLogEx);
+                LOG.warn("insufficient exception, refresh and setup again", insufficientLogEx);
                 NetworkRestore restore = new NetworkRestore();
                 NetworkRestoreConfig config = new NetworkRestoreConfig();
                 config.setRetainLogFiles(false); // delete obsolete log files.
@@ -223,7 +222,7 @@ public class BDBEnvironment {
                 restore.execute(insufficientLogEx, config);
                 close();
             } catch (RollbackException exception) {
-                LOG.warn("rollback exception", exception);
+                LOG.warn("rollback exception, setup again", exception);
                 close();
             } catch (DatabaseException e) {
                 LOG.warn("database exception", e);
@@ -369,7 +368,7 @@ public class BDBEnvironment {
                 names = replicatedEnvironment.getDatabaseNames();
                 break;
             } catch (InsufficientLogException e) {
-                LOG.warn("catch insufficient log exception. will recover and try again.", e);
+                LOG.warn("catch insufficient log exception. refresh and setup again.", e);
                 NetworkRestore restore = new NetworkRestore();
                 NetworkRestoreConfig config = new NetworkRestoreConfig();
                 config.setRetainLogFiles(false);
@@ -377,7 +376,7 @@ public class BDBEnvironment {
                 close();
                 setup();
             } catch (RollbackException exception) {
-                LOG.warn("rollback exception", exception);
+                LOG.warn("rollback exception, setup again", exception);
                 close();
                 setup();
             } catch (EnvironmentFailureException e) {
