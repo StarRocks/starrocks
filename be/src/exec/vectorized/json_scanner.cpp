@@ -16,6 +16,7 @@
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/json_functions.h"
 #include "formats/json/nullable_column.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -614,8 +615,8 @@ Status JsonReader::_read_and_parse_json() {
     length = nread;
 
 #else
-
-    StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
     RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
     if (length == 0) {

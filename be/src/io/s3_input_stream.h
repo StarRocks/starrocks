@@ -34,11 +34,7 @@ public:
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
-    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override;
-
-    Status skip(int64_t count) override;
-
-    StatusOr<int64_t> seek(int64_t offset, int whence) override;
+    Status seek(int64_t offset) override;
 
     StatusOr<int64_t> position() override;
 

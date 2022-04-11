@@ -82,9 +82,9 @@ TEST_F(EnvPosixTest, random_access) {
         Slice slice2(mem + 9, 100);
         Slice slice3(mem + 9 + 100, 3);
 
-        Slice read_slices[3]{slice1, slice2, slice3};
-        st = rfile->readv_at(0, read_slices, 3);
-        ASSERT_TRUE(st.ok());
+        ASSERT_OK(rfile->read_at_fully(0, slice1.data, slice1.size));
+        ASSERT_OK(rfile->read_at_fully(9, slice2.data, slice2.size));
+        ASSERT_OK(rfile->read_at_fully(109, slice3.data, slice3.size));
         ASSERT_STREQ("123456789", std::string(slice1.data, slice1.size).c_str());
         ASSERT_STREQ("abc", std::string(slice3.data, slice3.size).c_str());
 
@@ -92,10 +92,7 @@ TEST_F(EnvPosixTest, random_access) {
         ASSERT_TRUE(st.ok()) << st;
         ASSERT_STREQ("bcd", std::string(mem, 3).c_str());
 
-        // end of file
-        st = rfile->read_at_fully(114, mem, 3);
-        ASSERT_EQ(TStatusCode::END_OF_FILE, st.code());
-        LOG(INFO) << "st=" << st.to_string();
+        ASSERT_ERROR(rfile->read_at_fully(114, mem, 3));
     }
     // test try read
     {
@@ -119,97 +116,6 @@ TEST_F(EnvPosixTest, random_access) {
             ASSIGN_OR_ABORT(auto nread, rfile->read_at(115, mem, 100));
             ASSERT_EQ(0, nread);
         }
-    }
-}
-
-TEST_F(EnvPosixTest, random_rw) {
-    std::string fname = "./ut_dir/env_posix/random_rw";
-    WritableFileOptions ops;
-    std::unique_ptr<RandomRWFile> wfile;
-    auto env = Env::Default();
-    wfile = *env->new_random_rw_file(fname);
-    // wirte data
-    Slice field1("123456789");
-    auto st = wfile->write_at(0, field1);
-    ASSERT_TRUE(st.ok());
-    std::string buf;
-    for (int i = 0; i < 100; ++i) {
-        buf.push_back((char)i);
-    }
-    st = wfile->write_at(9, buf);
-    ASSERT_TRUE(st.ok());
-    Slice abc("abc");
-    Slice bcd("bcd");
-    Slice slices[2]{abc, bcd};
-    st = wfile->writev_at(0, slices, 2);
-    ASSERT_TRUE(st.ok());
-
-    ASSIGN_OR_ABORT(uint64_t size, wfile->get_size());
-    ASSERT_EQ(109, size);
-
-    st = wfile->flush(RandomRWFile::FLUSH_ASYNC, 0, 0);
-    ASSERT_TRUE(st.ok());
-    st = wfile->sync();
-    ASSERT_TRUE(st.ok());
-    st = wfile->close();
-    ASSERT_TRUE(st.ok());
-
-    const auto status_or = env->get_file_size(fname);
-    ASSERT_TRUE(status_or.ok());
-    size = status_or.value();
-    ASSERT_EQ(109, size);
-    {
-        char mem[1024];
-        std::unique_ptr<RandomRWFile> rfile;
-        RandomRWFileOptions opts;
-        opts.mode = Env::MUST_EXIST;
-        rfile = *env->new_random_rw_file(opts, fname);
-
-        Slice slice1(mem, 3);
-        Slice slice2(mem + 3, 3);
-        Slice slice3(mem + 6, 3);
-
-        Slice read_slices[3]{slice1, slice2, slice3};
-        st = rfile->readv_at(0, read_slices, 3);
-        LOG(INFO) << st.to_string();
-        ASSERT_TRUE(st.ok());
-        ASSERT_STREQ("abc", std::string(slice1.data, slice1.size).c_str());
-        ASSERT_STREQ("bcd", std::string(slice2.data, slice2.size).c_str());
-        ASSERT_STREQ("789", std::string(slice3.data, slice3.size).c_str());
-
-        Slice slice4(mem, 100);
-        st = rfile->read_at(9, slice4);
-        ASSERT_TRUE(st.ok());
-
-        // end of file
-        st = rfile->read_at(102, slice4);
-        ASSERT_EQ(TStatusCode::END_OF_FILE, st.code());
-        LOG(INFO) << "st=" << st.to_string();
-    }
-    // SequentialFile
-    {
-        char mem[1024];
-        auto rfile = *env->new_sequential_file(fname);
-
-        ASSIGN_OR_ABORT(auto nread, rfile->read(mem, 3));
-        ASSERT_EQ(3, nread);
-        ASSERT_EQ("abc", std::string_view(mem, nread));
-
-        st = rfile->skip(3);
-        ASSERT_TRUE(st.ok());
-
-        ASSIGN_OR_ABORT(nread, rfile->read(mem, 3));
-        ASSERT_EQ(3, nread);
-        ASSERT_EQ("789", std::string_view(mem, 3));
-
-        st = rfile->skip(90);
-        ASSERT_TRUE(st.ok());
-
-        ASSIGN_OR_ABORT(nread, rfile->read(mem, 15));
-        ASSERT_EQ(10, nread);
-
-        ASSIGN_OR_ABORT(nread, rfile->read(mem, 15));
-        ASSERT_EQ(0, nread);
     }
 }
 
