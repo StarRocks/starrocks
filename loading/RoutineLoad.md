@@ -26,8 +26,8 @@ The import process is illustrated above.
 
 ### Environment requirements
 
-* It is supported to access Kafka clusters without authentication or with SSL authentication.
-* Supported CSV text format with one line per message and **no** line breaks at the end.
+* It is supported to access Kafka clusters without authentication or with SSL/SASL authentication.
+* Supports **JSON** text format or **CSV** text format with one line per message and **no** line breaks at the end.
 * Only Kafka versions 0.10.0.0 and above are supported.
 
 ### Create import task
