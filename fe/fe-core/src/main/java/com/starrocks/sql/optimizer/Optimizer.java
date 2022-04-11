@@ -78,7 +78,7 @@ public class Optimizer {
         memo.init(logicOperatorTree);
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             LOG.info("{} initial root group:\n{}",
-                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toString());
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
@@ -92,7 +92,7 @@ public class Optimizer {
         logicalRuleRewrite(memo, rootTaskContext);
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             LOG.info("{} after logical rewrite, root group:\n{}",
-                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toString());
         }
 
         // collect all olap scan operator
@@ -110,7 +110,7 @@ public class Optimizer {
         memoOptimize(connectContext, memo, rootTaskContext);
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             LOG.info("{} after memo optimize, root group:\n{}",
-                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toPrettyString());
+                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toString());
         }
 
         OptExpression result;

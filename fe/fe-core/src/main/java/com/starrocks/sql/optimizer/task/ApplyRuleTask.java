@@ -73,8 +73,12 @@ public class ApplyRuleTask extends OptimizerTask {
                 sb.append(" APPLY RULE " + rule).append("\n");
                 sb.append("Original Expression:\n" + extractExpr.explain());
                 sb.append("New Expressions:\n");
-                for (int i = 0; i < targetExpressions.size(); i++) {
-                    sb.append(i + ":\n" + targetExpressions.get(i).explain());
+                if (targetExpressions.isEmpty()) {
+                    sb.append("Empty\n");
+                } else {
+                    for (int i = 0; i < targetExpressions.size(); i++) {
+                        sb.append(i + ":\n" + targetExpressions.get(i).explain());
+                    }
                 }
                 LOG.info(sb.toString());
                 traceInfo.recordAppliedRule(rule.toString());

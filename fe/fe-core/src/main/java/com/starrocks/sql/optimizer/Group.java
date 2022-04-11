@@ -239,18 +239,6 @@ public class Group {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("->  ").append("Group: ").append(id).append('\n');
-        for (GroupExpression expr : logicalExpressions) {
-            sb.append(expr).append('\n');
-        }
-        for (GroupExpression expr : physicalExpressions) {
-            sb.append(expr).append('\n');
-        }
-        return sb.toString();
-    }
-
-    public String toPrettyString() {
         return toPrettyString("", "");
     }
 
