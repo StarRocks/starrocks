@@ -1390,6 +1390,29 @@ public class CreateMaterializedViewStmtTest {
 
     }
 
+    @Test(expected = AnalysisException.class)
+    public void testBooleanMinAgg(@Injectable SelectStmt selectStmt,
+                                  @Injectable Column column,
+                                  @Injectable SlotDescriptor slotDescriptor) {
+        CreateMaterializedViewStmt createMaterializedViewStmt =
+                new CreateMaterializedViewStmt("test", selectStmt, null);
+        SlotRef slotRef = new SlotRef(new TableName("db", "table"), "a");
+        List<Expr> params = Lists.newArrayList();
+        params.add(slotRef);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr("min", params);
+        Deencapsulation.setField(slotRef, "desc", slotDescriptor);
+        new Expectations() {
+            {
+                slotDescriptor.getColumn();
+                result = column;
+                column.getType();
+                result = Type.BOOLEAN;
+            }
+        };
+
+        Deencapsulation.invoke(createMaterializedViewStmt, "buildMVColumnItem", functionCallExpr);
+    }
+
     @Test
     public void testKeepScaleAndPrecisionOfType(@Injectable SelectStmt selectStmt,
                                                 @Injectable SlotDescriptor slotDescriptor1,

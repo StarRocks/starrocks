@@ -455,6 +455,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             default:
                 throw new AnalysisException("Unsupported function:" + functionName);
         }
+
+        if (!mvAggregateType.checkCompatibility(type)) {
+            throw new AnalysisException(
+                    String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
+        }
         return new MVColumnItem(mvColumnName, type, mvAggregateType, functionCallExpr.isNullable(), false, defineExpr,
                 baseColumnName);
     }
