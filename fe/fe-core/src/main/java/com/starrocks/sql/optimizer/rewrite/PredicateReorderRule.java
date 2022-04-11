@@ -28,8 +28,9 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
     private static class PredicateReorderVisitor extends OptExpressionVisitor<OptExpression, Void> {
         @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
-            for (int i = 0; i < optExpression.arity(); ++i) {
-                optExpression.setChild(i, optExpression.inputAt(i).getOp().accept(this, optExpression.inputAt(i), null));
+            for (int i = 0; i < optExpression.arity(); i++) {
+                OptExpression inputOptExpression = optExpression.inputAt(i);
+                inputOptExpression.getOp().accept(this, inputOptExpression, null);
             }
             return predicateRewrite(optExpression);
         }
@@ -48,17 +49,14 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
 
         private void predicateReorder(ScalarOperator scalarOperator, Statistics statistics) {
             // get conjunctive predicate
-            List<ScalarOperator> scalarOperators = Utils.extractConjuncts(scalarOperator);
-            if (scalarOperators.size() == 0) {
+            List<ScalarOperator> conjunctiveScalarOperators = Utils.extractConjuncts(scalarOperator);
+            if (conjunctiveScalarOperators.size() <= 1) {
                 return;
             }
-            for (ScalarOperator operator : scalarOperators) {
-                predicateReorder(operator, statistics);
-            }
-            if (scalarOperators.size() > 1) {
-                DefaultPredicateSelectivityEstimator heuristic = new DefaultPredicateSelectivityEstimator();
-                scalarOperators.sort((o1, o2) -> {
-                    if (heuristic.estimate(o1, statistics) > heuristic.estimate(o2, statistics)) {
+            if (conjunctiveScalarOperators.size() > 1) {
+                DefaultPredicateSelectivityEstimator selectivityEstimator = new DefaultPredicateSelectivityEstimator();
+                conjunctiveScalarOperators.sort((o1, o2) -> {
+                    if (selectivityEstimator.estimate(o1, statistics) > selectivityEstimator.estimate(o2, statistics)) {
                         return 1;
                     }
                     return 0;
