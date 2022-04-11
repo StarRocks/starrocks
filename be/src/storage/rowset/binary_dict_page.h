@@ -31,11 +31,11 @@
 #include "storage/column_block.h"
 #include "storage/column_vector.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
-#include "storage/vectorized/range.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

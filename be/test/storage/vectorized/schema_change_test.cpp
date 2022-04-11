@@ -1,13 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/schema_change.h"
+#include "storage/schema_change.h"
 
 #include "column/datum_convert.h"
 #include "gtest/gtest.h"
+#include "storage/chunk_helper.h"
+#include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/convert_helper.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/logging.h"

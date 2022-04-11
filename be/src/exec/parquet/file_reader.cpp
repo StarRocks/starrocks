@@ -13,7 +13,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/strings/substitute.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/memcmp.h"

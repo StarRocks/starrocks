@@ -1,18 +1,18 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/cumulative_compaction.h"
+#include "storage/cumulative_compaction.h"
 
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
+#include "storage/chunk_helper.h"
+#include "storage/compaction.h"
 #include "storage/compaction_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/compaction.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 

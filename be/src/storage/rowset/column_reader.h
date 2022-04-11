@@ -35,6 +35,7 @@
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
 #include "storage/fs/fs_util.h"
+#include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
@@ -42,7 +43,6 @@
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
-#include "storage/vectorized/range.h"
 #include "util/once.h"
 
 namespace starrocks {

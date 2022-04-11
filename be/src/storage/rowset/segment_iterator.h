@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-#include "storage/vectorized/chunk_iterator.h"
+#include "storage/chunk_iterator.h"
 
 namespace starrocks {
 class Segment;

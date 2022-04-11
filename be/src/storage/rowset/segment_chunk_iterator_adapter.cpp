@@ -2,7 +2,7 @@
 
 #include "segment_chunk_iterator_adapter.h"
 
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
 

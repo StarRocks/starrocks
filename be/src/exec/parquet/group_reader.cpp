@@ -8,7 +8,7 @@
 #include "exprs/expr.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 

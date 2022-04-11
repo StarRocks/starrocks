@@ -13,11 +13,11 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
+#include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
+#include "storage/predicate_parser.h"
+#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/column_predicate_rewriter.h"
-#include "storage/vectorized/predicate_parser.h"
-#include "storage/vectorized/projection_iterator.h"
 
 namespace starrocks::pipeline {
 using namespace vectorized;

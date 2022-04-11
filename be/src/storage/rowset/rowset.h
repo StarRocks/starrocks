@@ -30,8 +30,8 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/vectorized/chunk_iterator.h"
 
 namespace starrocks {
 

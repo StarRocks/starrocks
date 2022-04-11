@@ -1,12 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/column_predicate.h"
-
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/column_or_predicate.h"
+#include "storage/chunk_helper.h"
+#include "storage/column_or_predicate.h"
+#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
 namespace starrocks::vectorized {
