@@ -579,8 +579,10 @@ public class PlanFragmentBuilder {
 
             tupleDescriptor.computeMemLayout();
 
-            // set unused output columns
-            setUnUsedOutputColumns(node, scanNode, predicates);
+            // set unused output columns if not a agg table
+            if (!referenceTable.getKeysType().isAggregationFamily()) {
+                setUnUsedOutputColumns(node, scanNode, predicates);
+            }
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
