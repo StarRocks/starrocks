@@ -26,8 +26,6 @@ public:
     int64_t seq = 0;
 };
 
-static constexpr int default_send_rpc_runtime_filter_timeout_ms = 1000;
-
 static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
     if (rpc_closure->seq != 0) {
@@ -56,7 +54,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
         if (filter == nullptr) continue;
         state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
     }
-    int timeout_ms = default_send_rpc_runtime_filter_timeout_ms;
+    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
     }
@@ -270,7 +268,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     size_t actual_size = vectorized::RuntimeFilterHelper::serialize_runtime_filter(
             out, reinterpret_cast<uint8_t*>(send_data->data()));
     send_data->resize(actual_size);
-    int timeout_ms = default_send_rpc_runtime_filter_timeout_ms;
+    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = _query_options.runtime_filter_send_timeout_ms;
     }
@@ -577,7 +575,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
         index += (1 + half);
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        send_rpc_runtime_filter(stub, rpc_closure, default_send_rpc_runtime_filter_timeout_ms, request);
+        send_rpc_runtime_filter(stub, rpc_closure, config::send_rpc_runtime_filter_timeout_ms, request);
     }
 }
 
