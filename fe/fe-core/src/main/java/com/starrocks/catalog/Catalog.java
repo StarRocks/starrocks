@@ -6223,16 +6223,10 @@ public class Catalog {
             tableProperty.modifyTableProperties(properties);
         }
         tableProperty.buildEnablePersistentIndex();
-        /*
-        // need to update partition info meta
-        for (Partition partition : table.getPartitions()) {
-            table.getPartitionInfo().setIsInMemory(partition.getId(), tableProperty.isInMemory());
-        }
-        */
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyInMemory(info);
+        editLog.logModifyEnablePersistentIndex(info);
 
     }
 
@@ -6337,8 +6331,7 @@ public class Catalog {
                         }
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
-                    // TODO
-                    // set partition info 
+                    olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 }
             }
         } finally {

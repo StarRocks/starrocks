@@ -44,6 +44,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
@@ -974,6 +975,10 @@ public class ReportHandler extends Daemon {
         }
     }
 
+    public static void testHandleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
@@ -1016,7 +1021,9 @@ public class ReportHandler extends Daemon {
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
                                                                          TTabletMetaType.ENABLEPERSISTENTINDEX);
             batchTask.addTask(task);
-            AgentTaskExecutor.submit(batchTask);
+            if (FeConstants.runningUnitTest) {
+                AgentTaskExecutor.submit(batchTask);
+            }
         }
     }
 

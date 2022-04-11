@@ -108,7 +108,6 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     }
 
     public TUpdateTabletMetaInfoReq toThrift() {
-        LOG.info("do update tablet meta task");
         TUpdateTabletMetaInfoReq updateTabletMetaInfoReq = new TUpdateTabletMetaInfoReq();
         List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
         switch (metaType) {
