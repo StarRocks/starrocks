@@ -11,6 +11,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.AsyncRefreshSchemeDesc;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -52,10 +54,12 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.PartitionExpDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RefreshSchemeDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -80,6 +84,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
@@ -147,6 +152,68 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDbStmt(null, null);
         }
+    }
+
+    @Override
+    public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
+
+
+        boolean ifExist = context.IF() != null;
+        String mvName = context.mvName.getText();
+        String comment = context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
+        PartitionDesc partitionDesc = (PartitionDesc) visit(context.partitionExpDesc());
+        RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        // get query statement
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        // get properties if exists
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        // todo
+        // return new CreateMvStmt();
+        return null;
+    }
+
+    public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {
+        List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
+        FunctionName functionName = null;
+        if (context.DATE_FORMAT() != null) {
+            functionName = new FunctionName("date_format");
+        }
+        return new PartitionExpDesc(
+                identifierList.stream().map(Identifier::getValue).collect(toList()),
+                functionName);
+    }
+
+    @Override
+    public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
+        long startTime = TimeUtils.getStartTime();
+        long step = 1;
+        String timeUnit = "HOUR";
+        if (context.ASYNC() != null) {
+            if (context.string() != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+                startTime = TimeUtils.timeStringToLong(stringLiteral.getStringValue());
+                if (startTime == -1) {
+                    throw new IllegalArgumentException("Refresh type: " + context.SYNC().getText() + " start is incorrect");
+                }
+            }
+            if (context.interval() != null) {
+                IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+                step = Long.parseLong(intervalLiteral.getValue().toString());
+                timeUnit = intervalLiteral.getUnitIdentifier().getDescription();
+            }
+            return new AsyncRefreshSchemeDesc(startTime, step, timeUnit);
+        } else if (context.SYNC() != null) {
+            throw new IllegalArgumentException("Unsupported refresh type: " + context.SYNC().getText());
+        } else if (context.MANUAL() != null) {
+            throw new IllegalArgumentException("Unsupported refresh type: " + context.MANUAL().getText());
+        }
+        return null;
     }
 
     @Override

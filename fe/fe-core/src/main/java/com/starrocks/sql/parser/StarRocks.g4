@@ -29,12 +29,29 @@ statement
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+        comment?
+        partitionExpDesc
+        refreshSchemeDesc
+        AS queryStatement
+        properties?                                                                     #createMaterializedView
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                               #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
+    ;
+
+partitionExpDesc
+    : PARTITION BY ( DATE_FORMAT '(' identifier '.' identifier ')'
+    | identifier '.' identifier )
+    ;
+
+refreshSchemeDesc
+    : REFRESH (SYNC
+    | ASYNC (START '(' string ')')? (EVERY '(' interval ')')?
+    | MANUAL)
     ;
 
 explainDesc
