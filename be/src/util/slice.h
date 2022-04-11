@@ -87,7 +87,7 @@ public:
               data(const_cast<char*>(s)),
               size(strlen(s)) {}
 
-    inline operator std::string_view() const { return {data, size}; }
+    operator std::string_view() const { return {data, size}; }
 
     /// @return A pointer to the beginning of the referenced data.
     const char* get_data() const { return data; }

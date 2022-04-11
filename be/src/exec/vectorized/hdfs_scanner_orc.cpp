@@ -56,7 +56,7 @@ public:
         doRead(_cache_buffer.data(), length, offset);
     }
 
-    inline bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
         if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
             ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
             return true;

@@ -80,31 +80,31 @@ public:
     typedef const T& const_reference;
 
 public:
-    inline AlignmentAllocator() throw() {}
+    AlignmentAllocator() throw() {}
 
     template <typename T2>
-    inline AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw() {}
+    AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw() {}
 
-    inline ~AlignmentAllocator() throw() {}
+    ~AlignmentAllocator() throw() {}
 
-    inline pointer adress(reference r) { return &r; }
+    pointer adress(reference r) { return &r; }
 
-    inline const_pointer adress(const_reference r) const { return &r; }
+    const_pointer adress(const_reference r) const { return &r; }
 
-    inline pointer allocate(size_type n) {
+    pointer allocate(size_type n) {
         if (n * sizeof(value_type) < N) {
             return (pointer)std::aligned_alloc(N, N);
         }
         return (pointer)std::aligned_alloc(N, n * sizeof(value_type));
     }
 
-    inline void deallocate(pointer p, size_type) { free(p); }
+    void deallocate(pointer p, size_type) { free(p); }
 
-    inline void construct(pointer p, const value_type& wert) { new (p) value_type(wert); }
+    void construct(pointer p, const value_type& wert) { new (p) value_type(wert); }
 
-    inline void destroy(pointer p) { p->~value_type(); }
+    void destroy(pointer p) { p->~value_type(); }
 
-    inline size_type max_size() const throw() { return size_type(-1) / sizeof(value_type); }
+    size_type max_size() const throw() { return size_type(-1) / sizeof(value_type); }
 
     template <typename T2>
     struct rebind {
@@ -148,13 +148,13 @@ template <class T>
 using RawVectorPad16 = std::vector<T, RawAllocator<T, 16>>;
 
 template <class T>
-static inline void make_room(std::vector<T>* v, size_t n) {
+inline void make_room(std::vector<T>* v, size_t n) {
     RawVector<T> rv;
     rv.resize(n);
     v->swap(reinterpret_cast<std::vector<T>&>(rv));
 }
 
-static inline void make_room(std::string* s, size_t n) {
+inline void make_room(std::string* s, size_t n) {
     RawStringPad16 rs;
     rs.resize(n);
     s->swap(reinterpret_cast<std::string&>(rs));
