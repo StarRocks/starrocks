@@ -125,7 +125,12 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFil
 }
 
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const vectorized::JoinRuntimeFilter* rf) {
-    _state->exec_env()->add_rf_event(_state->query_id(), filter_id, "LOCAL_PUBLISH");
+    _state->exec_env()->add_rf_event({
+            _state->query_id(),
+            filter_id,
+            "",
+            "LOCAL_PUBLISH",
+    });
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
@@ -353,7 +358,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
         }
 
         index += (1 + half);
-        _exec_env->add_rf_event(request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC");
+        _exec_env->add_rf_event({request.query_id(), request.filter_id(), t.first.hostname, "SEND_TOTAL_RF_RPC"});
         send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     }
 
@@ -425,7 +430,7 @@ void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
 
 void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                    const std::vector<TNetworkAddress>& addrs, int timeout_ms) {
-    _exec_env->add_rf_event(params.query_id(), params.filter_id(), "SEND_PART_RF");
+    _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_PART_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_PART_RF;
     ev.transmit_timeout_ms = timeout_ms;
@@ -437,7 +442,7 @@ void RuntimeFilterWorker::send_part_runtime_filter(PTransmitRuntimeFilterParams&
 void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                                         const std::vector<TRuntimeFilterDestination>& destinations,
                                                         int timeout_ms) {
-    _exec_env->add_rf_event(params.query_id(), params.filter_id(), "SEND_BROADCAST_RF");
+    _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "SEND_BROADCAST_RF"});
     RuntimeFilterWorkerEvent ev;
     ev.type = SEND_BROADCAST_GRF;
     ev.transmit_timeout_ms = timeout_ms;
@@ -453,10 +458,10 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
 
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
-        _exec_env->add_rf_event(params.query_id(), params.filter_id(), "RECV_PART_RF");
+        _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_PART_RF"});
         ev.type = RECEIVE_PART_RF;
     } else {
-        _exec_env->add_rf_event(params.query_id(), params.filter_id(), "RECV_TOTAL_RF");
+        _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_TOTAL_RF"});
         ev.type = RECEIVE_TOTAL_RF;
     }
     ev.query_id.hi = params.query_id().hi();
@@ -471,8 +476,8 @@ static inline Status receive_total_runtime_filter_pipeline(
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
     query_id.lo = pb_query_id.lo();
-    ExecEnv::GetInstance()->add_rf_event(params.query_id(), params.filter_id(), BackendOptions::get_localhost(),
-                                         "RECV_TOTAL_RF_RPC_PIPELINE");
+    ExecEnv::GetInstance()->add_rf_event(
+            {params.query_id(), params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC_PIPELINE"});
     auto query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
     // query_ctx is absent means that the query is finished or any fragments have not arrived, so
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
@@ -571,7 +576,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         }
 
         index += (1 + half);
-        _exec_env->add_rf_event(request.query_id(), request.filter_id(), addr.hostname, "FORWARD");
+        _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
         send_rpc_runtime_filter(stub, rpc_closure, default_send_rpc_runtime_filter_timeout_ms, request);
     }
 }
@@ -581,8 +586,8 @@ void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
     std::random_device rd;
     std::mt19937 rand(rd());
     std::shuffle(destinations.begin(), destinations.end(), rand);
-    _exec_env->add_rf_event(params.query_id(), params.filter_id(),
-                            strings::Substitute("SEND_BROADCAST_RF_RPC: num_dest=$0", destinations.size()));
+    _exec_env->add_rf_event({params.query_id(), params.filter_id(), "",
+                             strings::Substitute("SEND_BROADCAST_RF_RPC: num_dest=$0", destinations.size())});
     params.set_is_partial(false);
     TNetworkAddress local;
     local.hostname = BackendOptions::get_localhost();
@@ -640,8 +645,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
     auto* rpc_closure = new RuntimeFilterRpcClosure();
     rpc_closure->ref();
     doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
-    _exec_env->add_rf_event(request.query_id(), request.filter_id(), first_dest.address.hostname,
-                            "DELIVER_BROADCAST_RF_RELAY");
+    _exec_env->add_rf_event(
+            {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
     send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
     brpc::Join(rpc_closure->cntl.call_id());
     rpc_closure->unref();
@@ -673,8 +678,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
                 finst_id->set_hi(id.hi);
                 finst_id->set_lo(id.lo);
             }
-            _exec_env->add_rf_event(request.query_id(), request.filter_id(), dest.address.hostname,
-                                    "DELIVER_BROADCAST_RF_PASSTHROUGH");
+            _exec_env->add_rf_event({request.query_id(), request.filter_id(), dest.address.hostname,
+                                     "DELIVER_BROADCAST_RF_PASSTHROUGH"});
             send_rpc_runtime_filter(stub, rpc_closure, timeout_ms, request);
         }
 
@@ -695,7 +700,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
         finst_id->set_hi(id.hi);
         finst_id->set_lo(id.lo);
     }
-    _exec_env->add_rf_event(param.query_id(), param.filter_id(), "DELIVER_BROADCAST_RF_LOCAL");
+    _exec_env->add_rf_event({param.query_id(), param.filter_id(), "", "DELIVER_BROADCAST_RF_LOCAL"});
     _receive_total_runtime_filter(param, nullptr);
 }
 
@@ -747,8 +752,8 @@ void RuntimeFilterWorker::execute() {
                 break;
             }
             RuntimeFilterMerger& merger = it->second;
-            _exec_env->add_rf_event(ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
-                                    "RECV_PART_RF_RPC");
+            _exec_env->add_rf_event(
+                    {ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(), "", "RECV_PART_RF_RPC"});
             merger.merge_runtime_filter(ev.transmit_rf_request, rpc_closure);
             break;
         }
@@ -756,8 +761,8 @@ void RuntimeFilterWorker::execute() {
         case SEND_PART_RF: {
             for (const auto& addr : ev.transmit_addrs) {
                 doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
-                _exec_env->add_rf_event(ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
-                                        addr.hostname, "SEND_PART_RF_RPC");
+                _exec_env->add_rf_event({ev.transmit_rf_request.query_id(), ev.transmit_rf_request.filter_id(),
+                                         addr.hostname, "SEND_PART_RF_RPC"});
                 send_rpc_runtime_filter(stub, rpc_closure, ev.transmit_timeout_ms, ev.transmit_rf_request);
             }
             break;

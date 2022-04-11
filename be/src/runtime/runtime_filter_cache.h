@@ -20,6 +20,24 @@ class RfEventValue;
 using RfEventValueRawPtr = RfEventValue*;
 using RfEventValuePtr = std::shared_ptr<RfEventValue>;
 
+struct RfTracePoint {
+    struct UnifiedQueryId {
+        UnifiedQueryId(const TUniqueId& tquery_id) : query_id(tquery_id) {}
+        UnifiedQueryId(const PUniqueId& pquery_id) {
+            query_id.lo = pquery_id.lo();
+            query_id.hi = pquery_id.hi();
+        }
+        operator TUniqueId() const { return query_id; }
+
+    private:
+        TUniqueId query_id;
+    } query_id;
+
+    int filter_id;
+    std::string network;
+    std::string msg;
+};
+
 class RuntimeFilterCache {
 public:
     explicit RuntimeFilterCache(size_t log2_num_slots);

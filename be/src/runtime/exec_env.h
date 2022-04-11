@@ -161,10 +161,7 @@ public:
     Status init_mem_tracker();
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
-    void add_rf_event(const TUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg);
-    void add_rf_event(const PUniqueId& query_id, int filter_id, const std::string& network, std::string&& msg);
-    void add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg);
-    void add_rf_event(const PUniqueId& query_id, int filter_id, std::string&& msg);
+    void add_rf_event(const RfTracePoint& pt);
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
