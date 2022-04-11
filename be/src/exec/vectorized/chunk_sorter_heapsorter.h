@@ -235,7 +235,7 @@ public:
     void setup_runtime(RuntimeProfile* profile) override;
 
 private:
-    inline size_t _number_of_rows_to_sort() const { return _offset + _limit; }
+    size_t _number_of_rows_to_sort() const { return _offset + _limit; }
 
     // For TOPN cases, we can filter out a very large amount of data with
     // the elements at the top of the heap, which will significantly improve the sorting performance
