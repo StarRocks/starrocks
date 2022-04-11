@@ -455,7 +455,7 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
-    public  static Type getBiggerType(Type t) {
+    public static Type getBiggerType(Type t) {
         switch (t.getNumResultType().getPrimitiveType()) {
             case TINYINT:
                 return Type.SMALLINT;
