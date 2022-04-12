@@ -1371,7 +1371,7 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
                         topN.getOffset(),
-                        inputFragment);
+                        inputFragment, topN);
             } else {
                 return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr, topN);
             }
@@ -1405,7 +1405,7 @@ public class PlanFragmentBuilder {
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       OrderSpec orderSpec, long limit, long offset,
-                                                      PlanFragment inputFragment) {
+                                                      PlanFragment inputFragment, PhysicalTopNOperator topN) {
             List<Expr> resolvedTupleExprs = new ArrayList<>();
             List<Expr> sortExprs = new ArrayList<>();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
@@ -1471,6 +1471,7 @@ public class PlanFragmentBuilder {
             sortNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(sortNode);
+            inputFragment.setQueryGlobalDicts(topN.getGlobalDicts());
             estimateDopOfTopN(inputFragment);
             return inputFragment;
         }
