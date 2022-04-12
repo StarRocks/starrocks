@@ -3,6 +3,7 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -161,6 +162,7 @@ public class StatementPlanner {
         return statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateMaterializedViewStatement
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt

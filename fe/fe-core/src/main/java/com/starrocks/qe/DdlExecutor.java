@@ -87,6 +87,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 
 public class DdlExecutor {
     public static void execute(Catalog catalog, DdlStmt ddlStmt) throws Exception {
@@ -229,6 +230,8 @@ public class DdlExecutor {
             catalog.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterWorkGroupStmt) {
             catalog.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
+            //todo we need add catalog operation here
         } else {
             throw new DdlException("Unknown statement.");
         }

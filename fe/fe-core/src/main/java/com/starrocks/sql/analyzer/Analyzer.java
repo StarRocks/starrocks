@@ -24,6 +24,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.MetaUtils;
@@ -76,6 +77,12 @@ public class Analyzer {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
             CTASAnalyzer.transformCTASStmt((CreateTableAsSelectStmt) statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
 

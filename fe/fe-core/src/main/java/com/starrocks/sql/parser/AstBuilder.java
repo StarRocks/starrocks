@@ -20,6 +20,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -54,12 +55,12 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionExpDesc;
+import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
-import com.starrocks.analysis.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -158,7 +159,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
 
 
-        boolean ifExist = context.IF() != null;
+        boolean ifNotExist = context.IF() != null;
         String mvName = context.mvName.getText();
         String comment = context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         PartitionDesc partitionDesc = (PartitionDesc) visit(context.partitionExpDesc());
@@ -173,9 +174,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        // todo
-        // return new CreateMvStmt();
-        return null;
+        return new CreateMaterializedViewStatement(mvName, ifNotExist, comment,
+                refreshSchemeDesc, partitionDesc, properties, queryStatement);
     }
 
     public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {

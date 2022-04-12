@@ -99,6 +99,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
