@@ -3,6 +3,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "column/type_traits.h"
+#include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr.h"
@@ -354,42 +355,46 @@ Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
 void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number,
                                           size_t sorted_size, size_t permutation_size,
                                           Permutation& permutation_second) {
-    uint32_t last_chunk_index = segments.size();
+    constexpr int kLeftChunkIndex = 0;
+    constexpr int kRightChunkIndex = 1;
+
+    // Assemble the permutated segments into a chunk
+    std::vector<ChunkPtr> right_chunks;
+    for (auto& segment : segments) {
+        right_chunks.push_back(segment.assemble_orderby_chunk());
+    }
+    ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
+    append_by_permutation(right_chunk.get(), right_chunks, permutation_second);
+
+    ChunkPtr left_chunk = _merged_segment.assemble_orderby_chunk();
+
     size_t index_of_merging = 0, index_of_left = 0, index_of_right = 0;
     Permutation merged_perm;
     merged_perm.reserve(sort_row_number);
+    SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
     while ((index_of_merging < sort_row_number) && (index_of_left < sorted_size) &&
            (index_of_right < permutation_size)) {
-        const auto& right = permutation_second[index_of_right];
-        // TODO: optimize the compare
-        int cmp = _merged_segment.compare_at(index_of_left, segments[right.chunk_index], right.index_in_chunk,
-                                             _sort_order_flag, _null_first_flag);
-
+        int cmp = compare_chunk_row(sort_desc, *left_chunk, *right_chunk, index_of_left, index_of_right);
         if (cmp <= 0) {
-            merged_perm.emplace_back(PermutationItem(last_chunk_index, index_of_left, 0));
+            merged_perm.emplace_back(PermutationItem(kLeftChunkIndex, index_of_left, 0));
             ++index_of_left;
         } else {
-            merged_perm.emplace_back(right);
+            merged_perm.emplace_back(PermutationItem(kRightChunkIndex, index_of_right, 0));
             ++index_of_right;
         }
         ++index_of_merging;
     }
     while (index_of_left < sorted_size && index_of_merging < sort_row_number) {
-        merged_perm.emplace_back(last_chunk_index, index_of_left, 0);
+        merged_perm.emplace_back(kLeftChunkIndex, index_of_left, 0);
         ++index_of_left;
     }
     while (index_of_right < permutation_size && index_of_merging < sort_row_number) {
-        merged_perm.emplace_back(permutation_second[index_of_right]);
+        merged_perm.emplace_back(kRightChunkIndex, index_of_right, 0);
         ++index_of_right;
     }
 
-    std::vector<ChunkPtr> chunks;
-    for (auto& seg : segments) {
-        chunks.push_back(seg.chunk);
-    }
-    chunks.push_back(_merged_segment.chunk);
-
+    std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
     append_by_permutation(big_chunk.get(), chunks, merged_perm);
 }
 

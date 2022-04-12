@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/vectorized/jdbc_scanner.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
@@ -13,6 +14,9 @@
 namespace starrocks::vectorized {
 
 struct DataSegment {
+    static const uint8_t BEFORE_LAST_RESULT = 2;
+    static const uint8_t IN_LAST_RESULT = 1;
+
     ChunkPtr chunk;
     Columns order_by_columns;
 
@@ -38,8 +42,7 @@ struct DataSegment {
         }
     }
 
-    static const uint8_t BEFORE_LAST_RESULT = 2;
-    static const uint8_t IN_LAST_RESULT = 1;
+    ChunkPtr assemble_orderby_chunk() const { return std::make_shared<Chunk>(order_by_columns, chunk->schema()); }
 
     // there is two compares in the method,
     // the first is:
