@@ -219,6 +219,10 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override { return _data->has_large_column(); }
+
 private:
     ColumnPtr _data;
     uint64_t _size;

@@ -82,6 +82,39 @@ PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
+    auto column = BinaryColumn::create();
+    column->append_string("test");
+    ASSERT_FALSE(column->has_large_column());
+    auto ret = column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    auto large_column = LargeBinaryColumn::create();
+    ASSERT_TRUE(large_column->has_large_column());
+    for (size_t i = 0; i < 10; i++) {
+        large_column->append_string(std::to_string(i));
+    }
+    ret = large_column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(ret.value()->has_large_column());
+    ASSERT_EQ(ret.value()->size(), 10);
+    for (size_t i = 0; i < 10; i++) {
+        ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
+    }
+
+#ifdef NDEBUG
+    large_column = LargeBinaryColumn::create();
+    size_t count = 1 << 29;
+    for (size_t i = 0; i < count; i++) {
+        large_column->append("0123456789");
+    }
+    ret = large_column->downgrade();
+    ASSERT_FALSE(ret.ok());
+#endif
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_get_data) {
     auto column = BinaryColumn::create();
     for (int i = 0; i < 100; i++) {

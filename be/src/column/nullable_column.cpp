@@ -356,15 +356,11 @@ StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of NullableColumn exceed the limit");
     }
 
-    auto ret = _data_column->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() != nullptr) {
-        _data_column = ret.value();
-        return nullptr;
-    } else {
-        return nullptr;
-    }
+    return upgrade_helper_func(&_data_column);
+}
+
+StatusOr<ColumnPtr> NullableColumn::downgrade() {
+    return downgrade_helper_func(&_data_column);
 }
 
 } // namespace starrocks::vectorized

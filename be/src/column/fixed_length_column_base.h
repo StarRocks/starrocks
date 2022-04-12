@@ -134,6 +134,10 @@ public:
     // access the item, so we should use 2^32 as the limit
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+
+    bool has_large_column() const override { return false; }
+
     uint32_t serialize(size_t idx, uint8_t* pos) override;
 
     uint32_t serialize_default(uint8_t* pos) override;
