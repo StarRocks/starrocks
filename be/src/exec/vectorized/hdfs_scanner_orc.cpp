@@ -154,7 +154,8 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
           _current_stripe_index(0),
           _init_use_dict_filter_slots(false),
           _can_do_filter_on_orc_cvb(true),
-          _adapter(adapter) {
+          _adapter(adapter),
+          _writer_tzoffset_in_seconds(adapter->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
