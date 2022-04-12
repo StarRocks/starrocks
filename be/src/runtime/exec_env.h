@@ -26,6 +26,7 @@
 
 #include "common/status.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/runtime_filter_cache.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -158,6 +159,9 @@ public:
     PluginMgr* plugin_mgr() { return _plugin_mgr; }
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     Status init_mem_tracker();
+    RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
+
+    void add_rf_event(const RfTracePoint& pt);
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -239,6 +243,7 @@ private:
     PluginMgr* _plugin_mgr = nullptr;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
+    RuntimeFilterCache* _runtime_filter_cache = nullptr;
 };
 
 template <>
