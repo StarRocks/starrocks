@@ -86,20 +86,22 @@ Status QueryContextManager::init() {
         return Status::InternalError("Fail to create clean_thread of QueryContextManager");
     }
 }
-
+void QueryContextManager::_clean_slot_unlocked(size_t i) {
+    auto& sc_map = _second_chance_maps[i];
+    auto sc_it = sc_map.begin();
+    while (sc_it != sc_map.end()) {
+        if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
+            sc_it = sc_map.erase(sc_it);
+        } else {
+            ++sc_it;
+        }
+    }
+}
 void QueryContextManager::_clean_query_contexts() {
     for (auto i = 0; i < _num_slots; ++i) {
         auto& mutex = _mutexes[i];
-        auto& sc_map = _second_chance_maps[i];
         std::unique_lock write_lock(mutex);
-        auto sc_it = sc_map.begin();
-        while (sc_it != sc_map.end()) {
-            if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
-                sc_it = sc_map.erase(sc_it);
-            } else {
-                ++sc_it;
-            }
-        }
+        _clean_slot_unlocked(i);
     }
 }
 
@@ -195,7 +197,7 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     auto& sc_map = _second_chance_maps[i];
 
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-
+    _clean_slot_unlocked(i);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
