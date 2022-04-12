@@ -1397,7 +1397,7 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
-            inputFragment.setQueryGlobalDicts(topN.getGlobalDicts());
+            fragment.setQueryGlobalDicts(topN.getGlobalDicts());
 
             context.getFragments().add(fragment);
             return fragment;

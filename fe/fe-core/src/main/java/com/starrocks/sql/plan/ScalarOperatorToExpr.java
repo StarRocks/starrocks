@@ -468,8 +468,10 @@ public class ScalarOperatorToExpr {
                     new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
                             operator.getDictColumn().getName(),
                             dictExpr.isNullable());
+            final Expr old = context.colRefToExpr.get(key);
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExecExpression(call, context);
+            context.colRefToExpr.put(key, old);
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
             return result;
