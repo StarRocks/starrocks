@@ -1333,10 +1333,12 @@ void TabletUpdates::_erase_expired_versions(int64_t expire_time,
 
 bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
     // TODO(cbl): optimization: check multiple rowset_ids at once
-    std::unique_lock l(_rowsets_lock);
-    for (const auto& [id, rowset] : _rowsets) {
-        if (rowset->rowset_id() == rowset_id) {
-            return true;
+    {
+        std::lock_guard l(_rowsets_lock);
+        for (const auto& [id, rowset] : _rowsets) {
+            if (rowset->rowset_id() == rowset_id) {
+                return true;
+            }
         }
     }
     {
