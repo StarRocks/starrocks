@@ -230,7 +230,8 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
         : _descriptors(std::move(that._descriptors)),
           _wait_timeout_ms(that._wait_timeout_ms),
           _scan_wait_timeout_ms(that._scan_wait_timeout_ms),
-          _eval_context(that._eval_context) {}
+          _eval_context(that._eval_context),
+          _plan_node_id(that._plan_node_id) {}
 
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
                                             RuntimeProfile* profile) {
@@ -263,22 +264,30 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         return;
     }
     if (!eval_context.selectivity.empty()) {
+        const auto num_rows = chunk->num_rows();
+        auto& selection = eval_context.running_context.selection;
+        size_t true_count = 0;
+        selection.assign(num_rows, 1);
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-            if (filter == nullptr) continue;
+            if (filter == nullptr) {
+                continue;
+            }
             auto* ctx = rf_desc->probe_expr_ctx();
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
-            vectorized::Column::Filter& selection = filter->evaluate(column.get(), &eval_context.running_context);
+            filter->evaluate(column.get(), &eval_context.running_context);
+            // true_count is accummulated
+            true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
-            size_t true_count = SIMD::count_nonzero(selection);
 
             if (true_count == 0) {
                 chunk->set_num_rows(0);
                 return;
-            } else {
-                chunk->filter(selection);
             }
+        }
+        if (true_count != num_rows) {
+            chunk->filter(selection);
         }
     }
 }
@@ -320,22 +329,25 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      RuntimeBloomFilterEvalContext& eval_context) {
     eval_context.selectivity.clear();
     size_t chunk_size = chunk->num_rows();
-    vectorized::Column::Filter* selection = nullptr;
+    auto& selection = eval_context.running_context.selection;
+    selection.assign(chunk_size, 1);
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-        if (filter == nullptr) continue;
+        if (filter == nullptr) {
+            continue;
+        }
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
-        vectorized::Column::Filter& new_selection = filter->evaluate(column.get(), &eval_context.running_context);
+        // true count is not accummulated, it is evaluated for each RF respectively
+        auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
-        size_t true_count = SIMD::count_nonzero(new_selection);
         double selectivity = true_count * 1.0 / chunk_size;
         if (selectivity <= 0.5) {     // useful filter
             if (selectivity < 0.05) { // very useful filter, could early return
                 eval_context.selectivity.clear();
                 eval_context.selectivity.emplace(selectivity, rf_desc);
-                chunk->filter(new_selection);
+                chunk->filter(selection);
                 return;
             }
 
@@ -350,21 +362,10 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                     eval_context.selectivity.emplace(selectivity, rf_desc);
                 }
             }
-
-            if (selection == nullptr) {
-                selection = &new_selection;
-            } else {
-                // Merge selection
-                uint8_t* dest = selection->data();
-                const uint8_t* src = new_selection.data();
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    dest[j] = src[j] & dest[j];
-                }
-            }
         }
     }
     if (!eval_context.selectivity.empty()) {
-        chunk->filter(*selection);
+        chunk->filter(selection);
     }
 }
 
