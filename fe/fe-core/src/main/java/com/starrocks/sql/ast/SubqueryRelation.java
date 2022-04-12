@@ -18,6 +18,11 @@ public class SubqueryRelation extends Relation {
     }
 
     @Override
+    public String toString() {
+        return alias == null ? "anonymous" : alias.toString();
+    }
+
+    @Override
     public String toPrettyString(String indent) {
         StringBuilder sb = new StringBuilder("SubqueryRelation{\n");
         sb.append(indent).append("  alias=").append(alias == null ? "anonymous" : alias.toString()).append("\n");
