@@ -266,8 +266,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
     if (!eval_context.selectivity.empty()) {
         const auto num_rows = chunk->num_rows();
         auto& selection = eval_context.running_context.selection;
+        size_t true_count = 0;
         selection.assign(num_rows, 1);
-        auto has_filtered = false;
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
@@ -275,18 +275,16 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
                 continue;
             }
             ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
-            auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
-
+            filter->evaluate(column.get(), &eval_context.running_context);
+            true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
 
             if (true_count == 0) {
                 chunk->set_num_rows(0);
                 return;
-            } else if (true_count < num_rows && !has_filtered) {
-                has_filtered = true;
             }
         }
-        if (has_filtered) {
+        if (true_count != num_rows) {
             chunk->filter(selection);
         }
     }
