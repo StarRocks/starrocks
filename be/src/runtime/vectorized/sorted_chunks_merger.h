@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <queue>
-
 #include "runtime/vectorized/chunk_cursor.h"
 #include "util/runtime_profile.h"
 
@@ -35,30 +33,25 @@ public:
     Status get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
 private:
-    RuntimeState* _state;
+    struct CursorCmpGreater {
+        // if a is greater than b.
+        inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
+    };
+
     void collect_merged_chunks(ChunkPtr* chunk);
     void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);
+
+    bool _is_pipeline;
+    RuntimeState* _state;
 
     ChunkSupplier _single_supplier;
     ChunkProbeSupplier _single_probe_supplier;
     ChunkHasSupplier _single_has_supplier;
 
-    bool _is_pipeline;
-
-public:
     std::vector<std::unique_ptr<ChunkCursor>> _cursors;
-
-private:
-    struct CursorCmpGreater {
-        // if a is greater than b.
-        inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
-    };
     CursorCmpGreater _cursor_cmp_greater;
-
-public:
     std::vector<ChunkCursor*> _min_heap;
 
-private:
     RuntimeProfile::Counter* _total_timer = nullptr;
 
     // for multiple suppliers.
@@ -73,7 +66,7 @@ private:
      * _wait_for_data: record is it need to blocking or non-blocking.
      */
     size_t _row_number = 0;
-    ChunkCursor* _cursor;
+    ChunkCursor* _cursor = nullptr;
     ChunkPtr _current_chunk;
     ChunkPtr _result_chunk;
     std::vector<uint32_t> _selective_values;
