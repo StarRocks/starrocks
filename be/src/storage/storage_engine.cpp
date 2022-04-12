@@ -503,6 +503,11 @@ void StorageEngine::stop() {
 
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();
+
+    _checker_cv.notify_all();
+    if (_compaction_checker_thread.joinable()) {
+        _compaction_checker_thread.join();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -546,7 +551,7 @@ void StorageEngine::_start_clean_fd_cache() {
 
 void StorageEngine::compaction_check() {
     int checker_one_round_sleep_time_s = 1800;
-    while (true) {
+    while (!bg_worker_stopped()) {
         MonotonicStopWatch stop_watch;
         stop_watch.start();
         LOG(INFO) << "start to check compaction";
@@ -554,7 +559,9 @@ void StorageEngine::compaction_check() {
         stop_watch.stop();
         LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
                   << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
-        std::this_thread::sleep_for(std::chrono::seconds(checker_one_round_sleep_time_s));
+        std::unique_lock<std::mutex> lk(_checker_mutex);
+        _checker_cv.wait_for(lk, std::chrono::seconds(checker_one_round_sleep_time_s),
+                             [this] { return bg_worker_stopped(); });
     }
 }
 
@@ -566,7 +573,7 @@ size_t StorageEngine::compaction_check_one_round() {
     std::vector<TabletSharedPtr> tablets;
     tablets.reserve(batch_size);
     size_t tablets_num_checked = 0;
-    while (true) {
+    while (!bg_worker_stopped()) {
         bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
         for (auto& tablet : tablets) {
             _compaction_manager->update_tablet(tablet, true, false);
@@ -576,7 +583,9 @@ size_t StorageEngine::compaction_check_one_round() {
         if (finished) {
             break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(batch_sleep_time_ms));
+        std::unique_lock<std::mutex> lk(_checker_mutex);
+        _checker_cv.wait_for(lk, std::chrono::milliseconds(batch_sleep_time_ms),
+                             [this] { return bg_worker_stopped(); });
     }
     return tablets_num_checked;
 }

@@ -321,7 +321,10 @@ private:
     std::vector<std::thread> _tablet_checkpoint_threads;
 
     std::thread _compaction_scheduler;
+
     std::thread _compaction_checker_thread;
+    std::mutex _checker_mutex;
+    std::condition_variable _checker_cv;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;

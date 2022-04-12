@@ -281,10 +281,11 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
         }
     }
     ASSERT_GE(batch_count, 2);
-    ASSERT_EQ(tablets_count, 20);
+    // because there maybe other tablets exists in storage engine
+    ASSERT_GE(tablets_count, 20);
 
     size_t num = StorageEngine::instance()->compaction_check_one_round();
-    ASSERT_EQ(num, 20);
+    ASSERT_GE(num, 20);
 }
 
 } // namespace starrocks
