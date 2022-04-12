@@ -54,7 +54,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
 
-    OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
@@ -127,7 +127,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state));
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;

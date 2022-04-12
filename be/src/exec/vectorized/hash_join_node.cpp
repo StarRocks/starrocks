@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
@@ -542,7 +543,7 @@ Status HashJoinNode::_build(RuntimeState* state) {
 
         for (auto& _build_expr_ctx : _build_expr_ctxs) {
             const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
-            ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());
+            ASSIGN_OR_RETURN(ColumnPtr column_ptr, _build_expr_ctx->evaluate(_ht.get_build_chunk().get()));
             if (column_ptr->is_nullable() && column_ptr->is_constant()) {
                 ColumnPtr column = ColumnHelper::create_column(data_type, true);
                 column->append_nulls(_ht.get_build_chunk()->num_rows());
@@ -638,7 +639,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                     SCOPED_TIMER(_probe_conjunct_evaluate_timer);
                     _key_columns.resize(0);
                     for (auto& probe_expr_ctx : _probe_expr_ctxs) {
-                        ColumnPtr column_ptr = probe_expr_ctx->evaluate(_probing_chunk.get());
+                        ASSIGN_OR_RETURN(ColumnPtr column_ptr, probe_expr_ctx->evaluate(_probing_chunk.get()));
                         if (column_ptr->is_nullable() && column_ptr->is_constant()) {
                             ColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
                             column->append_nulls(_probing_chunk->num_rows());
@@ -674,7 +675,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
-            _process_other_conjunct(chunk);
+            RETURN_IF_ERROR(_process_other_conjunct(chunk));
             if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
@@ -682,7 +683,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
-            eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
             if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
@@ -711,7 +712,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
         }
 
         if (!_conjunct_ctxs.empty()) {
-            eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
             if (check_chunk_zero_and_create_new(chunk)) {
                 _build_eos = !_right_table_has_remain;
@@ -728,14 +729,14 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     return Status::OK();
 }
 
-void HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
-                                                   bool& hit_all) {
+Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
+                                                     bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
-        ColumnPtr column = ctx->evaluate((*chunk).get());
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -762,6 +763,8 @@ void HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filt
             hit_all = true;
         }
     }
+
+    return Status::OK();
 }
 
 void HashJoinNode::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
@@ -793,60 +796,64 @@ void HashJoinNode::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start
     }
 }
 
-void HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
+Status HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column,
+                                                             size_t column_count) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->set_num_rows(0);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
-        break;
+        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_semi_join_with_other_conjunct(chunk);
-        break;
+        return _process_semi_join_with_other_conjunct(chunk);
     case TJoinOp::RIGHT_ANTI_JOIN:
-        _process_right_anti_join_with_other_conjunct(chunk);
-        break;
+        return _process_right_anti_join_with_other_conjunct(chunk);
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
-        eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
+        return eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
     }
 }
 

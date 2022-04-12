@@ -38,7 +38,7 @@ struct DataSegment {
         chunk = cnk;
         order_by_columns.reserve(sort_exprs->size());
         for (ExprContext* expr_ctx : (*sort_exprs)) {
-            order_by_columns.push_back(expr_ctx->evaluate(chunk.get()));
+            order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
         }
     }
 
@@ -287,10 +287,10 @@ public:
                  size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
-    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
-                                                              TupleDescriptor* materialized_tuple_desc,
-                                                              const SortExecExprs& sort_exec_exprs,
-                                                              const std::vector<OrderByType>& order_by_types);
+    static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                                        TupleDescriptor* materialized_tuple_desc,
+                                                                        const SortExecExprs& sort_exec_exprs,
+                                                                        const std::vector<OrderByType>& order_by_types);
 
     virtual void setup_runtime(RuntimeProfile* profile);
 

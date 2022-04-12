@@ -80,7 +80,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
             }
 
-            _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, slot_id);
+            RETURN_IF_ERROR(_dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, slot_id));
             auto dict_iter = global_dict.find(slot_id);
             DCHECK(dict_iter != global_dict.end());
             if (dict_iter == global_dict.end()) {

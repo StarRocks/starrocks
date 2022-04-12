@@ -134,7 +134,8 @@ void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk,
     }
 }
 
-ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast) {
+StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src,
+                                            starrocks::vectorized::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
     // materialize
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
@@ -156,8 +157,7 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
 
         int dest_index = ctx_index++;
         ExprContext* ctx = _dest_expr_ctx[dest_index];
-
-        auto col = ctx->evaluate(cast.get());
+        ASSIGN_OR_RETURN(auto col, ctx->evaluate(cast.get()));
         uintptr_t col_pointer = reinterpret_cast<uintptr_t>(col.get());
         if (column_pointers.contains(col_pointer)) {
             col = col->clone();
