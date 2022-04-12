@@ -281,14 +281,15 @@ struct SortDesc {
 };
 
 struct SortDescs {
-    const std::vector<int>& sort_orders;
-    const std::vector<int>& null_firsts;
+    std::vector<int> sort_orders;
+    std::vector<int> null_firsts;
 
     SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
             : sort_orders(orders), null_firsts(nulls) {}
 
     SortDesc get_column_desc(int col) const {
         SortDesc desc;
+        DCHECK_LT(col, sort_orders.size());
         desc.sort_order = sort_orders[col];
         desc.null_first = null_firsts[col];
         return desc;
