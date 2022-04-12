@@ -120,9 +120,21 @@ public:
     void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                   const std::vector<starrocks::TNetworkAddress>& addrs, int timeout_ms);
+    void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
+                                       const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms);
 
 private:
     void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
+    void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
+                                                      std::vector<TRuntimeFilterDestination>&& destinations,
+                                                      int timeout_ms);
+    void _deliver_broadcast_runtime_filter_passthrough(PTransmitRuntimeFilterParams&& params,
+                                                       std::vector<TRuntimeFilterDestination>&& destinations,
+                                                       int timeout_ms);
+    void _deliver_broadcast_runtime_filter_relay(PTransmitRuntimeFilterParams&& params,
+                                                 std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms);
+    void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
+                                                 const TRuntimeFilterDestination& destinations);
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;
