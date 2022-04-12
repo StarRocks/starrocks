@@ -597,7 +597,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20170107"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
 
     }
@@ -638,7 +638,7 @@ public class AlterTest {
         Assert.assertNotNull(table.getPartition("p20170113"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -708,7 +708,7 @@ public class AlterTest {
         Assert.assertNotNull(table.getPartition("p2017_15"));
 
         String dropSQL = "drop table test_partition_week";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -749,7 +749,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p201704"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -790,7 +790,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p2020"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -831,7 +831,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p4"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -878,7 +878,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
 
     }
@@ -973,7 +973,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -1018,7 +1018,7 @@ public class AlterTest {
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -1063,7 +1063,7 @@ public class AlterTest {
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
