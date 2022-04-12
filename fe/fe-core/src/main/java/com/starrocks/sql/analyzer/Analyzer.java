@@ -10,6 +10,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
@@ -24,7 +25,6 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.MetaUtils;
@@ -123,7 +123,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitBaseMaterializedViewStatement(BaseMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }

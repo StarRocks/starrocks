@@ -34,7 +34,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BaseMaterializedViewStatement;
 
 import java.util.List;
 
@@ -47,7 +46,7 @@ import java.util.List;
  * db_name: The name of db to which materialized view belongs.
  * table_name: The name of table to which materialized view belongs.
  */
-public class DropMaterializedViewStmt extends BaseMaterializedViewStatement {
+public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
     private final TableName dbMvName;
