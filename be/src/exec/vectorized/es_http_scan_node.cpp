@@ -186,23 +186,24 @@ Status EsHttpScanNode::_build_conjuncts() {
     return status;
 }
 
-void EsHttpScanNode::_try_skip_constant_conjuncts() {
+Status EsHttpScanNode::_try_skip_constant_conjuncts() {
     // TODO: skip constant true
     for (auto& _conjunct_ctx : _conjunct_ctxs) {
         if (_conjunct_ctx->root()->is_constant()) {
             // unreachable path
             // The new optimizer will rewrite `where always false` to `EMPTY_SET`
-            ColumnPtr value = _conjunct_ctx->evaluate(nullptr);
+            ASSIGN_OR_RETURN(ColumnPtr value, _conjunct_ctx->evaluate(nullptr));
             DCHECK(value->is_constant());
             if (value->only_null() || value->get(0).get_uint8() == 0) {
                 _eos = true;
             }
         }
     }
+    return Status::OK();
 }
 
 Status EsHttpScanNode::_normalize_conjuncts() {
-    _try_skip_constant_conjuncts();
+    RETURN_IF_ERROR(_try_skip_constant_conjuncts());
 
     std::vector<bool> validate_res;
     BooleanQueryBuilder::validate(_predicates, &validate_res);

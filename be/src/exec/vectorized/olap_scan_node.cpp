@@ -74,7 +74,7 @@ Status OlapScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
-    OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());

@@ -110,7 +110,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     result_columns.reserve(num_columns);
 
     for (int i = 0; i < num_columns; ++i) {
-        ColumnPtr column = _output_expr_ctxs[i]->evaluate(chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? vectorized::ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;

@@ -267,7 +267,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()
