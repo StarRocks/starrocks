@@ -55,9 +55,12 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
 void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
 
 struct SortedRun;
-Status merge_sorted_chunks_two_way(const SortedRun& left_run, const SortedRun& right_run, Permutation* output);
-Status merge_sorted_chunks_two_way(const ChunkPtr left, const ChunkPtr right, Permutation* output);
-Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor, ChunkConsumer output);
-Status merge_sorted_chunks(const std::vector<ChunkPtr>& chunks, Chunk* output);
+struct SortDescs;
+Status merge_sorted_chunks_two_way(const SortDescs& descs, const SortedRun& left_run, const SortedRun& right_run,
+                                   Permutation* output);
+Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
+                                   Permutation* output);
+Status merge_sorted_cursor_two_way(const SortDescs& descs, ChunkCursor& left_cursor, ChunkCursor& right_cursor,
+                                   ChunkConsumer output);
 
 } // namespace starrocks::vectorized

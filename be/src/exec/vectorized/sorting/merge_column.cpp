@@ -30,9 +30,11 @@ struct EqualRange {
 
 class MergeTwoColumn final : public ColumnVisitorAdapter<MergeTwoColumn> {
 public:
-    MergeTwoColumn(const Column* left_col, const Column* right_col, std::vector<EqualRange>* equal_range,
+    MergeTwoColumn(SortDesc desc, const Column* left_col, const Column* right_col, std::vector<EqualRange>* equal_range,
                    Permutation* perm)
             : ColumnVisitorAdapter(this),
+              _sort_order(desc.sort_order),
+              _null_first(desc.null_first),
               _left_col(left_col),
               _right_col(right_col),
               _equal_ranges(equal_range),
@@ -68,8 +70,9 @@ public:
                         auto& right_data = right_col->get_data();
                         x = SorterComparator<int32_t>::compare(left_data[left_range.first],
                                                                right_data[right_range.first]);
+                        x *= _sort_order;
                     } else {
-                        x = left_col->compare_at(left_range.first, right_range.first, *right_col, 1);
+                        x = left_col->compare_at(left_range.first, right_range.first, *right_col, _null_first);
                     }
                 } else if (lhs < lhs_end) {
                     x = -1;
@@ -130,7 +133,7 @@ public:
                 last++;
             }
         } else {
-            while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, 1) == 0) {
+            while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, _null_first) == 0) {
                 last++;
             }
         }
@@ -149,7 +152,7 @@ public:
                 last++;
             }
         } else {
-            while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, 1) == 0) {
+            while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, _null_first) == 0) {
                 last++;
             }
         }
@@ -160,6 +163,8 @@ private:
     constexpr static uint32_t kLeftIndex = 0;
     constexpr static uint32_t kRightIndex = 1;
 
+    const int _sort_order;
+    const int _null_first;
     const Column* _left_col;
     const Column* _right_col;
     std::vector<EqualRange>* _equal_ranges;
@@ -169,8 +174,8 @@ private:
 // Merge two sorted chunk cusor
 class MergeTwoCursor {
 public:
-    static Status merge_sorted_chunks_two_way(const SortedRun& left_run, const SortedRun& right_run,
-                                              Permutation* output) {
+    static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
+                                              const SortedRun& right_run, Permutation* output) {
         DCHECK(!!left_run.chunk);
         DCHECK(!!right_run.chunk);
         DCHECK_EQ(left_run.chunk->num_columns(), right_run.chunk->num_columns());
@@ -200,7 +205,7 @@ public:
             for (int col = 0; col < left_run.num_columns(); col++) {
                 const Column* left_col = left_run.chunk->get_column_by_index(col).get();
                 const Column* right_col = right_run.chunk->get_column_by_index(col).get();
-                MergeTwoColumn merge2(left_col, right_col, &equal_ranges, output);
+                MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
                 Status st = left_col->accept(&merge2);
                 CHECK(st.ok());
             }
@@ -209,8 +214,8 @@ public:
         return Status::OK();
     }
 
-    static Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor,
-                                              ChunkConsumer output) {
+    static Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, ChunkCursor& left_cursor,
+                                              ChunkCursor& right_cursor, ChunkConsumer output) {
         // 1. Find smaller tail
         // 2. Cutoff the chunk based on tail
         // 3. Merge two chunks and output
@@ -245,16 +250,17 @@ public:
                 }
                 left_chunk.reset();
             } else {
-                int tail_cmp = compare_tail(left_chunk, right_chunk);
+                int tail_cmp = compare_tail(sort_desc, left_chunk, right_chunk);
                 if (tail_cmp <= 0) {
                     // Cutoff right by left tail
-                    size_t right_cut = cutoff_run(right_chunk, std::make_pair(left_chunk, left_chunk.num_rows() - 1));
+                    size_t right_cut =
+                            cutoff_run(sort_desc, right_chunk, std::make_pair(left_chunk, left_chunk.num_rows() - 1));
                     SortedRun right_1(right_chunk.chunk, 0, right_cut);
                     SortedRun right_2(right_chunk.chunk, right_cut, right_chunk.num_rows());
 
                     // Merge partial chunk
                     Permutation perm;
-                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(left_chunk, right_1, &perm));
+                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, left_chunk, right_1, &perm));
                     trim_permutation(left_chunk, right_1, perm);
                     DCHECK_EQ(left_chunk.num_rows() + right_1.num_rows(), perm.size());
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
@@ -273,13 +279,14 @@ public:
                     RETURN_IF_ERROR(output(std::move(merged)));
                 } else {
                     // Cutoff left by right tail
-                    size_t left_cut = cutoff_run(left_chunk, std::make_pair(right_chunk, right_chunk.num_rows() - 1));
+                    size_t left_cut =
+                            cutoff_run(sort_desc, left_chunk, std::make_pair(right_chunk, right_chunk.num_rows() - 1));
                     SortedRun left_1(left_chunk.chunk, 0, left_cut);
                     SortedRun left_2(left_chunk.chunk, left_cut, left_chunk.num_rows());
 
                     // Merge partial chunk
                     Permutation perm;
-                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(right_chunk, left_1, &perm));
+                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, right_chunk, left_1, &perm));
                     trim_permutation(left_1, right_chunk, perm);
                     DCHECK_EQ(right_chunk.num_rows() + left_1.num_rows(), perm.size());
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
@@ -324,15 +331,16 @@ public:
 
     // Cutoff by upper_bound
     // @return last row index of upper bound
-    static size_t cutoff_run(SortedRun run, std::pair<SortedRun, size_t> cut) {
+    static size_t cutoff_run(const SortDescs& sort_descs, SortedRun run, std::pair<SortedRun, size_t> cut) {
         size_t res = 0;
         std::pair<size_t, size_t> search_range = run.range;
 
         for (int i = 0; i < run.num_columns(); i++) {
             auto& lhs_col = *run.get_column(i);
             auto& rhs_col = *cut.first.get_column(i);
-            size_t lower = lower_bound(lhs_col, search_range, rhs_col, cut.second);
-            size_t upper = upper_bound(lhs_col, search_range, rhs_col, cut.second);
+            SortDesc desc = sort_descs.get_column_desc(i);
+            size_t lower = lower_bound(desc, lhs_col, search_range, rhs_col, cut.second);
+            size_t upper = upper_bound(desc, lhs_col, search_range, rhs_col, cut.second);
             res = upper;
             if (upper - lower <= 1) {
                 break;
@@ -343,13 +351,14 @@ public:
     }
 
     // Find upper_bound in left column based on right row
-    static size_t upper_bound(const Column& column, std::pair<size_t, size_t> range, const Column& rhs_column,
-                              size_t rhs_row) {
+    static size_t upper_bound(SortDesc desc, const Column& column, std::pair<size_t, size_t> range,
+                              const Column& rhs_column, size_t rhs_row) {
         size_t first = range.first;
         size_t count = range.second - range.first;
         while (count > 0) {
             size_t mid = first + count / 2;
-            if (column.compare_at(mid, rhs_row, rhs_column, -1) <= 0) {
+            int x = column.compare_at(mid, rhs_row, rhs_column, -1) * desc.sort_order;
+            if (x <= 0) {
                 first = mid + 1;
                 count -= count / 2 + 1;
             } else {
@@ -359,13 +368,14 @@ public:
         return first;
     }
 
-    static size_t lower_bound(const Column& column, std::pair<size_t, size_t> range, const Column& rhs_column,
-                              size_t rhs_row) {
+    static size_t lower_bound(SortDesc desc, const Column& column, std::pair<size_t, size_t> range,
+                              const Column& rhs_column, size_t rhs_row) {
         size_t first = range.first;
         size_t count = range.second - range.first;
         while (count > 0) {
             size_t mid = first + count / 2;
-            if (column.compare_at(mid, rhs_row, rhs_column, -1) < 0) {
+            int x = column.compare_at(mid, rhs_row, rhs_column, desc.null_first) * desc.sort_order;
+            if (x < 0) {
                 first = mid + 1;
                 count -= count / 2 + 1;
             } else {
@@ -375,10 +385,10 @@ public:
         return first;
     }
 
-    static int compare_tail(const SortedRun& left, const SortedRun& right) {
+    static int compare_tail(const SortDescs& desc, const SortedRun& left, const SortedRun& right) {
         size_t lhs_tail = left.num_rows() - 1;
         size_t rhs_tail = right.num_rows() - 1;
-        return compare_chunk_row(*(left.chunk), *(right.chunk), lhs_tail, rhs_tail);
+        return compare_chunk_row(desc, *(left.chunk), *(right.chunk), lhs_tail, rhs_tail);
     }
 };
 
@@ -394,36 +404,18 @@ private:
 
 // Merge two-way sorted run into on sorted run
 // TODO: specify the ordering
-Status merge_sorted_chunks_two_way(const ChunkPtr left, const ChunkPtr right, Permutation* output) {
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,
+                                   Permutation* output) {
     DCHECK_EQ(left->num_columns(), right->num_columns());
 
     SortedRun left_run(left, std::make_pair(0, left->num_rows()));
     SortedRun right_run(right, std::make_pair(0, right->num_rows()));
-    return MergeTwoCursor::merge_sorted_chunks_two_way(left_run, right_run, output);
+    return MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
 }
 
-Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor, ChunkConsumer output) {
-    return MergeTwoCursor::merge_sorted_cursor_two_way(left_cursor, right_cursor, output);
+Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, ChunkCursor& left_cursor, ChunkCursor& right_cursor,
+                                   ChunkConsumer output) {
+    return MergeTwoCursor::merge_sorted_cursor_two_way(sort_desc, left_cursor, right_cursor, output);
 }
 
-Status merge_sorted_chunks_heap_based(const std::vector<SortedRun>& runs, Chunk* output) {
-    return Status::NotSupported("TODO");
-}
-
-Status merge_sorted_chunks(const std::vector<ChunkPtr>& chunks, Chunk* output) {
-    if (chunks.empty()) {
-        return Status::OK();
-    }
-
-    std::vector<SortedRun> runs;
-    for (auto chunk : chunks) {
-        runs.push_back(SortedRun(chunk));
-    }
-
-    int num_columns = chunks[0]->num_columns();
-    for (int i = 0; i < num_columns; i++) {
-    }
-
-    return Status::OK();
-}
 } // namespace starrocks::vectorized

@@ -374,6 +374,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
             }
             // state.ResumeTiming();
 
+            SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
             while (streams.size() > 1) {
                 SortedChunkStream left_stream = std::move(streams.front());
                 streams.pop_front();
@@ -387,7 +388,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                         right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; },
                         &sort_exprs, &asc_arr, &null_first, true);
                 SortedChunkStream merged;
-                Status st = merge_sorted_cursor_two_way(left, right, [&](ChunkUniquePtr chunk) {
+                Status st = merge_sorted_cursor_two_way(sort_desc, left, right, [&](ChunkUniquePtr chunk) {
                     CHECK(!chunk->is_empty());
                     merged.append_chunk(std::move(chunk));
                     return Status::OK();
@@ -430,15 +431,16 @@ static void do_merge_two_way(benchmark::State& state, int num_runs) {
     ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
 
     int64_t num_rows = 0;
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     for (auto _ : state) {
         ChunkPtr merged(chunk1->clone_unique().release());
         for (int i = 1; i < num_runs; i++) {
             Permutation perm;
             if (i % 2 == 0) {
-                merge_sorted_chunks_two_way(merged, chunk1, &perm);
+                merge_sorted_chunks_two_way(sort_desc, merged, chunk1, &perm);
                 append_by_permutation(merged.get(), {merged, chunk1}, perm);
             } else {
-                merge_sorted_chunks_two_way(merged, chunk2, &perm);
+                merge_sorted_chunks_two_way(sort_desc, merged, chunk2, &perm);
                 append_by_permutation(merged.get(), {merged, chunk2}, perm);
             }
         }

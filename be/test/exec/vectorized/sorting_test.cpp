@@ -38,7 +38,8 @@ TEST(MergeTest, merge_sorter_chunks_two_way) {
     ChunkPtr chunk1 = std::make_shared<Chunk>(Columns{col1, col3}, map);
     ChunkPtr chunk2 = std::make_shared<Chunk>(Columns{col2, col4}, map);
     Permutation perm;
-    merge_sorted_chunks_two_way(chunk1, chunk2, &perm);
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+    merge_sorted_chunks_two_way(sort_desc, chunk1, chunk2, &perm);
 
     size_t expected_size = col1->size() + col2->size();
     std::unique_ptr<Chunk> output = chunk1->clone_empty();
@@ -148,13 +149,14 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
         output_chunks.push_back(std::move(chunk));
         return Status::OK();
     };
-    merge_sorted_cursor_two_way(left_cursor, right_cursor, consumer);
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+    merge_sorted_cursor_two_way(sort_desc, left_cursor, right_cursor, consumer);
 
     for (auto& chunk : output_chunks) {
         for (int i = 0; i < chunk->num_rows(); i++) {
             fmt::print("row: {}\n", chunk->debug_row(i));
             if (i > 0) {
-                int x = compare_chunk_row(*chunk, *chunk, i - 1, i);
+                int x = compare_chunk_row(sort_desc, *chunk, *chunk, i - 1, i);
                 ASSERT_LE(x, 0);
             }
         }
@@ -230,6 +232,7 @@ TEST(MergeTest, merge_sorted_stream) {
         streams.push_back(std::move(stream));
     }
 
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     while (streams.size() > 1) {
         SortedChunkStream left_stream = std::move(streams.front());
         streams.pop_front();
@@ -243,7 +246,7 @@ TEST(MergeTest, merge_sorted_stream) {
                 right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; }, &sort_exprs,
                 &asc_arr, &null_first, true);
         SortedChunkStream merged;
-        Status st = merge_sorted_cursor_two_way(left, right, [&](ChunkUniquePtr chunk) {
+        Status st = merge_sorted_cursor_two_way(sort_desc, left, right, [&](ChunkUniquePtr chunk) {
             CHECK(!chunk->is_empty());
             merged.append_chunk(std::move(chunk));
             return Status::OK();
@@ -261,12 +264,12 @@ TEST(MergeTest, merge_sorted_stream) {
         if (c > 0) {
             fmt::print("sorted row {}: {}\n", c * chunk->num_rows(), chunk->debug_row(0));
             auto& last_chunk = streams[0].chunks[c - 1];
-            int x = compare_chunk_row(*last_chunk, *chunk, last_chunk->num_rows() - 1, 0);
+            int x = compare_chunk_row(sort_desc, *last_chunk, *chunk, last_chunk->num_rows() - 1, 0);
             ASSERT_LE(x, 0);
         }
         for (int i = 1; i < chunk->num_rows(); i++) {
             fmt::print("sorted row {}: {}\n", c * chunk->num_rows() + i, chunk->debug_row(i));
-            int x = compare_chunk_row(*chunk, *chunk, i - 1, i);
+            int x = compare_chunk_row(sort_desc, *chunk, *chunk, i - 1, i);
             ASSERT_LE(x, 0);
         }
     }

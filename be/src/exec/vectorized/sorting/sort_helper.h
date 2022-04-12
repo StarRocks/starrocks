@@ -275,7 +275,28 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
     return Status::OK();
 }
 
-static inline int compare_chunk_row(const Chunk& lhs, const Chunk& rhs, size_t lhs_row, size_t rhs_row) {
+struct SortDesc {
+    int sort_order;
+    int null_first;
+};
+
+struct SortDescs {
+    const std::vector<int>& sort_orders;
+    const std::vector<int>& null_firsts;
+
+    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
+            : sort_orders(orders), null_firsts(nulls) {}
+
+    SortDesc get_column_desc(int col) const {
+        SortDesc desc;
+        desc.sort_order = sort_orders[col];
+        desc.null_first = null_firsts[col];
+        return desc;
+    }
+};
+
+static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, const Chunk& rhs, size_t lhs_row,
+                                    size_t rhs_row) {
     DCHECK_LT(lhs_row, lhs.num_rows());
     DCHECK_LT(rhs_row, rhs.num_rows());
     DCHECK_EQ(lhs.num_columns(), rhs.num_columns());
@@ -284,9 +305,9 @@ static inline int compare_chunk_row(const Chunk& lhs, const Chunk& rhs, size_t l
     for (int i = 0; i < num_columns; i++) {
         auto& lhs_column = lhs.get_column_by_index(i);
         auto& rhs_column = rhs.get_column_by_index(i);
-        int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, 1);
+        int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.null_firsts[i]);
         if (x != 0) {
-            return x;
+            return x * desc.sort_orders[i];
         }
     }
     return 0;
