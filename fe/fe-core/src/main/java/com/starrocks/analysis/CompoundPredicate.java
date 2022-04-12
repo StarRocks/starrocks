@@ -253,4 +253,9 @@ public class CompoundPredicate extends Predicate {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitCompoundPredicate(this, context);
     }
+
+    @Override
+    public String toString() {
+        return toSqlImpl();
+    }
 }

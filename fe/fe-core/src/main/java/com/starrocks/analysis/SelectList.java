@@ -116,4 +116,13 @@ public class SelectList {
     public SelectList clone() {
         return new SelectList(this);
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("SelectList{");
+        sb.append("isDistinct=").append(isDistinct);
+        sb.append(", selectItems=").append(items);
+        sb.append("}");
+        return sb.toString();
+    }
 }

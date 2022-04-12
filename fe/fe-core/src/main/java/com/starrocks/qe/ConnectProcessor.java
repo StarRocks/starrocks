@@ -275,7 +275,6 @@ public class ConnectProcessor {
                 }
                 parsedStmt = stmts.get(i);
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
-
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
 

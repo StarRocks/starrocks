@@ -94,4 +94,15 @@ public class JoinRelation extends Relation {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitJoin(this, context);
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("JoinRelation{");
+        sb.append("joinType=").append(joinOp);
+        sb.append(", left=").append(left);
+        sb.append(", right=").append(right);
+        sb.append(", onPredicate=").append(onPredicate);
+        sb.append("}");
+        return sb.toString();
+    }
 }

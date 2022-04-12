@@ -124,4 +124,9 @@ public class LimitElement implements ParseNode {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitLimitElement(this, context);
     }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
 }

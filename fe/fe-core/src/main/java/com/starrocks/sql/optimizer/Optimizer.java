@@ -108,10 +108,6 @@ public class Optimizer {
 
         // Phase 3: optimize based on memo and group
         memoOptimize(connectContext, memo, rootTaskContext);
-        if (sessionVariable.isEnableOptimizerTraceLog()) {
-            LOG.info("{} after memo optimize, root group:\n{}",
-                    traceInfo.getTraceLogPrefix(), memo.getRootGroup().toString());
-        }
 
         OptExpression result;
         if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
