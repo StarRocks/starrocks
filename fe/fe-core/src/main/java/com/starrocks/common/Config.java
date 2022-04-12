@@ -1356,12 +1356,6 @@ public class Config extends ConfigBase {
     public static boolean check_java_version = true;
 
     /**
-     * timeout for shutdown hook execute
-     */
-    @ConfField(mutable = true)
-    public static long shutdown_hook_timeout_sec = 60;
-
-    /**
      * connection and socket timeout for broker client
      */
     @ConfField
