@@ -198,8 +198,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr min_col = min_chunk->columns()[i];
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
-            int64_t offset_in_seconds = _adapter->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = _adapter->decode_min_max_value(slot, stats, min_col, max_col, offset_in_seconds);
+            int64_t tz_offset_in_seconds = _adapter->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
+            Status st = _adapter->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }

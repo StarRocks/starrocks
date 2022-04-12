@@ -65,7 +65,7 @@ public:
 
     // to decode min and max value from column stats.
     Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
-                                ColumnPtr max_col, int64_t offset_in_seconds);
+                                ColumnPtr max_col, int64_t tz_offset_in_seconds);
     Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                         Filter* filter);
     size_t get_cvb_size();
