@@ -151,31 +151,26 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testCreateMaterializedView() throws Exception {
-
+    public void testDropTable() throws Exception {
         auth = starRocksAssert.getCtx().getCatalog().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
 
-        String sql = "create materialized view db1.abc " +
-                "distributed by hash(k1) " +
-                "refresh async " +
-                "as select k1, k4 from db1.tbl1;";
+        String sql = "drop table if exists db1.tbl1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
-        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
-        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
-        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
-
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
+        sql = "drop table if exists db1.tbl1";
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
-                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+
     }
 }

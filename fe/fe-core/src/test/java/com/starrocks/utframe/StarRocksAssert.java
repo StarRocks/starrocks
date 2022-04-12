@@ -88,7 +88,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
-                (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database if exists " + dbName + ";", ctx);
+                (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists " + dbName + ";", ctx);
         Catalog.getCurrentCatalog().dropDb(dropDbStmt);
 
         CreateDbStmt createDbStmt =
@@ -156,7 +156,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert dropView(String viewName) throws Exception {
         DropTableStmt dropViewStmt =
-                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop view " + viewName + ";", ctx);
+                (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
         Catalog.getCurrentCatalog().dropTable(dropViewStmt);
         return this;
     }
@@ -170,7 +170,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
-                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop table " + tableName + ";", ctx);
+                (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
         return this;
     }

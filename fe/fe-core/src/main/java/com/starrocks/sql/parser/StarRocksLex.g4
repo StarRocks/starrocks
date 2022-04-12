@@ -184,6 +184,7 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WITH: 'WITH';
 YEAR: 'YEAR';
+FORCE: 'FORCE';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
