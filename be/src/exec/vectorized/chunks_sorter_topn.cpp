@@ -386,73 +386,50 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
 
 Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                              DataSegments& segments, size_t sort_row_number) {
-    ChunkPtr big_chunk;
     size_t first_size = new_permutation.first.size();
+    size_t second_size = new_permutation.second.size();
 
-    // this means we just need number_of_rows_to_sort rows in permutations.first.
-    if (first_size >= sort_row_number) {
+    if (first_size == 0 && second_size == 0) {
+        return Status::OK();
+    }
+
+    ChunkPtr big_chunk;
+    std::vector<ChunkPtr> chunks;
+    for (auto& segment : segments) {
+        chunks.push_back(segment.chunk);
+    }
+
+    if (first_size > 0) {
         big_chunk.reset(segments[new_permutation.first[0].chunk_index].chunk->clone_empty(sort_row_number).release());
+        append_by_permutation(big_chunk.get(), chunks, new_permutation.first);
+        sort_row_number -= first_size;
+    }
 
-        for (size_t index = 0; index < sort_row_number; ++index) {
-            auto& right = new_permutation.first[index];
-            big_chunk->append_safe(*segments[right.chunk_index].chunk, right.index_in_chunk, 1);
-        }
-
-        DataSegment merged_segment;
-        merged_segment.init(_sort_exprs, big_chunk);
-
-        _merged_segment = std::move(merged_segment);
-    } else {
-        size_t permutation_size = new_permutation.second.size();
-        if (first_size == 0 && permutation_size == 0) {
-            return Status::OK();
-        }
-
-        // this means we need all permutations.first as BEFORE and take (number_of_rows_to_sort - permutations.first.size()) rows from
-        // permutations.second merge-sort with _merged_segment.
-        sort_row_number = sort_row_number - first_size;
-        size_t sorted_size = _merged_segment.chunk->num_rows();
-        if (sort_row_number > sorted_size + permutation_size) {
-            sort_row_number = sorted_size + permutation_size;
-        }
-
-        if (first_size > 0) {
-            big_chunk.reset(segments[new_permutation.first[0].chunk_index]
-                                    .chunk->clone_empty(sort_row_number + first_size)
-                                    .release());
-
-            for (size_t index = 0; index < first_size; ++index) {
-                auto& right = new_permutation.first[index];
-                big_chunk->append_safe(*segments[right.chunk_index].chunk, right.index_in_chunk, 1);
-            }
-        } else {
+    if (sort_row_number > 0) {
+        if (big_chunk == nullptr) {
             big_chunk.reset(
                     segments[new_permutation.second[0].chunk_index].chunk->clone_empty(sort_row_number).release());
         }
+        size_t sorted_size = _merged_segment.chunk->num_rows();
+        sort_row_number = std::min(sort_row_number, sorted_size + second_size);
 
-        // take sort_row_number rows from permutations.second merge-sort with _merged_segment.
-        _merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, permutation_size, new_permutation.second);
-
-        if (big_chunk->reach_capacity_limit()) {
-            LOG(WARNING) << "TopN sort encounter big chunk overflow";
-            return Status::InternalError(fmt::format("TopN sort encounter big chunk overflow"));
-        }
-
-        DataSegment merged_segment;
-        merged_segment.init(_sort_exprs, big_chunk);
-
-        _merged_segment = std::move(merged_segment);
+        _merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, second_size, new_permutation.second);
     }
+    if (big_chunk->reach_capacity_limit()) {
+        LOG(WARNING) << "TopN sort encounter big chunk overflow";
+        return Status::InternalError(fmt::format("TopN sort encounter big chunk overflow"));
+    }
+
+    DataSegment merged_segment;
+    merged_segment.init(_sort_exprs, big_chunk);
+    _merged_segment = std::move(merged_segment);
 
     return Status::OK();
 }
 
 Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation,
                                                  DataSegments& segments, size_t sort_row_number) {
-    size_t permutation_size = new_permutation.size();
-    if (sort_row_number > permutation_size) {
-        sort_row_number = permutation_size;
-    }
+    sort_row_number = std::min(new_permutation.size(), sort_row_number);
 
     if (sort_row_number > Column::MAX_CAPACITY_LIMIT) {
         LOG(WARNING) << "topn sort row exceed rows limit " << sort_row_number;
@@ -460,14 +437,24 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     }
 
     ChunkPtr big_chunk;
-    size_t index_of_merging = 0;
+    big_chunk.reset(segments[new_permutation[0].chunk_index].chunk->clone_empty(sort_row_number).release());
 
     // Initial this big chunk.
-    big_chunk.reset(segments[new_permutation[0].chunk_index].chunk->clone_empty(sort_row_number).release());
-    while (index_of_merging < sort_row_number) {
-        auto& permutation = new_permutation[index_of_merging];
-        big_chunk->append_safe(*segments[permutation.chunk_index].chunk, permutation.index_in_chunk, 1);
-        ++index_of_merging;
+    if (_compare_strategy != RowWise) {
+        std::vector<ChunkPtr> chunks;
+        for (auto& segment : segments) {
+            chunks.push_back(segment.assemble_orderby_chunk());
+        }
+        new_permutation.resize(sort_row_number);
+        append_by_permutation(big_chunk.get(), chunks, new_permutation);
+    } else {
+        // TODO: remove it
+        size_t index_of_merging = 0;
+        while (index_of_merging < sort_row_number) {
+            auto& permutation = new_permutation[index_of_merging];
+            big_chunk->append_safe(*segments[permutation.chunk_index].chunk, permutation.index_in_chunk, 1);
+            ++index_of_merging;
+        }
     }
 
     if (big_chunk->reach_capacity_limit()) {
