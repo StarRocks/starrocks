@@ -280,12 +280,12 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggTableValueColumnName = new HashSet<String>();
+                Set<String> aggTableValueColumnNames = new HashSet<String>();
                 if (referenceTable.getKeysType().isAggregationFamily()) {
                     List<Column> fullColumn = referenceTable.getFullSchema();
                     for (Column col : fullColumn) {
                         if (!col.isKey()) {
-                            aggTableValueColumnName.add(col.getName());
+                            aggTableValueColumnNames.add(col.getName());
                         }
                     }
                 }
@@ -315,7 +315,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnName);
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnNames);
             }
         }
 
