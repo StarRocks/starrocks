@@ -97,6 +97,36 @@ TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ChunkTest, test_chunk_downgrade) {
+    auto c1 = BinaryColumn::create();
+    c1->append_string("1");
+    auto c2 = BinaryColumn::create();
+    c2->append_string("11");
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(c1, 1);
+    chunk->append_column(c2, 2);
+    ASSERT_FALSE(chunk->has_large_column());
+
+    auto ret = chunk->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(chunk->has_large_column());
+
+    auto c3 = LargeBinaryColumn::create();
+    c3->append_string("1");
+    auto c4 = LargeBinaryColumn::create();
+    c4->append_string("2");
+    chunk = std::make_shared<Chunk>();
+    chunk->append_column(c3, 1);
+    chunk->append_column(c4, 2);
+    ASSERT_TRUE(chunk->has_large_column());
+
+    ret = chunk->downgrade();
+    ASSERT_FALSE(chunk->has_large_column());
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(chunk->has_large_column());
+}
+
+// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_construct) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 

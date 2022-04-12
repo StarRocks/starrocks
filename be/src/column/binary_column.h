@@ -52,6 +52,10 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override;
+
     ~BinaryColumnBase<T>() override {
         if (!_offsets.empty()) {
             DCHECK_EQ(_bytes.size(), _offsets.back());

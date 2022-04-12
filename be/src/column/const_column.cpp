@@ -77,15 +77,12 @@ StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
     if (_size > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
-    auto ret = _data->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() != nullptr) {
-        _data = ret.value();
-        return nullptr;
-    } else {
-        return nullptr;
-    }
+
+    return upgrade_helper_func(&_data);
+}
+
+StatusOr<ColumnPtr> ConstColumn::downgrade() {
+    return downgrade_helper_func(&_data);
 }
 
 } // namespace starrocks::vectorized

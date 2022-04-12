@@ -18,7 +18,7 @@ Chunk::Chunk() {
 }
 
 Status Chunk::upgrade_if_overflow() {
-    for (auto& column : columns()) {
+    for (auto& column : _columns) {
         auto ret = column->upgrade_if_overflow();
         if (!ret.ok()) {
             return ret.status();
@@ -29,6 +29,29 @@ Status Chunk::upgrade_if_overflow() {
         }
     }
     return Status::OK();
+}
+
+Status Chunk::downgrade() {
+    for (auto& column : _columns) {
+        auto ret = column->downgrade();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = ret.value();
+        } else {
+            continue;
+        }
+    }
+    return Status::OK();
+}
+
+bool Chunk::has_large_column() const {
+    for (const auto& column : _columns) {
+        if (column->has_large_column()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {

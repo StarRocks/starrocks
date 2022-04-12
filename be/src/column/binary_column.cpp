@@ -575,6 +575,40 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
     }
 }
 
+template <typename T>
+StatusOr<ColumnPtr> BinaryColumnBase<T>::downgrade() {
+    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
+
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        return nullptr;
+    } else {
+        if (_bytes.size() >= Column::MAX_CAPACITY_LIMIT) {
+            return Status::InternalError("column size exceed the limit, can't downgrade");
+        } else {
+            auto new_column = BinaryColumn::create();
+            new_column->get_offset().resize(_offsets.size());
+            new_column->get_bytes().swap(_bytes);
+
+            for (size_t i = 0; i < _offsets.size(); i++) {
+                new_column->get_offset()[i] = _offsets[i];
+            }
+            _offsets.resize(0);
+            return new_column;
+        }
+    }
+}
+
+template <typename T>
+bool BinaryColumnBase<T>::has_large_column() const {
+    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
+
+    if constexpr (std::is_same_v<T, uint64_t>) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
 
