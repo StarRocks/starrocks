@@ -3,6 +3,8 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -13,7 +15,9 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -23,6 +27,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private final boolean isSplit;
 
     private boolean isEnforced;
+
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
@@ -39,6 +45,15 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void setGlobalDicts(
+            List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
     }
 
     public SortPhase getSortPhase() {

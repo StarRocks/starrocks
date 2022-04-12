@@ -1373,13 +1373,13 @@ public class PlanFragmentBuilder {
                         topN.getOffset(),
                         inputFragment);
             } else {
-                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
+                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr, topN);
             }
         }
 
         private PlanFragment buildFinalTopNFragment(ExecPlan context, long limit, long offset,
                                                     PlanFragment inputFragment,
-                                                    OptExpression optExpr) {
+                                                    OptExpression optExpr, PhysicalTopNOperator topN) {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(), false,
                     DistributionSpec.DistributionType.GATHER);
@@ -1397,6 +1397,7 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
+            inputFragment.setQueryGlobalDicts(topN.getGlobalDicts());
 
             context.getFragments().add(fragment);
             return fragment;
