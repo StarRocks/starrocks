@@ -97,24 +97,40 @@ Status EngineCloneTask::execute() {
     return Status::OK();
 }
 
+static string version_list_to_string(const std::vector<Version>& versions) {
+    std::ostringstream str;
+    size_t last = 0;
+    for (size_t i = last + 1; i <= versions.size(); i++) {
+        if (i == versions.size() || versions[last].second + 1 != versions[i].first) {
+            if (versions[last].first == versions[i - 1].second) {
+                str << versions[last].first << ",";
+            } else {
+                str << versions[last].first << "-" << versions[i - 1].second << ",";
+            }
+            last = i;
+        }
+    }
+    return str.str();
+}
+
 Status EngineCloneTask::_do_clone(Tablet* tablet) {
     Status status;
     // try to repair a tablet with missing version
     if (tablet != nullptr) {
-        LOG(INFO) << "Cloning existing tablet. "
-                  << "signature=" << _signature << " tablet_id=" << _clone_req.tablet_id
-                  << " schema_hash=" << _clone_req.schema_hash << " committed_version=" << _clone_req.committed_version
-                  << " keys_type=" << tablet->keys_type();
-
         string download_path = tablet->schema_hash_path() + CLONE_PREFIX;
         DeferOp defer([&]() { (void)FileUtils::remove_all(download_path); });
 
         std::vector<Version> missed_versions;
         tablet->calc_missed_versions(_clone_req.committed_version, &missed_versions);
         if (missed_versions.size() == 0) {
-            LOG(INFO) << "Skipped clone, no missing version";
+            LOG(INFO) << "Cloning existing tablet skipped, no missing version. tablet:" << tablet->table_id()
+                      << " type:" << KeysType_Name(tablet->keys_type()) << " version:" << _clone_req.committed_version;
             return Status::OK();
         }
+        LOG(INFO) << "Cloning existing tablet. "
+                  << " tablet:" << _clone_req.tablet_id << " type:" << KeysType_Name(tablet->keys_type())
+                  << " version:" << _clone_req.committed_version
+                  << " missed_versions=" << version_list_to_string(missed_versions);
         status = _clone_copy(*tablet->data_dir(), download_path, _error_msgs, &missed_versions);
         bool incremental_clone = true;
         if (!status.ok()) {
@@ -129,13 +145,13 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         }
 
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to load snapshot:" << status << ". tablet_id=" << tablet->tablet_id();
+            LOG(WARNING) << "Fail to load snapshot:" << status << ". tablet:" << tablet->tablet_id();
             _error_msgs->push_back(status.to_string());
         }
         return status;
     } else {
         LOG(INFO) << "Creating a new replica of tablet " << _clone_req.tablet_id
-                  << " by clone. committed_version=" << _clone_req.committed_version << " signature=" << _signature;
+                  << " by clone. version:" << _clone_req.committed_version;
         std::string shard_path;
         DataDir* store = nullptr;
         int64_t dest_path_hash = -1;
@@ -145,8 +161,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         auto ost = StorageEngine::instance()->obtain_shard_path(_clone_req.storage_medium, dest_path_hash, &shard_path,
                                                                 &store);
         if (!ost.ok()) {
-            LOG(WARNING) << "Fail to obtain shard path. tablet_id=" << _clone_req.tablet_id
-                         << " signature=" << _signature;
+            LOG(WARNING) << "Fail to obtain shard path. tablet:" << _clone_req.tablet_id;
             _error_msgs->push_back("fail to obtain shard path");
             return ost;
         }
@@ -169,20 +184,20 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             DCHECK(!FileUtils::check_exist(clone_meta_file));
             status = tablet_manager->load_tablet_from_dir(store, tablet_id, schema_hash, schema_hash_dir, false);
             if (!status.ok()) {
-                LOG(WARNING) << "Fail to load tablet from dir: " << status << ". schema_hash_dir='" << schema_hash_dir
-                             << " signature=" << _signature;
+                LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
+                             << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
             }
         } else if (FileUtils::check_exist(clone_meta_file)) {
             DCHECK(!FileUtils::check_exist(clone_header_file));
             status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
             if (!status.ok()) {
-                LOG(WARNING) << "Fail to load tablet from snapshot: " << status
-                             << ". schema_hash_dir=" << schema_hash_dir << " signature=" << _signature;
+                LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
+                             << ". schema_hash_dir=" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from snapshot failed.");
             }
         } else {
-            LOG(WARNING) << "Fail to find snapshot meta or header file";
+            LOG(WARNING) << "Fail to find snapshot meta or header file. tablet:" << _clone_req.tablet_id;
             status = Status::InternalError("fail to find snapshot meta or header file");
         }
 
@@ -260,7 +275,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         st = _make_snapshot(src.host, src.be_port, _clone_req.tablet_id, _clone_req.schema_hash, timeout_s,
                             missed_versions, &snapshot_path, &snapshot_format);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to make snapshot from " << src.host << ": " << st.to_string();
+            LOG(WARNING) << "Fail to make snapshot from " << src.host << ": " << st.to_string()
+                         << " tablet:" << _clone_req.tablet_id;
             error_msgs->push_back("make snapshot failed. backend_ip: " + src.host);
             continue;
         }
@@ -272,12 +288,14 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string();
+            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string()
+                         << " tablet:" << _clone_req.tablet_id;
             error_msgs->push_back("download snapshot failed. backend_ip: " + src.host);
             continue;
         }
         if (snapshot_format != g_Types_constants.TSNAPSHOT_REQ_VERSION2) {
-            LOG(WARNING) << "Unsupported snapshot format version " << snapshot_format;
+            LOG(WARNING) << "Unsupported snapshot format version " << snapshot_format
+                         << " tablet:" << _clone_req.tablet_id;
             error_msgs->push_back("unknown snapshot format version. backend_ip: " + src.host);
             continue;
         }
@@ -286,7 +304,7 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         // as part of its field, should be enough to avoid the conflicts with each other.
         st = SnapshotManager::instance()->convert_rowset_ids(local_path, _clone_req.tablet_id, _clone_req.schema_hash);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to convert rowset ids: " << st.to_string();
+            LOG(WARNING) << "Fail to convert rowset ids: " << st.to_string() << " tablet:" << _clone_req.tablet_id;
             error_msgs->push_back("convert rowset id failed. backend_ip: " + src.host);
             continue;
         }
@@ -427,8 +445,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        LOG(INFO) << "Downloading " << remote_file_url << " to " << local_file_path << ". bytes=" << file_size
-                  << " timeout=" << estimate_timeout;
+        VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+                << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
             RETURN_IF_ERROR(client->init(remote_file_url));
@@ -454,7 +472,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     if (total_time_ms > 0) {
         copy_rate = total_file_size / ((double)total_time_ms) / 1000;
     }
-    LOG(INFO) << "Copied tablet " << _signature << ". bytes=" << total_file_size << " cost=" << total_time_ms << " ms"
+    LOG(INFO) << "Copied tablet " << _signature << " files=" << file_name_list.size() << ". bytes=" << total_file_size
+              << " cost=" << total_time_ms << " ms"
               << " rate=" << copy_rate << " MB/s";
     return Status::OK();
 }
@@ -533,12 +552,13 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
                 LOG(WARNING) << "Fail to link " << from << " to " << to << ": " << res;
                 break;
             }
-            LOG(INFO) << "Linked " << from << " to " << to;
+            VLOG(1) << "Linked " << from << " to " << to;
             linked_success_files.emplace_back(std::move(to));
         }
         if (!res.ok()) {
             break;
         }
+        LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
 
         if (incremental_clone) {
             res = _clone_incremental_data(tablet, cloned_tablet_meta, committed_version);
