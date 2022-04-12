@@ -172,6 +172,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
+            // Because windowfunnel have more two input types.
+            // functions registry use 4th args.
+            if (fn.name.function_name == "window_funnel") {
+                arg_type = TypeDescriptor::from_thrift(fn.arg_types[3]);
+            }
+
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
                                                             is_input_nullable, fn.binary_type, state->func_version());
