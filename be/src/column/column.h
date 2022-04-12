@@ -366,6 +366,7 @@ public:
 
     virtual void check_or_die() const = 0;
 
+protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col) {
         auto ret = (*col)->downgrade();
         if (!ret.ok()) {
@@ -390,7 +391,6 @@ public:
         }
     }
 
-protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
