@@ -57,16 +57,16 @@ public class DropTableStmt extends DdlStmt {
         return tableName.getTbl();
     }
 
+    public TableName getTableNameObject() {
+        return tableName;
+    }
+
     public boolean isView() {
         return isView;
     }
 
     public boolean isForceDrop() {
         return this.forceDrop;
-    }
-
-    public void setDbName(String dbName) {
-        tableName.setDb(dbName);
     }
 
     @Override
@@ -76,7 +76,18 @@ public class DropTableStmt extends DdlStmt {
     @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("DROP TABLE ").append(tableName.toSql());
+        if (isView()) {
+            stringBuilder.append("DROP VIEW ");
+        } else {
+            stringBuilder.append("DROP TABLE ");
+        }
+        if (isSetIfExists()) {
+            stringBuilder.append("IF EXISTS ");
+        }
+        stringBuilder.append(tableName.toSql());
+        if (isForceDrop()) {
+            stringBuilder.append(" FORCE");
+        }
         return stringBuilder.toString();
     }
 
