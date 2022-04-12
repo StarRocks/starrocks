@@ -27,6 +27,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -166,6 +167,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowTableStmt(database, isVerbose, null);
         }
+    }
+
+    @Override
+    public ParseNode visitDropTable(StarRocksParser.DropTableContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        boolean force = context.FORCE() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, force);
+    }
+
+    @Override
+    public ParseNode visitDropView(StarRocksParser.DropViewContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, true, false);
     }
 
     @Override
