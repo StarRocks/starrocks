@@ -12,7 +12,7 @@ const size_t MAX_RAW_JSON_LEN = 64;
 
 Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
-        _doc_stream = _parser.iterate_many(data, len);
+        _doc_stream = _parser->iterate_many(data, len);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -74,7 +74,7 @@ Status JsonDocumentStreamParser::advance() noexcept {
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
-        _doc = _parser.iterate(data, len, allocated);
+        _doc = _parser->iterate(data, len, allocated);
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format("the value should be array type with strip_outer_array=true, value: {}",

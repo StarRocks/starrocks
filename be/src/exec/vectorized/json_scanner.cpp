@@ -665,23 +665,23 @@ Status JsonReader::_read_and_parse_json() {
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             } else {
-                _parser.reset(new ExpandedJsonArrayParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new ExpandedJsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             }
         } else {
             if (_is_ndjson) {
-                _parser.reset(new JsonDocumentStreamParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new JsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             } else {
-                _parser.reset(new JsonArrayParserWithRoot(_scanner->_root_paths));
+                _parser.reset(new JsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParser);
+            _parser.reset(new JsonArrayParser(&_simdjson_parser));
         } else {
-            _parser.reset(new JsonDocumentStreamParser);
+            _parser.reset(new JsonDocumentStreamParser(&_simdjson_parser));
         }
     }
 

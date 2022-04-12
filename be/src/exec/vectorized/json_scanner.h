@@ -101,13 +101,15 @@ private:
     bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
-    int _next_line;
-    int _total_lines;
     bool _closed;
     std::vector<SlotDescriptor*> _slot_descs;
 
     std::unique_ptr<uint8_t[]> _json_binary_ptr;
     bool _is_ndjson = false;
+
+    // For performance reason, the simdjson parser should be reused over several files.
+    //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
+    simdjson::ondemand::parser _simdjson_parser;
 
     std::unique_ptr<JsonParser> _parser;
     bool _empty_parser = true;
