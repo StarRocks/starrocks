@@ -57,6 +57,19 @@ ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_
     }
 }
 
+ChunkCursor::ChunkCursor(ChunkProbeSupplier chunk_probe_supplier, const std::vector<ExprContext*>* sort_exprs,
+                         const std::vector<int>& is_asc, const std::vector<int>& is_null_first)
+        : ChunkCursor(nullptr, chunk_probe_supplier, nullptr, sort_exprs, is_asc, is_null_first, true) {
+    _chunk_supplier = [](Chunk** _) {
+        CHECK(false) << "unreachable";
+        return Status::NotSupported("");
+    };
+    _chunk_has_supplier = [] {
+        CHECK(false) << "unreachable";
+        return false;
+    };
+}
+
 ChunkCursor::~ChunkCursor() = default;
 
 ChunkCursor ChunkCursor::make_for_pipeline(ChunkProbeSupplier chunk_supplier,

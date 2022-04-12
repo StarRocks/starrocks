@@ -140,17 +140,18 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
         return true;
     };
 
-    ChunkCursor left_cursor(left_chunk_supplier, left_chunk_probe_supplier, left_chunk_has_supplier, &sort_exprs,
-                            &asc_arr, &null_first, true);
-    ChunkCursor right_cursor(right_chunk_supplier, right_chunk_probe_supplier, right_chunk_has_supplier, &sort_exprs,
-                             &asc_arr, &null_first, true);
+    auto left_cursor = std::make_unique<ChunkCursor>(left_chunk_supplier, left_chunk_probe_supplier,
+                                                     left_chunk_has_supplier, &sort_exprs, &asc_arr, &null_first, true);
+    auto right_cursor =
+            std::make_unique<ChunkCursor>(right_chunk_supplier, right_chunk_probe_supplier, right_chunk_has_supplier,
+                                          &sort_exprs, &asc_arr, &null_first, true);
     std::vector<ChunkUniquePtr> output_chunks;
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
         output_chunks.push_back(std::move(chunk));
         return Status::OK();
     };
     SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
-    merge_sorted_cursor_two_way(sort_desc, left_cursor, right_cursor, consumer);
+    merge_sorted_cursor_two_way(sort_desc, std::move(left_cursor), std::move(right_cursor), consumer);
 
     for (auto& chunk : output_chunks) {
         for (int i = 0; i < chunk->num_rows(); i++) {
@@ -217,10 +218,10 @@ TEST(MergeTest, merge_sorted_stream) {
         chunk_has_suppliers.emplace_back(chunk_has_supplier);
     }
 
-    std::vector<ChunkCursor> input_cursors;
+    std::vector<std::unique_ptr<ChunkCursor>> input_cursors;
     for (int run = 0; run < num_runs; run++) {
-        input_cursors.push_back(ChunkCursor::make_for_pipeline(chunk_probe_suppliers[run], &sort_exprs,
-                                                               sort_desc.sort_orders, sort_desc.null_firsts));
+        input_cursors.push_back(std::make_unique<ChunkCursor>(chunk_probe_suppliers[run], &sort_exprs,
+                                                              sort_desc.sort_orders, sort_desc.null_firsts));
     }
 
     std::vector<ChunkUniquePtr> output_chunks;

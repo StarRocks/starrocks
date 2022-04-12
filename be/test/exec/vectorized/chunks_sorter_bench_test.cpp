@@ -381,18 +381,19 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 SortedChunkStream right_stream = std::move(streams.front());
                 streams.pop_front();
                 CHECK(!right_stream.chunks.empty());
-                ChunkCursor left(
+                auto left = std::make_unique<ChunkCursor>(
                         left_stream.get_supplier(), left_stream.get_probe_supplier(), []() { return true; },
                         &sort_exprs, &asc_arr, &null_first, true);
-                ChunkCursor right(
+                auto right = std::make_unique<ChunkCursor>(
                         right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; },
                         &sort_exprs, &asc_arr, &null_first, true);
                 SortedChunkStream merged;
-                Status st = merge_sorted_cursor_two_way(sort_desc, left, right, [&](ChunkUniquePtr chunk) {
-                    CHECK(!chunk->is_empty());
-                    merged.append_chunk(std::move(chunk));
-                    return Status::OK();
-                });
+                Status st = merge_sorted_cursor_two_way(sort_desc, std::move(left), std::move(right),
+                                                        [&](ChunkUniquePtr chunk) {
+                                                            CHECK(!chunk->is_empty());
+                                                            merged.append_chunk(std::move(chunk));
+                                                            return Status::OK();
+                                                        });
                 CHECK(st.ok());
                 CHECK(!merged.chunks.empty());
                 streams.push_back(std::move(merged));

@@ -32,12 +32,15 @@ typedef std::vector<ChunkHasSupplier> ChunkHasSuppliers;
 class ChunkCursor {
 public:
     ChunkCursor() = default;
+    ChunkCursor(const ChunkCursor&) = delete;
     ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
                 ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline);
     ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
                 ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<int>& is_asc, const std::vector<int>& is_null_first, bool is_pipeline);
+    ChunkCursor(ChunkProbeSupplier chunk_probe_supplier, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<int>& is_asc, const std::vector<int>& is_null_first);
     ~ChunkCursor();
 
     static ChunkCursor make_for_pipeline(ChunkProbeSupplier chunk_supplier, const std::vector<ExprContext*>* sort_exprs,

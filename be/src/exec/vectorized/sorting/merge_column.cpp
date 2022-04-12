@@ -174,15 +174,16 @@ private:
 // Merge two sorted cusor
 class MergeTwoCursor {
 public:
-    MergeTwoCursor(const SortDescs& sort_desc, ChunkCursor left_cursor, ChunkCursor right_cursor)
-            : _sort_desc(sort_desc), _left_cursor(left_cursor), _right_cursor(right_cursor) {
-        _left_cursor.next_chunk_for_pipeline();
-        _right_cursor.next_chunk_for_pipeline();
-        if (_left_cursor.has_next()) {
-            _left_run = SortedRun(_left_cursor.get_current_chunk());
+    MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<ChunkCursor>&& left_cursor,
+                   std::unique_ptr<ChunkCursor>&& right_cursor)
+            : _sort_desc(sort_desc), _left_cursor(std::move(left_cursor)), _right_cursor(std::move(right_cursor)) {
+        _left_cursor->next_chunk_for_pipeline();
+        _right_cursor->next_chunk_for_pipeline();
+        if (_left_cursor->has_next()) {
+            _left_run = SortedRun(_left_cursor->get_current_chunk());
         }
-        if (_right_cursor.has_next()) {
-            _right_run = SortedRun(_right_cursor.get_current_chunk());
+        if (_right_cursor->has_next()) {
+            _right_run = SortedRun(_right_cursor->get_current_chunk());
         }
         _chunk_supplier = [&](Chunk** output) -> bool {
             auto chunk = next();
@@ -216,14 +217,12 @@ public:
     ChunkProbeSupplier& as_supplier() { return _chunk_supplier; }
 
     // use this as cursor
-    ChunkCursor& as_chunk_cursor() {
-        if (!_output_cursor_inited) {
-            _output_cursor =
-                    ChunkCursor::make_for_pipeline(as_supplier(), _left_cursor.get_sort_exprs(),
-                                                   *_left_cursor.get_sort_orders(), *_left_cursor.get_null_firsts());
-            _output_cursor_inited = true;
+    std::unique_ptr<ChunkCursor> as_chunk_cursor() {
+        if (!_output_cursor) {
+            _output_cursor.reset(new ChunkCursor(as_supplier(), _left_cursor->get_sort_exprs(),
+                                                 *_left_cursor->get_sort_orders(), *_left_cursor->get_null_firsts()));
         }
-        return _output_cursor;
+        return std::move(_output_cursor);
     }
 
     static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
@@ -332,15 +331,15 @@ private:
 
         // Move cursor
         if (_left_run.empty()) {
-            _left_cursor.next_chunk_for_pipeline();
-            if (_left_cursor.has_next()) {
-                _left_run = SortedRun(_left_cursor.get_current_chunk());
+            _left_cursor->next_chunk_for_pipeline();
+            if (_left_cursor->has_next()) {
+                _left_run = SortedRun(_left_cursor->get_current_chunk());
             }
         }
         if (_right_run.empty()) {
-            _right_cursor.next_chunk_for_pipeline();
-            if (_right_cursor.has_next()) {
-                _right_run = SortedRun(_right_cursor.get_current_chunk());
+            _right_cursor->next_chunk_for_pipeline();
+            if (_right_cursor->has_next()) {
+                _right_run = SortedRun(_right_cursor->get_current_chunk());
             }
         }
 
@@ -351,11 +350,10 @@ private:
     SortDescs _sort_desc;
     SortedRun _left_run;
     SortedRun _right_run;
-    ChunkCursor _left_cursor;
-    ChunkCursor _right_cursor;
+    std::unique_ptr<ChunkCursor> _left_cursor;
+    std::unique_ptr<ChunkCursor> _right_cursor;
     ChunkProbeSupplier _chunk_supplier;
-    ChunkCursor _output_cursor;
-    bool _output_cursor_inited = false;
+    std::unique_ptr<ChunkCursor> _output_cursor = nullptr;
 
 private:
     static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
@@ -431,41 +429,43 @@ private:
 // Merge multiple cursors in cascade way
 class MergeCursorsCascade {
 public:
-    static Status merge_sorted_cursor_cascade(const SortDescs& sort_desc, const std::vector<ChunkCursor>& cursors,
+    static Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                              std::vector<std::unique_ptr<ChunkCursor>>& cursors,
                                               ChunkConsumer consumer) {
         // Build a cascade merge tree
-        std::vector<std::vector<ChunkCursor>> level_cursors;
-        std::vector<ChunkCursor> current_level = cursors;
-        level_cursors.push_back(current_level);
-        std::vector<MergeTwoCursor> mergers;
+        std::vector<std::vector<std::unique_ptr<ChunkCursor>>> level_cursors;
+        int level_size = cursors.size();
+        level_cursors.push_back(std::move(cursors));
+        std::vector<std::unique_ptr<MergeTwoCursor>> mergers;
 
-        while (current_level.size() > 1) {
-            std::vector<ChunkCursor> next_level;
+        while (level_size > 1) {
+            std::vector<std::unique_ptr<ChunkCursor>> next_level;
+            auto& current_level = level_cursors.back();
             next_level.reserve(current_level.size() / 2);
 
             for (int i = 0; i < current_level.size(); i += 2) {
                 auto& left = current_level[i];
                 auto& right = current_level[i + 1];
-                mergers.emplace_back(sort_desc, left, right);
-                next_level.push_back(mergers.back().as_chunk_cursor());
+                mergers.emplace_back(std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right)));
+                next_level.push_back(mergers.back()->as_chunk_cursor());
             }
             if (current_level.size() % 2 == 1) {
-                next_level.push_back(current_level.back());
+                next_level.push_back(std::move(current_level.back()));
             }
 
-            level_cursors.push_back(std::move(current_level));
-            current_level = std::move(next_level);
+            level_size = next_level.size();
+            level_cursors.push_back(std::move(next_level));
         }
 
         CHECK_EQ(1, level_cursors.back().size());
-        ChunkCursor& root_cursor = level_cursors.back()[0];
+        auto& root_cursor = level_cursors.back()[0];
 
-        root_cursor.next_chunk_for_pipeline();
-        while (root_cursor.has_next()) {
-            ChunkPtr chunk = root_cursor.get_current_chunk();
+        root_cursor->next_chunk_for_pipeline();
+        while (root_cursor->has_next()) {
+            ChunkPtr chunk = root_cursor->get_current_chunk();
             RETURN_IF_ERROR(consumer(chunk->clone_unique()));
 
-            root_cursor.next_chunk_for_pipeline();
+            root_cursor->next_chunk_for_pipeline();
         }
 
         return Status::OK();
@@ -485,13 +485,13 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr le
     return MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
 }
 
-Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, ChunkCursor& left_cursor, ChunkCursor& right_cursor,
-                                   ChunkConsumer output) {
-    MergeTwoCursor merger(sort_desc, left_cursor, right_cursor);
+Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<ChunkCursor> left_cursor,
+                                   std::unique_ptr<ChunkCursor> right_cursor, ChunkConsumer output) {
+    MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
     return merger.consume_all(output);
 }
 
-Status merge_sorted_cursor_cascade(const SortDescs& sort_desc, const std::vector<ChunkCursor>& cursors,
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc, std::vector<std::unique_ptr<ChunkCursor>>& cursors,
                                    ChunkConsumer consumer) {
     return MergeCursorsCascade::merge_sorted_cursor_cascade(sort_desc, cursors, consumer);
 }
