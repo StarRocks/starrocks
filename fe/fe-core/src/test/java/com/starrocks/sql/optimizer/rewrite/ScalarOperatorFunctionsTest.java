@@ -18,6 +18,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 import static org.junit.Assert.assertEquals;
@@ -122,6 +123,81 @@ public class ScalarOperatorFunctionsTest {
     public void secondsAdd() {
         assertEquals("2015-03-23T09:24:05",
                 ScalarOperatorFunctions.secondsAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void dateTrunc() {
+        String[][] testCases = {
+                {"second", "2015-03-23 09:23:55", "2015-03-23T09:23:55"},
+                {"minute", "2015-03-23 09:23:55", "2015-03-23T09:23"},
+                {"hour", "2015-03-23 09:23:55", "2015-03-23T09:00"},
+                {"day", "2015-03-23 09:23:55", "2015-03-23T00:00"},
+                {"month", "2015-03-23 09:23:55", "2015-03-01T00:00"},
+                {"year", "2015-03-23 09:23:55", "2015-01-01T00:00"},
+                {"week", "2015-01-01 09:23:55", "2014-12-29T00:00"},
+                {"week", "2015-03-22 09:23:55", "2015-03-16T00:00"},
+                {"week", "2015-03-23 09:23:55", "2015-03-23T00:00"},
+                {"week", "2015-03-24 09:23:55", "2015-03-23T00:00"},
+                {"week", "2020-02-29 09:23:55", "2020-02-24T00:00"},
+                {"quarter", "2015-01-01 09:23:55", "2015-01-01T00:00"},
+                {"quarter", "2015-03-23 09:23:55", "2015-01-01T00:00"},
+                {"quarter", "2015-04-01 09:23:55", "2015-04-01T00:00"},
+                {"quarter", "2015-05-23 09:23:55", "2015-04-01T00:00"},
+                {"quarter", "2015-07-01 09:23:55", "2015-07-01T00:00"},
+                {"quarter", "2015-07-23 09:23:55", "2015-07-01T00:00"},
+                {"quarter", "2015-10-01 09:23:55", "2015-10-01T00:00"},
+                {"quarter", "2015-11-23 09:23:55", "2015-10-01T00:00"},
+
+                // The following cases are migrated from BE UT.
+                {"day", "2020-01-01 09:23:55", "2020-01-01T00:00"},
+                {"day", "2020-02-02 09:23:55", "2020-02-02T00:00"},
+                {"day", "2020-03-06 09:23:55", "2020-03-06T00:00"},
+                {"day", "2020-04-08 09:23:55", "2020-04-08T00:00"},
+                {"day", "2020-05-09 09:23:55", "2020-05-09T00:00"},
+                {"day", "2020-11-03 09:23:55", "2020-11-03T00:00"},
+
+                {"month", "2020-01-01 09:23:55", "2020-01-01T00:00"},
+                {"month", "2020-02-02 09:23:55", "2020-02-01T00:00"},
+                {"month", "2020-03-06 09:23:55", "2020-03-01T00:00"},
+                {"month", "2020-04-08 09:23:55", "2020-04-01T00:00"},
+                {"month", "2020-05-09 09:23:55", "2020-05-01T00:00"},
+                {"month", "2020-11-03 09:23:55", "2020-11-01T00:00"},
+
+                {"year", "2020-01-01 09:23:55", "2020-01-01T00:00"},
+                {"year", "2020-02-02 09:23:55", "2020-01-01T00:00"},
+                {"year", "2020-03-06 09:23:55", "2020-01-01T00:00"},
+                {"year", "2020-04-08 09:23:55", "2020-01-01T00:00"},
+                {"year", "2020-05-09 09:23:55", "2020-01-01T00:00"},
+                {"year", "2020-11-03 09:23:55", "2020-01-01T00:00"},
+
+                {"week", "2020-01-01 09:23:55", "2019-12-30T00:00"},
+                {"week", "2020-02-02 09:23:55", "2020-01-27T00:00"},
+                {"week", "2020-03-06 09:23:55", "2020-03-02T00:00"},
+                {"week", "2020-04-08 09:23:55", "2020-04-06T00:00"},
+                {"week", "2020-05-09 09:23:55", "2020-05-04T00:00"},
+                {"week", "2020-11-03 09:23:55", "2020-11-02T00:00"},
+
+                {"quarter", "2020-01-01 09:23:55", "2020-01-01T00:00"},
+                {"quarter", "2020-02-02 09:23:55", "2020-01-01T00:00"},
+                {"quarter", "2020-03-06 09:23:55", "2020-01-01T00:00"},
+                {"quarter", "2020-04-08 09:23:55", "2020-04-01T00:00"},
+                {"quarter", "2020-05-09 09:23:55", "2020-04-01T00:00"},
+                {"quarter", "2020-11-03 09:23:55", "2020-10-01T00:00"},
+        };
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        for (String[] tc : testCases) {
+            ConstantOperator fmt = ConstantOperator.createVarchar(tc[0]);
+            ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.parse(tc[1], formatter));
+            assertEquals(tc[2],
+                    ScalarOperatorFunctions.dateTrunc(fmt, date).getDatetime().toString());
+        }
+
+        Assert.assertThrows("<ERROR> not supported in date_trunc format string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("<ERROR>"), O_DT_20150323_092355)
+                        .getVarchar());
+
     }
 
     @Test
