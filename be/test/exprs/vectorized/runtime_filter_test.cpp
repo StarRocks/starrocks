@@ -104,8 +104,10 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     Chunk chunk;
     chunk.append_column(column, 0);
     JoinRuntimeFilter::RunningContext ctx;
-    Column::Filter& filter = rf->evaluate(column.get(), &ctx);
-    chunk.filter(filter);
+    auto& selection = ctx.selection;
+    selection.assign(column->size(), 1);
+    rf->evaluate(column.get(), &ctx);
+    chunk.filter(selection);
     // 0 17 34 ... 187
     EXPECT_EQ(chunk.num_rows(), 12);
 }
