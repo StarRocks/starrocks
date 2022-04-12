@@ -500,7 +500,7 @@ static inline Status receive_total_runtime_filter_pipeline(
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
     }
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
-    auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
+    query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     if (!query_ctx) {
         return Status::OK();
     }

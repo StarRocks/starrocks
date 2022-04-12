@@ -68,7 +68,7 @@ class HeartbeatFlags;
 namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
-}
+} // namespace pipeline
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
