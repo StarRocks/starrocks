@@ -168,7 +168,8 @@ public class ReportHandler extends Daemon {
         if (request.isSetActive_workgroups()) {
             activeWorkGroups = request.active_workgroups;
         }
-        List<TWorkGroupOp> workGroupOps = Catalog.getCurrentCatalog().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
+        List<TWorkGroupOp> workGroupOps =
+                Catalog.getCurrentCatalog().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask = new ReportTask(beId, tasks, disks, tablets, reportVersion, activeWorkGroups);
@@ -724,10 +725,11 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
-                    DropReplicaTask task = new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
+                    DropReplicaTask task =
+                            new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
                     batchTask.addTask(task);
-                    LOG.warn("delete tablet[" + tabletId + " - " + backendTabletInfo.getSchema_hash()
-                            + "] from backend[" + backendId + "] because not found in meta");
+                    LOG.warn("delete tablet[" + tabletId + "] from backend[" + backendId +
+                            "] because not found in meta");
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }
@@ -1033,8 +1035,9 @@ public class ReportHandler extends Daemon {
 
             // check replica version
             if (version < visibleVersion) {
-                throw new MetaNotFoundException("version is invalid. tablet[" + version + "]"
-                        + ", visible[" + visibleVersion + "]");
+                throw new MetaNotFoundException(
+                        String.format("version is invalid. tablet:%d < partitionVisible:%d replicas:%s", version,
+                                visibleVersion, tablet.getReplicaInfos()));
             }
 
             // check schema hash
@@ -1101,7 +1104,8 @@ public class ReportHandler extends Daemon {
 
                 Catalog.getCurrentCatalog().getEditLog().logAddReplica(info);
 
-                LOG.info("add replica[{}-{}] to catalog. backend[{}]", tabletId, replicaId, backendId);
+                LOG.info("add replica[{}-{}] to catalog. backend:[{}] replicas:", tabletId, replicaId, backendId,
+                        tablet.getReplicaInfos());
             } else {
                 // replica is enough. check if this tablet is already in meta
                 // (status changed between 'tabletReport()' and 'addReplica()')
