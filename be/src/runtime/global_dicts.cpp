@@ -196,7 +196,7 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, expr_slot_id);
     // call inner expr with input column
-    auto result_column = expr_ctx->evaluate(origin_expr, temp_chunk.get());
+    ASSIGN_OR_RETURN(auto result_column, expr_ctx->evaluate(origin_expr, temp_chunk.get()));
     // assign convert mapping column
     dict_opt_ctx->convert_column = result_column;
     // build code convert map

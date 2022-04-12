@@ -215,8 +215,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
     for (auto& min_max_conjunct_ctx : _reader_params.min_max_conjunct_ctxs) {
-        auto min_col = min_max_conjunct_ctx->evaluate(min_chunk.get());
-        auto max_col = min_max_conjunct_ctx->evaluate(max_chunk.get());
+        // TODO: add a warning log here
+        auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
+        auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
         auto min = min_col->get(0).get_int8();
         auto max = max_col->get(0).get_int8();
         if (min == 0 && max == 0) {
@@ -489,7 +490,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter);
+                    ASSIGN_OR_RETURN(chunk_size,
+                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
                     if (chunk_size == 0) {
                         break;
                     }

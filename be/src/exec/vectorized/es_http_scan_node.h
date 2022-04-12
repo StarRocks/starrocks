@@ -38,7 +38,7 @@ private:
     Status _build_conjuncts();
     // try to skip constant conjuncts is constant conjuncts
     // we will set eos to true if always false
-    void _try_skip_constant_conjuncts();
+    Status _try_skip_constant_conjuncts();
 
     // validate predicate and remove expr that have been push down
     Status _normalize_conjuncts();
