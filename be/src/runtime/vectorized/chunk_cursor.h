@@ -36,6 +36,9 @@ public:
                 const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline);
     ~ChunkCursor();
 
+    static ChunkCursor make_for_pipeline(ChunkProbeSupplier chunk_supplier, const std::vector<ExprContext*>* sort_exprs,
+                                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
+
     // Whether the record referenced by this cursor is before the one referenced by cursor.
     bool operator<(const ChunkCursor& cursor) const;
 

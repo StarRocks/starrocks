@@ -166,58 +166,49 @@ private:
     Permutation* _perm;
 };
 
-// Merge two-way sorted run into on sorted run
-// TODO: specify the ordering
-Status merge_sorted_chunks_two_way(const ChunkPtr left, const ChunkPtr right, Permutation* output) {
-    DCHECK_EQ(left->num_columns(), right->num_columns());
-
-    SortedRun left_run(left, std::make_pair(0, left->num_rows()));
-    SortedRun right_run(right, std::make_pair(0, right->num_rows()));
-    return merge_sorted_chunks_two_way(left_run, right_run, output);
-}
-
-Status merge_sorted_chunks_two_way(const SortedRun& left_run, const SortedRun& right_run, Permutation* output) {
-    DCHECK(!!left_run.chunk);
-    DCHECK(!!right_run.chunk);
-    DCHECK_EQ(left_run.chunk->num_columns(), right_run.chunk->num_columns());
-
-    if (left_run.empty()) {
-        size_t count = right_run.range.second - right_run.range.first;
-        output->resize(count);
-        for (size_t i = 0; i < count; i++) {
-            (*output)[i].chunk_index = 1;
-            (*output)[i].index_in_chunk = i + right_run.range.first;
-        }
-    } else if (right_run.empty()) {
-        size_t count = left_run.range.second - left_run.range.first;
-        output->resize(count);
-        for (size_t i = 0; i < count; i++) {
-            (*output)[i].chunk_index = 0;
-            (*output)[i].index_in_chunk = i + left_run.range.first;
-        }
-    } else {
-        // TODO: optimize with tie
-        // The first column
-        std::vector<EqualRange> equal_ranges;
-        equal_ranges.emplace_back(left_run.range, right_run.range);
-
-        output->resize(left_run.range.second + right_run.range.second);
-        // Iterate each column
-        for (int col = 0; col < left_run.num_columns(); col++) {
-            const Column* left_col = left_run.chunk->get_column_by_index(col).get();
-            const Column* right_col = right_run.chunk->get_column_by_index(col).get();
-            MergeTwoColumn merge2(left_col, right_col, &equal_ranges, output);
-            Status st = left_col->accept(&merge2);
-            CHECK(st.ok());
-        }
-    }
-
-    return Status::OK();
-}
-
 // Merge two sorted chunk cusor
 class MergeTwoCursor {
 public:
+    static Status merge_sorted_chunks_two_way(const SortedRun& left_run, const SortedRun& right_run,
+                                              Permutation* output) {
+        DCHECK(!!left_run.chunk);
+        DCHECK(!!right_run.chunk);
+        DCHECK_EQ(left_run.chunk->num_columns(), right_run.chunk->num_columns());
+
+        if (left_run.empty()) {
+            size_t count = right_run.range.second - right_run.range.first;
+            output->resize(count);
+            for (size_t i = 0; i < count; i++) {
+                (*output)[i].chunk_index = 1;
+                (*output)[i].index_in_chunk = i + right_run.range.first;
+            }
+        } else if (right_run.empty()) {
+            size_t count = left_run.range.second - left_run.range.first;
+            output->resize(count);
+            for (size_t i = 0; i < count; i++) {
+                (*output)[i].chunk_index = 0;
+                (*output)[i].index_in_chunk = i + left_run.range.first;
+            }
+        } else {
+            // TODO: optimize with tie
+            // The first column
+            std::vector<EqualRange> equal_ranges;
+            equal_ranges.emplace_back(left_run.range, right_run.range);
+
+            output->resize(left_run.range.second + right_run.range.second);
+            // Iterate each column
+            for (int col = 0; col < left_run.num_columns(); col++) {
+                const Column* left_col = left_run.chunk->get_column_by_index(col).get();
+                const Column* right_col = right_run.chunk->get_column_by_index(col).get();
+                MergeTwoColumn merge2(left_col, right_col, &equal_ranges, output);
+                Status st = left_col->accept(&merge2);
+                CHECK(st.ok());
+            }
+        }
+
+        return Status::OK();
+    }
+
     static Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor,
                                               ChunkConsumer output) {
         // 1. Find smaller tail
@@ -263,7 +254,7 @@ public:
 
                     // Merge partial chunk
                     Permutation perm;
-                    RETURN_IF_ERROR(merge_sorted_chunks_two_way(left_chunk, right_1, &perm));
+                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(left_chunk, right_1, &perm));
                     trim_permutation(left_chunk, right_1, perm);
                     DCHECK_EQ(left_chunk.num_rows() + right_1.num_rows(), perm.size());
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
@@ -288,7 +279,7 @@ public:
 
                     // Merge partial chunk
                     Permutation perm;
-                    RETURN_IF_ERROR(merge_sorted_chunks_two_way(right_chunk, left_1, &perm));
+                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(right_chunk, left_1, &perm));
                     trim_permutation(left_1, right_chunk, perm);
                     DCHECK_EQ(right_chunk.num_rows() + left_1.num_rows(), perm.size());
                     std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
@@ -390,6 +381,26 @@ public:
         return compare_chunk_row(*(left.chunk), *(right.chunk), lhs_tail, rhs_tail);
     }
 };
+
+// Merge multiple cursors in cascade way
+class MergeCursorsCascade {
+public:
+    static Status merge_sorted_cursor_cascade(const std::vector<ChunkCursor&>& cursors, ChunkConsumer consumer) {
+        return Status::NotSupported("TODO");
+    }
+
+private:
+};
+
+// Merge two-way sorted run into on sorted run
+// TODO: specify the ordering
+Status merge_sorted_chunks_two_way(const ChunkPtr left, const ChunkPtr right, Permutation* output) {
+    DCHECK_EQ(left->num_columns(), right->num_columns());
+
+    SortedRun left_run(left, std::make_pair(0, left->num_rows()));
+    SortedRun right_run(right, std::make_pair(0, right->num_rows()));
+    return MergeTwoCursor::merge_sorted_chunks_two_way(left_run, right_run, output);
+}
 
 Status merge_sorted_cursor_two_way(ChunkCursor& left_cursor, ChunkCursor& right_cursor, ChunkConsumer output) {
     return MergeTwoCursor::merge_sorted_cursor_two_way(left_cursor, right_cursor, output);

@@ -40,6 +40,20 @@ ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_
 
 ChunkCursor::~ChunkCursor() = default;
 
+ChunkCursor ChunkCursor::make_for_pipeline(ChunkProbeSupplier chunk_supplier,
+                                           const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
+                                           const std::vector<bool>* is_null_first) {
+    ChunkSupplier supplier = [](Chunk** _) {
+        CHECK(false) << "unreachable";
+        return Status::NotSupported("");
+    };
+    ChunkHasSupplier has_supplier = [] {
+        CHECK(false) << "unreachable";
+        return false;
+    };
+    return ChunkCursor(supplier, chunk_supplier, has_supplier, sort_exprs, is_asc, is_null_first, true);
+}
+
 bool ChunkCursor::operator<(const ChunkCursor& cursor) const {
     DCHECK_EQ(_current_order_by_columns.size(), cursor._current_order_by_columns.size());
     // both cursors must be pointing to valid data.
