@@ -166,7 +166,7 @@ private:
     void _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
         key_columns.resize(0);
         for (auto& expr_ctx : expr_ctxs) {
-            ColumnPtr column_ptr = expr_ctx->evaluate(chunk.get());
+            ColumnPtr column_ptr = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get());
             if (column_ptr->only_null()) {
                 ColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
                 column->append_nulls(chunk->num_rows());
@@ -221,29 +221,31 @@ private:
 
     StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
-    void _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
+    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all, bool& hit_all);
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);
 
-    void _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
-    void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
-    void _process_other_conjunct(ChunkPtr* chunk);
-    void _process_where_conjunct(ChunkPtr* chunk);
+    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
+    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
+    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
+    Status _process_other_conjunct(ChunkPtr* chunk);
+    Status _process_where_conjunct(ChunkPtr* chunk);
 
-    void _filter_probe_output_chunk(ChunkPtr& chunk) {
+    Status _filter_probe_output_chunk(ChunkPtr& chunk) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
         // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
         // not be called when other_conjuncts is empty.
         if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
-            _process_other_conjunct(&chunk);
+            RETURN_IF_ERROR(_process_other_conjunct(&chunk));
         }
 
         // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
-            _process_where_conjunct(&chunk);
+            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
         }
+
+        return Status::OK();
     }
     void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they

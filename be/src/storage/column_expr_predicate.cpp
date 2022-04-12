@@ -58,7 +58,7 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
     for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
         ExprContext* ctx = _expr_ctxs[i];
         chunk.update_column(bits, _slot_desc->id());
-        bits = ctx->evaluate(&chunk);
+        bits = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), &chunk);
     }
 
     // deal with constant.

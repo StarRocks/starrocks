@@ -68,7 +68,6 @@ public:
     /// reinitializing function state).
     Status open(RuntimeState* state);
 
-    //TODO chenhao
     static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
@@ -124,9 +123,9 @@ public:
     std::string get_error_msg() const;
 
     // vector query engine
-    ColumnPtr evaluate(vectorized::Chunk* chunk);
+    StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk);
 
-    ColumnPtr evaluate(Expr* expr, vectorized::Chunk* chunk);
+    StatusOr<ColumnPtr> evaluate(Expr* expr, vectorized::Chunk* chunk);
 
 private:
     friend class Expr;
@@ -168,5 +167,14 @@ private:
             RETURN_IF_ERROR(ctx->get_udf_error()); \
         }                                          \
     } while (false)
+
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                         \
+    [](ExprContext* c, Expr* e, vectorized::Chunk* ptr) {                                                \
+        auto st = c->evaluate(e, ptr);                                                                   \
+        if (st.ok()) {                                                                                   \
+            return st.value();                                                                           \
+        }                                                                                                \
+        return vectorized::ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+    }(ctx, expr, chunk)
 
 } // namespace starrocks

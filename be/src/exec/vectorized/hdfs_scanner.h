@@ -230,7 +230,7 @@ private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
-    void _build_file_read_param();
+    Status _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 

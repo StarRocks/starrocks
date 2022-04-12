@@ -169,9 +169,10 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         }
         timer.start();
         if (chunk != nullptr && chunk->num_rows() > 0) {
-            ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
-                    chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
+            auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
+                                                                                 _sort_exec_exprs, _order_by_types);
+            RETURN_IF_ERROR(materialize_chunk);
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
         }
     } while (!eos);
 

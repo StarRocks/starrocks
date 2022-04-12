@@ -274,8 +274,10 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             if (filter == nullptr) {
                 continue;
             }
-            ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
+            auto* ctx = rf_desc->probe_expr_ctx();
+            ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
             filter->evaluate(column.get(), &eval_context.running_context);
+            // true_count is accummulated
             true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
 
@@ -335,7 +337,9 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         if (filter == nullptr) {
             continue;
         }
-        ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
+        auto ctx = rf_desc->probe_expr_ctx();
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        // true count is not accummulated, it is evaluated for each RF respectively
         auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
