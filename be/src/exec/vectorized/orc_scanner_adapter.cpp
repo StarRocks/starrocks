@@ -2028,7 +2028,8 @@ static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnS
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
 static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                      int64_t tz_offset_in_seconds, const ColumnPtr& min_col, const ColumnPtr& max_col) {
+                                      int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
+                                      const ColumnPtr& max_col) {
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
