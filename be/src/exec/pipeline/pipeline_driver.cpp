@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
@@ -49,13 +50,15 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
         const auto* global_rf_collector = op->runtime_bloom_filters();
+        auto is_scan_operator = dynamic_cast<ScanOperator*>(op.get()) != nullptr;
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 _global_rf_descriptors.emplace_back(desc);
             }
 
-            _global_rf_wait_timeout_ns =
-                    std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
+            auto wait_time_ns = 1000'000L * (is_scan_operator ? global_rf_collector->scan_wait_timeout_ms()
+                                                              : global_rf_collector->wait_timeout_ms());
+            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, wait_time_ns);
         }
     }
     if (!all_local_rf_set.empty()) {

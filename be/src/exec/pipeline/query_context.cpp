@@ -18,6 +18,7 @@ QueryContext::~QueryContext() {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
+        _exec_env->runtime_filter_cache()->remove(_query_id);
     }
 }
 

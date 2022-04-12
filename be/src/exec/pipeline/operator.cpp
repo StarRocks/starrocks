@@ -6,6 +6,8 @@
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -167,6 +169,17 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
+        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+        for (auto& [filter_id, desc] : descriptors) {
+            if (desc->is_local() || desc->runtime_filter() != nullptr) {
+                continue;
+            }
+            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+            if (grf == nullptr) {
+                continue;
+            }
+            desc->set_shared_runtime_filter(grf);
+        }
     }
     return Status::OK();
 }
