@@ -177,6 +177,7 @@ TEST_F(EnvPosixTest, create_dir_recursive) {
     ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a/b/c/d").status().is_not_found());
 
     ASSERT_OK(Env::Default()->create_dir_recursive(dir_path));
+    ASSERT_OK(Env::Default()->create_dir_recursive(dir_path));
 
     ASSERT_TRUE(Env::Default()->is_directory("./ut_dir").value());
     ASSERT_TRUE(Env::Default()->is_directory("./ut_dir/env_posix/a").value());
