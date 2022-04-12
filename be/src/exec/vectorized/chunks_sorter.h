@@ -42,7 +42,9 @@ struct DataSegment {
         }
     }
 
-    ChunkPtr assemble_orderby_chunk() const { return std::make_shared<Chunk>(order_by_columns, chunk->schema()); }
+    ChunkPtr assemble_orderby_chunk() const {
+        return std::make_shared<Chunk>(order_by_columns, chunk->get_slot_id_to_index_map());
+    }
 
     // there is two compares in the method,
     // the first is:

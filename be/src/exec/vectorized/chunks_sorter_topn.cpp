@@ -355,9 +355,6 @@ Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
 void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number,
                                           size_t sorted_size, size_t permutation_size,
                                           Permutation& permutation_second) {
-    constexpr int kLeftChunkIndex = 0;
-    constexpr int kRightChunkIndex = 1;
-
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
@@ -368,30 +365,19 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
 
     ChunkPtr left_chunk = _merged_segment.assemble_orderby_chunk();
 
-    size_t index_of_merging = 0, index_of_left = 0, index_of_right = 0;
     Permutation merged_perm;
     merged_perm.reserve(sort_row_number);
     SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
-    while ((index_of_merging < sort_row_number) && (index_of_left < sorted_size) &&
-           (index_of_right < permutation_size)) {
-        int cmp = compare_chunk_row(sort_desc, *left_chunk, *right_chunk, index_of_left, index_of_right);
-        if (cmp <= 0) {
-            merged_perm.emplace_back(PermutationItem(kLeftChunkIndex, index_of_left, 0));
-            ++index_of_left;
-        } else {
-            merged_perm.emplace_back(PermutationItem(kRightChunkIndex, index_of_right, 0));
-            ++index_of_right;
-        }
-        ++index_of_merging;
-    }
-    while (index_of_left < sorted_size && index_of_merging < sort_row_number) {
-        merged_perm.emplace_back(kLeftChunkIndex, index_of_left, 0);
-        ++index_of_left;
-    }
-    while (index_of_right < permutation_size && index_of_merging < sort_row_number) {
-        merged_perm.emplace_back(kRightChunkIndex, index_of_right, 0);
-        ++index_of_right;
+    if (_compare_strategy == RowWise) {
+        Status st =
+                merge_sorted_chunks_two_way_rowwise(sort_desc, left_chunk, right_chunk, &merged_perm, sort_row_number);
+        CHECK(st.ok());
+    } else {
+        Status st = merge_sorted_chunks_two_way(sort_desc, left_chunk, right_chunk, &merged_perm);
+        CHECK(st.ok());
+        CHECK_GE(merged_perm.size(), sort_row_number);
+        merged_perm.resize(sort_row_number);
     }
 
     std::vector<ChunkPtr> chunks{left_chunk, right_chunk};

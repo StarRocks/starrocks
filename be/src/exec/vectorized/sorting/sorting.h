@@ -62,5 +62,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, 
                                    Permutation* output);
 Status merge_sorted_cursor_two_way(const SortDescs& descs, ChunkCursor& left_cursor, ChunkCursor& right_cursor,
                                    ChunkConsumer output);
+// Merge in rowwise
+Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
+                                           Permutation* output, size_t limit);
 
 } // namespace starrocks::vectorized
