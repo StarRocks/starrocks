@@ -471,9 +471,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
         }
         st = _rowset_commit_unlocked(version, rowset);
         if (st.ok()) {
-            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
-                      << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
-                      << " #row:" << rowset->num_rows()
+            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version << " "
+                      << rowset->rowset_id().to_string() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                      << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
@@ -2311,6 +2311,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
 
     if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_INCREMENTAL) {
         // Assume the elements of |snapshot_meta.rowset_metas()| are sorted by version.
+        LOG(INFO) << "load incremental snapshot start #rowset:" << snapshot_meta.rowset_metas().size() << " "
+                  << _debug_string(true);
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
             RowsetSharedPtr rowset;
@@ -2328,8 +2330,11 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
             }
             RETURN_IF_ERROR(rowset_commit(rowset->end_version(), rowset));
         }
+        LOG(INFO) << "load incremental snapshot done " << _debug_string(true);
         return Status::OK();
     } else if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_FULL) {
+        LOG(INFO) << "load full snapshot start #rowset:" << snapshot_meta.rowset_metas().size() << " "
+                  << _debug_string(true);
         if (snapshot_meta.tablet_meta().tablet_id() != _tablet.tablet_id()) {
             return Status::InvalidArgument("mismatched tablet id");
         }
@@ -2456,6 +2461,9 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         index_cache.release(index_entry);
 
         _apply_version_changed.notify_all();
+
+        LOG(INFO) << "load full snapshot done " << _debug_string(false);
+
         return Status::OK();
     } else {
         return Status::InternalError("unknown snapshot type");
