@@ -31,6 +31,7 @@
 #include "http/action/pprof_actions.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
+#include "http/action/runtime_filter_cache_action.h"
 #include "http/action/snapshot_action.h"
 #include "http/action/stream_load.h"
 #include "http/action/update_config_action.h"
@@ -175,6 +176,13 @@ Status HttpService::start() {
     ListWorkGroupAction* list_workgroup_action = new ListWorkGroupAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/list_resource_groups", list_workgroup_action);
     _http_handlers.emplace_back(list_workgroup_action);
+
+    RuntimeFilterCacheAction* runtime_filter_cache_action = new RuntimeFilterCacheAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/runtime_filter_cache/{action}",
+                                      runtime_filter_cache_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/runtime_filter_cache/{action}",
+                                      runtime_filter_cache_action);
+    _http_handlers.emplace_back(runtime_filter_cache_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());
     return Status::OK();
