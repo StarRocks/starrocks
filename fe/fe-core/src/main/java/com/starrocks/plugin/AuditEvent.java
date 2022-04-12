@@ -57,6 +57,8 @@ public class AuditEvent {
     public String clientIp = "";
     @AuditField(value = "User")
     public String user = "";
+    @AuditField(value = "ResourceGroup")
+    public String resourceGroup = "";
     @AuditField(value = "Db")
     public String db = "";
     @AuditField(value = "State")
@@ -110,6 +112,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setUser(String user) {
             auditEvent.user = user;
+            return this;
+        }
+
+        public AuditEventBuilder setResourceGroup(String resourceGroup) {
+            auditEvent.resourceGroup = resourceGroup;
             return this;
         }
 

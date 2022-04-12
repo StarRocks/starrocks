@@ -382,7 +382,9 @@ public class WorkGroupMgr implements Writable {
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+            WorkGroup workGroup = id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+            ctx.getAuditEventBuilder().setResourceGroup(workGroup.getName());
+            return workGroup;
         }
     }
 
