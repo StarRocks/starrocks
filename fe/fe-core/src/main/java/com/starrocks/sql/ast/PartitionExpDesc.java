@@ -2,33 +2,34 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.SlotRef;
 
 import java.util.List;
 
 public class PartitionExpDesc extends PartitionDesc {
 
-    private List<SlotRef> slotRefs;
-    //expr in outputExpression
-    private List<Expr> exprs;
+    private String tableName;
 
-    public PartitionExpDesc(List<SlotRef> slotRefs) {
-        this.slotRefs = slotRefs;
-        this.exprs = Lists.newArrayList();
+    private String columnName;
+
+    private FunctionName functionName;
+
+    public String getTableName() {
+        return tableName;
     }
 
-    public List<SlotRef> getSlotRefs() {
-        return slotRefs;
+    public String getColumnName() {
+        return columnName;
     }
 
-    public List<Expr> getExprs() {
-        return exprs;
+    public FunctionName getFunctionName() {
+        return functionName;
     }
 
-    public void setExprs(List<Expr> exprs) {
-        this.exprs = exprs;
+    public PartitionExpDesc(List<String> names, FunctionName functionName) {
+        this.tableName = names.get(0);
+        this.columnName = names.get(1);
+        this.functionName = functionName;
     }
 }

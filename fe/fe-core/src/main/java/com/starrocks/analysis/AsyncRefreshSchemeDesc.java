@@ -2,8 +2,10 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
@@ -14,6 +16,7 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
     private String timeUnit;
 
     public AsyncRefreshSchemeDesc(long startTime, long step, String timeUnit) {
+        this.type = RefreshType.ASYNC;
         this.startTime = startTime;
         this.step = step;
         this.timeUnit = timeUnit;

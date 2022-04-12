@@ -2,33 +2,35 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
+import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
-import org.spark_project.guava.collect.Maps;
+import com.starrocks.analysis.MVColumnItem;
+import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.catalog.*;
+import com.starrocks.common.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
+ * //todo add more comments
  * Materialized view is performed to materialize the results of query.
  * This clause is used to create a new materialized view for specified tables
  * through a specified query stmt.
- * The differences with CreateMaterializedViewStmt:
- * 1. Supports querying materiazlied view directly and try best to keep the result consistent with querying base tables
- * 2. Supports creating mvs on multi tables
- * 3. partition and distribution desc can be specified for each mv independently.
- * 4. Supports complex computation on columns
- * 5. Supports adding predicate in sql for mvs
- * 6. Supports making mvs on external tables
+ * <p>
+ * Syntax:
+ * CREATE MATERIALIZED VIEW [IF NOT EXISTS] mvName
+ * [COMMENT]
+ * PARTITION BY Table1.Column1
+ * REFRESH ASYNC/SYNC
+ * AS query_stmt
+ * [PROPERTIES ("key" = "value")]
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
-    private TableName tableName;
+    private String mvName;
 
     private boolean ifNotExists;
 
@@ -36,7 +38,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private RefreshSchemeDesc refreshSchemeDesc;
 
-    private PartitionExpDesc partitionExpDesc;
+    private PartitionDesc partitionDesc;
 
     private Map<String, String> properties;
 
@@ -44,20 +46,17 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private DistributionDesc distributionDesc;
 
+    private String dbName;
+
     private KeysType myKeyType = KeysType.DUP_KEYS;
 
-    protected String inlineViewDef;
 
-    private List<Column> mvColumnItems = Lists.newArrayList();
-
-    private Map<Column, Expr> columnExprMap = Maps.newHashMap();
-
-    public TableName getTableName() {
-        return tableName;
+    public String getMvName() {
+        return mvName;
     }
 
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
+    public void setMvName(String mvName) {
+        this.mvName = mvName;
     }
 
     public boolean isIfNotExists() {
@@ -84,20 +83,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public PartitionExpDesc getPartitionExpDesc() {
-        return partitionExpDesc;
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
     }
 
-    public void setPartitionExpDesc(PartitionExpDesc partitionExpDesc) {
-        this.partitionExpDesc = partitionExpDesc;
-    }
-
-    public DistributionDesc getDistributionDesc() {
-        return distributionDesc;
-    }
-
-    public void setDistributionDesc(DistributionDesc distributionDesc) {
-        this.distributionDesc = distributionDesc;
+    public void setPartitionDesc(PartitionDesc partitionDesc) {
+        this.partitionDesc = partitionDesc;
     }
 
     public Map<String, String> getProperties() {
@@ -108,14 +99,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.properties = properties;
     }
 
-    public String getInlineViewDef() {
-        return inlineViewDef;
-    }
-
-    public void setInlineViewDef(String inlineViewDef) {
-        this.inlineViewDef = inlineViewDef;
-    }
-
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -124,35 +107,30 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.queryStatement = queryStatement;
     }
 
+    private int beginIndexOfAggregation = -1;
+    /**
+     * origin stmt: select k1, k2, v1, sum(v2) from base_table group by k1, k2, v1
+     * mvColumnItemList: [k1: {name: k1, isKey: true, aggType: null, isAggregationTypeImplicit: false},
+     * k2: {name: k2, isKey: true, aggType: null, isAggregationTypeImplicit: false},
+     * v1: {name: v1, isKey: true, aggType: null, isAggregationTypeImplicit: false},
+     * v2: {name: v2, isKey: false, aggType: sum, isAggregationTypeImplicit: false}]
+     * This order of mvColumnItemList is meaningful.
+     **/
+    private List<MVColumnItem> mvColumnItems = new ArrayList<>();
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
 
-    public List<Column> getMvColumnItems() {
-        return mvColumnItems;
-    }
+    private String baseIndexName;
 
-    public void setMvColumnItems(List<Column> mvColumnItems) {
-        this.mvColumnItems = mvColumnItems;
-    }
 
-    public void setColumnExprMap(Map<Column, Expr> columnExprMap) {
-        this.columnExprMap = columnExprMap;
-    }
-
-    public Map<Column, Expr> getColumnExprMap() {
-        return columnExprMap;
-    }
-
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
-                                           DistributionDesc distributionDesc, Map<String, String> properties,
-                                           QueryStatement queryStatement) {
-        this.tableName = tableName;
+    public CreateMaterializedViewStatement(String mvName, boolean ifNotExists, String comment,
+                                           RefreshSchemeDesc refreshSchemeDesc, PartitionDesc partitionDesc,
+                                           Map<String, String> properties, QueryStatement queryStatement) {
+        this.mvName = mvName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.partitionExpDesc = partitionExpDesc;
-        this.distributionDesc = distributionDesc;
+        this.partitionDesc = partitionDesc;
         this.properties = properties;
         this.queryStatement = queryStatement;
     }
