@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
+#include "column/binary_column.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
@@ -43,6 +44,27 @@ PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
     column = ConstColumn::create(std::move(data_column), 2ul << 32u);
     ret = column->upgrade_if_overflow();
     ASSERT_FALSE(ret.ok());
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ConstColumnTest, test_const_column_downgrade) {
+    auto data_column = BinaryColumn::create();
+    ASSERT_FALSE(data_column->has_large_column());
+    data_column->append_string("1");
+    auto const_column = ConstColumn::create(data_column, 1024);
+    auto ret = const_column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    auto large_data_column = LargeBinaryColumn::create();
+    large_data_column->append_string("1");
+    const_column = ConstColumn::create(large_data_column, 1024);
+    ASSERT_TRUE(const_column->has_large_column());
+    ret = const_column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_FALSE(const_column->has_large_column());
+    ASSERT_FALSE(const_column->has_large_column());
 }
 
 // NOLINTNEXTLINE

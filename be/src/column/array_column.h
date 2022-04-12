@@ -151,6 +151,10 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override { return _elements->has_large_column(); }
+
     void check_or_die() const override;
 
 private:
