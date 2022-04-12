@@ -29,7 +29,7 @@ statement
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
-    | DROP MATERIALIZED VIEW (IF EXISTS)?mvName=qualifiedName (ON tableName = qualifiedName)?              #dropMaterialized
+    | DROP MATERIALIZED VIEW (IF EXISTS)?mvName=qualifiedName              #dropMaterialized
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                               #createView
@@ -516,4 +516,5 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | MATERIALIZED
     ;

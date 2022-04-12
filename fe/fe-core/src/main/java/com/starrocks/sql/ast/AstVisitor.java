@@ -156,8 +156,12 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitBaseMaterializedViewStatement(BaseMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
-        return visitStatement(statement, context);
+        return visitBaseMaterializedViewStatement(statement, context);
     }
     // ----------------- Relation ---------------
 
