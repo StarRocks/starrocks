@@ -39,6 +39,7 @@ public class IcebergMetaCache {
 
     // statistic cache
     // IcebergTableKey => IcebergFileStats
+    @VisibleForTesting
     protected LoadingCache<IcebergTableKey, IcebergFileStats> tableStatsCache;
 
     public IcebergMetaCache(Executor executor) {
@@ -88,7 +89,7 @@ public class IcebergMetaCache {
     }
 
     @VisibleForTesting
-    public IcebergFileStats getIcebergFileStats(Table table,
+    protected IcebergFileStats getIcebergFileStats(Table table,
                                                 IcebergTableStatisticCalculator calculator) {
         IcebergFileStats icebergFileStats = calculator.generateIcebergFileStats(
                 new ArrayList<>(), table.schema().columns()
@@ -97,13 +98,13 @@ public class IcebergMetaCache {
     }
 
     @VisibleForTesting
-    public IcebergTableStatisticCalculator getCalculator(Table table) {
+    protected IcebergTableStatisticCalculator getCalculator(Table table) {
         IcebergTableStatisticCalculator calculator = new IcebergTableStatisticCalculator(table);
         return calculator;
     }
 
     @VisibleForTesting
-    public org.apache.iceberg.Table getTable(IcebergTableKey key) {
+    protected org.apache.iceberg.Table getTable(IcebergTableKey key) {
         Resource resource = Catalog.getCurrentCatalog().getResourceMgr()
                 .getResource(key.getResourceName());
         IcebergResource icebergResource = (IcebergResource) resource;

@@ -26,22 +26,23 @@ public class IcebergMetaCacheTest {
 
     @Test
     public void testTableCacheTakeEffect(@Mocked IcebergTableStatisticCalculator calculator,
-                                      @Mocked Table table,
-                                      @Mocked IcebergFileStats fileStats) throws ExecutionException {
+                                         @Mocked Table table,
+                                         @Mocked IcebergFileStats fileStats) throws ExecutionException {
         new MockUp<IcebergMetaCache>() {
             @Mock
-            protected IcebergTableStatisticCalculator getCalculator() {
+            protected IcebergTableStatisticCalculator getCalculator(Table table) {
                 return calculator;
             }
 
             @Mock
-            protected Table getTable() {
-                return table;
+            protected IcebergFileStats getIcebergFileStats(Table table,
+                                                           IcebergTableStatisticCalculator calculator) {
+                return fileStats;
             }
 
             @Mock
-            protected IcebergFileStats getIcebergFileStats() {
-                return fileStats;
+            protected Table getTable(IcebergTableKey key) {
+                return table;
             }
         };
 
