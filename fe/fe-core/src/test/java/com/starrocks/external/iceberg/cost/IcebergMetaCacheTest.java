@@ -15,6 +15,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -54,7 +55,7 @@ public class IcebergMetaCacheTest {
         Executor executor = Executors.newFixedThreadPool(1);
         IcebergMetaCache icebergMetaCache = new IcebergMetaCache(executor);
         IcebergTableKey key = new IcebergTableKey("testRes", "testDb", "testTbl");
-        icebergMetaCache.getTableStatistics(key, null);
+        icebergMetaCache.getTableStatistics(key, new HashMap<>());
         Assert.assertNotNull(icebergMetaCache.tableStatsCache.get(key));
     }
 }
