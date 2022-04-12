@@ -31,13 +31,17 @@ typedef std::vector<ChunkHasSupplier> ChunkHasSuppliers;
 // A cursor refers to a record in a Chunk, and can compare to a cursor referring a record in another Chunk.
 class ChunkCursor {
 public:
+    ChunkCursor() = default;
     ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
                 ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline);
+    ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
+                ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<int>& is_asc, const std::vector<int>& is_null_first, bool is_pipeline);
     ~ChunkCursor();
 
     static ChunkCursor make_for_pipeline(ChunkProbeSupplier chunk_supplier, const std::vector<ExprContext*>* sort_exprs,
-                                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
+                                         const std::vector<int>& sort_orders, const std::vector<int>& null_firsts);
 
     // Whether the record referenced by this cursor is before the one referenced by cursor.
     bool operator<(const ChunkCursor& cursor) const;
@@ -62,6 +66,9 @@ public:
     Status chunk_supplier(Chunk**);
     bool chunk_probe_supplier(Chunk**);
     bool chunk_has_supplier();
+    const std::vector<ExprContext*>* get_sort_exprs() const { return _sort_exprs; }
+    const std::vector<int>* get_sort_orders() const { return &_sort_order_flag; }
+    const std::vector<int>* get_null_firsts() const { return &_null_first_flag; }
 
 private:
     void _reset_with_next_chunk();

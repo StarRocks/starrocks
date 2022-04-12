@@ -171,9 +171,61 @@ private:
     Permutation* _perm;
 };
 
-// Merge two sorted chunk cusor
+// Merge two sorted cusor
 class MergeTwoCursor {
 public:
+    MergeTwoCursor(const SortDescs& sort_desc, ChunkCursor left_cursor, ChunkCursor right_cursor)
+            : _sort_desc(sort_desc), _left_cursor(left_cursor), _right_cursor(right_cursor) {
+        _left_cursor.next_chunk_for_pipeline();
+        _right_cursor.next_chunk_for_pipeline();
+        if (_left_cursor.has_next()) {
+            _left_run = SortedRun(_left_cursor.get_current_chunk());
+        }
+        if (_right_cursor.has_next()) {
+            _right_run = SortedRun(_right_cursor.get_current_chunk());
+        }
+        _chunk_supplier = [&](Chunk** output) -> bool {
+            auto chunk = next();
+            if (!chunk.ok()) return false;
+            if (!chunk.value()) return false;
+            *output = chunk.value().release();
+            return true;
+        };
+    }
+
+    // Use it as iterator
+    // Return nullptr if no output
+    StatusOr<ChunkUniquePtr> next() {
+        if (_left_run.empty() && _right_run.empty()) {
+            return ChunkUniquePtr();
+        }
+        return merge_sorted_cursor_two_way();
+    }
+
+    // Consume all inputs and produce output through the callback function
+    Status consume_all(ChunkConsumer output) {
+        auto chunk = next();
+        while (chunk.ok() && !!chunk.value()) {
+            output(std::move(chunk.value()));
+            chunk = next();
+        }
+        return Status::OK();
+    }
+
+    // Use this as a supplier
+    ChunkProbeSupplier& as_supplier() { return _chunk_supplier; }
+
+    // use this as cursor
+    ChunkCursor& as_chunk_cursor() {
+        if (!_output_cursor_inited) {
+            _output_cursor =
+                    ChunkCursor::make_for_pipeline(as_supplier(), _left_cursor.get_sort_exprs(),
+                                                   *_left_cursor.get_sort_orders(), *_left_cursor.get_null_firsts());
+            _output_cursor_inited = true;
+        }
+        return _output_cursor;
+    }
+
     static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
                                               const SortedRun& right_run, Permutation* output) {
         DCHECK(!!left_run.chunk);
@@ -214,114 +266,98 @@ public:
         return Status::OK();
     }
 
-    static Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, ChunkCursor& left_cursor,
-                                              ChunkCursor& right_cursor, ChunkConsumer output) {
-        // 1. Find smaller tail
-        // 2. Cutoff the chunk based on tail
-        // 3. Merge two chunks and output
-        // 4. Move to next
+private:
+    // 1. Find smaller tail
+    // 2. Cutoff the chunk based on tail
+    // 3. Merge two chunks and output
+    // 4. Move to next
+    StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way() {
+        DCHECK(!(_left_run.empty() && _right_run.empty()));
+        const SortDescs& sort_desc = _sort_desc;
+        ChunkUniquePtr result;
 
-        SortedRun left_chunk;
-        SortedRun right_chunk;
+        if (_left_run.empty()) {
+            // TODO: avoid copy
+            result = _right_run.clone_chunk();
+            _right_run.reset();
+        } else if (_right_run.empty()) {
+            result = _left_run.clone_chunk();
+            _left_run.reset();
+        } else {
+            int tail_cmp = compare_tail(sort_desc, _left_run, _right_run);
+            if (tail_cmp <= 0) {
+                // Cutoff right by left tail
+                size_t right_cut =
+                        cutoff_run(sort_desc, _right_run, std::make_pair(_left_run, _left_run.num_rows() - 1));
+                SortedRun right_1(_right_run.chunk, 0, right_cut);
+                SortedRun right_2(_right_run.chunk, right_cut, _right_run.num_rows());
 
-        left_cursor.next_chunk_for_pipeline();
-        right_cursor.next_chunk_for_pipeline();
-        if (left_cursor.has_next()) {
-            left_chunk = SortedRun(left_cursor.get_current_chunk());
-        }
-        if (right_cursor.has_next()) {
-            right_chunk = SortedRun(right_cursor.get_current_chunk());
-        }
+                // Merge partial chunk
+                Permutation perm;
+                RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, _left_run, right_1, &perm));
+                trim_permutation(_left_run, right_1, perm);
+                DCHECK_EQ(_left_run.num_rows() + right_1.num_rows(), perm.size());
+                ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
+                append_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
 
-        while (!left_chunk.empty() || !right_chunk.empty()) {
-            if (left_chunk.empty()) {
-                // TODO: avoid copy
-                if (right_chunk.num_rows() == right_chunk.chunk->num_rows()) {
-                    RETURN_IF_ERROR(output(right_chunk.chunk->clone_unique()));
-                } else {
-                    RETURN_IF_ERROR(output(right_chunk.clone_chunk()));
-                }
-                right_chunk.reset();
-            } else if (right_chunk.empty()) {
-                if (left_chunk.num_rows() == left_chunk.chunk->num_rows()) {
-                    RETURN_IF_ERROR(output(left_chunk.chunk->clone_unique()));
-                } else {
-                    RETURN_IF_ERROR(output(left_chunk.clone_chunk()));
-                }
-                left_chunk.reset();
+                _left_run.reset();
+                _right_run = right_2;
+                result = std::move(merged);
             } else {
-                int tail_cmp = compare_tail(sort_desc, left_chunk, right_chunk);
-                if (tail_cmp <= 0) {
-                    // Cutoff right by left tail
-                    size_t right_cut =
-                            cutoff_run(sort_desc, right_chunk, std::make_pair(left_chunk, left_chunk.num_rows() - 1));
-                    SortedRun right_1(right_chunk.chunk, 0, right_cut);
-                    SortedRun right_2(right_chunk.chunk, right_cut, right_chunk.num_rows());
+                // Cutoff left by right tail
+                size_t left_cut =
+                        cutoff_run(sort_desc, _left_run, std::make_pair(_right_run, _right_run.num_rows() - 1));
+                SortedRun left_1(_left_run.chunk, 0, left_cut);
+                SortedRun left_2(_left_run.chunk, left_cut, _left_run.num_rows());
 
-                    // Merge partial chunk
-                    Permutation perm;
-                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, left_chunk, right_1, &perm));
-                    trim_permutation(left_chunk, right_1, perm);
-                    DCHECK_EQ(left_chunk.num_rows() + right_1.num_rows(), perm.size());
-                    std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
-                    append_by_permutation(merged.get(), {left_chunk.chunk, right_1.chunk}, perm);
+                // Merge partial chunk
+                Permutation perm;
+                RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, _right_run, left_1, &perm));
+                trim_permutation(left_1, _right_run, perm);
+                DCHECK_EQ(_right_run.num_rows() + left_1.num_rows(), perm.size());
+                std::unique_ptr<Chunk> merged = _left_run.chunk->clone_empty(perm.size());
+                append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
-                    left_chunk.reset();
-                    right_chunk = right_2;
-#ifndef NDEBUG
-                    fmt::print("merge right chunk [0, {})\n", right_cut);
-                    for (int i = 0; i < merged->num_rows(); i++) {
-                        fmt::print("merge row: {}\n", merged->debug_row(i));
-                    }
-#endif
-
-                    // Output
-                    RETURN_IF_ERROR(output(std::move(merged)));
-                } else {
-                    // Cutoff left by right tail
-                    size_t left_cut =
-                            cutoff_run(sort_desc, left_chunk, std::make_pair(right_chunk, right_chunk.num_rows() - 1));
-                    SortedRun left_1(left_chunk.chunk, 0, left_cut);
-                    SortedRun left_2(left_chunk.chunk, left_cut, left_chunk.num_rows());
-
-                    // Merge partial chunk
-                    Permutation perm;
-                    RETURN_IF_ERROR(MergeTwoCursor::merge_sorted_chunks_two_way(sort_desc, right_chunk, left_1, &perm));
-                    trim_permutation(left_1, right_chunk, perm);
-                    DCHECK_EQ(right_chunk.num_rows() + left_1.num_rows(), perm.size());
-                    std::unique_ptr<Chunk> merged = left_chunk.chunk->clone_empty(perm.size());
-                    append_by_permutation(merged.get(), {right_chunk.chunk, left_1.chunk}, perm);
-
-                    left_chunk = left_2;
-                    right_chunk.reset();
-#ifndef NDEBUG
-                    fmt::print("merge left chunk [0, {})\n", left_cut);
-                    for (int i = 0; i < merged->num_rows(); i++) {
-                        fmt::print("merge row: {}\n", merged->debug_row(i));
-                    }
-#endif
-
-                    // Output
-                    RETURN_IF_ERROR(output(std::move(merged)));
-                }
+                _left_run = left_2;
+                _right_run.reset();
+                result = std::move(merged);
             }
 
-            if (left_chunk.empty()) {
-                left_cursor.next_chunk_for_pipeline();
-                if (left_cursor.has_next()) {
-                    left_chunk = SortedRun(left_cursor.get_current_chunk());
-                }
+#ifndef NDEBUG
+            for (int i = 0; i < result->num_rows(); i++) {
+                fmt::print("merge row: {}\n", result->debug_row(i));
             }
-            if (right_chunk.empty()) {
-                right_cursor.next_chunk_for_pipeline();
-                if (right_cursor.has_next()) {
-                    right_chunk = SortedRun(right_cursor.get_current_chunk());
-                }
+#endif
+        }
+
+        // Move cursor
+        if (_left_run.empty()) {
+            _left_cursor.next_chunk_for_pipeline();
+            if (_left_cursor.has_next()) {
+                _left_run = SortedRun(_left_cursor.get_current_chunk());
             }
         }
-        return Status::OK();
+        if (_right_run.empty()) {
+            _right_cursor.next_chunk_for_pipeline();
+            if (_right_cursor.has_next()) {
+                _right_run = SortedRun(_right_cursor.get_current_chunk());
+            }
+        }
+
+        DCHECK(!!result);
+        return result;
     }
 
+    SortDescs _sort_desc;
+    SortedRun _left_run;
+    SortedRun _right_run;
+    ChunkCursor _left_cursor;
+    ChunkCursor _right_cursor;
+    ChunkProbeSupplier _chunk_supplier;
+    ChunkCursor _output_cursor;
+    bool _output_cursor_inited = false;
+
+private:
     static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
         size_t start = left.range.first + right.range.first;
         size_t end = left.range.second + right.range.second;
@@ -395,8 +431,44 @@ public:
 // Merge multiple cursors in cascade way
 class MergeCursorsCascade {
 public:
-    static Status merge_sorted_cursor_cascade(const std::vector<ChunkCursor&>& cursors, ChunkConsumer consumer) {
-        return Status::NotSupported("TODO");
+    static Status merge_sorted_cursor_cascade(const SortDescs& sort_desc, const std::vector<ChunkCursor>& cursors,
+                                              ChunkConsumer consumer) {
+        // Build a cascade merge tree
+        std::vector<std::vector<ChunkCursor>> level_cursors;
+        std::vector<ChunkCursor> current_level = cursors;
+        level_cursors.push_back(current_level);
+        std::vector<MergeTwoCursor> mergers;
+
+        while (current_level.size() > 1) {
+            std::vector<ChunkCursor> next_level;
+            next_level.reserve(current_level.size() / 2);
+
+            for (int i = 0; i < current_level.size(); i += 2) {
+                auto& left = current_level[i];
+                auto& right = current_level[i + 1];
+                mergers.emplace_back(sort_desc, left, right);
+                next_level.push_back(mergers.back().as_chunk_cursor());
+            }
+            if (current_level.size() % 2 == 1) {
+                next_level.push_back(current_level.back());
+            }
+
+            level_cursors.push_back(std::move(current_level));
+            current_level = std::move(next_level);
+        }
+
+        CHECK_EQ(1, level_cursors.back().size());
+        ChunkCursor& root_cursor = level_cursors.back()[0];
+
+        root_cursor.next_chunk_for_pipeline();
+        while (root_cursor.has_next()) {
+            ChunkPtr chunk = root_cursor.get_current_chunk();
+            RETURN_IF_ERROR(consumer(chunk->clone_unique()));
+
+            root_cursor.next_chunk_for_pipeline();
+        }
+
+        return Status::OK();
     }
 
 private:
@@ -415,7 +487,13 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr le
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, ChunkCursor& left_cursor, ChunkCursor& right_cursor,
                                    ChunkConsumer output) {
-    return MergeTwoCursor::merge_sorted_cursor_two_way(sort_desc, left_cursor, right_cursor, output);
+    MergeTwoCursor merger(sort_desc, left_cursor, right_cursor);
+    return merger.consume_all(output);
+}
+
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc, const std::vector<ChunkCursor>& cursors,
+                                   ChunkConsumer consumer) {
+    return MergeCursorsCascade::merge_sorted_cursor_cascade(sort_desc, cursors, consumer);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left_chunk,

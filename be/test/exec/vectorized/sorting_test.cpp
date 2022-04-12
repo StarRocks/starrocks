@@ -173,6 +173,7 @@ TEST(MergeTest, merge_sorted_stream) {
     std::vector<bool> null_first;
     Chunk::SlotHashMap map;
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
 
     for (int i = 0; i < num_columns; i++) {
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
@@ -216,6 +217,29 @@ TEST(MergeTest, merge_sorted_stream) {
         chunk_has_suppliers.emplace_back(chunk_has_supplier);
     }
 
+    std::vector<ChunkCursor> input_cursors;
+    for (int run = 0; run < num_runs; run++) {
+        input_cursors.push_back(ChunkCursor::make_for_pipeline(chunk_probe_suppliers[run], &sort_exprs,
+                                                               sort_desc.sort_orders, sort_desc.null_firsts));
+    }
+
+    std::vector<ChunkUniquePtr> output_chunks;
+    merge_sorted_cursor_cascade(sort_desc, input_cursors, [&](ChunkUniquePtr chunk) {
+        output_chunks.push_back(std::move(chunk));
+        return Status::OK();
+    });
+
+    for (auto& chunk : output_chunks) {
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            fmt::print("row: {}\n", chunk->debug_row(i));
+            if (i > 0) {
+                int x = compare_chunk_row(sort_desc, *chunk, *chunk, i - 1, i);
+                ASSERT_LE(x, 0);
+            }
+        }
+    }
+
+    /*
     std::deque<SortedChunkStream> streams;
     for (int run = 0; run < num_runs; run++) {
         SortedChunkStream stream;
@@ -232,7 +256,6 @@ TEST(MergeTest, merge_sorted_stream) {
         streams.push_back(std::move(stream));
     }
 
-    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     while (streams.size() > 1) {
         SortedChunkStream left_stream = std::move(streams.front());
         streams.pop_front();
@@ -273,6 +296,7 @@ TEST(MergeTest, merge_sorted_stream) {
             ASSERT_LE(x, 0);
         }
     }
+    */
 }
 
 } // namespace starrocks::vectorized
