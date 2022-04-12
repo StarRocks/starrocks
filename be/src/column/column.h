@@ -366,6 +366,30 @@ public:
 
     virtual void check_or_die() const = 0;
 
+    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col) {
+        auto ret = (*col)->downgrade();
+        if (!ret.ok()) {
+            return ret;
+        } else if (ret.value() == nullptr) {
+            return nullptr;
+        } else {
+            (*col) = ret.value();
+            return nullptr;
+        }
+    }
+
+    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col) {
+        auto ret = (*col)->upgrade_if_overflow();
+        if (!ret.ok()) {
+            return ret;
+        } else if (ret.value() == nullptr) {
+            return nullptr;
+        } else {
+            (*col) = ret.value();
+            return nullptr;
+        }
+    }
+
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
