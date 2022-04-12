@@ -158,7 +158,9 @@ Status HdfsScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
     _decompose_conjunct_ctxs();
-    if (_lake_table != nullptr) _init_partition_values_map();
+    if (_lake_table != nullptr) {
+        RETURN_IF_ERROR(_init_partition_values_map());
+    }
     for (auto& scan_range : _scan_ranges) {
         RETURN_IF_ERROR(_find_and_insert_hdfs_file(scan_range));
     }
@@ -586,9 +588,9 @@ Status HdfsScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-void HdfsScanNode::_init_partition_values_map() {
+Status HdfsScanNode::_init_partition_values_map() {
     if (_scan_ranges.empty() || !_lake_table->has_partition()) {
-        return;
+        return Status::OK();
     }
 
     for (auto& scan_range : _scan_ranges) {
@@ -602,23 +604,25 @@ void HdfsScanNode::_init_partition_values_map() {
     if (_has_partition_columns && _has_partition_conjuncts) {
         auto it = _partition_values_map.begin();
         while (it != _partition_values_map.end()) {
-            if (_filter_partition(it->second)) {
+            ASSIGN_OR_RETURN(bool res, _filter_partition(it->second));
+            if (res) {
                 _partition_values_map.erase(it++);
             } else {
                 it++;
             }
         }
     }
+    return Status::OK();
 }
 
-bool HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_values) {
+StatusOr<bool> HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_values) {
     _partition_chunk->reset();
 
     // append partition data
     for (size_t i = 0; i < _partition_slots.size(); i++) {
         SlotId slot_id = _partition_slots[i]->id();
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-        auto partition_value_col = partition_values[partition_col_idx]->evaluate(nullptr);
+        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
         assert(partition_value_col->is_constant());
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
         ColumnPtr data_column = const_column->data_column();
@@ -631,7 +635,7 @@ bool HdfsScanNode::_filter_partition(const std::vector<ExprContext*>& partition_
     }
 
     // eval conjuncts and skip if no rows.
-    ExecNode::eval_conjuncts(_partition_conjunct_ctxs, _partition_chunk.get());
+    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, _partition_chunk.get()));
     if (_partition_chunk->has_rows()) {
         return false;
     }

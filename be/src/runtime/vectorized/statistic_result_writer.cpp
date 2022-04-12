@@ -49,7 +49,8 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     result_columns.reserve(num_columns);
 
     for (int i = 0; i < num_columns; ++i) {
-        result_columns.emplace_back(_output_expr_ctxs[i]->evaluate(chunk));
+        ASSIGN_OR_RETURN(auto col, _output_expr_ctxs[i]->evaluate(chunk));
+        result_columns.emplace_back(std::move(col));
     }
 
     // Step 2: fill version magic_num, first column must be version(const int)

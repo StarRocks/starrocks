@@ -586,12 +586,12 @@ void Expr::close(const std::vector<Expr*>& exprs) {
     for (Expr* expr : exprs) expr->close();
 }
 
-ColumnPtr Expr::evaluate_const(ExprContext* context) {
+StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     if (!is_constant()) {
         return nullptr;
     }
 
-    if (_constant_column) {
+    if (_constant_column.ok() && _constant_column.value()) {
         return _constant_column;
     }
 

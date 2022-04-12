@@ -267,7 +267,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
             if (filter == nullptr) continue;
-            ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
+            auto* ctx = rf_desc->probe_expr_ctx();
+            ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
             vectorized::Column::Filter& selection = filter->evaluate(column.get(), &eval_context.running_context);
             eval_context.run_filter_nums += 1;
             size_t true_count = SIMD::count_nonzero(selection);
@@ -324,7 +325,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) continue;
-        ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
+        auto ctx = rf_desc->probe_expr_ctx();
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         vectorized::Column::Filter& new_selection = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
         size_t true_count = SIMD::count_nonzero(new_selection);

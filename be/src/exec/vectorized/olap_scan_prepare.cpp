@@ -83,7 +83,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     }
 
     // 3. extract the const value from |r|.
-    ColumnPtr column_ptr = ctx->evaluate(r, nullptr);
+    ColumnPtr column_ptr = EVALUATE_NULL_IF_ERROR(ctx, r, nullptr);
     if (column_ptr == nullptr) {
         return false;
     }
@@ -647,12 +647,12 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
+Status OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status) {
     *status = Status::OK();
-    for (const auto& ctx_iter : conjunct_ctxs) {
+    for (const auto& ctx : conjunct_ctxs) {
         // if conjunct is constant, compute direct and set eos = true
-        if (ctx_iter->root()->is_constant()) {
-            ColumnPtr value = ctx_iter->root()->evaluate_const(ctx_iter);
+        if (ctx->root()->is_constant()) {
+            ASSIGN_OR_RETURN(ColumnPtr value, ctx->root()->evaluate_const(ctx));
 
             if (value == nullptr || value->only_null() || value->is_null(0)) {
                 *status = Status::EndOfFile("conjuncts evaluated to null");
@@ -663,6 +663,7 @@ void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContex
             }
         }
     }
+    return Status::OK();
 }
 
 Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {

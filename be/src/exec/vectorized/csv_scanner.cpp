@@ -161,7 +161,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 
         fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
                                src_chunk->num_rows());
-        chunk = _materialize(src_chunk);
+        ASSIGN_OR_RETURN(chunk, _materialize(src_chunk));
     } while ((chunk)->num_rows() == 0);
     return std::move(chunk);
 }
@@ -255,7 +255,7 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
 }
 
 // TODO(zhuming): move this function to `FileScanner` or `FileScanNode`
-ChunkPtr CSVScanner::_materialize(ChunkPtr& src_chunk) {
+StatusOr<ChunkPtr> CSVScanner::_materialize(ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
 
     if (src_chunk->num_rows() == 0) {
@@ -278,7 +278,7 @@ ChunkPtr CSVScanner::_materialize(ChunkPtr& src_chunk) {
         }
 
         int dest_index = ctx_index++;
-        auto dst_col = _dest_expr_ctx[dest_index]->evaluate(src_chunk.get());
+        ASSIGN_OR_RETURN(auto dst_col, _dest_expr_ctx[dest_index]->evaluate(src_chunk.get()));
         uintptr_t col_pointer = reinterpret_cast<uintptr_t>(dst_col.get());
         if (column_pointers.contains(col_pointer)) {
             dst_col = dst_col->clone();

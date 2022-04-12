@@ -37,9 +37,10 @@ StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeStat
 }
 
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    vectorized::ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
-            chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
+    auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
+                                                                         _sort_exec_exprs, _order_by_types);
+    RETURN_IF_ERROR(materialize_chunk);
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
     return Status::OK();
 }
 
