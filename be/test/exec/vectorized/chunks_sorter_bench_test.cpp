@@ -586,9 +586,9 @@ BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {1
 BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 
 // Merge
-BENCHMARK(BM_merge_heap)->DenseRange(2, 32, 2);
-BENCHMARK(BM_merge_cascades)->DenseRange(2, 32, 2);
-BENCHMARK(BM_merge_vertical)->DenseRange(2, 32, 2);
+BENCHMARK(BM_merge_heap)->DenseRange(2, 64, 4);
+BENCHMARK(BM_merge_cascades)->DenseRange(2, 64, 4);
+BENCHMARK(BM_merge_vertical)->DenseRange(2, 64, 4);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {
