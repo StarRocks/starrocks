@@ -162,6 +162,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
+    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }

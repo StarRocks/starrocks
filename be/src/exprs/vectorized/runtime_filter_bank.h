@@ -166,6 +166,8 @@ public:
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
     void init_counter();
+    void set_plan_node_id(int id) { _plan_node_id = id; }
+    int plan_node_id() { return _plan_node_id; }
 
 private:
     void update_selectivity(vectorized::Chunk* chunk);
@@ -177,6 +179,7 @@ private:
     int _wait_timeout_ms = 0;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
+    int _plan_node_id = -1;
 };
 
 } // namespace vectorized
