@@ -136,6 +136,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.sender_finst_id) {
         _sender_finst_id = desc.sender_finst_id;
     }
+    if (desc.__isset.broadcast_grf_senders) {
+        _broadcast_grf_senders.insert(desc.broadcast_grf_senders.begin(), desc.broadcast_grf_senders.end());
+    }
+    if (desc.__isset.broadcast_grf_destinations) {
+        _broadcast_grf_destinations = desc.broadcast_grf_destinations;
+    }
 
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
     return Status::OK();
@@ -223,6 +229,7 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(de
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept
         : _descriptors(std::move(that._descriptors)),
           _wait_timeout_ms(that._wait_timeout_ms),
+          _scan_wait_timeout_ms(that._scan_wait_timeout_ms),
           _eval_context(that._eval_context) {}
 
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
@@ -440,8 +447,10 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* r
     }
 }
 void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf) {
-    _shared_runtime_filter = rf;
-    set_runtime_filter(_shared_runtime_filter.get());
+    std::shared_ptr<const JoinRuntimeFilter> old_value = nullptr;
+    if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
+        set_runtime_filter(_shared_runtime_filter.get());
+    }
 }
 
 } // namespace starrocks::vectorized
