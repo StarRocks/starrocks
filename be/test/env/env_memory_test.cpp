@@ -185,6 +185,7 @@ TEST_F(EnvMemoryTest, test_delete_dir_recursive) {
 // NOLINTNEXTLINE
 TEST_F(EnvMemoryTest, test_create_dir_recursive) {
     EXPECT_STATUS(Status::OK(), _env->create_dir_recursive("/usr/b/a/a"));
+    EXPECT_STATUS(Status::OK(), _env->create_dir_recursive("/usr/b/a/a"));
     EXPECT_TRUE(_env->is_directory("/usr").value());
     EXPECT_TRUE(_env->is_directory("/usr/b").value());
     EXPECT_TRUE(_env->is_directory("/usr/b/a").value());

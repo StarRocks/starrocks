@@ -2,6 +2,7 @@
 
 #include "storage/base_compaction.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
@@ -209,14 +210,8 @@ public:
         ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
         exec_env->set_storage_engine(k_engine);
 
-        std::string data_path = config::storage_root_path + "/data";
-        ASSERT_TRUE(FileUtils::create_dir(data_path).ok());
-        std::string shard_path = data_path + "/0";
-        ASSERT_TRUE(FileUtils::create_dir(shard_path).ok());
-        std::string tablet_path = shard_path + "/12345";
-        ASSERT_TRUE(FileUtils::create_dir(tablet_path).ok());
-        _schema_hash_path = tablet_path + "/1111";
-        ASSERT_TRUE(FileUtils::create_dir(_schema_hash_path).ok());
+        _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
+        ASSERT_OK(FileUtils::create_dir(_schema_hash_path));
 
         _mem_pool.reset(new MemPool());
 
