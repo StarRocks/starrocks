@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "column/array_column.h"
-#include "column/chunk.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"

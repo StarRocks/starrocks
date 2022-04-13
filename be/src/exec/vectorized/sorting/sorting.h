@@ -63,6 +63,8 @@ struct SortDescs {
     std::vector<int> sort_orders;
     std::vector<int> null_firsts;
 
+    SortDescs() = default;
+    ~SortDescs() = default;
     SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
             : sort_orders(orders), null_firsts(nulls) {}
 
@@ -80,7 +82,7 @@ struct SortDescs {
 struct SortedRun {
     ChunkPtr chunk;
     Columns orderby;
-    std::pair<size_t, size_t> range;
+    std::pair<uint32_t, uint32_t> range;
 
     SortedRun() = default;
     ~SortedRun() = default;

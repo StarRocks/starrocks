@@ -286,6 +286,9 @@ static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, con
 
     int num_columns = desc.num_columns();
     for (int i = 0; i < num_columns; i++) {
+        DCHECK(desc.sort_orders[i] == 1 || desc.sort_orders[i] == -1);
+        DCHECK(desc.null_firsts[i] == 1 || desc.null_firsts[i] == -1);
+
         auto& lhs_column = lhs.get_column_by_index(i);
         auto& rhs_column = rhs.get_column_by_index(i);
         int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.null_firsts[i]);
@@ -295,47 +298,5 @@ static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, con
     }
     return 0;
 }
-
-
-struct SortedChunkStream {
-    std::vector<ChunkUniquePtr> chunks;
-    int supplier_index = -1;
-    size_t rows = 0;
-
-    SortedChunkStream() = default;
-    SortedChunkStream(SortedChunkStream&& other) = default;
-    SortedChunkStream(const SortedChunkStream&) = delete;
-
-    void append_chunk(Chunk* chunk) {
-        DCHECK(!!chunk);
-        append_chunk(ChunkUniquePtr(chunk));
-    }
-
-    void append_chunk(ChunkUniquePtr chunk) {
-        rows += chunk->num_rows();
-        chunks.push_back(std::move(chunk));
-    }
-
-    size_t num_rows() const { return rows; }
-
-    ChunkSupplier get_supplier() {
-        return [&](Chunk** output) {
-            if (supplier_index + 1 >= chunks.size()) return Status::EndOfFile("end");
-            *output = chunks[++supplier_index].release();
-            CHECK(!(*output)->is_empty());
-            return Status::OK();
-        };
-    }
-
-    ChunkProbeSupplier get_probe_supplier() {
-        return [&](Chunk** output) {
-            if (supplier_index + 1 >= chunks.size()) return false;
-            // TODO: optimize memory copy
-            *output = chunks[++supplier_index].release();
-            CHECK(!(*output)->is_empty());
-            return true;
-        };
-    }
-};
 
 } // namespace starrocks::vectorized

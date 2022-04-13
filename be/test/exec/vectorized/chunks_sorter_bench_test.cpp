@@ -270,11 +270,13 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
 }
 
 static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merger = true) {
+    constexpr int num_columns = 3;
+    constexpr int num_chunks_per_run = 8;
+
     ChunkSorterBase suite;
     suite.SetUp();
     RuntimeState* runtime_state = suite._runtime_state.get();
 
-    constexpr int num_columns = 3;
     Columns columns;
     std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
@@ -299,9 +301,9 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
         ChunkSuppliers chunk_suppliers;
         ChunkProbeSuppliers chunk_probe_suppliers;
         ChunkHasSuppliers chunk_has_suppliers;
-        constexpr int num_chunks_per_run = 8;
         std::vector<int> chunk_input_index(num_runs, 0);
         std::vector<int> chunk_probe_index(num_runs, 0);
+
         for (int i = 0; i < num_runs; i++) {
             ChunkSupplier chunk_supplier = [&, i](Chunk** output) -> Status {
                 if (chunk_input_index[i]++ > num_chunks_per_run) {
@@ -316,7 +318,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                             x += start;
                         }
                     }
-                    *output = cloned.release();
+                    if (output) *output = cloned.release();
                     // state.ResumeTiming();
                 }
                 return Status::OK();
@@ -335,7 +337,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                             x += start;
                         }
                     }
-                    *output = cloned.release();
+                    if (output) *output = cloned.release();
                     // state.ResumeTiming();
 
                     return true;
@@ -376,7 +378,6 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
 
             SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
             std::vector<ChunkUniquePtr> output_chunks;
-            size_t num_rows = 0;
             merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
                 num_rows += chunk->num_rows();
                 output_chunks.push_back(std::move(chunk));

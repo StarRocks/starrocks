@@ -92,11 +92,10 @@ public:
 
 private:
     RuntimeState* _state;
-    RuntimeProfile* _profile = nullptr;
+    RuntimeProfile* _profile;
 
     const std::vector<ExprContext*>* _sort_exprs;
-    std::vector<int> _sort_orders;
-    std::vector<int> _null_firsts;
+    SortDescs _sort_desc;
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;

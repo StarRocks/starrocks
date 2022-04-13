@@ -4,7 +4,6 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized/jdbc_scanner.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
@@ -40,10 +39,6 @@ struct DataSegment {
         for (ExprContext* expr_ctx : (*sort_exprs)) {
             order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
         }
-    }
-
-    ChunkPtr assemble_orderby_chunk() const {
-        return std::make_shared<Chunk>(order_by_columns, chunk->get_slot_id_to_index_map());
     }
 
     // there is two compares in the method,

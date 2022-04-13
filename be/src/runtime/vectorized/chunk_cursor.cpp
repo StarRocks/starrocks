@@ -38,53 +38,7 @@ ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_
     }
 }
 
-ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
-                         ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* exprs,
-                         const std::vector<int>& is_asc, const std::vector<int>& is_null_first, bool is_pipeline)
-        : _chunk_supplier(std::move(chunk_supplier)),
-          _chunk_probe_supplier(std::move(chunk_probe_supplier)),
-          _chunk_has_supplier(std::move(chunk_has_supplier)),
-          _current_pos(-1),
-          _sort_exprs(exprs),
-          _sort_order_flag(is_asc),
-          _null_first_flag(is_null_first),
-          _is_pipeline(is_pipeline) {
-    DCHECK_EQ(_sort_exprs->size(), is_asc.size());
-    DCHECK_EQ(is_asc.size(), is_null_first.size());
-
-    if (!_is_pipeline) {
-        _reset_with_next_chunk();
-    }
-}
-
-ChunkCursor::ChunkCursor(ChunkProbeSupplier chunk_probe_supplier, const std::vector<ExprContext*>* sort_exprs,
-                         const std::vector<int>& is_asc, const std::vector<int>& is_null_first)
-        : ChunkCursor(nullptr, chunk_probe_supplier, nullptr, sort_exprs, is_asc, is_null_first, true) {
-    _chunk_supplier = [](Chunk** _) {
-        CHECK(false) << "unreachable";
-        return Status::NotSupported("");
-    };
-    _chunk_has_supplier = [] {
-        CHECK(false) << "unreachable";
-        return false;
-    };
-}
-
 ChunkCursor::~ChunkCursor() = default;
-
-ChunkCursor ChunkCursor::make_for_pipeline(ChunkProbeSupplier chunk_supplier,
-                                           const std::vector<ExprContext*>* sort_exprs,
-                                           const std::vector<int>& sort_orders, const std::vector<int>& null_firsts) {
-    ChunkSupplier supplier = [](Chunk** _) {
-        CHECK(false) << "unreachable";
-        return Status::NotSupported("");
-    };
-    ChunkHasSupplier has_supplier = [] {
-        CHECK(false) << "unreachable";
-        return false;
-    };
-    return ChunkCursor(supplier, std::move(chunk_supplier), has_supplier, sort_exprs, sort_orders, null_firsts, true);
-}
 
 bool ChunkCursor::operator<(const ChunkCursor& cursor) const {
     DCHECK_EQ(_current_order_by_columns.size(), cursor._current_order_by_columns.size());
@@ -226,17 +180,18 @@ bool SimpleChunkSortCursor::is_data_ready() {
 
 std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
     DCHECK(_data_ready);
+    DCHECK(_sort_exprs);
+
     if (_eos) {
         return {nullptr, {}};
     }
     Chunk* chunk = nullptr;
-    if (!_chunk_provider(&chunk, &_eos)) {
+    if (!_chunk_provider(&chunk, &_eos) || !chunk) {
         return {nullptr, {}};
     }
     DCHECK(!!chunk);
 
     Columns sort_columns;
-    sort_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr : *_sort_exprs) {
         sort_columns.push_back(expr->evaluate(chunk));
     }

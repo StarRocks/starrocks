@@ -301,20 +301,19 @@ Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
     _sort_exprs = sort_exprs;
 
     size_t col_num = sort_orders->size();
-    _sort_orders.resize(col_num);
-    _null_firsts.resize(col_num);
+    _sort_desc.sort_orders.resize(col_num);
+    _sort_desc.null_firsts.resize(col_num);
     for (size_t i = 0; i < col_num; ++i) {
-        _sort_orders[i] = (*sort_orders)[i] ? 1 : -1;
+        _sort_desc.sort_orders[i] = (*sort_orders)[i] ? 1 : -1;
         if ((*sort_orders)[i]) {
-            _null_firsts[i] = (*null_firsts)[i] ? -1 : 1;
+            _sort_desc.null_firsts[i] = (*null_firsts)[i] ? -1 : 1;
         } else {
-            _null_firsts[i] = (*null_firsts)[i] ? 1 : -1;
+            _sort_desc.null_firsts[i] = (*null_firsts)[i] ? 1 : -1;
         }
     }
     
     _merger = std::make_unique<MergeCursorsCascade>();
-    SortDescs sort_descs(_sort_orders, _null_firsts);
-    RETURN_IF_ERROR(_merger->init(sort_descs, std::move(cursors)));
+    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
     return Status::OK();
 }
 

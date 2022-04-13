@@ -8,7 +8,6 @@
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
@@ -18,7 +17,7 @@
 namespace starrocks::vectorized {
 
 struct EqualRange {
-    using Range = std::pair<size_t, size_t>;
+    using Range = std::pair<uint32_t, uint32_t>;
 
     Range left_range;
     Range right_range;
@@ -26,6 +25,7 @@ struct EqualRange {
     EqualRange(Range left, Range right) : left_range(left), right_range(right) {}
 };
 
+// MergeTwoColumn incremental merge two columns
 class MergeTwoColumn final : public ColumnVisitorAdapter<MergeTwoColumn> {
 public:
     MergeTwoColumn(SortDesc desc, const Column* left_col, const Column* right_col, std::vector<EqualRange>* equal_range,
@@ -61,17 +61,8 @@ public:
                 // TODO: optimize the compare
                 int x = 0;
                 if (lhs < lhs_end && rhs < rhs_end) {
-                    // TODO: avoid specialization
-                    if constexpr (std::is_same_v<FixedLengthColumn<int32_t>, ColumnType> ||
-                                  std::is_same_v<FixedLengthColumnBase<int32_t>, ColumnType>) {
-                        auto& left_data = left_col->get_data();
-                        auto& right_data = right_col->get_data();
-                        x = SorterComparator<int32_t>::compare(left_data[left_range.first],
-                                                               right_data[right_range.first]);
-                        x *= _sort_order;
-                    } else {
-                        x = left_col->compare_at(left_range.first, right_range.first, *right_col, _null_first);
-                    }
+                    x = left_col->compare_at(left_range.first, right_range.first, *right_col, _null_first);
+                    x *= _sort_order;
                 } else if (lhs < lhs_end) {
                     x = -1;
                 } else if (rhs < rhs_end) {
@@ -79,29 +70,18 @@ public:
                 }
 
                 if (x <= 0) {
-#ifndef NDEBUG
-                    fmt::print("merge left [{}, {}]\n", left_range.first, left_range.second);
-#endif
                     lhs = left_range.second;
                     for (size_t i = left_range.first; i < left_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kLeftIndex, i);
                     }
                 }
                 if (x >= 0) {
-#ifndef NDEBUG
-                    fmt::print("merge right [{}, {}]\n", right_range.first, right_range.second);
-#endif
                     rhs = right_range.second;
                     for (size_t i = right_range.first; i < right_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kRightIndex, i);
                     }
                 }
-
                 if (x == 0) {
-#ifndef NDEBUG
-                    fmt::print("merge equal [{}, {}) + [{}, {})\n", left_range.first, left_range.second,
-                               right_range.first, right_range.second);
-#endif
                     next_ranges.emplace_back(left_range, right_range);
                 }
             }
@@ -120,9 +100,9 @@ public:
     }
 
     template <class ColumnType>
-    std::pair<size_t, size_t> fetch_left(const ColumnType* left_col, size_t lhs, size_t lhs_end) {
-        size_t first = lhs;
-        size_t last = lhs + 1;
+    EqualRange::Range fetch_left(const ColumnType* left_col, size_t lhs, size_t lhs_end) {
+        uint32_t first = lhs;
+        uint32_t last = lhs + 1;
         while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, _null_first) == 0) {
             last++;
         }
@@ -130,9 +110,9 @@ public:
     }
 
     template <class ColumnType>
-    std::pair<size_t, size_t> fetch_right(const ColumnType* right_col, size_t rhs, size_t rhs_end) {
-        size_t first = rhs;
-        size_t last = rhs + 1;
+    EqualRange::Range fetch_right(const ColumnType* right_col, size_t rhs, size_t rhs_end) {
+        uint32_t first = rhs;
+        uint32_t last = rhs + 1;
         while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, _null_first) == 0) {
             last++;
         }
@@ -151,6 +131,10 @@ private:
     Permutation* _perm;
 };
 
+// MergeTwoChunk merge two chunk in column-wise
+// 1. Merge the first column, record the equal rows into equal-range
+// 2. Merge the second column within the equal-range of previous column
+// 3. Repeat it until no equal-range or the last column
 class MergeTwoChunk {
 public:
     static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
@@ -176,7 +160,9 @@ public:
         } else {
             std::vector<EqualRange> equal_ranges;
             equal_ranges.emplace_back(left_run.range, right_run.range);
-            output->resize(left_run.range.second + right_run.range.second);
+            size_t count = left_run.range.second + right_run.range.second;
+            output->resize(count);
+            equal_ranges.reserve(std::max((size_t)1, count / 4));
 
             for (int col = 0; col < sort_desc.num_columns(); col++) {
                 const Column* left_col = left_run.get_column(col);
@@ -184,13 +170,15 @@ public:
                 MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
                 Status st = left_col->accept(&merge2);
                 CHECK(st.ok());
+                if (equal_ranges.size() == 0) {
+                    break;
+                }
             }
         }
 
         return Status::OK();
     }
 
-private:
 };
 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,

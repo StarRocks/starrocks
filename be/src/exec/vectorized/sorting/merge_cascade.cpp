@@ -11,8 +11,8 @@ namespace starrocks::vectorized {
 // Some search algorithms with cursor
 struct CursorAlgo {
     static int compare_tail(const SortDescs& desc, const SortedRun& left, const SortedRun& right) {
-        size_t lhs_tail = left.num_rows() - 1;
-        size_t rhs_tail = right.num_rows() - 1;
+        size_t lhs_tail = left.range.second - 1;
+        size_t rhs_tail = right.range.second - 1;
         return left.compare_row(desc, right, lhs_tail, rhs_tail);
     }
 
@@ -30,7 +30,7 @@ struct CursorAlgo {
         size_t count = range.second - range.first;
         while (count > 0) {
             size_t mid = first + count / 2;
-            int x = column.compare_at(mid, rhs_row, rhs_column, -1) * desc.sort_order;
+            int x = column.compare_at(mid, rhs_row, rhs_column, desc.null_first) * desc.sort_order;
             if (x <= 0) {
                 first = mid + 1;
                 count -= count / 2 + 1;
@@ -61,10 +61,10 @@ struct CursorAlgo {
     // Cutoff by upper_bound
     // @return last row index of upper bound
     static size_t cutoff_run(const SortDescs& sort_descs, SortedRun run, std::pair<SortedRun, size_t> cut) {
-        size_t res = 0;
         std::pair<size_t, size_t> search_range = run.range;
+        size_t res = 0;
 
-        for (int i = 0; i < run.num_columns(); i++) {
+        for (int i = 0; i < sort_descs.num_columns(); i++) {
             auto& lhs_col = *run.get_column(i);
             auto& rhs_col = *cut.first.get_column(i);
             SortDesc desc = sort_descs.get_column_desc(i);
@@ -222,30 +222,28 @@ bool MergeTwoCursor::move_cursor() {
 
 Status MergeCursorsCascade::init(const SortDescs& sort_desc,
                                  std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors) {
-    int level_size = cursors.size();
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> current_level = std::move(cursors);
 
-    while (level_size > 1) {
+    while (current_level.size() > 1) {
         std::vector<std::unique_ptr<SimpleChunkSortCursor>> next_level;
         next_level.reserve(current_level.size() / 2);
 
-        for (int i = 0; i < current_level.size(); i += 2) {
+        int level_size = current_level.size() & ~1;
+        for (int i = 0; i < level_size; i += 2) {
             auto& left = current_level[i];
             auto& right = current_level[i + 1];
-            _mergers.emplace_back(std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right)));
+            _mergers.push_back(std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right)));
             next_level.push_back(_mergers.back()->as_chunk_cursor());
         }
         if (current_level.size() % 2 == 1) {
             next_level.push_back(std::move(current_level.back()));
         }
 
-        level_size = next_level.size();
         std::swap(next_level, current_level);
     }
     DCHECK_EQ(1, current_level.size());
     _root_cursor = std::move(current_level.front());
 
-    VLOG(2) << "init MergerCursorsCascade";
     return Status::OK();
 }
 
