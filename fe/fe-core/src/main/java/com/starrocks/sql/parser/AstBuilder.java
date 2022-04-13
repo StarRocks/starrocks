@@ -76,6 +76,7 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -1219,7 +1220,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB", "DATE_FLOOR");
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
@@ -1235,6 +1236,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = (Expr) visit(context.expression(1));
             if (!(e2 instanceof IntervalLiteral)) {
+                if (functionName.toUpperCase().equals(FunctionSet.DATE_FLOOR.toUpperCase())) {
+                    throw new ParsingException(
+                            functionName + " requires second parameter must be a constant interval");
+                }
                 e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
             }
             IntervalLiteral intervalLiteral = (IntervalLiteral) e2;

@@ -64,6 +64,25 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testDateFloor() {
+        analyzeSuccess("select date_floor(th, interval 1 year) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 month) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 day) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 week) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 quarter) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 hour) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 minute) from tall");
+        analyzeSuccess("select date_floor(th, interval 1 second) from tall");
+
+        analyzeFail("select date_floor(ta, th) from tall",
+                "date_floor requires second parameter must be a constant interval");
+
+        analyzeFail("select date_floor(ta, 1) from tall",
+                "date_floor requires second parameter must be a constant interval");
+
+    }
+
+    @Test
     public void testApproxCountDistinctWithMetricType() {
         analyzeFail("select approx_count_distinct(h1) from test_object");
         analyzeFail("select ndv(h1) from test_object");
