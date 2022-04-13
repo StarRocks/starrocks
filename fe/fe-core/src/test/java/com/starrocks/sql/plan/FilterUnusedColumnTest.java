@@ -40,8 +40,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" + 
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
