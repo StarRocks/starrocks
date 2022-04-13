@@ -62,7 +62,8 @@ public:
         return sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range, _build_tie);
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         DCHECK_GE(column.size(), _permutation.size());
         using ItemType = InlinePermuteItem<Slice>;
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
@@ -169,8 +170,9 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
-        using ColumnType = BinaryColumn;
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+        using ColumnType = BinaryColumnBase<T>;
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
