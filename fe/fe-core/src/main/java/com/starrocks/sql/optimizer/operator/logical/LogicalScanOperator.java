@@ -87,6 +87,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return new ColumnRefSet(new ArrayList<>(colRefToColumnMetaMap.keySet()));
     }
 
+    @Override
+    public String toString() {
+        return "LogicalScanOperator" + " {" +
+                "table='" + table.getId() + '\'' +
+                ", outputColumns='" + new ArrayList<>(colRefToColumnMetaMap.keySet()) + '\'' +
+                '}';
+    }
+
     public ScanOperatorPredicates getScanOperatorPredicates() throws AnalysisException {
         throw new AnalysisException("Operation getScanOperatorPredicates() is not supported by this ScanOperator.");
     }
