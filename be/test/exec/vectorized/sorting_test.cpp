@@ -140,11 +140,10 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
         return true;
     };
 
-    auto left_cursor = std::make_unique<ChunkCursor>(left_chunk_supplier, left_chunk_probe_supplier,
-                                                     left_chunk_has_supplier, &sort_exprs, &asc_arr, &null_first, true);
+    auto left_cursor =
+            std::make_unique<SimpleChunkSortCursor>(left_chunk_has_supplier, left_chunk_probe_supplier, &sort_exprs);
     auto right_cursor =
-            std::make_unique<ChunkCursor>(right_chunk_supplier, right_chunk_probe_supplier, right_chunk_has_supplier,
-                                          &sort_exprs, &asc_arr, &null_first, true);
+            std::make_unique<SimpleChunkSortCursor>(right_chunk_has_supplier, right_chunk_probe_supplier, &sort_exprs);
     std::vector<ChunkUniquePtr> output_chunks;
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
         output_chunks.push_back(std::move(chunk));
@@ -218,10 +217,10 @@ TEST(MergeTest, merge_sorted_stream) {
         chunk_has_suppliers.emplace_back(chunk_has_supplier);
     }
 
-    std::vector<std::unique_ptr<ChunkCursor>> input_cursors;
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
     for (int run = 0; run < num_runs; run++) {
-        input_cursors.push_back(std::make_unique<ChunkCursor>(chunk_probe_suppliers[run], &sort_exprs,
-                                                              sort_desc.sort_orders, sort_desc.null_firsts));
+        input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(chunk_has_suppliers[run],
+                                                                        chunk_probe_suppliers[run], &sort_exprs));
     }
 
     std::vector<ChunkUniquePtr> output_chunks;

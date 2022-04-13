@@ -123,6 +123,7 @@ set(EXEC_FILES
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp
     vectorized/sorting/merge_column.cpp
+    vectorized/sorting/merge_cascade.cpp
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
     parquet/column_chunk_reader.cpp

@@ -275,28 +275,6 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
     return Status::OK();
 }
 
-struct SortDesc {
-    int sort_order;
-    int null_first;
-};
-
-struct SortDescs {
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
-
-    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
-            : sort_orders(orders), null_firsts(nulls) {}
-
-    size_t num_columns() const { return sort_orders.size(); }
-
-    SortDesc get_column_desc(int col) const {
-        SortDesc desc;
-        DCHECK_LT(col, sort_orders.size());
-        desc.sort_order = sort_orders[col];
-        desc.null_first = null_firsts[col];
-        return desc;
-    }
-};
 
 static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, const Chunk& rhs, size_t lhs_row,
                                     size_t rhs_row) {
@@ -318,41 +296,6 @@ static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, con
     return 0;
 }
 
-struct SortedRun {
-    ChunkPtr chunk;
-    std::pair<size_t, size_t> range;
-
-    SortedRun() = default;
-    ~SortedRun() = default;
-    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), range(0, ichunk->num_rows()) {}
-    SortedRun(ChunkPtr ichunk, std::pair<size_t, size_t> irange) : chunk(ichunk), range(irange) {}
-    SortedRun(ChunkPtr ichunk, size_t start, size_t end) : chunk(ichunk), range(start, end) {}
-    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), range(rhs.range) {}
-    SortedRun& operator=(const SortedRun& rhs) {
-        if (&rhs == this) return *this;
-        chunk = rhs.chunk;
-        range = rhs.range;
-        return *this;
-    }
-
-    size_t num_columns() const { return chunk->num_columns(); }
-    size_t num_rows() const { return range.second - range.first; }
-    const Column* get_column(int index) const { return chunk->get_column_by_index(index).get(); }
-    bool empty() const { return range.second == range.first; }
-    void reset() {
-        chunk->reset();
-        range = {};
-    }
-    ChunkUniquePtr clone_chunk() {
-        if (range.first == 0) {
-            return chunk->clone_unique();
-        } else {
-            ChunkUniquePtr cloned = chunk->clone_empty(num_rows() - range.first);
-            cloned->append(*chunk, range.first, num_rows());
-            return cloned;
-        }
-    }
-};
 
 struct SortedChunkStream {
     std::vector<ChunkUniquePtr> chunks;

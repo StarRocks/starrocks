@@ -293,10 +293,10 @@ VerticalChunkMerger::VerticalChunkMerger(RuntimeState* state) : _state(state) {}
 Status VerticalChunkMerger::init(ChunkHasSuppliers has_suppliers, ChunkProbeSuppliers chunk_suppliers,
                                  const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
                                  const std::vector<bool>* null_firsts) {
-    /*
     CHECK_EQ(has_suppliers.size(), chunk_suppliers.size());
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     for (int i = 0; i < has_suppliers.size(); i++) {
-        _cursors.push_back(std::make_unique<SimpleChunkSortCursor>(has_suppliers[i], chunk_suppliers[i]));
+        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(has_suppliers[i], chunk_suppliers[i], sort_exprs));
     }
     _sort_exprs = sort_exprs;
 
@@ -313,24 +313,16 @@ Status VerticalChunkMerger::init(ChunkHasSuppliers has_suppliers, ChunkProbeSupp
     }
     
     _merger = std::make_unique<MergeCursorsCascade>();
-    RETURN_IF_ERROR(_merger->init());
-    */
+    SortDescs sort_descs(_sort_orders, _null_firsts);
+    RETURN_IF_ERROR(_merger->init(sort_descs, std::move(cursors)));
     return Status::OK();
 }
 
 bool VerticalChunkMerger::is_data_ready() {
-    /*
-    for (auto& cursor : _cursors) {
-        if (!cursor->is_data_ready()) {
-            return false;
-        }
-    }
-    */
-    return true;
+    return _merger->is_data_ready();
 }
 
-Status VerticalChunkMerger::get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
-    /*
+Status VerticalChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
     if (_merger->is_eos()) {
         *eos = true;
         return Status::OK();
@@ -340,8 +332,7 @@ Status VerticalChunkMerger::get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bo
         *should_exit = true;
         return Status::OK();
     }
-    *chunk = ChunkPtr(chunk.release());
-    */
+    *output = ChunkPtr(chunk.release());
     return Status::OK();
 }
 

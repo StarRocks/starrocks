@@ -213,8 +213,9 @@ void ChunkCursor::next_chunk_for_pipeline() {
     }
 }
 
-SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier)
-        : _chunk_has_supplier(has_supplier), _chunk_probe_supplier(chunk_supplier) {}
+SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier,
+                                             const std::vector<ExprContext*>* sort_exprs)
+        : _chunk_has_supplier(has_supplier), _chunk_probe_supplier(chunk_supplier), _sort_exprs(sort_exprs) {}
 
 bool SimpleChunkSortCursor::is_data_ready() {
     if (!_chunk_has_supplier()) {

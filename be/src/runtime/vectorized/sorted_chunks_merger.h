@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "exec/vectorized/sorting/sorting.h"
 #include "runtime/vectorized/chunk_cursor.h"
 #include "util/runtime_profile.h"
 
@@ -77,8 +78,6 @@ private:
     bool _wait_for_data = false;
 };
 
-class MergeCursorsCascade;
-
 class VerticalChunkMerger {
 public:
     VerticalChunkMerger(RuntimeState* state);
@@ -102,7 +101,7 @@ private:
     std::vector<int> _null_firsts;
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
-    // std::unique_ptr<MergeCursorsCascade> _merger;
+    std::unique_ptr<MergeCursorsCascade> _merger;
 };
 
 } // namespace vectorized

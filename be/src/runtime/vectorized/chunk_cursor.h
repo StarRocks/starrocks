@@ -107,7 +107,8 @@ class SimpleChunkSortCursor {
 public:
     SimpleChunkSortCursor() = delete;
     SimpleChunkSortCursor(const SimpleChunkSortCursor& rhs) = delete;
-    SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier);
+    SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier,
+                          const std::vector<ExprContext*>* sort_exprs);
     ~SimpleChunkSortCursor() = default;
 
     // Check has any data
@@ -124,9 +125,9 @@ private:
     bool _data_ready = false;
     bool _eos = false;
 
-    const std::vector<ExprContext*>* _sort_exprs;
     ChunkHasSupplier _chunk_has_supplier;
     ChunkProbeSupplier _chunk_probe_supplier;
+    const std::vector<ExprContext*>* _sort_exprs;
 };
 
 } // namespace vectorized

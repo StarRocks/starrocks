@@ -360,45 +360,20 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 num_rows += chunk->num_rows();
             }
         } else {
-            std::deque<SortedChunkStream> streams;
-            // state.PauseTiming();
-            for (int i = 0; i < num_runs; i++) {
-                SortedChunkStream stream;
-                Chunk* chunk = nullptr;
-                while (chunk_probe_suppliers[i](&chunk)) {
-                    if (chunk == nullptr) break;
-                    DCHECK(!chunk->is_empty());
-                    stream.append_chunk(chunk);
-                }
-                streams.push_back(std::move(stream));
+            std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
+            for (int run = 0; run < num_runs; run++) {
+                input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(
+                        chunk_has_suppliers[run], chunk_probe_suppliers[run], &sort_exprs));
             }
-            // state.ResumeTiming();
 
             SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
-            while (streams.size() > 1) {
-                SortedChunkStream left_stream = std::move(streams.front());
-                streams.pop_front();
-                SortedChunkStream right_stream = std::move(streams.front());
-                streams.pop_front();
-                CHECK(!right_stream.chunks.empty());
-                auto left = std::make_unique<ChunkCursor>(
-                        left_stream.get_supplier(), left_stream.get_probe_supplier(), []() { return true; },
-                        &sort_exprs, &asc_arr, &null_first, true);
-                auto right = std::make_unique<ChunkCursor>(
-                        right_stream.get_supplier(), right_stream.get_probe_supplier(), []() { return true; },
-                        &sort_exprs, &asc_arr, &null_first, true);
-                SortedChunkStream merged;
-                Status st = merge_sorted_cursor_two_way(sort_desc, std::move(left), std::move(right),
-                                                        [&](ChunkUniquePtr chunk) {
-                                                            CHECK(!chunk->is_empty());
-                                                            merged.append_chunk(std::move(chunk));
-                                                            return Status::OK();
-                                                        });
-                CHECK(st.ok());
-                CHECK(!merged.chunks.empty());
-                streams.push_back(std::move(merged));
-            }
-            num_rows += streams[0].num_rows();
+            std::vector<ChunkUniquePtr> output_chunks;
+            size_t num_rows = 0;
+            merge_sorted_cursor_cascade(sort_desc, input_cursors, [&](ChunkUniquePtr chunk) {
+                num_rows += chunk->num_rows();
+                output_chunks.push_back(std::move(chunk));
+                return Status::OK();
+            });
         }
     }
     state.SetItemsProcessed(num_rows);
