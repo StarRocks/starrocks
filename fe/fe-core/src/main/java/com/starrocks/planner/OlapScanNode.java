@@ -191,13 +191,13 @@ public class OlapScanNode extends ScanNode {
     }
 
     private List<String> unUsedOutputStringColumns = new ArrayList<>();
-    
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds) {
+
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds, Set<String> aggTableValueColumnNames) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            if (unUsedOutputColumnIds.contains(slot.getId().asInt())) {
+            if (unUsedOutputColumnIds.contains(slot.getId().asInt()) && !aggTableValueColumnNames.contains(slot.getColumn().getName())) {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
