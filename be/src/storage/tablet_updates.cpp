@@ -414,22 +414,6 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
     return Status::OK();
 }
 
-StatusOr<IteratorList> TabletUpdates::read(int64_t version, const vectorized::Schema& schema,
-                                           const vectorized::RowsetReadOptions& options) {
-    if (_error) {
-        return Status::InternalError(Substitute("read failed, tablet updates is in error state: tablet:$0 $1",
-                                                _tablet.tablet_id(), _error_msg));
-    }
-    std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(get_applied_rowsets(version, &rowsets));
-
-    IteratorList iterators;
-    for (auto& rowset : rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
-    }
-    return std::move(iterators);
-}
-
 Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     if (_error) {
         return Status::InternalError(Substitute("rowset_commit failed, tablet updates is in error state: tablet:$0 $1",
