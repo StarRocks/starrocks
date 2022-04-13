@@ -5,7 +5,9 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -18,6 +20,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -35,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -268,7 +272,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 
@@ -346,7 +350,6 @@ public class CostModel {
             }
         }
 
-        // TODO: 4/7/22 mergejoin 
         @Override
         public CostEstimate visitPhysicalMergeJoin(PhysicalMergeJoinOperator join, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
@@ -363,17 +366,46 @@ public class CostModel {
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
                     rightStatistics.getUsedColumns(),
                     Utils.extractConjuncts(join.getOnPredicate()));
-
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * Constants.CrossJoinCostPenalty, 0);
+                                * Constants.CrossJoinCostPenalty * 2, 0);
             } else {
-                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
-                        rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
+                boolean hasSort = checkSort(join, context);
+                if (hasSort) {
+                    return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
+                            0, 0);
+                } else {
+                    return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1))) * 1.5,
+                            leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
+                }
             }
+        }
+
+        private boolean checkSort(PhysicalMergeJoinOperator join, ExpressionContext context) {
+            GroupExpression leftChildGroupExpression = context.getChildGroupExpression(0);
+            GroupExpression rightChildGroupExpression = context.getChildGroupExpression(1);
+            Operator leftOperator = leftChildGroupExpression.getOp();
+            Operator rightOperator = rightChildGroupExpression.getOp();
+            if (!(leftOperator instanceof LogicalOlapScanOperator && rightOperator instanceof LogicalOlapScanOperator)) {
+                return false;
+            }
+            LogicalOlapScanOperator leftLogicalOlapScanOperator = (LogicalOlapScanOperator) leftOperator;
+            LogicalOlapScanOperator rightLogicalOlapScanOperator = (LogicalOlapScanOperator) rightOperator;
+            Table leftTable = leftLogicalOlapScanOperator.getTable();
+            Table rightTable = rightLogicalOlapScanOperator.getTable();
+            List<Column> leftFullSchema = leftTable.getFullSchema();
+            List<Column> rightFullSchema = rightTable.getFullSchema();
+            List<ScalarOperator> children = join.getOnPredicate().getChildren();
+            ColumnRefOperator leftColumnRefOperator = (ColumnRefOperator) children.get(0);
+            ColumnRefOperator rightColumnRefOperator = (ColumnRefOperator) children.get(1);
+            boolean leftEquals = leftColumnRefOperator.getName().equals(leftFullSchema.get(0).getName());
+            boolean rightEquals = rightColumnRefOperator.getName().equals(rightFullSchema.get(0).getName());
+            return leftEquals && rightEquals;
         }
 
         @Override
