@@ -92,7 +92,6 @@ public class BDBEnvironment {
     private final String helperHostPort;
     private final boolean isElectable;
 
-
     public BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
                           String helperHostPort, boolean isElectable) {
         this.envHome = envHome;
