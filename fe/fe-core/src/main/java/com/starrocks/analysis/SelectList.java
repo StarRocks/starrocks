@@ -28,6 +28,7 @@ import com.starrocks.rewrite.ExprRewriter;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Select list items plus distinct clause.
@@ -121,7 +122,7 @@ public class SelectList {
     public String toString() {
         StringBuilder sb = new StringBuilder("SelectList{");
         sb.append("isDistinct=").append(isDistinct);
-        sb.append(", selectItems=").append(items);
+        sb.append(", selectItems=").append(items.stream().map(v -> v.toSql()).collect(Collectors.toList()));
         sb.append("}");
         return sb.toString();
     }

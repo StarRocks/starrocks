@@ -67,12 +67,11 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         // Phase 1: none
-        OptimizerTraceUtil.log(connectContext,
-                String.format("origin logicOperatorTree:\n%s", logicOperatorTree.explain()));
+        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
         Memo memo = new Memo();
         memo.init(logicOperatorTree);
-        OptimizerTraceUtil.log(connectContext, String.format("initial root group:\n%s", memo.getRootGroup().toString()));
+        OptimizerTraceUtil.log(connectContext, "initial root group:\n%s", memo.getRootGroup());
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
@@ -83,8 +82,7 @@ public class Optimizer {
         // so we should always get root group and root group expression
         // directly from memo.
         logicalRuleRewrite(memo, rootTaskContext);
-        OptimizerTraceUtil.log(connectContext,
-                String.format("after logical rewrite, root group:\n%s", memo.getRootGroup().toString()));
+        OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -108,12 +106,11 @@ public class Optimizer {
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
         }
-        OptimizerTraceUtil.log(connectContext, String.format("after extract best plan:\n%s", result.explain()));
+        OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
         OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
-        OptimizerTraceUtil.log(connectContext,
-                String.format("final plan after physical rewrite:\n%s", finalPlan.explain()));
-        OptimizerTraceUtil.log(connectContext, context.getTraceInfo().toString());
+        OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
+        OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
         return finalPlan;
     }
 

@@ -267,22 +267,12 @@ public class SelectRelation extends QueryRelation {
                 || (orderByAnalytic != null && orderByAnalytic.size() > 0);
     }
 
-    @Override
-    public List<Expr> getOutputExpression() {
-        return outputExpr;
+    public List<OrderByElement> getSortClause() {
+        return sortClause;
     }
 
     @Override
-    public String toPrettyString(String indent) {
-        StringBuilder sb = new StringBuilder("SelectRelation{\n");
-        sb.append(indent).append("  selectList=").append(selectList).append("\n");
-        sb.append(indent).append("  fromRelation=").append(relation.toPrettyString(indent + "  ")).append("\n");
-        sb.append(indent).append("  predicate=").append(predicate == null ? "null" : predicate.toSql()).append("\n");
-        sb.append(indent).append("  groupByClause=").append(groupByClause).append("\n");
-        sb.append(indent).append("  having=").append(having == null ? "null" : having.toSql()).append("\n");
-        sb.append(indent).append("  sortClause=").append(sortClause).append("\n");
-        sb.append(indent).append("  limit=").append(limit).append("\n");
-        sb.append(indent).append("}");
-        return sb.toString();
+    public List<Expr> getOutputExpression() {
+        return outputExpr;
     }
 }

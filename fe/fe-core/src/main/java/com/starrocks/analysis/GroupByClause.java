@@ -370,9 +370,4 @@ public class GroupByClause implements ParseNode {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitGroupByClause(this, context);
     }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
 }

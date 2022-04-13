@@ -69,9 +69,7 @@ public class ApplyRuleTask extends OptimizerTask {
             newExpressions.addAll(targetExpressions);
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(sessionVariable,
-                    traceInfo.getQueryId(), rule, extractExpr, targetExpressions);
-            traceInfo.recordAppliedRule(rule.toString());
+            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
 
             extractExpr = binder.next();
         }

@@ -13,15 +13,4 @@ public class UnionRelation extends SetOperationRelation {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitUnion(this, context);
     }
-
-    @Override
-    public String toPrettyString(String indent) {
-        StringBuilder sb = new StringBuilder("UnionRelation{\n");
-        sb.append(indent).append("relations=\n");
-        for (QueryRelation relation : getRelations()) {
-            sb.append(indent + "  ").append(relation.toPrettyString(indent + "  ")).append("\n");
-        }
-        sb.append("}");
-        return sb.toString();
-    }
 }

@@ -132,9 +132,4 @@ public class SelectListItem implements ParseNode {
         }
         return expr.toColumnLabel();
     }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
 }

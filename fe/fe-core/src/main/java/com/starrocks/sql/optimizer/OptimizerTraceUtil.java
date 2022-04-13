@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -9,6 +11,14 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -73,23 +83,48 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class OptimizerTraceUtil {
     private static final Logger LOG = LogManager.getLogger(OptimizerTraceUtil.class);
 
-    public static void log(ConnectContext ctx, String message) {
+    // In order to completely avoid the overhead caused by assembling strings when enable_optimizer_trace_log is false.
+    // We specifically implement the log interface for some classes
+
+    public static void logOptExpression(ConnectContext ctx, String format, OptExpression optExpression) {
         if (ctx.getSessionVariable().isEnableOptimizerTraceLog()) {
-            LOG.info("[TRACE QUERY {}] {}", ctx.getQueryId(), message);
+            log(ctx, String.format(format, optExpression.explain()));
         }
     }
 
-    public static void logApplyRule(SessionVariable sessionVariable, UUID queryId,
-                                    Rule rule,
+    public static void logQueryStatement(ConnectContext ctx, String format, QueryStatement statement) {
+        if (ctx.getSessionVariable().isEnableOptimizerTraceLog()) {
+            log(ctx, String.format(format, statement.accept(new RelationTracePrinter(), "")));
+        }
+    }
+
+    public static void log(ConnectContext ctx, Object object) {
+        if (ctx.getSessionVariable().isEnableOptimizerTraceLog()) {
+            log(ctx, String.valueOf(object));
+        }
+    }
+
+    public static void log(ConnectContext ctx, String format, Object... object) {
+        if (ctx.getSessionVariable().isEnableOptimizerTraceLog()) {
+            log(ctx, String.format(format, object));
+        }
+    }
+
+    private static void log(ConnectContext ctx, String message) {
+        Preconditions.checkState(ctx.getSessionVariable().isEnableOptimizerTraceLog());
+        LOG.info("[TRACE QUERY {}] {}", ctx.getQueryId(), message);
+    }
+
+    public static void logApplyRule(SessionVariable sessionVariable,
+                                    OptimizerTraceInfo traceInfo, Rule rule,
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", queryId, rule));
+            sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", traceInfo.getQueryId(), rule));
             sb.append("Original Expression:\n" + oldExpression.explain());
             sb.append("New Expression:\n");
             if (newExpressions.isEmpty()) {
@@ -99,6 +134,8 @@ public class OptimizerTraceUtil {
                     sb.append(i + ":\n" + newExpressions.get(i).explain());
                 }
             }
+            LOG.info(sb.toString());
+            traceInfo.recordAppliedRule(rule.toString());
         }
     }
 
@@ -519,6 +556,85 @@ public class OptimizerTraceUtil {
         public String visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
             return super.visitPhysicalNoCTE(node, context);
         }
+    }
 
+    public static class RelationTracePrinter extends AstVisitor<String, String> {
+        @Override
+        public String visit(ParseNode node) {
+            return node == null ? "null" : node.toSql();
+        }
+
+        @Override
+        public String visit(ParseNode node, String indent) {
+            return node == null ? "null" : node.accept(this, indent);
+        }
+
+        @Override
+        public String visitQueryStatement(QueryStatement statement, String indent) {
+            StringBuilder sb = new StringBuilder("QueryStatement{\n");
+            sb.append(indent).append("  queryRelation=")
+                    .append(visit(statement.getQueryRelation(), indent + "  "))
+                    .append("\n");
+            sb.append(indent).append("}");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitSelect(SelectRelation node, String indent) {
+            StringBuilder sb = new StringBuilder("SelectRelation{\n");
+            sb.append(indent).append("  selectList=").append(node.getSelectList()).append("\n");
+            sb.append(indent).append("  fromRelation=")
+                    .append(visit(node.getRelation(), indent + "  ")).append("\n");
+            sb.append(indent).append("  predicate=")
+                    .append(visit(node.getPredicate())).append("\n");
+            sb.append(indent).append("  groupByClause=")
+                    .append(visit(node.getGroupByClause())).append("\n");
+            sb.append(indent).append("  having=")
+                    .append(visit(node.getHaving())).append("\n");
+            sb.append(indent).append("  sortClause=")
+                    .append(node.getSortClause()).append("\n");
+            sb.append(indent).append("  limit=")
+                    .append(visit(node.getLimit())).append("\n");
+            sb.append(indent).append("}");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitJoin(JoinRelation node, String indent) {
+            StringBuilder sb = new StringBuilder("JoinRelation{");
+            sb.append("joinType=").append(node.getJoinOp());
+            sb.append(", left=").append(visit(node.getLeft(), indent));
+            sb.append(", right=").append(visit(node.getRight(), indent));
+            sb.append(", onPredicate=").append(node.getOnPredicate());
+            sb.append("}");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitSubquery(SubqueryRelation node, String indent) {
+            StringBuilder sb = new StringBuilder("SubqueryRelation{\n");
+            sb.append(indent).append("  alias=")
+                    .append(node.getAlias() == null ? "anonymous" : node.getAlias()).append("\n");
+            sb.append(indent).append("  query=")
+                    .append(visit(node.getQueryStatement(), indent + "  ")).append("\n");
+            sb.append(indent).append("}");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitUnion(UnionRelation node, String indent) {
+            StringBuilder sb = new StringBuilder("UnionRelation{\n");
+            sb.append(indent).append("relations=\n");
+            for (QueryRelation relation : node.getRelations()) {
+                sb.append(indent + "  ").append(visit(relation, indent + "  ")).append("\n");
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitTable(TableRelation node, String indent) {
+            return node.toString();
+        }
     }
 }

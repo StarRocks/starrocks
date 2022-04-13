@@ -52,12 +52,12 @@ public class StatementPlanner {
 
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
         if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.log(session, String.format("after parse:\n%s", stmt));
+            OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }
         Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session);
         if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.log(session, String.format("after analyze:\n%s", stmt));
+            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
         }
 
         if (stmt instanceof QueryStatement) {

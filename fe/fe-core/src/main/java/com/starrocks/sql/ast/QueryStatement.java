@@ -40,16 +40,4 @@ public class QueryStatement extends StatementBase {
     public RedirectStatus getRedirectStatus() {
         return null;
     }
-
-    @Override
-    public String toString() {
-        return toPrettyString("");
-    }
-
-    public String toPrettyString(String indent) {
-        StringBuilder sb = new StringBuilder("QueryStatement{\n");
-        sb.append(indent).append("  queryRelation=").append(queryRelation.toPrettyString(indent + "  ")).append("\n");
-        sb.append(indent).append("}");
-        return sb.toString();
-    }
 }
