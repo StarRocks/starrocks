@@ -21,12 +21,40 @@ QueryContext::~QueryContext() {
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
 }
+
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
 
 void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
+}
+
+int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
+                                              size_t pipeline_dop) {
+    // no mem_limit
+    if (per_instance_mem_limit == -1) {
+        return -1;
+    }
+    int64_t mem_limit = per_instance_mem_limit;
+    // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
+    static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
+    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop < mem_limit) {
+        mem_limit *= total_fragments() * pipeline_dop;
+    } else {
+        mem_limit = MEM_LIMIT_MAX;
+    }
+    // query's mem_limit never exceeds its parent's limit if it exists
+    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
+}
+
+void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+    std::call_once(_init_mem_tracker_once, [=]() {
+        _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
+        auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        mem_tracker_counter->set(bytes_limit);
+        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+    });
 }
 
 static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM = 64;

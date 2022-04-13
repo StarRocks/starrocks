@@ -146,10 +146,20 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _fragment_ctx->set_runtime_state(
                 std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     }
+
+    auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
+    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
+                                                                  degree_of_parallelism);
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
+
+    auto query_mem_tracker = _query_ctx->mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
+
     auto* runtime_state = _fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
+    runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker().get());
     runtime_state->set_be_number(backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 

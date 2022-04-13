@@ -53,7 +53,6 @@ public:
     void extend_lifetime() {
         _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _expire_seconds).count();
     }
-
     FragmentContextManager* fragment_mgr();
 
     void cancel(const Status& status);
@@ -70,6 +69,10 @@ public:
         DCHECK(_desc_tbl != nullptr);
         return _desc_tbl;
     }
+    int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop);
+    size_t total_fragments() { return _total_fragments; }
+    void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
+    std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
 private:
     ExecEnv* _exec_env = nullptr;
@@ -81,6 +84,9 @@ private:
     int64_t _deadline;
     seconds _expire_seconds;
     bool _is_runtime_filter_coordinator = false;
+    std::once_flag _init_mem_tracker_once;
+    std::shared_ptr<RuntimeProfile> _profile;
+    std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 };
