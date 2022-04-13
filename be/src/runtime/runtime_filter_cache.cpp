@@ -113,13 +113,13 @@ RuntimeFilterCache::~RuntimeFilterCache() {
 Status RuntimeFilterCache::init() {
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_thread_func, this);
+        Thread::set_thread_name(*_clean_thread, "rf_cache_clr");
         return Status::OK();
     } catch (...) {
         return Status::InternalError("Fail to create clean_thread of RuntimeFilterCache");
     }
 }
 void RuntimeFilterCache::_clean_thread_func(RuntimeFilterCache* cache) {
-    Thread::set_thread_name(cache->clean_thread(), "rf_cache_clr");
     while (!cache->is_stopped()) {
         cache->_clean_filters();
         cache->_clean_events(false);
