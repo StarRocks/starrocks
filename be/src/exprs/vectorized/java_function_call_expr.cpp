@@ -282,17 +282,12 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
 
 void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     auto function_close = [this, scope]() {
-        if (_func_desc && _func_desc->close) {
-            // Now we only support FRAGMENT LOCAL scope close
-            if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            if (_func_desc && _func_desc->close) {
                 _call_udf_close();
             }
-        }
-        if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            {
-                _func_desc.reset();
-                _call_helper.reset();
-            }
+            _func_desc.reset();
+            _call_helper.reset();
         }
         return Status::OK();
     };
