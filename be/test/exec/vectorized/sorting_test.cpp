@@ -129,7 +129,9 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
             *eos = true;
             return false;
         }
-        *chunk = left_chunks[left_index++].release();
+        if (chunk && eos) {
+            *chunk = left_chunks[left_index++].release();
+        }
         return true;
     };
 
@@ -138,7 +140,9 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
             *eos = true;
             return false;
         }
-        *chunk = right_chunks[right_index++].release();
+        if (chunk && eos) {
+            *chunk = right_chunks[right_index++].release();
+        }
         return true;
     };
 
@@ -193,7 +197,7 @@ TEST(MergeTest, merge_sorted_stream) {
                 *output = nullptr;
                 *eos = true;
                 return false;
-            } else {
+            } else if (output && eos) {
                 Columns columns;
                 for (int col_idx = 0; col_idx < num_columns; col_idx++) {
                     auto column =
@@ -202,9 +206,8 @@ TEST(MergeTest, merge_sorted_stream) {
                 }
                 ChunkUniquePtr chunk = std::make_unique<Chunk>(columns, map);
                 *output = chunk.release();
-
-                return true;
             }
+            return true;
         };
         chunk_providers.emplace_back(chunk_probe_supplier);
     }
@@ -215,7 +218,7 @@ TEST(MergeTest, merge_sorted_stream) {
     }
 
     std::vector<ChunkUniquePtr> output_chunks;
-    merge_sorted_cursor_cascade(sort_desc, input_cursors, [&](ChunkUniquePtr chunk) {
+    merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
         output_chunks.push_back(std::move(chunk));
         return Status::OK();
     });

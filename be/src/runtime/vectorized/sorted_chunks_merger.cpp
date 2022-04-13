@@ -288,12 +288,12 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-VerticalChunkMerger::VerticalChunkMerger(RuntimeState* state, RuntimeProfile* profile)
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile)
         : _state(state), _profile(profile) {}
 
-Status VerticalChunkMerger::init(const std::vector<ChunkProvider>& providers,
-                                 const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
-                                 const std::vector<bool>* null_firsts) {
+Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
+                                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
+                                const std::vector<bool>* null_firsts) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     for (int i = 0; i < providers.size(); i++) {
         cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
@@ -318,11 +318,11 @@ Status VerticalChunkMerger::init(const std::vector<ChunkProvider>& providers,
     return Status::OK();
 }
 
-bool VerticalChunkMerger::is_data_ready() {
+bool CascadeChunkMerger::is_data_ready() {
     return _merger->is_data_ready();
 }
 
-Status VerticalChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
+Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
     if (_merger->is_eos()) {
         *eos = true;
         return Status::OK();

@@ -827,7 +827,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                                                    const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _vertical_merger = std::make_unique<vectorized::VerticalChunkMerger>(state, _profile.get());
+    _cascade_merger = std::make_unique<vectorized::CascadeChunkMerger>(state, _profile.get());
 
     std::vector<vectorized::ChunkProvider> chunk_providers;
     for (SenderQueue* q : _sender_queues) {
@@ -843,7 +843,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
         chunk_providers.push_back(std::move(f));
     }
 
-    RETURN_IF_ERROR(_vertical_merger->init(chunk_providers, &exprs->lhs_ordering_expr_ctxs(), is_asc, is_null_first));
+    RETURN_IF_ERROR(_cascade_merger->init(chunk_providers, &exprs->lhs_ordering_expr_ctxs(), is_asc, is_null_first));
     return Status::OK();
 }
 
@@ -899,13 +899,13 @@ Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
 }
 
 Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
-    DCHECK(!!_vertical_merger);
-    return _vertical_merger->get_next(chunk, eos, should_exit);
+    DCHECK(!!_cascade_merger);
+    return _cascade_merger->get_next(chunk, eos, should_exit);
 }
 
 bool DataStreamRecvr::is_data_ready() {
-    if (!!_vertical_merger) {
-        return _vertical_merger->is_data_ready();
+    if (!!_cascade_merger) {
+        return _cascade_merger->is_data_ready();
     } else {
         return _chunks_merger->is_data_ready();
     }
@@ -949,7 +949,7 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
-    _vertical_merger.reset();
+    _cascade_merger.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

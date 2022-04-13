@@ -78,10 +78,11 @@ private:
     bool _wait_for_data = false;
 };
 
-class VerticalChunkMerger {
+// Merge sorted chunks in cascade style
+class CascadeChunkMerger {
 public:
-    VerticalChunkMerger(RuntimeState* state, RuntimeProfile* profile);
-    ~VerticalChunkMerger() = default;
+    CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile);
+    ~CascadeChunkMerger() = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);

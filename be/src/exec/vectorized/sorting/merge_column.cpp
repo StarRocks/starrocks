@@ -157,7 +157,7 @@ public:
                                               const SortedRun& right_run, Permutation* output) {
         DCHECK(!!left_run.chunk);
         DCHECK(!!right_run.chunk);
-        DCHECK_EQ(left_run.chunk->num_columns(), right_run.chunk->num_columns());
+        DCHECK_EQ(left_run.num_columns(), right_run.num_columns());
 
         if (left_run.empty()) {
             size_t count = right_run.range.second - right_run.range.first;
@@ -179,8 +179,8 @@ public:
             output->resize(left_run.range.second + right_run.range.second);
 
             for (int col = 0; col < sort_desc.num_columns(); col++) {
-                const Column* left_col = left_run.chunk->get_column_by_index(col).get();
-                const Column* right_col = right_run.chunk->get_column_by_index(col).get();
+                const Column* left_col = left_run.get_column(col);
+                const Column* right_col = right_run.get_column(col);
                 MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
                 Status st = left_col->accept(&merge2);
                 CHECK(st.ok());
@@ -198,8 +198,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr le
     DCHECK_LE(sort_desc.num_columns(), left->num_columns());
     DCHECK_LE(sort_desc.num_columns(), right->num_columns());
 
-    SortedRun left_run(left, std::make_pair(0, left->num_rows()));
-    SortedRun right_run(right, std::make_pair(0, right->num_rows()));
+    SortedRun left_run(left, 0, left->num_rows());
+    SortedRun right_run(right, 0, right->num_rows());
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
 }
 

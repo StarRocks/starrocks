@@ -377,7 +377,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
             SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
             std::vector<ChunkUniquePtr> output_chunks;
             size_t num_rows = 0;
-            merge_sorted_cursor_cascade(sort_desc, input_cursors, [&](ChunkUniquePtr chunk) {
+            merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
                 num_rows += chunk->num_rows();
                 output_chunks.push_back(std::move(chunk));
                 return Status::OK();

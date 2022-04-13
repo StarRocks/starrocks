@@ -79,27 +79,32 @@ struct SortDescs {
 
 struct SortedRun {
     ChunkPtr chunk;
+    Columns orderby;
     std::pair<size_t, size_t> range;
 
     SortedRun() = default;
     ~SortedRun() = default;
-    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), range(0, ichunk->num_rows()) {}
-    SortedRun(ChunkPtr ichunk, std::pair<size_t, size_t> irange) : chunk(ichunk), range(irange) {}
-    SortedRun(ChunkPtr ichunk, size_t start, size_t end) : chunk(ichunk), range(start, end) {}
-    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), range(rhs.range) {}
+    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), orderby(ichunk->columns()), range(0, ichunk->num_rows()) {}
+    SortedRun(ChunkPtr ichunk, const Columns& columns)
+            : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
+    SortedRun(ChunkPtr ichunk, size_t start, size_t end)
+            : chunk(ichunk), orderby(ichunk->columns()), range(start, end) {}
+    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
     SortedRun& operator=(const SortedRun& rhs) {
         if (&rhs == this) return *this;
         chunk = rhs.chunk;
+        orderby = rhs.orderby;
         range = rhs.range;
         return *this;
     }
 
-    size_t num_columns() const { return chunk->num_columns(); }
+    size_t num_columns() const { return orderby.size(); }
     size_t num_rows() const { return range.second - range.first; }
-    const Column* get_column(int index) const { return chunk->get_column_by_index(index).get(); }
+    const Column* get_column(int index) const { return orderby[index].get(); }
     bool empty() const { return range.second == range.first; }
     void reset() {
         chunk->reset();
+        orderby.clear();
         range = {};
     }
     ChunkUniquePtr clone_chunk() {
@@ -110,6 +115,16 @@ struct SortedRun {
             cloned->append(*chunk, range.first, num_rows());
             return cloned;
         }
+    }
+
+    int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
+        for (int i = 0; i < orderby.size(); i++) {
+            int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
+            if (x != 0) {
+                return x;
+            }
+        }
+        return 0;
     }
 };
 
@@ -127,10 +142,10 @@ public:
     StatusOr<ChunkUniquePtr> next();
 
     Status consume_all(ChunkConsumer output);
-    ChunkProvider& as_provider() { return _chunk_provider; }
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
 
 private:
+    ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
     bool move_cursor();
 
@@ -140,7 +155,6 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
-    std::unique_ptr<SimpleChunkSortCursor> _output_cursor = nullptr;
 };
 
 // Merge multiple cursors in cascade way
@@ -156,8 +170,8 @@ public:
     Status consume_all(ChunkConsumer consumer);
 
 private:
-    std::vector<std::vector<std::unique_ptr<SimpleChunkSortCursor>>> _level_cursors;
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
+    std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
 };
 
 // Merge algorithms
@@ -168,7 +182,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
                                    std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
-                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>& cursors,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
                                    ChunkConsumer consumer);
 
 // Merge in rowwise
