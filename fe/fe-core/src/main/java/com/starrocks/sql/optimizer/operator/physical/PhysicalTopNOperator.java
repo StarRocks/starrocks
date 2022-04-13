@@ -105,7 +105,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         ColumnRefSet dictSet = new ColumnRefSet();
         dictColIds.forEach(dictSet::union);
-        // Now we disable DictOptimize when group by predicate couldn't push down
+        // Now we disable DictOptimize when order by predicate couldn't push down
         final ScalarOperator predicate = getPredicate();
         if (predicate != null) {
             final ColumnRefSet predicateUsedColumns = getPredicate().getUsedColumns();

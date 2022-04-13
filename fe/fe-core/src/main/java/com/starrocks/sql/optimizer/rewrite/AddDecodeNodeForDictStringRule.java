@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -286,14 +287,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             context);
                     newTopN.getUsedColumns();
                     LogicalProperty logicalProperty = optExpression.getLogicalProperty();
-                    ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
-                    int[] columnIds = outputColumns.getColumnIds();
-                    outputColumns.clear();
-
-                    for (int columnId : columnIds) {
-                        outputColumns.union(context.stringColumnIdToDictColumnIds.getOrDefault(columnId, columnId));
-                    }
-
+                    rewriteLogicProperty(logicalProperty, context.stringColumnIdToDictColumnIds);
                     OptExpression result = OptExpression.create(newTopN, newChildExpr);
                     result.setStatistics(optExpression.getStatistics());
                     result.setLogicalProperty(optExpression.getLogicalProperty());
@@ -433,6 +427,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 }
             }
             return visitProjectionAfter(optExpression, context);
+        }
+
+        private LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
+                                                     Map<Integer, Integer> stringColumnIdToDictColumnIds) {
+            ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
+            int[] columnIds = outputColumns.getColumnIds();
+            outputColumns.clear();
+            // For string column rewrite to dictionary column, other columns remain unchanged
+            Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
+                    .forEach(outputColumns::union);
+            return logicalProperty;
         }
 
         private Projection rewriteProjectOperator(Projection projectOperator,
