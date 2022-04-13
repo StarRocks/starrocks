@@ -13,10 +13,6 @@ public class MaterializedViewAnalyzer {
     }
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        public void analyze(StatementBase statement, ConnectContext session) {
-            visit(statement, session);
-        }
-
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             stmt.getDbMvName().normalization(context);

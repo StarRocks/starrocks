@@ -117,9 +117,9 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext session) {
-            String db = statement.getDbName();
-            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(session, db, PrivPredicate.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
+                    statement.getMvName(), PrivPredicate.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
             }
             return null;
         }
