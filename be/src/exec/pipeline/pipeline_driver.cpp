@@ -316,7 +316,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            QueryContextManager::instance()->remove(query_id);
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

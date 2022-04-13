@@ -60,7 +60,7 @@ void PipelineTestBase::_prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_expire_seconds(60);
     _query_ctx->extend_lifetime();
