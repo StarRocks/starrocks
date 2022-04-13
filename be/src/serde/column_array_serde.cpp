@@ -40,12 +40,12 @@ const uint8_t* read_little_endian_64(const uint8_t* buff, uint64_t* value) {
     return buff + sizeof(*value);
 }
 
-uint8_t* write_raw(const void* data, uint64_t size, uint8_t* buff) {
+uint8_t* write_raw(const void* data, size_t size, uint8_t* buff) {
     strings::memcpy_inlined(buff, data, size);
     return buff + size;
 }
 
-const uint8_t* read_raw(const uint8_t* buff, void* target, uint64_t size) {
+const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     strings::memcpy_inlined(target, buff, size);
     return buff + size;
 }
