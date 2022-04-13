@@ -38,7 +38,7 @@ TEST(MergeTest, merge_sorter_chunks_two_way) {
     ChunkPtr chunk1 = std::make_shared<Chunk>(Columns{col1, col3}, map);
     ChunkPtr chunk2 = std::make_shared<Chunk>(Columns{col2, col4}, map);
     Permutation perm;
-    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+    SortDescs sort_desc({1, 1}, {-1, -1});
     merge_sorted_chunks_two_way(sort_desc, chunk1, chunk2, &perm);
 
     size_t expected_size = col1->size() + col2->size();

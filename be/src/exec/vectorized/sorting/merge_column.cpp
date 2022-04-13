@@ -253,7 +253,7 @@ public:
 
             output->resize(left_run.range.second + right_run.range.second);
             // Iterate each column
-            for (int col = 0; col < left_run.num_columns(); col++) {
+            for (int col = 0; col < sort_desc.num_columns(); col++) {
                 const Column* left_col = left_run.chunk->get_column_by_index(col).get();
                 const Column* right_col = right_run.chunk->get_column_by_index(col).get();
                 MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
@@ -478,7 +478,8 @@ private:
 // TODO: specify the ordering
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,
                                    Permutation* output) {
-    DCHECK_EQ(left->num_columns(), right->num_columns());
+    DCHECK_LE(sort_desc.num_columns(), left->num_columns());
+    DCHECK_LE(sort_desc.num_columns(), right->num_columns());
 
     SortedRun left_run(left, std::make_pair(0, left->num_rows()));
     SortedRun right_run(right, std::make_pair(0, right->num_rows()));

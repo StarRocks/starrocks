@@ -287,6 +287,8 @@ struct SortDescs {
     SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
             : sort_orders(orders), null_firsts(nulls) {}
 
+    size_t num_columns() const { return sort_orders.size(); }
+
     SortDesc get_column_desc(int col) const {
         SortDesc desc;
         DCHECK_LT(col, sort_orders.size());
@@ -301,8 +303,10 @@ static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, con
     DCHECK_LT(lhs_row, lhs.num_rows());
     DCHECK_LT(rhs_row, rhs.num_rows());
     DCHECK_EQ(lhs.num_columns(), rhs.num_columns());
+    DCHECK_LE(desc.num_columns(), lhs.num_columns());
+    DCHECK_LE(desc.num_columns(), rhs.num_columns());
 
-    int num_columns = lhs.num_columns();
+    int num_columns = desc.num_columns();
     for (int i = 0; i < num_columns; i++) {
         auto& lhs_column = lhs.get_column_by_index(i);
         auto& rhs_column = rhs.get_column_by_index(i);

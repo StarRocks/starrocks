@@ -358,12 +358,12 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
-        right_chunks.push_back(segment.assemble_orderby_chunk());
+        right_chunks.push_back(segment.chunk);
     }
     ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
     append_by_permutation(right_chunk.get(), right_chunks, permutation_second);
 
-    ChunkPtr left_chunk = _merged_segment.assemble_orderby_chunk();
+    ChunkPtr left_chunk = _merged_segment.chunk;
 
     Permutation merged_perm;
     merged_perm.reserve(sort_row_number);
@@ -443,7 +443,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     if (_compare_strategy != RowWise) {
         std::vector<ChunkPtr> chunks;
         for (auto& segment : segments) {
-            chunks.push_back(segment.assemble_orderby_chunk());
+            chunks.push_back(segment.chunk);
         }
         new_permutation.resize(sort_row_number);
         append_by_permutation(big_chunk.get(), chunks, new_permutation);

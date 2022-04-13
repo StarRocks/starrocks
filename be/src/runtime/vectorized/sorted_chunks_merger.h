@@ -24,8 +24,6 @@ public:
                              const ChunkHasSuppliers& chunk_has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                              const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
     bool is_data_ready();
-    void init_for_min_heap();
-
     void set_profile(RuntimeProfile* profile);
 
     // Return the next sorted chunk from this merger.
@@ -38,11 +36,12 @@ private:
         inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
     };
 
+    void init_for_min_heap();
     void collect_merged_chunks(ChunkPtr* chunk);
     void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);
 
-    bool _is_pipeline;
     RuntimeState* _state;
+    bool _is_pipeline;
 
     ChunkSupplier _single_supplier;
     ChunkProbeSupplier _single_probe_supplier;
