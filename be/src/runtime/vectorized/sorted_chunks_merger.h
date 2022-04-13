@@ -80,16 +80,13 @@ private:
 
 class VerticalChunkMerger {
 public:
-    VerticalChunkMerger(RuntimeState* state);
+    VerticalChunkMerger(RuntimeState* state, RuntimeProfile* profile);
     ~VerticalChunkMerger() = default;
 
-    // TODO: simplify sort parametersj
-    Status init(ChunkHasSuppliers has_suppliers, ChunkProbeSuppliers chunk_suppliers,
-                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
-                const std::vector<bool>* null_firsts);
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);
 
     bool is_data_ready();
-    void set_profile(RuntimeProfile* profile) { _profile = profile; }
     Status get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
 private:

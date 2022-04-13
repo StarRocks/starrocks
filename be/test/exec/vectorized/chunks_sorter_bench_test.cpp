@@ -362,8 +362,16 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
         } else {
             std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
             for (int run = 0; run < num_runs; run++) {
-                input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(
-                        chunk_has_suppliers[run], chunk_probe_suppliers[run], &sort_exprs));
+                ChunkProvider provider = [&, run](Chunk** output, bool* eos) {
+                    if (!chunk_has_suppliers[run]()) {
+                        return false;
+                    }
+                    if (!chunk_probe_suppliers[run](output)) {
+                        *eos = true;
+                    }
+                    return true;
+                };
+                input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(provider, &sort_exprs));
             }
 
             SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});

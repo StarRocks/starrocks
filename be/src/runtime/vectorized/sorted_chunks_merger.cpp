@@ -288,15 +288,15 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-VerticalChunkMerger::VerticalChunkMerger(RuntimeState* state) : _state(state) {}
+VerticalChunkMerger::VerticalChunkMerger(RuntimeState* state, RuntimeProfile* profile)
+        : _state(state), _profile(profile) {}
 
-Status VerticalChunkMerger::init(ChunkHasSuppliers has_suppliers, ChunkProbeSuppliers chunk_suppliers,
+Status VerticalChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                  const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
                                  const std::vector<bool>* null_firsts) {
-    CHECK_EQ(has_suppliers.size(), chunk_suppliers.size());
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
-    for (int i = 0; i < has_suppliers.size(); i++) {
-        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(has_suppliers[i], chunk_suppliers[i], sort_exprs));
+    for (int i = 0; i < providers.size(); i++) {
+        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
     }
     _sort_exprs = sort_exprs;
 

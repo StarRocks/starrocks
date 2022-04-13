@@ -203,6 +203,11 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr le
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
 }
 
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
+                                   Permutation* output) {
+    return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
+}
+
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left_chunk,
                                            const ChunkPtr right_chunk, Permutation* output, size_t limit) {
     constexpr int kLeftChunkIndex = 0;

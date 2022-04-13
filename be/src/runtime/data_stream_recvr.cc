@@ -827,23 +827,23 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                                                    const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _vertical_merger = std::make_unique<vectorized::VerticalChunkMerger>(state);
-    vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
+    _vertical_merger = std::make_unique<vectorized::VerticalChunkMerger>(state, _profile.get());
+
+    std::vector<vectorized::ChunkProvider> chunk_providers;
     for (SenderQueue* q : _sender_queues) {
-        // we use chunk_probe_supplier in pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> bool { return q->try_get_chunk(chunk); };
-        chunk_probe_suppliers.emplace_back(std::move(f));
-    }
-    vectorized::ChunkHasSuppliers chunk_has_suppliers;
-    for (SenderQueue* q : _sender_queues) {
-        // we use chunk_has_supplier in pipeline.
-        auto f = [q]() -> bool { return q->has_chunk(); };
-        chunk_has_suppliers.emplace_back(std::move(f));
+        auto f = [q](vectorized::Chunk** chunk, bool* eos) -> bool {
+            if (!q->has_chunk()) {
+                return false;
+            }
+            if (chunk != nullptr && eos != nullptr) {
+                *eos = !q->try_get_chunk(chunk);
+            }
+            return true;
+        };
+        chunk_providers.push_back(std::move(f));
     }
 
-    RETURN_IF_ERROR(_vertical_merger->init(chunk_has_suppliers, chunk_probe_suppliers, &exprs->lhs_ordering_expr_ctxs(),
-                                           is_asc, is_null_first));
-    _vertical_merger->set_profile(_profile.get());
+    RETURN_IF_ERROR(_vertical_merger->init(chunk_providers, &exprs->lhs_ordering_expr_ctxs(), is_asc, is_null_first));
     return Status::OK();
 }
 

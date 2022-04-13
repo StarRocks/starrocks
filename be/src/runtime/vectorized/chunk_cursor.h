@@ -94,6 +94,7 @@ private:
     bool _is_pipeline;
 };
 
+using ChunkProvider = std::function<bool(Chunk**, bool*)>;
 // SimpleChunkCursor a simple cursor over the SenderQueue, avoid copy the chunk
 //
 // Example:
@@ -107,8 +108,7 @@ class SimpleChunkSortCursor {
 public:
     SimpleChunkSortCursor() = delete;
     SimpleChunkSortCursor(const SimpleChunkSortCursor& rhs) = delete;
-    SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier,
-                          const std::vector<ExprContext*>* sort_exprs);
+    SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs);
     ~SimpleChunkSortCursor() = default;
 
     // Check has any data
@@ -121,13 +121,15 @@ public:
     // Check if is the end of stream
     bool is_eos();
 
+    const std::vector<ExprContext*>* get_sort_exprs() const { return _sort_exprs; }
+
 private:
     bool _data_ready = false;
     bool _eos = false;
 
-    ChunkHasSupplier _chunk_has_supplier;
-    ChunkProbeSupplier _chunk_probe_supplier;
+    ChunkProvider _chunk_provider;
     const std::vector<ExprContext*>* _sort_exprs;
+    ChunkUniquePtr _current_chunk;
 };
 
 } // namespace vectorized

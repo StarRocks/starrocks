@@ -213,12 +213,11 @@ void ChunkCursor::next_chunk_for_pipeline() {
     }
 }
 
-SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier,
-                                             const std::vector<ExprContext*>* sort_exprs)
-        : _chunk_has_supplier(has_supplier), _chunk_probe_supplier(chunk_supplier), _sort_exprs(sort_exprs) {}
+SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs)
+        : _chunk_provider(chunk_provider), _sort_exprs(sort_exprs) {}
 
 bool SimpleChunkSortCursor::is_data_ready() {
-    if (!_chunk_has_supplier()) {
+    if (!_data_ready && !_chunk_provider(nullptr, nullptr)) {
         return false;
     }
     _data_ready = true;
@@ -226,9 +225,17 @@ bool SimpleChunkSortCursor::is_data_ready() {
 }
 
 std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
+    DCHECK(_data_ready);
     if (_eos) {
         return {nullptr, {}};
     }
+    Chunk* chunk = nullptr;
+    if (!_chunk_provider(&chunk, &_eos)) {
+        return {nullptr, {}};
+    }
+    DCHECK(!!chunk);
+
+    /*
     if (!_chunk_has_supplier()) {
         return {nullptr, {}};
     }
@@ -238,6 +245,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
         return {nullptr, {}};
     }
     DCHECK(!!chunk);
+    */
 
     Columns sort_columns;
     sort_columns.reserve(_sort_exprs->size());
