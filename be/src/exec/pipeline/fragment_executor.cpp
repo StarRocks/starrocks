@@ -77,7 +77,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
-    auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
+    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
         auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existing_fragment_ctx) {
@@ -85,7 +85,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         }
     }
 
-    _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
