@@ -184,7 +184,7 @@ public:
 
             std::vector<const Container*> containers;
             for (const auto& col : _vertical_columns) {
-                const auto real = down_cast<const BinaryColumn*>(col.get());
+                const auto real = down_cast<const ColumnType*>(col.get());
                 containers.push_back(&real->get_data());
             }
 
