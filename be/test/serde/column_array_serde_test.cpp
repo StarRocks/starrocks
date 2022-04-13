@@ -155,6 +155,24 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
+    std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
+    auto c1 = vectorized::LargeBinaryColumn::create();
+    auto c2 = vectorized::LargeBinaryColumn::create();
+    c1->append_strings(strings);
+
+    ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
+
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    for (size_t i = 0; i < c1->size(); i++) {
+        ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
+    }
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
     auto create_const_column = [](int32_t value, size_t size) {
         auto c = vectorized::Int32Column::create();
