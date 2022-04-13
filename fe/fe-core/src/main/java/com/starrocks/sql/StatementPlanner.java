@@ -40,15 +40,12 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
-    private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
 
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
         if (stmt instanceof QueryStatement) {
