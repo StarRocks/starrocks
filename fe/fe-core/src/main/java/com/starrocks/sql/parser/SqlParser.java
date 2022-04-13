@@ -34,7 +34,7 @@ public class SqlParser {
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);
             } catch (ParsingException parsingException) {
-                StatementBase statement = parseWithOldParser(sql, sqlMode);
+                StatementBase statement = parseWithOldParser(sql, sqlMode, 0);
                 if (StatementPlanner.supportedByNewParser(statement)) {
                     throw parsingException;
                 }
@@ -45,11 +45,11 @@ public class SqlParser {
         return statements;
     }
 
-    private static StatementBase parseWithOldParser(String originStmt, long sqlMode) {
+    public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
         com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);
         try {
-            return SqlParserUtils.getFirstStmt(parser);
+            return SqlParserUtils.getStmt(parser, idx);
         } catch (Error e) {
             throw new ParsingException("Please check your sql, we meet an error when parsing.");
         } catch (AnalysisException e) {
