@@ -58,28 +58,6 @@ bool LocalFileReader::closed() {
     return _fp == nullptr;
 }
 
-// Read all bytes
-Status LocalFileReader::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz,
-                                         size_t padding) {
-    bool eof;
-    int64_t file_size = size() - _current_offset;
-    if (file_size <= 0) {
-        buf->reset();
-        *buf_sz = 0;
-        return Status::OK();
-    }
-
-    if (*buf_cap < file_size + padding) {
-        // realocate buffer if capacity is not engough.
-        buf->reset(new uint8_t[file_size + padding]);
-        *buf_cap = file_size + padding;
-    }
-
-    *buf_sz = file_size;
-    read(buf->get(), buf_sz, &eof);
-    return Status::OK();
-}
-
 Status LocalFileReader::read(uint8_t* buf, size_t* buf_len, bool* eof) {
     readat(_current_offset, (int64_t)*buf_len, (int64_t*)buf_len, buf);
     if (*buf_len == 0) {

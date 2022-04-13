@@ -41,8 +41,6 @@ public:
     // is set to zero.
     Status read(uint8_t* buf, size_t* buf_len, bool* eof) override;
     Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz,
-                            size_t padding = 0) override;
     int64_t size() override;
     Status seek(int64_t position) override;
     Status tell(int64_t* position) override;

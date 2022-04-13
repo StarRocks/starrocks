@@ -105,6 +105,7 @@ public:
 
         if (*buf_cap < _total_length + padding) {
             buf->reset(new uint8_t[_total_length + padding]);
+            *buf_cap = _total_length + padding;
         }
         *buf_sz = _total_length;
         bool eof = false;
