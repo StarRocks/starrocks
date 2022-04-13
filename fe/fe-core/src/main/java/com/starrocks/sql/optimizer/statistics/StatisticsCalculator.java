@@ -308,11 +308,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
                                 computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
-                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                                new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                        hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                        hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
-                        .collect(Collectors.toList());
+                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
+                    return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues());
+                }).collect(Collectors.toList());
             } else {
                 LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
             }
