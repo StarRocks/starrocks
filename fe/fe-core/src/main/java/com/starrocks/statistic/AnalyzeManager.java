@@ -35,11 +35,11 @@ public class AnalyzeManager implements Writable {
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
 
-    private ExecutorService executor;
+    private static final ExecutorService executor =
+            ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
-        executor = ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
