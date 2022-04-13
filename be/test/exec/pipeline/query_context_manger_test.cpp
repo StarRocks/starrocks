@@ -10,7 +10,8 @@ namespace starrocks {
 namespace pipeline {
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     {
-        auto query_ctx_mgr = std::make_shared<QueryContextManager>(0);
+        auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+        ASSERT_TRUE(query_ctx_mgr->init().ok());
         for (int i = 0; i < 100; ++i) {
             TUniqueId query_id;
             query_id.hi = 100;
@@ -22,7 +23,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             query_ctx->extend_lifetime();
             ASSERT_EQ(query_ctx->query_id(), query_id);
             ASSERT_FALSE(query_ctx->is_expired());
-            ASSERT_FALSE(query_ctx->is_finished());
+            ASSERT_FALSE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
         }
         for (int i = 1; i < 10; ++i) {
@@ -33,10 +34,10 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             ASSERT_TRUE(query_ctx);
             ASSERT_EQ(query_ctx->query_id(), query_id);
             ASSERT_FALSE(query_ctx->is_expired());
-            ASSERT_FALSE(query_ctx->is_finished());
+            ASSERT_FALSE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
             query_ctx->count_down_fragments();
-            ASSERT_TRUE(query_ctx->is_finished());
+            ASSERT_TRUE(query_ctx->has_no_active_instances());
             ASSERT_TRUE(query_ctx->is_dead());
             query_ctx_mgr->remove(query_id);
             query_ctx = query_ctx_mgr->get(query_id);
@@ -44,7 +45,8 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         }
 
         {
-            auto query_ctx_mgr = std::make_shared<QueryContextManager>(0);
+            auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+            ASSERT_TRUE(query_ctx_mgr->init().ok());
             TUniqueId query_id;
             query_id.hi = 100;
             query_id.lo = 1;
@@ -61,14 +63,15 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             for (int i = 0; i < 7; ++i) {
                 query_ctx->count_down_fragments();
             }
-            ASSERT_TRUE(query_ctx->is_finished());
+            ASSERT_TRUE(query_ctx->has_no_active_instances());
             ASSERT_TRUE(query_ctx->is_dead());
             query_ctx_mgr->remove(query_id);
             ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
         }
 
         {
-            auto query_ctx_mgr = std::make_shared<QueryContextManager>(0);
+            auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+            ASSERT_TRUE(query_ctx_mgr->init().ok());
             TUniqueId query_id;
             query_id.hi = 100;
             query_id.lo = 2;
@@ -85,7 +88,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             for (int i = 0; i < 3; ++i) {
                 query_ctx->count_down_fragments();
             }
-            ASSERT_TRUE(query_ctx->is_finished());
+            ASSERT_TRUE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
             query_ctx_mgr->remove(query_id);
             ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
@@ -94,7 +97,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
                 ASSERT_TRUE(query_ctx != nullptr);
                 tmp_query_ctx->count_down_fragments();
                 query_ctx_mgr->remove(query_id);
-                ASSERT_TRUE(tmp_query_ctx->is_finished());
+                ASSERT_TRUE(tmp_query_ctx->has_no_active_instances());
                 ASSERT_FALSE(tmp_query_ctx->is_dead());
                 ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
             }
@@ -106,7 +109,8 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         }
 
         {
-            auto query_ctx_mgr = std::make_shared<QueryContextManager>(0);
+            auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+            ASSERT_TRUE(query_ctx_mgr->init().ok());
             TUniqueId query_id;
             query_id.hi = 100;
             query_id.lo = 3;
@@ -122,7 +126,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             for (int i = 0; i < 3; ++i) {
                 query_ctx->count_down_fragments();
             }
-            ASSERT_TRUE(query_ctx->is_finished());
+            ASSERT_TRUE(query_ctx->has_no_active_instances());
             ASSERT_FALSE(query_ctx->is_dead());
             query_ctx_mgr->remove(query_id);
             ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
@@ -130,18 +134,14 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             query_ctx->set_expire_seconds(1);
             query_ctx->extend_lifetime();
             sleep(2);
-            ASSERT_TRUE(query_ctx->is_expired());
-            TUniqueId query_id2;
-            query_id2.hi = 100;
-            query_id2.lo = 3;
-            query_ctx_mgr->remove(query_id2);
             ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
         }
     }
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {
-    auto query_ctx_mgr = std::make_shared<QueryContextManager>(0);
+    auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+    ASSERT_TRUE(query_ctx_mgr->init().ok());
     TUniqueId query_id;
     query_id.lo = 100;
     query_id.hi = 2;
@@ -151,7 +151,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     query_ctx->extend_lifetime();
     query_ctx->count_down_fragments();
     query_ctx_mgr->remove(query_id);
-    ASSERT_TRUE(query_ctx->is_finished());
+    ASSERT_TRUE(query_ctx->has_no_active_instances());
     ASSERT_FALSE(query_ctx->is_dead());
     std::vector<std::thread> threads;
     for (int i = 0; i < 10; ++i) {
