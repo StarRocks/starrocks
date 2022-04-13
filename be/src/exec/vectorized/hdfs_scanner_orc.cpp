@@ -112,6 +112,7 @@ public:
     bool is_slot_evaluated(SlotId id) { return _dict_filter_eval_cache.find(id) != _dict_filter_eval_cache.end(); }
     void onStartingPickRowGroups() override;
     void onEndingPickRowGroups() override;
+    void setWriterTimezone(const std::string& tz) override;
 
 private:
     const HdfsScannerParams& _scanner_params;
@@ -130,11 +131,21 @@ private:
     // 2. and check if range.start <= `offset`
     std::map<uint64_t, uint64_t> _scan_ranges;
     OrcScannerAdapter* _adapter;
+    int64_t _writer_tzoffset_in_seconds;
 };
 
 void OrcRowReaderFilter::onStartingPickRowGroups() {}
 
 void OrcRowReaderFilter::onEndingPickRowGroups() {}
+
+void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
+    cctz::time_zone writer_tzinfo;
+    if (tz == "" || !TimezoneUtils::find_cctz_time_zone(tz, writer_tzinfo)) {
+        _writer_tzoffset_in_seconds = _adapter->tzoffset_in_seconds();
+    } else {
+        _writer_tzoffset_in_seconds = TimezoneUtils::to_utc_offset(writer_tzinfo);
+    }
+}
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
                                        const HdfsFileReaderParam& reader_params, OrcScannerAdapter* adapter)
@@ -143,7 +154,8 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
           _current_stripe_index(0),
           _init_use_dict_filter_slots(false),
           _can_do_filter_on_orc_cvb(true),
-          _adapter(adapter) {
+          _adapter(adapter),
+          _writer_tzoffset_in_seconds(adapter->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
@@ -186,7 +198,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr min_col = min_chunk->columns()[i];
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
-            Status st = OrcScannerAdapter::decode_min_max_value(slot, stats, min_col, max_col);
+            int64_t tz_offset_in_seconds = _adapter->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
+            Status st = _adapter->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }

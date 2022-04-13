@@ -55,6 +55,7 @@ public:
     virtual bool filterOnPickStringDictionary(const std::unordered_map<uint64_t, StringDictionary*>& sdicts) {
         return false;
     }
+    virtual void setWriterTimezone(const std::string& tz) {}
 };
 
 /**
