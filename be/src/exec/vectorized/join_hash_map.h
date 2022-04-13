@@ -103,6 +103,7 @@ struct JoinHashTableItems {
     bool need_create_tuple_columns = true;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
+    bool has_large_column = false;
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
@@ -574,9 +575,9 @@ public:
     void create(const HashTableParam& param);
     void close();
 
-    void build(RuntimeState* state);
-    void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
-    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    Status build(RuntimeState* state);
+    Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
+    Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
 

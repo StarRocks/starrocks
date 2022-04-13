@@ -83,6 +83,7 @@ public:
         return bytes.size() + offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset) + sizeof(T) * 2;
     }
 
+<<<<<<< HEAD
     template <typename T>
     static uint8_t* serialize(const vectorized::BinaryColumnBase<T>& column, uint8_t* buff) {
         const auto& bytes = column.get_bytes();
@@ -125,6 +126,19 @@ public:
             buff = read_little_endian_64(buff, &offsets_size);
         }
         raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
+        buff = read_raw(buff, column->get_offset().data(), offsets_size);
+        return buff;
+    }
+
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::LargeBinaryColumn* column) {
+        uint64_t bytes_size = 0;
+        buff = read_little_endian_64(buff, &bytes_size);
+        column->get_bytes().resize(bytes_size);
+        buff = read_raw(buff, column->get_bytes().data(), bytes_size);
+
+        uint64_t offsets_size = 0;
+        buff = read_little_endian_64(buff, &offsets_size);
+        raw::make_room(&column->get_offset(), offsets_size / sizeof(vectorized::LargeBinaryColumn::Offset));
         buff = read_raw(buff, column->get_offset().data(), offsets_size);
         return buff;
     }
@@ -307,6 +321,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::LargeBinaryColumn& column) {
+        _size += BinaryColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         _size += FixedLengthColumnSerde<T>::max_serialized_size(column);
@@ -351,6 +370,11 @@ public:
 
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+        _cur = BinaryColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::LargeBinaryColumn& column) {
         _cur = BinaryColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
@@ -403,6 +427,11 @@ public:
 
     template <typename T>
     Status do_visit(vectorized::BinaryColumnBase<T>* column) {
+        _cur = BinaryColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    Status do_visit(vectorized::LargeBinaryColumn* column) {
         _cur = BinaryColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
