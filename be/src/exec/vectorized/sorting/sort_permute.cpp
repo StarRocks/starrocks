@@ -146,11 +146,12 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(BinaryColumn* dst) {
-        using Container = BinaryColumn::Container;
+    template <typename T>
+    Status do_visit(BinaryColumnBase<T>* dst) {
+        using Container = typename BinaryColumnBase<T>::Container;
         std::vector<const Container*> srcs;
         for (auto& column : _columns) {
-            srcs.push_back(&(down_cast<const BinaryColumn*>(column.get())->get_data()));
+            srcs.push_back(&(down_cast<const BinaryColumnBase<T>*>(column.get())->get_data()));
         }
 
         auto& offsets = dst->get_offset();
