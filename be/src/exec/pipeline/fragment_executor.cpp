@@ -160,8 +160,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(query_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
     auto* runtime_state = _fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;

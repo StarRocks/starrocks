@@ -67,8 +67,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto& partial_bloom_filters = _join_builder->get_runtime_bloom_filters();
 
     auto mem_tracker = state->query_ctx()->mem_tracker();
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     // retain string-typed key columns to avoid premature de-allocation when both probe side and build side
     // PipelineDrivers finalization before in-filers is merged.

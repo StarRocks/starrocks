@@ -185,8 +185,7 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
 void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params,
                                                RuntimeFilterRpcClosure* rpc_closure) {
     auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     DCHECK(params.is_partial());
     int32_t filter_id = params.filter_id();
@@ -540,8 +539,7 @@ static inline Status receive_total_runtime_filter_pipeline(
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request,
                                                         RuntimeFilterRpcClosure* rpc_closure) {
     auto mem_tracker = get_mem_tracker(request.query_id(), request.is_pipeline());
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
     vectorized::JoinRuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
@@ -603,8 +601,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
         PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
     auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     std::random_device rd;
     std::mt19937 rand(rd());
