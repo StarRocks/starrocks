@@ -267,7 +267,7 @@ public class PlanFragmentBuilder {
         }
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
-                                            List<ScalarOperator> predicates) {
+                                            List<ScalarOperator> predicates, OlapTable referenceTable) {
             if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
                 List<ColumnRefOperator> outputColumns = node.getOutputColumns();
                 Set<Integer> outputColumnIds = new HashSet<Integer>();
@@ -280,6 +280,16 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
+                Set<String> aggTableValueColumnNames = new HashSet<String>();
+                if (referenceTable.getKeysType().isAggregationFamily()) {
+                    List<Column> fullColumn = referenceTable.getFullSchema();
+                    for (Column col : fullColumn) {
+                        if (!col.isKey()) {
+                            aggTableValueColumnNames.add(col.getName());
+                        }
+                    }
+                }
+
                 for (ScalarOperator predicate : predicates) {
                     ColumnRefSet usedColumns = predicate.getUsedColumns();
                     if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
@@ -304,7 +314,8 @@ public class PlanFragmentBuilder {
                         unUsedOutputColumnIds.add(newCid);
                     }
                 }
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
+
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnNames);
             }
         }
 
@@ -579,8 +590,8 @@ public class PlanFragmentBuilder {
 
             tupleDescriptor.computeMemLayout();
 
-            // set unused output columns
-            setUnUsedOutputColumns(node, scanNode, predicates);
+            // set unused output columns 
+            setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
