@@ -219,7 +219,8 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
-            const_columns.emplace_back(child->evaluate_const(context));
+            ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
+            const_columns.emplace_back(std::move(child_col));
         }
     }
     auto open_state = [this, scope]() {

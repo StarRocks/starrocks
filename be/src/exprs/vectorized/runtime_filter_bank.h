@@ -179,6 +179,7 @@ public:
 private:
     void update_selectivity(vectorized::Chunk* chunk);
     void update_selectivity(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    // TODO: return a funcion call status
     void do_evaluate(vectorized::Chunk* chunk);
     void do_evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.

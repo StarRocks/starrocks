@@ -26,6 +26,7 @@
 #include <memory>
 #include <sstream>
 
+#include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/slot_ref.h"
 #include "runtime/mem_pool.h"
@@ -185,11 +186,11 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-ColumnPtr ExprContext::evaluate(vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
     return evaluate(_root, chunk);
 }
 
-ColumnPtr ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
