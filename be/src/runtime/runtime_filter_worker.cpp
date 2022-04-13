@@ -33,7 +33,7 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
         TUniqueId tquery_id;
         tquery_id.lo = query_id.lo();
         tquery_id.hi = query_id.hi();
-        auto query_ctx = pipeline::QueryContextManager::instance()->get(tquery_id);
+        auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(tquery_id);
         return query_ctx == nullptr ? nullptr : query_ctx->mem_tracker();
     } else {
         return nullptr;
@@ -493,19 +493,19 @@ static inline Status receive_total_runtime_filter_pipeline(
     query_id.lo = pb_query_id.lo();
     ExecEnv::GetInstance()->add_rf_event(
             {params.query_id(), params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC_PIPELINE"});
-    auto query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     // query_ctx is absent means that the query is finished or any fragments have not arrived, so
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
     if (!query_ctx) {
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
     }
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
-    query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     if (!query_ctx) {
         return Status::OK();
     }
     // the query is already finished, so it is needless to cache rf.
-    if (query_ctx->is_finished() || query_ctx->is_expired()) {
+    if (query_ctx->has_no_active_instances() || query_ctx->is_expired()) {
         return Status::OK();
     }
 
