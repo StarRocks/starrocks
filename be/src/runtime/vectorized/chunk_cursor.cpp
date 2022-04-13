@@ -213,4 +213,41 @@ void ChunkCursor::next_chunk_for_pipeline() {
     }
 }
 
+SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier)
+        : _chunk_has_supplier(has_supplier), _chunk_probe_supplier(chunk_supplier) {}
+
+bool SimpleChunkSortCursor::is_data_ready() {
+    if (!_chunk_has_supplier()) {
+        return false;
+    }
+    _data_ready = true;
+    return true;
+}
+
+std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
+    if (_eos) {
+        return {nullptr, {}};
+    }
+    if (!_chunk_has_supplier()) {
+        return {nullptr, {}};
+    }
+    Chunk* chunk = nullptr;
+    if (!_chunk_probe_supplier(&chunk)) {
+        _eos = true;
+        return {nullptr, {}};
+    }
+    DCHECK(!!chunk);
+
+    Columns sort_columns;
+    sort_columns.reserve(_sort_exprs->size());
+    for (ExprContext* expr : *_sort_exprs) {
+        sort_columns.push_back(expr->evaluate(chunk));
+    }
+    return {ChunkUniquePtr(chunk), sort_columns};
+}
+
+bool SimpleChunkSortCursor::is_eos() {
+    return _eos;
+}
+
 } // namespace starrocks::vectorized

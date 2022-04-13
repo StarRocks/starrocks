@@ -77,6 +77,34 @@ private:
     bool _wait_for_data = false;
 };
 
+class MergeCursorsCascade;
+
+class VerticalChunkMerger {
+public:
+    VerticalChunkMerger(RuntimeState* state);
+    ~VerticalChunkMerger() = default;
+
+    // TODO: simplify sort parametersj
+    Status init(ChunkHasSuppliers has_suppliers, ChunkProbeSuppliers chunk_suppliers,
+                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
+                const std::vector<bool>* null_firsts);
+
+    bool is_data_ready();
+    void set_profile(RuntimeProfile* profile) { _profile = profile; }
+    Status get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
+
+private:
+    RuntimeState* _state;
+    RuntimeProfile* _profile = nullptr;
+
+    const std::vector<ExprContext*>* _sort_exprs;
+    std::vector<int> _sort_orders;
+    std::vector<int> _null_firsts;
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
+
+    // std::unique_ptr<MergeCursorsCascade> _merger;
+};
+
 } // namespace vectorized
 
 } // namespace starrocks

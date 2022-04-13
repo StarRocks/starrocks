@@ -827,13 +827,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                                                    const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
-    vectorized::ChunkSuppliers chunk_suppliers;
-    for (SenderQueue* q : _sender_queues) {
-        // we willn't use chunk_supplier in pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> Status { return Status::OK(); };
-        chunk_suppliers.emplace_back(std::move(f));
-    }
+    _vertical_merger = std::make_unique<vectorized::VerticalChunkMerger>(state);
     vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we use chunk_probe_supplier in pipeline.
@@ -847,9 +841,9 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
         chunk_has_suppliers.emplace_back(std::move(f));
     }
 
-    RETURN_IF_ERROR(_chunks_merger->init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers,
-                                                      &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
-    _chunks_merger->set_profile(_profile.get());
+    RETURN_IF_ERROR(_vertical_merger->init(chunk_has_suppliers, chunk_probe_suppliers, &exprs->lhs_ordering_expr_ctxs(),
+                                           is_asc, is_null_first));
+    _vertical_merger->set_profile(_profile.get());
     return Status::OK();
 }
 
@@ -905,12 +899,16 @@ Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
 }
 
 Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
-    DCHECK(_chunks_merger.get() != nullptr);
-    return _chunks_merger->get_next_for_pipeline(chunk, eos, should_exit);
+    DCHECK(!!_vertical_merger);
+    return _vertical_merger->get_next(chunk, eos, should_exit);
 }
 
 bool DataStreamRecvr::is_data_ready() {
-    return _chunks_merger->is_data_ready();
+    if (!!_vertical_merger) {
+        return _vertical_merger->is_data_ready();
+    } else {
+        return _chunks_merger->is_data_ready();
+    }
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
@@ -951,6 +949,7 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
+    _vertical_merger.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

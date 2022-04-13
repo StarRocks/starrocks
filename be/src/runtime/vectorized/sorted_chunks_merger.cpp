@@ -3,6 +3,9 @@
 #include "sorted_chunks_merger.h"
 
 #include "exec/sort_exec_exprs.h"
+#include "exec/vectorized/sorting/sorting.h"
+#include "runtime/runtime_state.h"
+#include "runtime/vectorized/chunk_cursor.h"
 
 namespace starrocks::vectorized {
 
@@ -283,6 +286,63 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _result_chunk->set_num_rows(_row_number); // set constant column in chunk with right size.
     (*chunk) = std::move(_result_chunk);
     _row_number = 0;
+}
+
+VerticalChunkMerger::VerticalChunkMerger(RuntimeState* state) : _state(state) {}
+
+Status VerticalChunkMerger::init(ChunkHasSuppliers has_suppliers, ChunkProbeSuppliers chunk_suppliers,
+                                 const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
+                                 const std::vector<bool>* null_firsts) {
+    /*
+    CHECK_EQ(has_suppliers.size(), chunk_suppliers.size());
+    for (int i = 0; i < has_suppliers.size(); i++) {
+        _cursors.push_back(std::make_unique<SimpleChunkSortCursor>(has_suppliers[i], chunk_suppliers[i]));
+    }
+    _sort_exprs = sort_exprs;
+
+    size_t col_num = sort_orders->size();
+    _sort_orders.resize(col_num);
+    _null_firsts.resize(col_num);
+    for (size_t i = 0; i < col_num; ++i) {
+        _sort_orders[i] = (*sort_orders)[i] ? 1 : -1;
+        if ((*sort_orders)[i]) {
+            _null_firsts[i] = (*null_firsts)[i] ? -1 : 1;
+        } else {
+            _null_firsts[i] = (*null_firsts)[i] ? 1 : -1;
+        }
+    }
+    
+    _merger = std::make_unique<MergeCursorsCascade>();
+    RETURN_IF_ERROR(_merger->init());
+    */
+    return Status::OK();
+}
+
+bool VerticalChunkMerger::is_data_ready() {
+    /*
+    for (auto& cursor : _cursors) {
+        if (!cursor->is_data_ready()) {
+            return false;
+        }
+    }
+    */
+    return true;
+}
+
+Status VerticalChunkMerger::get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
+    /*
+    if (_merger->is_eos()) {
+        *eos = true;
+        return Status::OK();
+    }
+    ChunkUniquePtr chunk = _merger->try_get_next();
+    if (!chunk) {
+        *should_exit = true;
+        return Status::OK();
+    }
+    *chunk = ChunkPtr(chunk.release());
+    */
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

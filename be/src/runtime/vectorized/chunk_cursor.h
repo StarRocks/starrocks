@@ -94,6 +94,41 @@ private:
     bool _is_pipeline;
 };
 
+// SimpleChunkCursor a simple cursor over the SenderQueue, avoid copy the chunk
+//
+// Example:
+// while (!cursor.is_eos()) {
+//      ChunkUniquePtr chunk = cursor.try_get_next();
+//      if (!!chunk)) {
+//          usage(chunk);
+//      }
+// }
+class SimpleChunkSortCursor {
+public:
+    SimpleChunkSortCursor() = delete;
+    SimpleChunkSortCursor(const SimpleChunkSortCursor& rhs) = delete;
+    SimpleChunkSortCursor(ChunkHasSupplier has_supplier, ChunkProbeSupplier chunk_supplier);
+    ~SimpleChunkSortCursor() = default;
+
+    // Check has any data
+    bool is_data_ready();
+
+    // Try to get next chunk, return a Chunk a available,
+    // return a nullptr if data temporarily not avaiable or end of stream
+    std::pair<ChunkUniquePtr, Columns> try_get_next();
+
+    // Check if is the end of stream
+    bool is_eos();
+
+private:
+    bool _data_ready = false;
+    bool _eos = false;
+
+    const std::vector<ExprContext*>* _sort_exprs;
+    ChunkHasSupplier _chunk_has_supplier;
+    ChunkProbeSupplier _chunk_probe_supplier;
+};
+
 } // namespace vectorized
 
 } // namespace starrocks

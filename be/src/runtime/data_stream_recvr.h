@@ -38,6 +38,7 @@ namespace starrocks {
 
 namespace vectorized {
 class SortedChunksMerger;
+class VerticalChunkMerger;
 }
 
 class DataStreamMgr;
@@ -166,6 +167,7 @@ private:
 
     // vectorized::SortedChunksMerger merges chunks from different senders.
     std::unique_ptr<vectorized::SortedChunksMerger> _chunks_merger;
+    std::unique_ptr<vectorized::VerticalChunkMerger> _vertical_merger;
 
     // Pool of sender queues.
     ObjectPool _sender_queue_pool;
