@@ -88,10 +88,13 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
             return is_data_ready();
         }
         auto chunk = next();
-        if (!chunk.ok() || !chunk.value()) return false;
-        *output = chunk.value().release();
         *eos = is_eos();
-        return true;
+        if (!chunk.ok() || !chunk.value()) {
+            return false;
+        } else {
+            *output = chunk.value().release();
+            return true;
+        }
     };
 }
 
@@ -201,7 +204,6 @@ bool MergeTwoCursor::move_cursor() {
 
     if (_left_run.empty() && !_left_cursor->is_eos()) {
         auto chunk = _left_cursor->try_get_next();
-        // TODO: orderby columns
         if (!chunk.first) {
             return false;
         }
