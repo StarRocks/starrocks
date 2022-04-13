@@ -304,7 +304,6 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-    starrocks::pipeline::QueryContextManager::instance()->clear();
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

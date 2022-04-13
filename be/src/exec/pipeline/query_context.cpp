@@ -5,6 +5,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "util/thread.h"
 
 namespace starrocks::pipeline {
 QueryContext::QueryContext()
@@ -69,21 +70,62 @@ void QueryContext::init_query(workgroup::WorkGroup* wg) {
     });
 }
 
-static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM = 64;
-static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM_MASK = (1 << 6) - 1;
+QueryContextManager::QueryContextManager(size_t log2_num_slots)
+        : _num_slots(1 << log2_num_slots),
+          _slot_mask(_num_slots - 1),
+          _mutexes(_num_slots),
+          _context_maps(_num_slots),
+          _second_chance_maps(_num_slots) {}
 
-QueryContextManager::QueryContextManager()
-        : _mutexes(QUERY_CONTEXT_MAP_SLOT_NUM),
-          _context_maps(QUERY_CONTEXT_MAP_SLOT_NUM),
-          _second_chance_maps(QUERY_CONTEXT_MAP_SLOT_NUM) {}
+Status QueryContextManager::init() {
+    try {
+        _clean_thread = std::make_shared<std::thread>(_clean_func, this);
+        Thread::set_thread_name(*_clean_thread.get(), "query_ctx_clr");
+        return Status::OK();
+    } catch (...) {
+        return Status::InternalError("Fail to create clean_thread of QueryContextManager");
+    }
+}
+void QueryContextManager::_clean_slot_unlocked(size_t i) {
+    auto& sc_map = _second_chance_maps[i];
+    auto sc_it = sc_map.begin();
+    while (sc_it != sc_map.end()) {
+        if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
+            sc_it = sc_map.erase(sc_it);
+        } else {
+            ++sc_it;
+        }
+    }
+}
+void QueryContextManager::_clean_query_contexts() {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _mutexes[i];
+        std::unique_lock write_lock(mutex);
+        _clean_slot_unlocked(i);
+    }
+}
 
-#ifdef BE_TEST
-QueryContextManager::QueryContextManager(int) : QueryContextManager() {}
-#endif
+void QueryContextManager::_clean_func(QueryContextManager* manager) {
+    while (!manager->_is_stopped()) {
+        manager->_clean_query_contexts();
+        std::this_thread::sleep_for(milliseconds(100));
+    }
+}
 
-QueryContextManager::~QueryContextManager() = default;
+size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
+    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+}
+
+QueryContextManager::~QueryContextManager() {
+    if (_clean_thread) {
+        this->_stop_clean_func();
+        _clean_thread->join();
+        clear();
+    }
+}
+
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
@@ -128,7 +170,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
 }
 
 QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
@@ -149,22 +191,13 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
 }
 
 void QueryContextManager::remove(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-
-    // clean expired query contexts in sc_map
-    auto sc_it = sc_map.begin();
-    while (sc_it != sc_map.end()) {
-        if (sc_it->second->is_expired()) {
-            sc_it = sc_map.erase(sc_it);
-        } else {
-            ++sc_it;
-        }
-    }
+    _clean_slot_unlocked(i);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
@@ -174,7 +207,7 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
-    } else if (it->second->is_finished()) {
+    } else if (it->second->has_no_active_instances()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished
