@@ -289,8 +289,10 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
             }
         }
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            _func_desc.reset();
-            _call_helper.reset();
+            {
+                _func_desc.reset();
+                _call_helper.reset();
+            }
         }
         return Status::OK();
     };
