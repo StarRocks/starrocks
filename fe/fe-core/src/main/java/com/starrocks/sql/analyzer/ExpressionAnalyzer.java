@@ -23,6 +23,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
@@ -372,6 +373,9 @@ public class ExpressionAnalyzer {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "ADD");
                 } else if (subDateFunctions.contains(node.getFuncName().toUpperCase())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "SUB");
+                } else if (node.getFuncName().toLowerCase().equals(FunctionSet.DATE_FLOOR)) {
+                    funcOpName = FunctionSet.DATE_FLOOR;
+                    node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "DIFF");

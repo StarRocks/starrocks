@@ -429,7 +429,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
     ;
 
 type
