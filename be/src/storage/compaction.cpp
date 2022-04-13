@@ -63,7 +63,7 @@ Status Compaction::do_compaction_impl() {
     _output_version = Version(_input_rowsets.front()->start_version(), _input_rowsets.back()->end_version());
 
     // choose vertical or horizontal compaction algorithm
-    size_t segment_iterator_num = Rowset::get_segment_num(_input_rowsets); 
+    size_t segment_iterator_num = Rowset::get_segment_num(_input_rowsets);
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
     CompactionAlgorithm algorithm =
