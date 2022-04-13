@@ -243,7 +243,8 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 
 Status TabletsChannel::close(int sender_id, bool* finished,
                              const google::protobuf::RepeatedField<int64_t>& partition_ids,
-                             google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec) {
+                             google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec,
+                             const google::protobuf::RepeatedField<google::protobuf::int64>& tablet_ids) {
     {
         std::lock_guard<std::mutex> l(_global_lock);
         if (_state == kFinished) {
@@ -331,6 +332,24 @@ Status TabletsChannel::close(int sender_id, bool* finished,
             // tablet_vec will only contains success tablet, and then let FE judge it.
             it.second->close_wait(tablet_vec);
         }
+    }
+
+    /*
+        Persist txn to make the meta crash-safe.
+        We persist txn in 2 place:
+        1. when all delta writers are finished, the txn is committed.
+        2. when the the txn version is published.
+    */
+    std::vector<TabletSharedPtr> tablets(tablet_ids.size());
+    for (const auto tablet_id : tablet_ids) {
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+        if (tablet != nullptr) {
+            tablets.push_back(tablet);
+        }
+    }
+    auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to persist transactions, tablets num: " << tablets.size() << " err: " << st;
     }
 
     return Status::OK();

@@ -79,7 +79,7 @@ public:
     // to include all tablets written in this channel.
     // no-op when this channel has been closed or cancelled
     Status close(int sender_id, bool* finished, const google::protobuf::RepeatedField<int64_t>& partition_ids,
-                 google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec);
+                 google::protobuf::RepeatedPtrField<PTabletInfo>* tablet_vec, const google::protobuf::RepeatedField<google::protobuf::int64>& tablet_ids);
 
     // no-op when this channel has been closed or cancelled
     Status cancel();

@@ -341,6 +341,32 @@ OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId 
     }
 }
 
+Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets) {
+    int64_t duration_ns = 0;
+    SCOPED_RAW_TIMER(&duration_ns);
+
+    std::unordered_set<std::string> persited;
+    for (auto& tablet : tablets) {
+        if (tablet == nullptr) {
+            continue;
+        }
+        auto path = tablet->data_dir()->path();
+        // skip persisted meta.
+        if (persited.find(path) != persited.end()) continue;
+
+        auto st = tablet->data_dir()->get_meta()->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
+            return st;
+        }
+        persited.insert(path);
+    }
+
+    StarRocksMetrics::instance()->txn_persist_total.increment(1);
+    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
+    return Status::OK();
+}
+
 // txn could be rollbacked if it does not have related rowset
 // if the txn has related rowset then could not rollback it, because it
 // may be committed in another thread and our current thread meets errors when writing to data file
