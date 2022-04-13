@@ -20,24 +20,11 @@ namespace starrocks::vectorized {
 
 class OrcScannerAdapterTest : public testing::Test {
 public:
-    void SetUp() override { _runtime_state = _create_runtime_state(); }
-
-    OrcScannerAdapterTest();
+    void SetUp() override { _create_runtime_state(); }
 
 protected:
-    std::vector<SlotDescriptor*> _src_slot_descs;
+    void _create_runtime_state();
     ObjectPool _pool;
-
-    std::shared_ptr<RuntimeState> _create_runtime_state() {
-        TUniqueId fragment_id;
-        TQueryOptions query_options;
-        query_options.batch_size = config::vector_chunk_size;
-        TQueryGlobals query_globals;
-        auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
-        runtime_state->init_instance_mem_tracker();
-        return runtime_state;
-    }
-
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
@@ -46,15 +33,29 @@ struct SlotDesc {
     TypeDescriptor type;
 };
 
-void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs, int size) {
+void OrcScannerAdapterTest::_create_runtime_state() {
+    TUniqueId fragment_id;
+    TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
+    TQueryGlobals query_globals;
+    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+    runtime_state->init_instance_mem_tracker();
+    _runtime_state = runtime_state;
+}
+
+void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs) {
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder b3;
     DescriptorTbl* tbl;
-
-    for (int i = 0; i < size; i++) {
+    size_t size = 0;
+    for (int i = 0;; i++) {
+        if (slot_descs[i].name == "") {
+            break;
+        }
         TSlotDescriptorBuilder b2;
         b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
         b3.add_slot(b2.build());
+        size += 1;
     }
     b3.build(&builder);
 
@@ -120,7 +121,7 @@ Data type: Integer Values: 4880 Has null: no Minimum: 1 Maximum: 50 Sum: 125102
 Data type: Integer Values: 4880 Has null: no Minimum: 954 Maximum: 102549 Sum: 187457815
 */
 
-static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/tpch_10k.orc.zstd";
+static const std::string default_orc_file = "./be/test/exec/test_data/orc_scanner/tpch_10k.orc.zstd";
 static const uint64_t total_record_num = 10 * 1000;
 static const uint64_t default_row_group_size = 1000;
 /** 
@@ -151,18 +152,15 @@ static const uint64_t default_row_group_size = 1000;
 }
 */
 
-OrcScannerAdapterTest::OrcScannerAdapterTest() {
-    SlotDesc slot_descs[] = {
-            {"lo_custkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-            {"lo_orderdate", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-            {"lo_orderkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-            {"lo_orderpriority", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-            {"lo_partkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-            {"lo_suppkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-    };
-    const int n = sizeof(slot_descs) / sizeof(slot_descs[0]);
-    create_slot_descriptors(&_pool, &_src_slot_descs, slot_descs, n);
-}
+SlotDesc default_slot_descs[] = {
+        {"lo_custkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+        {"lo_orderdate", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+        {"lo_orderkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+        {"lo_orderpriority", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+        {"lo_partkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
+        {"lo_suppkey", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+        {""},
+};
 
 static uint64_t get_hit_rows(OrcScannerAdapter* adapter) {
     uint64_t records = 0;
@@ -185,8 +183,10 @@ static uint64_t get_hit_rows(OrcScannerAdapter* adapter) {
 }
 
 TEST_F(OrcScannerAdapterTest, Normal) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&adapter);
     EXPECT_EQ(records, total_record_num);
@@ -206,11 +206,13 @@ public:
 };
 
 TEST_F(OrcScannerAdapterTest, SkipStripe) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     adapter.set_row_reader_filter(filter);
 
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
 
     uint64_t records = get_hit_rows(&adapter);
@@ -236,6 +238,18 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
     TIntLiteral lit_value;
     lit_value.__set_value(value_literal);
     lit_node.__set_int_literal(lit_value);
+    lit_node.__set_use_vectorized(true);
+    return lit_node;
+}
+
+[[maybe_unused]] static TExprNode create_date_literal_value(TPrimitiveType::type value_type, const std::string& value) {
+    TExprNode lit_node;
+    lit_node.__set_node_type(TExprNodeType::DATE_LITERAL);
+    lit_node.__set_num_children(0);
+    lit_node.__set_type(create_primitive_type_desc(value_type));
+    TDateLiteral lit_value;
+    lit_value.__set_value(value);
+    lit_node.__set_date_literal(lit_value);
     lit_node.__set_use_vectorized(true);
     return lit_node;
 }
@@ -320,26 +334,30 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 }
 
 TEST_F(OrcScannerAdapterTest, SkipFileByConjunctsEQ) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
     std::vector<TExprNode> nodes;
     int slot_index = 0;
     TExprNode lit_node = create_int_literal_node(TPrimitiveType::TINYINT, 0);
-    push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, _src_slot_descs[slot_index], TPrimitiveType::TINYINT,
+    push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, src_slot_descs[slot_index], TPrimitiveType::TINYINT,
                                 lit_node);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
     adapter.set_conjuncts(conjuncts);
 
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&adapter);
     EXPECT_EQ(records, 0);
 }
 
 TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsEQ) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate == 200000
     // stripe0 min/max = 9/199927 [5120]
@@ -347,13 +365,13 @@ TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsEQ) {
     std::vector<TExprNode> nodes;
     int slot_index = 1;
     TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 200000);
-    push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, _src_slot_descs[slot_index], TPrimitiveType::INT,
+    push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, src_slot_descs[slot_index], TPrimitiveType::INT,
                                 lit_node);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
     adapter.set_conjuncts(conjuncts);
 
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&adapter);
     // at most read one stripe.
@@ -365,7 +383,9 @@ TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsEQ) {
 }
 
 TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsInPred) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
     std::vector<TExprNode> nodes;
@@ -376,13 +396,13 @@ TEST_F(OrcScannerAdapterTest, SkipStripeByConjunctsInPred) {
         auto lit_node = create_int_literal_node(TPrimitiveType::INT, v);
         lit_nodes.emplace_back(lit_node);
     }
-    push_inpred_texpr_node(nodes, TExprOpcode::type::FILTER_IN, _src_slot_descs[slot_index], TPrimitiveType::INT,
+    push_inpred_texpr_node(nodes, TExprOpcode::type::FILTER_IN, src_slot_descs[slot_index], TPrimitiveType::INT,
                            lit_nodes);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
     adapter.set_conjuncts(conjuncts);
 
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
     uint64_t records = get_hit_rows(&adapter);
     EXPECT_LE(records, 0);
@@ -416,11 +436,13 @@ private:
 };
 
 TEST_F(OrcScannerAdapterTest, SkipRowGroups) {
-    OrcScannerAdapter adapter(_runtime_state.get(), _src_slot_descs);
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     adapter.set_row_reader_filter(filter);
 
-    auto input_stream = orc::readLocalFile(input_orc_file);
+    auto input_stream = orc::readLocalFile(default_orc_file);
     adapter.init(std::move(input_stream));
 
     uint64_t records = get_hit_rows(&adapter);
@@ -901,12 +923,12 @@ TEST_F(OrcScannerAdapterTest, TestReadPositionalColumn) {
             {"a", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"b", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {"c", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
+            {""},
     };
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_positional_column.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
-    const int n = sizeof(slot_descs) / sizeof(slot_descs[0]);
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
+    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
@@ -999,6 +1021,7 @@ TEST_F(OrcScannerAdapterTest, TestReadArrayBasic) {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY)},
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY)},
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
+            {""},
     };
 
     slot_descs[1].type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
@@ -1006,9 +1029,8 @@ TEST_F(OrcScannerAdapterTest, TestReadArrayBasic) {
 
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_array_basic.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
-    const int n = sizeof(slot_descs) / sizeof(slot_descs[0]);
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
+    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
@@ -1070,13 +1092,13 @@ Processing data file padding-char.orc [length: 2664]
 TEST_F(OrcScannerAdapterTest, TestReadPaddingChar) {
     SlotDesc slot_descs[] = {
             {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+            {""},
     };
 
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_padding_char.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
-    const int n = sizeof(slot_descs) / sizeof(slot_descs[0]);
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs, n);
+    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcScannerAdapter adapter(_runtime_state.get(), src_slot_descriptors);
