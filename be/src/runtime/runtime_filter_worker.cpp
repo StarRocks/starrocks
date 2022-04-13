@@ -33,7 +33,7 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
         TUniqueId tquery_id;
         tquery_id.lo = query_id.lo();
         tquery_id.hi = query_id.hi();
-        auto query_ctx = pipeline::QueryContextManager::instance()->get(tquery_id);
+        auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(tquery_id);
         return query_ctx == nullptr ? nullptr : query_ctx->mem_tracker();
     } else {
         return nullptr;

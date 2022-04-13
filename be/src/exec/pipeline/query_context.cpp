@@ -80,7 +80,7 @@ QueryContextManager::QueryContextManager(size_t log2_num_slots)
 Status QueryContextManager::init() {
     try {
         _clean_thread = std::make_shared<std::thread>(_clean_func, this);
-        Thread::set_thread_name(manager->clean_thread(), "query_ctx_clr");
+        Thread::set_thread_name(*_clean_thread.get(), "query_ctx_clr");
         return Status::OK();
     } catch (...) {
         return Status::InternalError("Fail to create clean_thread of QueryContextManager");

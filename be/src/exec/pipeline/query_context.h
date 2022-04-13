@@ -136,7 +136,6 @@ private:
     bool _is_stopped() { return _stop; }
     size_t _slot_idx(const TUniqueId& query_id);
     void _clean_slot_unlocked(size_t i);
-    std::thread& clean_thread() { return *_clean_thread.get(); }
 
 private:
     const size_t _num_slots;
