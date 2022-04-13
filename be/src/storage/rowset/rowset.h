@@ -247,6 +247,14 @@ public:
         }
     }
 
+    static size_t get_segment_num(std::vector<RowsetSharedPtr>& rowsets) {
+        size_t num_segments = 0;
+        std::for_each(rowsets.begin(), rowsets.end(), [&num_segments](RowsetSharedPtr& rowset) { 
+            num_segments += rowset->num_segments(); 
+        });
+        return num_segments;
+    }
+
 protected:
     friend class RowsetFactory;
 
