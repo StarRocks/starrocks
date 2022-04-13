@@ -680,33 +680,34 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPt
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& src_column, ChunkPtr* chunk,
                                                                const SlotDescriptor* slot, bool to_nullable) {
-    ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
-
     if (to_nullable) {
-        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+        auto data_column = src_column->clone_empty();
+        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
         // but append_selective() has set item of NullColumn to not null
         // so NullColumn needs to be set back to null
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
+        auto null_column = NullColumn::create(_probe_state->count, 0);
         size_t end = _probe_state->count;
         for (size_t i = 0; i < end; i++) {
             if (_probe_state->build_index[i] == 0) {
-                null_column->set_null(i);
+                null_column->get_data()[i] = 1;
             }
         }
+        auto dest_column = NullableColumn::create(std::move(data_column), null_column);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
+        auto dest_column = src_column->clone_empty();
         dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+        (*chunk)->append_column(std::move(dest_column), slot->id());
     }
-
-    (*chunk)->append_column(std::move(dest_column), slot->id());
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk,
                                                                         const SlotDescriptor* slot) {
-    ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+    ColumnPtr dest_column = src_column->clone_empty();
 
     dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
