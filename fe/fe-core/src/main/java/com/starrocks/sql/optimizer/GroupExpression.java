@@ -278,7 +278,8 @@ public class GroupExpression {
 
     public String toPrettyString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
-        sb.append(detailIndent).append(op).append("\n");
+        sb.append(detailIndent)
+                .append(op.accept(new OptimizerTraceUtil.OperatorTracePrinter(), null)).append("\n");
         String childHeadlineIndent = detailIndent + "->  ";
         String childDetailIndent = detailIndent + "    ";
         for (Group input : inputs) {

@@ -124,11 +124,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("LogicalAggregation");
-        sb.append(" {type=").append(type);
-        sb.append(" ,aggregations=").append(aggregations);
-        sb.append(" ,groupKeys=").append(groupingKeys).append("}");
-        return sb.toString();
+        return "LogicalAggregation" + " type " + type.toString();
     }
 
     @Override

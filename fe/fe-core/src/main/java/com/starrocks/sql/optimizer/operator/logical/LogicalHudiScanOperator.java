@@ -13,7 +13,6 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
@@ -74,17 +73,6 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalHudiScan(this, context);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("LogicalHudiScanOperator");
-        sb.append(" {").append("table=").append(((HudiTable) table).getTable())
-                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
-                .append(", predicates=").append(predicates)
-                .append(", limit=").append(limit)
-                .append("}");
-        return sb.toString();
     }
 
     public static class Builder

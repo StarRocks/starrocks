@@ -15,7 +15,6 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -60,17 +59,6 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalEsScan(this, context);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("LogicalEsScanOperator");
-        sb.append(" {").append("selectedIndex=").append(selectedIndex)
-                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
-                .append(", predicate=").append(predicate)
-                .append(", limit=").append(limit)
-                .append("}");
-        return sb.toString();
     }
 
     public static class Builder extends LogicalScanOperator.Builder<LogicalEsScanOperator, LogicalEsScanOperator.Builder> {

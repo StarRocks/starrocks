@@ -2,7 +2,6 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -12,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
@@ -33,16 +31,5 @@ public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalMysqlScan(optExpression, context);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("PhysicalMysqlScanOperator");
-        sb.append(" {").append("table=").append(((MysqlTable) table).getMysqlTableName())
-                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
-                .append(", predicate=").append(predicate)
-                .append(", limit=").append(limit)
-                .append("}");
-        return sb.toString();
     }
 }

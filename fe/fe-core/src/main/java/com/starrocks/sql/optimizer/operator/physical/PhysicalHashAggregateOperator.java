@@ -125,13 +125,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("PhysicalHashAggregate");
-        sb.append(" {type=").append(type)
-                .append(", groupBy=").append(groupBys)
-                .append(", partitionBy=").append(partitionByColumns)
-                .append(" ,aggregations=").append(aggregations);
-        sb.append("}");
-        return sb.toString();
+        return "PhysicalHashAggregate" + " type " + type.toString();
     }
 
     @Override

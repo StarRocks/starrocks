@@ -21,6 +21,10 @@ public class PhysicalLimitOperator extends PhysicalOperator {
         this.projection = projection;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalLimit(this, context);
@@ -49,14 +53,5 @@ public class PhysicalLimitOperator extends PhysicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), offset);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("PhysicalLimitOperator");
-        sb.append(" {limit=").append(limit)
-                .append(", offset=").append(offset)
-                .append("}");
-        return sb.toString();
     }
 }

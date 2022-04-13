@@ -13,7 +13,6 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
@@ -76,17 +75,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalHiveScan(this, context);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("LogicalHiveScanOperator");
-        sb.append(" {").append("table=").append(((HiveTable) table).getHiveTable())
-                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
-                .append(", predicates=").append(predicates)
-                .append(", limit=").append(limit)
-                .append("}");
-        return sb.toString();
     }
 
     public static class Builder

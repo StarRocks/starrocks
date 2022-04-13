@@ -11,8 +11,6 @@ public class OptimizerTraceInfo {
     private UUID queryId;
     private Map<String, Integer> rulesAppliedTimes = new HashMap<>();
 
-    public OptimizerTraceInfo() {}
-
     public OptimizerTraceInfo(UUID queryId) {
         this.queryId = queryId;
     }
@@ -25,8 +23,8 @@ public class OptimizerTraceInfo {
         return rulesAppliedTimes;
     }
 
-    public String getTraceLogPrefix() {
-        return "[TRACE QUERY " + queryId + "]";
+    public UUID getQueryId() {
+        return queryId;
     }
 
     @Override

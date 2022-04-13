@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -50,17 +51,13 @@ public class StatementPlanner {
     private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
 
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
-        if (session.getSessionVariable().isEnableOptimizerTraceLog()) {
-            if (stmt instanceof QueryStatement) {
-                LOG.info("[TRACE QUERY {}] After Parse\n{}\n", session.getQueryId(), stmt.toString());
-            }
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.log(session, String.format("after parse:\n%s", stmt));
         }
         Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session);
-        if (session.getSessionVariable().isEnableOptimizerTraceLog()) {
-            if (stmt instanceof QueryStatement) {
-                LOG.info("[TRACE QUERY {}] After analyze\n{}\n", session.getQueryId(), stmt.toString());
-            }
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.log(session, String.format("after analyze:\n%s", stmt));
         }
 
         if (stmt instanceof QueryStatement) {

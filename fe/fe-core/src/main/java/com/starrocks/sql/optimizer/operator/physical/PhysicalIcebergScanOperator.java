@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -15,7 +14,6 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -93,16 +91,5 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         minMaxColumnRefMap.keySet().forEach(refs::union);
         return refs;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
-        sb.append(" {").append("table=").append(((IcebergTable) table).getTable())
-                .append(", outputColumns=").append(new ArrayList<>(colRefToColumnMetaMap.keySet()))
-                .append(", conjuncts=").append(conjuncts)
-                .append(", minmaxConjuncts=").append(minMaxConjuncts)
-                .append("}");
-        return sb.toString();
     }
 }
