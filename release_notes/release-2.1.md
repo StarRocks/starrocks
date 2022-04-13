@@ -69,3 +69,20 @@ The following bugs are fixed:
 - Some queries may cause memory limit exceeded errors due to inappropriate execution plans.
 - The checksum between replicas may be inconsistent in different compaction processes. [#3438](https://github.com/StarRocks/starrocks/issues/3438)
 - Query may fail in some situation when JSON reorder projection is not processed correctly. [#4056](https://github.com/StarRocks/starrocks/pull/4056)
+
+## 2.1.4
+
+Release date: April 8, 2022
+
+### New Feature
+
+- The `UUID_NUMERIC` function is supported, which returns a LARGEINT value. Compared with `UUID` function, the performance of `UUID_NUMERIC` function can be improved by nearly 2 orders of magnitude.
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- After deleting columns, adding new partitions, and cloning tablets,  the columns' unique ids in old and new tablets may not be the same, which may cause BE to stop working because the system uses a shared tablet schema. [#4514](https://github.com/StarRocks/starrocks/issues/4514)
+- When data is loading to a StarRocks external table, if the configured FE of the target StarRocks cluster is not a Leader, it will cause the FE to stop working. [#4573](https://github.com/StarRocks/starrocks/issues/4573)
+- The results of `CAST` function are different in StarRocks version 1.19 and 2.1. [#4701](https://github.com/StarRocks/starrocks/pull/4701)
+- Query results may be incorrect, when a Duplicate Key table performs schema change and creates materialized view at the same time. [#4839](https://github.com/StarRocks/starrocks/issues/4839)
