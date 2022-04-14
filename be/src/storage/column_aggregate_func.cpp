@@ -5,6 +5,8 @@
 #include "column/vectorized_fwd.h"
 #include "storage/column_aggregator.h"
 
+#include "column/vectorized_fwd.h"
+
 namespace starrocks::vectorized {
 
 // SUM
