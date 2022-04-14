@@ -46,6 +46,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
@@ -164,10 +165,12 @@ public class ScalarOperatorFunctions {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
 
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt = LocalDateTime.from(builder.toFormatter().parse(date.getVarchar()));
+            LocalDateTime ldt = LocalDateTime.from(
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
-            LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
+            LocalDate ld = LocalDate.from(
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -175,7 +178,8 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
-        LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
+        LocalDate ld = LocalDate.from(
+                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
