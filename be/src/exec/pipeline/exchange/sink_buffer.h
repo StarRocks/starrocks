@@ -9,6 +9,7 @@
 #include <queue>
 #include <unordered_set>
 
+#include "bthread/mutex.h"
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
@@ -80,6 +81,8 @@ public:
     void cancel_one_sinker();
 
 private:
+    using Mutex = bthread::Mutex;
+
     void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
                               const int64_t receive_timestamp);
     // Update the discontinuous acked window, here are the invariants:
@@ -128,7 +131,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
-    phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.

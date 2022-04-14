@@ -89,13 +89,10 @@ public:
         if (_closure != nullptr && _closure->unref()) {
             delete _closure;
         }
-        // release this before request destruct
-        _brpc_request.release_finst_id();
 
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
             delete _chunk_closure;
         }
-        _chunk_request.release_finst_id();
     }
 
     // Initialize channel.
@@ -214,12 +211,12 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     // initialize brpc request
     _finst_id.set_hi(_fragment_instance_id.hi);
     _finst_id.set_lo(_fragment_instance_id.lo);
-    _brpc_request.set_allocated_finst_id(&_finst_id);
+    *_brpc_request.mutable_finst_id() = _finst_id;
     _brpc_request.set_node_id(_dest_node_id);
     _brpc_request.set_sender_id(_parent->_sender_id);
     _brpc_request.set_be_number(_parent->_be_number);
 
-    _chunk_request.set_allocated_finst_id(&_finst_id);
+    *_chunk_request.mutable_finst_id() = _finst_id;
     _chunk_request.set_node_id(_dest_node_id);
     _chunk_request.set_sender_id(_parent->_sender_id);
     _chunk_request.set_be_number(_parent->_be_number);
@@ -276,12 +273,11 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
 
 Status DataStreamSender::Channel::send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment) {
     RETURN_IF_ERROR(_wait_prev_request());
-    params->set_allocated_finst_id(&_finst_id);
+    *params->mutable_finst_id() = _finst_id;
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
     params->set_be_number(_parent->_be_number);
     auto status = _do_send_chunk_rpc(params, attachment);
-    params->release_finst_id();
     return status;
 }
 
