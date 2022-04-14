@@ -54,7 +54,7 @@ SHOW PROPERTY FOR 'root';
 
 ## 数据库存储容量 Quota
 
-默认每个 DB 的容量限制是 1TB，我们可以通过 alter database 修改
+默认每个 DB 的容量无限制，我们可以通过 alter database 修改
 
 ```sql
 ALTER DATABASE db_name SET DATA QUOTA quota;
