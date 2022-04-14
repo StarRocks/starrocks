@@ -359,12 +359,24 @@ Status JsonReader::_read_and_parse_json() {
     }
     _origin_json_doc.Parse(result.data, result.size);
 #else
+<<<<<<< HEAD
     std::unique_ptr<uint8_t[]> json_binary = nullptr;
     size_t length = 0;
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
     RETURN_IF_ERROR(stream_file->read_one_message(&json_binary, &length));
     if (length == 0) {
         return Status::EndOfFile("EOF of reading file");
+=======
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    {
+        SCOPED_RAW_TIMER(&_counter->file_read_ns);
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
+        if (length == 0) {
+            return Status::EndOfFile("EOF of reading file");
+        }
+>>>>>>> 8fe181a7 (Add file_read_timer for json scanner (#5006))
     }
     _origin_json_doc.Parse((char*)json_binary.get(), length);
 #endif
