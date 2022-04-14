@@ -13,12 +13,23 @@ void JoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table
 template <PrimitiveType PT>
 const Buffer<typename JoinBuildFunc<PT>::CppType>& JoinBuildFunc<PT>::get_key_data(
         const JoinHashTableItems& table_items) {
+    ColumnPtr data_column;
     if (table_items.key_columns[0]->is_nullable()) {
         auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        return ColumnHelper::as_raw_column<ColumnType>(null_column->data_column())->get_data();
+        data_column = null_column->data_column();
+    } else {
+        data_column = table_items.key_columns[0];
     }
 
-    return ColumnHelper::as_raw_column<ColumnType>(table_items.key_columns[0])->get_data();
+    if constexpr (pt_is_binary<PT>) {
+        if (UNLIKELY(data_column->is_large_binary())) {
+            return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->get_data();
+        } else {
+            return ColumnHelper::as_raw_column<BinaryColumn>(data_column)->get_data();
+        }
+    } else {
+        return ColumnHelper::as_raw_column<ColumnType>(data_column)->get_data();
+    }
 }
 
 template <PrimitiveType PT>
