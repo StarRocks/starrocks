@@ -78,4 +78,9 @@ public class DateLiteralTest {
         }
         Assert.assertFalse(hasException);
     }
+
+    @Test
+    public void invalidDate() {
+        Assert.assertThrows(AnalysisException.class, () -> new DateLiteral("2019-02-29", Type.DATETIME));
+    }
 }
