@@ -196,6 +196,7 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
 };
 
+class SimpleChunkSortCursor;
 // Merge algorithms
 Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
                                    Permutation* output);
