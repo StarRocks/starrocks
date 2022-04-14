@@ -29,6 +29,9 @@ QueryContext::~QueryContext() {
         _fragment_mgr.reset();
     }
 
+    // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
+    // in the mid of QueryContext destruction, so use its parent MemTracker.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
     if (_exec_env != nullptr) {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
