@@ -6,6 +6,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/base64.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/split.h"
@@ -363,6 +364,42 @@ ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks:
         }
     }
 
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr BitmapFunctions::base64_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto src_value = viewer.value(row);
+        if (src_value.size == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        int cipher_len = src_value.size;
+        std::unique_ptr<char[]> p;
+        p.reset(new char[cipher_len + 3]);
+
+        int len = base64_decode2(src_value.data, src_value.size, p.get());
+        if (len < 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue bitmap;
+        bitmap.deserialize(p.get());
+        builder.append(&bitmap);
+//        detail::Roaring64Map roaringBitmap;
+//        roaringBitmap = (detail::Roaring64Map) p.get();
+//        builder.append(&roaringBitmap);
+    }
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
