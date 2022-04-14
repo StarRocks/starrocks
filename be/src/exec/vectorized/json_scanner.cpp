@@ -620,12 +620,24 @@ Status JsonReader::_read_and_parse_json() {
     length = nread;
 
 #else
+<<<<<<< HEAD
 
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
     // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
     RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
     if (length == 0) {
         return Status::EndOfFile("EOF of reading file");
+=======
+    // TODO: Remove the down_cast, should not rely on the specific implementation.
+    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    {
+        SCOPED_RAW_TIMER(&_counter->file_read_ns);
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        RETURN_IF_ERROR(stream_file->read_one_message(&_json_binary_ptr, &length, simdjson::SIMDJSON_PADDING));
+        if (length == 0) {
+            return Status::EndOfFile("EOF of reading file");
+        }
+>>>>>>> 8fe181a7 (Add file_read_timer for json scanner (#5006))
     }
 
     data = _json_binary_ptr.get();
