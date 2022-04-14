@@ -49,7 +49,7 @@
 
 当前有三种方法分析 BE 内存使用:
 
-* **通过 Metrics 接口分析内存使用**
+### 1. **通过 Metrics 接口分析内存使用**
 
 Metrics 统计每 10 秒更新一次。
 
@@ -60,7 +60,7 @@ curl -XGET -s http://BE_IP:8040/metrics | grep "^starrocks_be_.*_mem_bytes\|^sta
 
 对应指标的含义参考章节: [内存分类](#内存分类)。
 
-* **通过 mem_tracker 接口分析 BE 内存使用**
+### 2. **通过 mem_tracker 接口分析 BE 内存使用**
 
 通过浏览器或是 curl 访问。
 
@@ -78,7 +78,7 @@ http://be_ip:8040/mem_tracker
 * Current Consumption: 当前内存使用。
 * Peak Consumption: 峰值内存使用。
 
-* **通过 tcmalloc 接口分析 BE 内存使用**
+### 3. **通过 tcmalloc 接口分析 BE 内存使用**
 
 通过浏览器或是 curl 访问。
 
