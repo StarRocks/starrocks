@@ -120,13 +120,6 @@ public:
      * @return TYPE_BIGINT
      */
     DEFINE_VECTORIZED_FN(bitmap_min);
-
-    /**
-     * @param:
-     * @paramType columns: [TYPE_VARCHAR]
-     * @return TYPE_OBJECT
-     */
-    DEFINE_VECTORIZED_FN(base64_to_bitmap);
 };
 
 } // namespace vectorized
