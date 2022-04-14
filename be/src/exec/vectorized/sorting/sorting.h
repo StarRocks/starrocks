@@ -150,6 +150,52 @@ struct SortedRuns {
     size_t num_chunks() const { return chunks.size(); }
 };
 
+// Merge two sorted cusor
+class MergeTwoCursor {
+public:
+    MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor>&& left_cursor,
+                   std::unique_ptr<SimpleChunkSortCursor>&& right_cursor);
+
+    bool is_data_ready();
+    bool is_eos();
+
+    // Use it as iterator
+    // Return nullptr if no output
+    StatusOr<ChunkUniquePtr> next();
+
+    Status consume_all(ChunkConsumer output);
+    std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
+
+private:
+    ChunkProvider& as_provider() { return _chunk_provider; }
+    StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    bool move_cursor();
+
+    SortDescs _sort_desc;
+    SortedRun _left_run;
+    SortedRun _right_run;
+    std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
+    std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
+    ChunkProvider _chunk_provider;
+};
+
+// Merge multiple cursors in cascade way
+class MergeCursorsCascade {
+public:
+    MergeCursorsCascade() = default;
+    ~MergeCursorsCascade() = default;
+
+    Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
+    bool is_data_ready();
+    bool is_eos();
+    ChunkUniquePtr try_get_next();
+    Status consume_all(ChunkConsumer consumer);
+
+private:
+    std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
+    std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
+};
+
 // Merge algorithms
 Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
                                    Permutation* output);
@@ -158,6 +204,11 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
                                    SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
+Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output);
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                   ChunkConsumer consumer);
 
 // Merge in rowwise
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
