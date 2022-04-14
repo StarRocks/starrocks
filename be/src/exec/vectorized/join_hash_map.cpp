@@ -389,7 +389,7 @@ Status JoinHashTable::build(RuntimeState* state) {
 }
 
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-                          bool* eos) {
+                            bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
