@@ -143,6 +143,27 @@ public:
 };
 
 template <>
+class MinAggregator<BooleanColumn, uint8_t> final : public ValueColumnAggregator<BooleanColumn, uint8_t> {
+public:
+    // The max value of boolean type is 1 (not uint8_t max).
+    void reset() override { this->data() = 1; }
+
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<BooleanColumn*>(src.get())->get_data().data();
+        this->data() = std::min<uint8_t>(this->data(), data[row]);
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override {
+        auto* data = down_cast<BooleanColumn*>(src.get())->get_data().data();
+        for (int i = start; i < end; ++i) {
+            this->data() = std::min<uint8_t>(this->data(), data[i]);
+        }
+    }
+
+    void append_data(Column* agg) override { down_cast<BooleanColumn*>(agg)->append(this->data()); }
+};
+
+template <>
 class MinAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
 public:
     void reset() override { this->data().reset(); }
