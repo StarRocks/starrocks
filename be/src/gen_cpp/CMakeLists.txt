@@ -90,6 +90,8 @@ set(SRC_FILES
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
     ${GEN_CPP_DIR}/opcode/builtin_functions.cpp
+    ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
+    ${GEN_CPP_DIR}/RuntimeFilter_constants.cpp
 )
 
 # keep everything in one library, the object files reference

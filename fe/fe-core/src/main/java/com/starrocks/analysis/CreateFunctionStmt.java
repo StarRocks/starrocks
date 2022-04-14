@@ -79,7 +79,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String SERIALIZE_LENGTH_METHOD_NAME = "serializeLength";
     public static final String RETURN_FIELD_NAME = "Return";
     public static final String WINDOW_UPDATE_METHOD_NAME = "windowUpdate";
-    public static final String IS_ANALYTIC_NAME = "Analytic";
+    public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
 
     private final FunctionName functionName;
@@ -231,7 +231,12 @@ public class CreateFunctionStmt extends DdlStmt {
         if (properties == null) {
             this.properties = ImmutableSortedMap.of();
         } else {
-            this.properties = ImmutableSortedMap.copyOf(properties, String.CASE_INSENSITIVE_ORDER);
+            Map<String, String> lowerCaseProperties = new HashMap<>();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                lowerCaseProperties.put(entry.getKey().toLowerCase(), entry.getValue());
+            }
+
+            this.properties = ImmutableSortedMap.copyOf(lowerCaseProperties, String.CASE_INSENSITIVE_ORDER);
         }
         this.mainClass = new UDFInternalClass();
         if (isAggregate) {

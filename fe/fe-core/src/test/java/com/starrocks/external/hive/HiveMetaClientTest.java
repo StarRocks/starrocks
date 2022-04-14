@@ -196,7 +196,7 @@ public class HiveMetaClientTest {
 
         HiveMetaClient client = new HiveMetaClient("thrift://127.0.0.1:9030");
         Map<String, HiveColumnStats> stats =
-                client.getTableLevelColumnStatsForPartTable("db", "tbl", partitionKeys, partColumns, allColumnNames);
+                client.getTableLevelColumnStatsForPartTable("db", "tbl", partitionKeys, partColumns, allColumnNames, false);
         HiveColumnStats partitionStats = stats.get("col1");
         Assert.assertEquals(partitionStats.getNumNulls(), 4L);
         Assert.assertEquals(partitionStats.getNumDistinctValues(), 3L);

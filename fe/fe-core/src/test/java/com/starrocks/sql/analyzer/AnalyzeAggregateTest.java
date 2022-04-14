@@ -13,20 +13,10 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAggregateTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeAggregateTest/" + UUID.randomUUID().toString() + "/";
-
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -59,6 +49,8 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select v1 from t0 group by v1 having parse_json('{\"a\": 1}')->'a'=1");
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = @@sql_mode");
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
+
+        analyzeSuccess("select count() from t0");
     }
 
     @Test
@@ -137,6 +129,9 @@ public class AnalyzeAggregateTest {
 
         analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
                 "No matching function with signature: multi_distinct_count(ARRAY)");
+
+        analyzeFail("select abs(distinct v1) from t0");
+        analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
     }
 
     @Test

@@ -22,6 +22,7 @@ namespace starrocks::vectorized {
 
 TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {
+    _sort_keys = tnode.sort_node.__isset.sql_sort_keys ? tnode.sort_node.sql_sort_keys : "NONE";
     _offset = tnode.sort_node.__isset.offset ? tnode.sort_node.offset : 0;
     _materialized_tuple_desc = nullptr;
     _sort_timer = nullptr;
@@ -60,9 +61,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _materialized_tuple_desc = _row_descriptor.tuple_descriptors()[0];
     DCHECK(_materialized_tuple_desc != nullptr);
 
-    if (tnode.sort_node.__isset.sql_sort_keys) {
-        _runtime_profile->add_info_string("SortKeys", tnode.sort_node.sql_sort_keys);
-    }
+    _runtime_profile->add_info_string("SortKeys", _sort_keys);
     _runtime_profile->add_info_string("SortType", tnode.sort_node.use_top_n ? "TopN" : "All");
     return Status::OK();
 }
@@ -148,22 +147,22 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         // after testing we think 1024 is a good threshold
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             _chunks_sorter = std::make_unique<HeapChunkSorter>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                               &_is_asc_order, &_is_null_first, _offset, _limit,
-                                                               SIZE_OF_CHUNK_FOR_TOPN);
+                                                               &_is_asc_order, &_is_null_first, _sort_keys, _offset,
+                                                               _limit, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
             _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _offset, _limit,
-                                                                SIZE_OF_CHUNK_FOR_TOPN);
+                                                                &_is_asc_order, &_is_null_first, _sort_keys, _offset,
+                                                                _limit, SIZE_OF_CHUNK_FOR_TOPN);
         }
 
     } else {
-        _chunks_sorter =
-                std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                       &_is_asc_order, &_is_null_first, SIZE_OF_CHUNK_FOR_FULL_SORT);
+        _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                                &_is_asc_order, &_is_null_first, _sort_keys,
+                                                                SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
+    _chunks_sorter->setup_runtime(runtime_profile());
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
@@ -174,9 +173,10 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         }
         timer.start();
         if (chunk != nullptr && chunk->num_rows() > 0) {
-            ChunkPtr materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
-                    chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk)));
+            auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
+                                                                                 _sort_exec_exprs, _order_by_types);
+            RETURN_IF_ERROR(materialize_chunk);
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
         }
     } while (!eos);
 
@@ -205,8 +205,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     auto partition_sort_sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
             context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
-            _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor,
-            _analytic_partition_exprs);
+            _sort_keys, _offset, _limit, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
+            _row_descriptor, _analytic_partition_exprs);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(partition_sort_sink_operator.get(), context, rc_rf_probe_collector);
 

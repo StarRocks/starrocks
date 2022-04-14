@@ -25,6 +25,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
@@ -113,9 +114,13 @@ public class Frontend implements Writable {
      * so we simple return true if the heartbeat status is OK.
      * But if heartbeat status is BAD, only return true if it is the first time to transfer from alive to dead.
      */
-    public boolean handleHbResponse(FrontendHbResponse hbResponse) {
+    public boolean handleHbResponse(FrontendHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
+            if (!isAlive && !isReplay) {
+                BDBHA ha = (BDBHA) Catalog.getCurrentCatalog().getHaProtocol();
+                ha.removeUnstableNode(host, Catalog.getCurrentCatalog().getFollowerCnt());
+            }
             isAlive = true;
             queryPort = hbResponse.getQueryPort();
             rpcPort = hbResponse.getRpcPort();

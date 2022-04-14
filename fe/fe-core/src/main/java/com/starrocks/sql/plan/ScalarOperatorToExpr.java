@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -32,6 +33,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -115,6 +117,15 @@ public class ScalarOperatorToExpr {
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
             return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
                     buildExecExpression(node.getChild(1), context));
+        }
+
+        @Override
+        public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
+            ArraySliceExpr arraySliceExpr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
+                    buildExecExpression(node.getChild(1), context),
+                    buildExecExpression(node.getChild(2), context));
+            arraySliceExpr.setType(node.getType());
+            return arraySliceExpr;
         }
 
         @Override

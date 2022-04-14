@@ -880,8 +880,8 @@ public class FunctionSet {
         } else if (typeElement != null) {
             typeArray = new ArrayType(typeElement);
         } else {
-            LOG.warn("could not determine polymorphic type because has unknown types");
-            return null;
+            typeElement = Type.NULL;
+            typeArray = new ArrayType(Type.NULL);
         }
 
         if (!typeArray.getItemType().matchesType(typeElement)) {

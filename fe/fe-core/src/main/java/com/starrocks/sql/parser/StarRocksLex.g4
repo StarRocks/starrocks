@@ -13,6 +13,7 @@ ANTI: 'ANTI';
 ARRAY: 'ARRAY';
 AS: 'AS';
 ASC: 'ASC';
+AVG: 'AVG';
 BETWEEN: 'BETWEEN';
 BIGINT: 'BIGINT';
 BITMAP: 'BITMAP';
@@ -26,6 +27,7 @@ COLLATE: 'COLLATE';
 CONNECTION_ID: 'CONNECTION_ID';
 COMMENT: 'COMMENT';
 COSTS: 'COSTS';
+COUNT: 'COUNT';
 CREATE: 'CREATE';
 CROSS: 'CROSS';
 CUBE: 'CUBE';
@@ -62,6 +64,7 @@ FILTER: 'FILTER';
 FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';
 FLOAT: 'FLOAT';
+FN: 'FN';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
 FORMAT: 'FORMAT';
@@ -100,9 +103,12 @@ LIKE: 'LIKE';
 LIMIT: 'LIMIT';
 LOCAL: 'LOCAL';
 LOGICAL: 'LOGICAL';
+MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
+MIN: 'MIN';
 MINUTE: 'MINUTE';
 MINUS: 'MINUS';
+MOD: 'MOD';
 MONTH: 'MONTH';
 NONE: 'NONE';
 NOT: 'NOT';
@@ -117,6 +123,7 @@ OUTFILE: 'OUTFILE';
 OVER: 'OVER';
 PARTITION: 'PARTITION';
 PARTITIONS: 'PARTITIONS';
+PASSWORD: 'PASSWORD';
 PRECEDING: 'PRECEDING';
 PERCENTILE: 'PERCENTILE';
 PROPERTIES: 'PROPERTIES';
@@ -141,6 +148,7 @@ SHOW: 'SHOW';
 SMALLINT: 'SMALLINT';
 START: 'START';
 STRING: 'STRING';
+SUM: 'SUM';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLET: 'TABLET';
@@ -181,24 +189,19 @@ MINUS_SYMBOL: '-';
 ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
+
 LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_AND: '&&';
+LOGICAL_NOT: '!';
 
 INT_DIV: 'DIV';
 BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
-LOGICAL_NOT: '!';
+
 ARROW: '->';
 AT: '@';
-
-SINGLE_QUOTED_TEXT
-    : '\'' ( ~'\'' | '\'\'' )* '\''
-    ;
-
-DOUBLE_QUOTED_TEXT
-    : '"' ( '\\'. | '""' | ~('"'| '\\') )* '"'
-    ;
 
 INTEGER_VALUE
     : DIGIT+
@@ -214,12 +217,20 @@ DOUBLE_VALUE
     | '.' DIGIT+ EXPONENT
     ;
 
+SINGLE_QUOTED_TEXT
+    : '\'' ( ~'\'' | '\'\'' )* '\''
+    ;
+
+DOUBLE_QUOTED_TEXT
+    : '"' ( '\\'. | '""' | ~('"'| '\\') )* '"'
+    ;
+
 IDENTIFIER
-    : (LETTER | '_') (LETTER | DIGIT | '_' | '@' | ':')*
+    : (LETTER | '_') (LETTER | DIGIT | '_')*
     ;
 
 DIGIT_IDENTIFIER
-    : DIGIT (LETTER | DIGIT | '_' | '@' | ':')+
+    : DIGIT (LETTER | DIGIT | '_')+
     ;
 
 QUOTED_IDENTIFIER

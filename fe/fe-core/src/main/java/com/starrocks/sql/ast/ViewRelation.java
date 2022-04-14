@@ -5,36 +5,40 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.View;
 
 public class ViewRelation extends Relation {
-    private TableName name;
-    private View view;
-    private final QueryRelation query;
+    private final TableName name;
+    private final View view;
+    private final QueryStatement queryStatement;
 
-    public ViewRelation(TableName name, View view, QueryRelation query) {
+    public ViewRelation(TableName name, View view, QueryStatement queryStatement) {
         this.name = name;
-        if (name != null) {
-            this.alias = name;
-        } else {
-            this.alias = null;
-        }
         this.view = view;
-        this.query = query;
+        this.queryStatement = queryStatement;
         // The order by is meaningless in subquery
-        if (this.query instanceof SelectRelation && !this.query.hasLimit()) {
-            SelectRelation qs = (SelectRelation) this.query;
-            qs.clearOrder();
+        QueryRelation queryRelation = this.queryStatement.getQueryRelation();
+        if (!queryRelation.hasLimit()) {
+            queryRelation.clearOrder();
         }
-    }
-
-    public TableName getName() {
-        return name;
     }
 
     public View getView() {
         return view;
     }
 
-    public QueryRelation getQuery() {
-        return query;
+    public TableName getName() {
+        return name;
+    }
+
+    @Override
+    public TableName getResolveTableName() {
+        if (alias != null) {
+            return alias;
+        } else {
+            return name;
+        }
+    }
+
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
     }
 
     @Override

@@ -38,7 +38,7 @@ struct DataSegment {
         chunk = cnk;
         order_by_columns.reserve(sort_exprs->size());
         for (ExprContext* expr_ctx : (*sort_exprs)) {
-            order_by_columns.push_back(expr_ctx->evaluate(chunk.get()));
+            order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
         }
     }
 
@@ -283,15 +283,16 @@ public:
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                 const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
+                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn,
+                 size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
-    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
-                                                              TupleDescriptor* materialized_tuple_desc,
-                                                              const SortExecExprs& sort_exec_exprs,
-                                                              const std::vector<OrderByType>& order_by_types);
+    static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                                        TupleDescriptor* materialized_tuple_desc,
+                                                                        const SortExecExprs& sort_exec_exprs,
+                                                                        const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
+    virtual void setup_runtime(RuntimeProfile* profile);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
@@ -330,6 +331,8 @@ protected:
     const std::vector<ExprContext*>* _sort_exprs;
     std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
     std::vector<int> _null_first_flag; // 1 for greatest, -1 for least.
+    const std::string _sort_keys;
+    const bool _is_topn;
 
     size_t _next_output_row = 0;
 

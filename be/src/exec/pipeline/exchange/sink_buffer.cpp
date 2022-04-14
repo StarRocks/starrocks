@@ -2,6 +2,10 @@
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
+#include <chrono>
+
+#include "util/time.h"
+
 namespace starrocks::pipeline {
 
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
@@ -31,6 +35,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
+            _network_times[instance_id.lo] = TimeTrace{};
             _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
 
             PUniqueId finst_id;
@@ -64,13 +69,17 @@ SinkBuffer::~SinkBuffer() {
     }
 }
 
-void SinkBuffer::add_request(const TransmitChunkInfo& request) {
+void SinkBuffer::add_request(TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
         // Once the request is added to SinkBuffer, its ownership will also be transferred,
         // so SinkBuffer needs to be responsible for the release of resources
         request.params->release_finst_id();
         return;
+    }
+    if (!request.attachment.empty()) {
+        _bytes_enqueued += request.attachment.size();
+        _request_enqueued++;
     }
     {
         auto& instance_id = request.fragment_instance_id;
@@ -89,7 +98,21 @@ bool SinkBuffer::is_full() const {
     for (auto& [_, buffer] : _buffers) {
         buffer_size += buffer.size();
     }
-    return buffer_size > max_buffer_size;
+    bool is_full = buffer_size > max_buffer_size;
+
+    if (is_full && _last_full_timestamp == -1) {
+        _last_full_timestamp = MonotonicNanos();
+    }
+    if (!is_full && _last_full_timestamp != -1) {
+        _full_time += (MonotonicNanos() - _last_full_timestamp);
+        _last_full_timestamp = -1;
+    }
+
+    return is_full;
+}
+
+void SinkBuffer::set_finishing() {
+    _pending_timestamp = MonotonicNanos();
 }
 
 bool SinkBuffer::is_finished() const {
@@ -100,12 +123,66 @@ bool SinkBuffer::is_finished() const {
     return _num_sending_rpc == 0 && _total_in_flight_rpc == 0;
 }
 
-// When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
-// the rest chunk request and EOS request needn't be sent anymore.
+void SinkBuffer::update_profile(RuntimeProfile* profile) {
+    bool flag = false;
+    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
+        return;
+    }
+
+    auto* network_timer = ADD_TIMER(profile, "NetworkTime");
+    auto* wait_timer = ADD_TIMER(profile, "WaitTime");
+    COUNTER_SET(network_timer, _network_time());
+
+    // WaitTime consists two parts
+    // 1. buffer full time
+    // 2. pending finish time
+    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+
+    auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
+    auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
+    COUNTER_SET(bytes_sent_counter, _bytes_sent);
+    COUNTER_SET(request_sent_counter, _request_sent);
+
+    if (_bytes_enqueued - _bytes_sent > 0) {
+        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
+    }
+
+    profile->add_derived_counter(
+            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            [bytes_sent_counter, network_timer] {
+                return RuntimeProfile::units_per_second(bytes_sent_counter, network_timer);
+            },
+            "");
+}
+
+int64_t SinkBuffer::_network_time() {
+    int64_t max = 0;
+    for (auto& [_, time_trace] : _network_times) {
+        double average_concurrency =
+                static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
+        int64_t average_accumulated_time =
+                static_cast<int64_t>(time_trace.accumulated_time / std::max(1.0, average_concurrency));
+        if (average_accumulated_time > max) {
+            max = average_accumulated_time;
+        }
+    }
+    return max;
+}
+
 void SinkBuffer::cancel_one_sinker() {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
     }
+}
+
+void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
+                                      const int64_t receive_timestamp) {
+    int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
+    _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
@@ -202,8 +279,14 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
         request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
-        auto* closure =
-                new DisposableClosure<PTransmitChunkResult, ClosureContext>({instance_id, request.params->sequence()});
+        if (!request.attachment.empty()) {
+            _bytes_sent += request.attachment.size();
+            _request_sent++;
+        }
+
+        auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
+                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
             {
@@ -229,6 +312,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             } else {
                 std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
                 _process_send_window(ctx.instance_id, ctx.sequence);
+                _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
                 _try_to_send_rpc(ctx.instance_id);
             }
             --_total_in_flight_rpc;

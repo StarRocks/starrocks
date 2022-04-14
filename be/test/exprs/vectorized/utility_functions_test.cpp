@@ -8,6 +8,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "runtime/primitive_type.h"
 #include "util/random.h"
 #include "util/time.h"
 
@@ -98,6 +99,18 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         }
 
         ASSERT_EQ(deduplication.size(), column_size);
+    }
+
+    {
+        int32_t chunk_size = 4096;
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(chunk_size, 1);
+        Columns columns;
+        columns.emplace_back(var1_col);
+        ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns);
+        Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
+        std::set<int128_t> vals;
+        vals.insert(col->get_data().begin(), col->get_data().end());
+        ASSERT_EQ(vals.size(), chunk_size);
     }
 }
 

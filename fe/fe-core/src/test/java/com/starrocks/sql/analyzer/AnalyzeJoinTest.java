@@ -16,20 +16,11 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeJoinTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeJoin/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -82,6 +73,11 @@ public class AnalyzeJoinTest {
         analyzeFail("select * from (select * from t0,tnotnull) t inner join t0 using (v1)",
                 "Column 'v1' is ambiguous");
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
+
+        analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
+        analyzeSuccess("select * from (t0 join tnotnull using(v1)) t , t1");
+        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1","Column 'v1' is ambiguous");
+        analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
 
     @Test
@@ -121,5 +117,11 @@ public class AnalyzeJoinTest {
         analyzeFail("select v1 from t0 right join [broadcast] t1 on t0.v1 = t1.v4");
         //Full outer does not support BROADCAST
         analyzeFail("select v1 from t0 full outer join [broadcast] t1 on t0.v1 = t1.v4");
+    }
+
+    @Test
+    public void testJoinPreceding() {
+        QueryStatement query = ((QueryStatement) analyzeSuccess("select * from t0,t1 inner join t2 on v4 = v7"));
+        System.out.println(AST2SQL.toString(query));
     }
 }

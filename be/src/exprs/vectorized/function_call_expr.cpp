@@ -5,9 +5,12 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
+#include "exprs/expr_context.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
@@ -46,7 +49,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */;
+                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uniq_id */;
 
     return Status::OK();
 }
@@ -61,7 +64,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         std::vector<ColumnPtr> const_columns;
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
-            const_columns.emplace_back(child->evaluate_const(context));
+            ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
+            const_columns.emplace_back(std::move(child_col));
         }
         fn_ctx->impl()->set_constant_columns(std::move(const_columns));
     }
@@ -116,7 +120,7 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     Columns args;
     args.reserve(_children.size());
     for (Expr* child : _children) {
-        ColumnPtr column = context->evaluate(child, ptr);
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
         args.emplace_back(column);
     }
 
@@ -138,7 +142,14 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     }
 #endif
 
-    ColumnPtr result = _fn_desc->scalar_function(fn_ctx, args);
+    ColumnPtr result;
+    if (_fn_desc->exception_safe) {
+        result = _fn_desc->scalar_function(fn_ctx, args);
+    } else {
+        SCOPED_SET_CATCHED(false);
+        result = _fn_desc->scalar_function(fn_ctx, args);
+    }
+
     // For no args function call (pi, e)
     if (result->is_constant() && ptr != nullptr) {
         result->resize(ptr->num_rows());

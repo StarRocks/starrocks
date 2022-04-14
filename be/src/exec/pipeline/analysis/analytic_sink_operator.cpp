@@ -65,7 +65,7 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
     for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
         for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
-            ColumnPtr column = _analytor->agg_expr_ctxs()[i][j]->evaluate(chunk.get());
+            ASSIGN_OR_RETURN(ColumnPtr column, _analytor->agg_expr_ctxs()[i][j]->evaluate(chunk.get()));
             // Currently, only lead and lag window function have multi args.
             // For performance, we do this special handle.
             // In future, if need, we could remove this if else easily.
@@ -79,12 +79,12 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     }
 
     for (size_t i = 0; i < _analytor->partition_ctxs().size(); i++) {
-        ColumnPtr column = _analytor->partition_ctxs()[i]->evaluate(chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr column, _analytor->partition_ctxs()[i]->evaluate(chunk.get()));
         TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column));
     }
 
     for (size_t i = 0; i < _analytor->order_ctxs().size(); i++) {
-        ColumnPtr column = _analytor->order_ctxs()[i]->evaluate(chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr column, _analytor->order_ctxs()[i]->evaluate(chunk.get()));
         TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column));
     }
 

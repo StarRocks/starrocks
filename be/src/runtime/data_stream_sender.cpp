@@ -382,7 +382,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _part_type(sink.output_partition.type),
           _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
           _profile(nullptr),
-          _serialize_batch_timer(nullptr),
+          _serialize_chunk_timer(nullptr),
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
@@ -502,7 +502,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(profile(), "UncompressedBytes", TUnit::BYTES);
     _ignore_rows = ADD_COUNTER(profile(), "IgnoreRows", TUnit::UNIT);
-    _serialize_batch_timer = ADD_TIMER(profile(), "SerializeBatchTime");
+    _serialize_chunk_timer = ADD_TIMER(profile(), "SerializeChunkTime");
     _compress_timer = ADD_TIMER(profile(), "CompressTime");
     _send_request_timer = ADD_TIMER(profile(), "SendRequestTime");
     _wait_response_timer = ADD_TIMER(profile(), "WaitResponseTime");
@@ -586,7 +586,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-                _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk);
+                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk));
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 
@@ -687,7 +687,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     VLOG_ROW << "serializing " << src->num_rows() << " rows";
 
     {
-        SCOPED_TIMER(_serialize_batch_timer);
+        SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);

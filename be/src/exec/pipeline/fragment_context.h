@@ -66,10 +66,6 @@ public:
 
     bool count_down_drivers() { return _num_drivers.fetch_sub(1) == 1; }
 
-    void set_num_root_drivers(size_t num_root_drivers) { _num_root_drivers.store(num_root_drivers); }
-
-    bool count_down_root_drivers() { return _num_root_drivers.fetch_sub(1) == 1; }
-
     void set_final_status(const Status& status) {
         if (_final_status.load() != nullptr) {
             return;
@@ -151,10 +147,6 @@ private:
     // MorselQueue that is shared among drivers created from the same pipeline,
     // drivers contend for Morsels from MorselQueue.
     MorselQueueMap _morsel_queues;
-    // when _num_root_drivers counts down to zero, means that all the root drivers are finished,
-    // the fragment instance produces the entire result required, all the outstanding drivers
-    // should finish computation.
-    std::atomic<size_t> _num_root_drivers;
     // when _num_drivers counts down to zero, means all drivers has finished, then BE
     // can notify FE via reportExecStatus that fragment instance is done after which
     // FragmentContext can be unregistered safely.

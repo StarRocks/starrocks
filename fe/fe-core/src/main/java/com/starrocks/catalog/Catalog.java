@@ -249,6 +249,7 @@ import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -266,6 +267,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -2583,10 +2585,20 @@ public class Catalog {
 
             fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
+            BDBHA bdbha = (BDBHA) haProtocol;
             if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
-                ((BDBHA) getHaProtocol()).addHelperSocket(host, editLogPort);
+                bdbha.addHelperSocket(host, editLogPort);
                 helperNodes.add(Pair.create(host, editLogPort));
+                bdbha.addUnstableNode(host, getFollowerCnt());
             }
+
+            // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
+            // will remain in bdb.
+            // So we should remove those nodes before joining the group,
+            // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
+            // xxx. It conflicts with the socket already used by the member: xxxx)
+            bdbha.removeNodeIfExist(host, editLogPort);
+
             editLog.logAddFrontend(fe);
         } finally {
             unlock();
@@ -2614,6 +2626,9 @@ public class Catalog {
             if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
                 haProtocol.removeElectableNode(fe.getNodeName());
                 helperNodes.remove(Pair.create(host, port));
+
+                BDBHA ha = (BDBHA) haProtocol;
+                ha.removeUnstableNode(host, getFollowerCnt());
             }
             editLog.logRemoveFrontend(fe);
         } finally {
@@ -2646,6 +2661,16 @@ public class Catalog {
             }
         }
         return null;
+    }
+
+    public int getFollowerCnt() {
+        int cnt = 0;
+        for (Frontend fe : frontends.values()) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                cnt++;
+            }
+        }
+        return cnt;
     }
 
     // The interface which DdlExecutor needs.
@@ -4375,11 +4400,17 @@ public class Catalog {
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
-        columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
-        columns.add(new Column("_hoodie_commit_seqno", Type.STRING, true));
-        columns.add(new Column("_hoodie_record_key", Type.STRING, true));
-        columns.add(new Column("_hoodie_partition_path", Type.STRING, true));
-        columns.add(new Column("_hoodie_file_name", Type.STRING, true));
+
+        Set<String> metaFields = new HashSet<>(Arrays.asList(
+                HoodieRecord.COMMIT_TIME_METADATA_FIELD,
+                HoodieRecord.COMMIT_SEQNO_METADATA_FIELD,
+                HoodieRecord.RECORD_KEY_METADATA_FIELD,
+                HoodieRecord.PARTITION_PATH_METADATA_FIELD,
+                HoodieRecord.FILENAME_METADATA_FIELD));
+        Set<String> includedMetaFields = columns.stream().map(Column::getName)
+                .filter(metaFields::contains).collect(Collectors.toSet());
+        metaFields.removeAll(includedMetaFields);
+        metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
         long tableId = getNextId();
         HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
@@ -4469,6 +4500,7 @@ public class Catalog {
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
+                || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG
                 || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
             sb.append("EXTERNAL ");
         }
@@ -4686,6 +4718,30 @@ public class Catalog {
             sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.HUDI) {
+            HudiTable hudiTable = (HudiTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(hudiTable.getDb()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == TableType.ICEBERG) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(icebergTable.getDb()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getTable()).append("\",\n");
+            sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;

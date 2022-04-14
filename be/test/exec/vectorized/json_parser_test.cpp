@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exec/vectorized/json_parser.h"
+
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <string>
 
-#include "exec/vectorized/json_scanner.h"
 #include "exprs/vectorized/json_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
@@ -40,6 +41,12 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser) {
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
     int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
     st = parser->advance();
@@ -90,6 +97,12 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser) {
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
     int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
     st = parser->advance();
@@ -145,6 +158,12 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
     int64_t val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
     st = parser->advance();
     ASSERT_TRUE(st.ok());
 
@@ -196,6 +215,12 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
     int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
     st = parser->advance();
@@ -251,6 +276,12 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     int64_t val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
     st = parser->advance();
     ASSERT_TRUE(st.ok());
 
@@ -264,6 +295,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
 
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
+
     val = row.find_field("key3").get_int64();
     ASSERT_EQ(val, 3);
 
@@ -301,6 +333,12 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
     int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
     st = parser->advance();

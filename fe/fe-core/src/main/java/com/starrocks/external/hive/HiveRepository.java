@@ -6,7 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.PartitionKey;
@@ -118,20 +118,18 @@ public class HiveRepository {
         return client.getTable(dbName, tableName);
     }
 
-    public ImmutableMap<PartitionKey, Long> getPartitionKeys(String resourceName, String dbName, String tableName,
-                                                             List<Column> partColumns) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getPartitionKeys(dbName, tableName, partColumns);
+    public ImmutableMap<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+        return metaCache.getPartitionKeys(hmsTable);
     }
 
-    public List<HivePartition> getPartitions(String resourceName, String dbName, String tableName,
-                                             List<PartitionKey> partitionKeys, boolean isHudiTable)
+    public List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable, List<PartitionKey> partitionKeys)
             throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
         List<Future<HivePartition>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {
             Future<HivePartition> future = partitionDaemonExecutor
-                    .submit(() -> metaCache.getPartition(dbName, tableName, partitionKey, isHudiTable));
+                    .submit(() -> metaCache.getPartition(hmsTable, partitionKey));
             futures.add(future);
         }
         List<HivePartition> result = Lists.newArrayList();
@@ -139,7 +137,7 @@ public class HiveRepository {
             try {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("get table {}.{} partition meta info failed.", dbName, tableName,  e);
+                LOG.warn("get table {}.{} partition meta info failed.", hmsTable.getDb(), hmsTable.getTable(),  e);
                 throw new DdlException(e.getMessage());
             }
         }
@@ -151,14 +149,13 @@ public class HiveRepository {
         return metaCache.getTableStats(dbName, tableName);
     }
 
-    public List<HivePartitionStats> getPartitionsStats(String resourceName, String dbName,
-                                                       String tableName, List<PartitionKey> partitionKeys,
-                                                       boolean isHudiTable) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
+    public List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
+                                                       List<PartitionKey> partitionKeys) throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
         List<Future<HivePartitionStats>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {
             Future<HivePartitionStats> future = partitionDaemonExecutor.
-                    submit(() -> metaCache.getPartitionStats(dbName, tableName, partitionKey, isHudiTable));
+                    submit(() -> metaCache.getPartitionStats(hmsTable, partitionKey));
             futures.add(future);
         }
         List<HivePartitionStats> result = Lists.newArrayList();
@@ -166,58 +163,46 @@ public class HiveRepository {
             try {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("get table {}.{} partition stats meta info failed.", dbName, tableName,  e);
+                LOG.warn("get table {}.{} partition stats meta info failed.", hmsTable.getDb(), hmsTable.getTable(), e);
                 throw new DdlException(e.getMessage());
             }
         }
         return result;
     }
 
-    public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(String resourceName, String dbName,
-                                                                          String tableName,
-                                                                          List<Column> partitionColumns,
-                                                                          List<String> columnNames)
+    public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable)
             throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        return metaCache.getTableLevelColumnStats(dbName, tableName, partitionColumns, columnNames);
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+        return metaCache.getTableLevelColumnStats(hmsTable);
     }
 
-    public void refreshTableCache(String resourceName, String dbName, String tableName, List<Column> partColumns,
-                                  List<String> columnNames) throws DdlException {
-        refreshTableCache(resourceName, dbName, tableName, partColumns, columnNames, false);
+    public void refreshTableCache(HiveMetaStoreTableInfo hmsTable) throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+        metaCache.refreshTable(hmsTable);
     }
 
-    public void refreshTableCache(String resourceName, String dbName, String tableName, List<Column> partColumns,
-                                  List<String> columnNames, boolean isHudiTable) throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        metaCache.refreshTable(dbName, tableName, partColumns, columnNames, isHudiTable);
-    }
-
-    public void refreshPartitionCache(String resourceName, String dbName, String tableName,
-                                      List<String> partNames) throws DdlException {
-        refreshPartitionCache(resourceName, dbName, tableName, partNames, false);
-    }
-
-    public void refreshPartitionCache(String resourceName, String dbName, String tableName,
-                                      List<String> partNames, boolean isHudiTable)
+    public void refreshPartitionCache(HiveMetaStoreTableInfo hmsTable, List<String> partNames)
             throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        metaCache.refreshPartition(dbName, tableName, partNames, isHudiTable);
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+        metaCache.refreshPartition(hmsTable, partNames);
     }
 
-    public void refreshTableColumnStats(String resourceName, String dbName, String tableName, List<Column> partColumns,
-                                        List<String> columnNames)
+    public void refreshTableColumnStats(HiveMetaStoreTableInfo hmsTable)
             throws DdlException {
-        HiveMetaCache metaCache = getMetaCache(resourceName);
-        metaCache.refreshColumnStats(dbName, tableName, partColumns, columnNames);
+        HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+        metaCache.refreshColumnStats(hmsTable);
     }
 
     public void clearCache(String resourceName, String dbName, String tableName) {
+        clearCache(resourceName, dbName, tableName, false);
+    }
+
+    public void clearCache(String resourceName, String dbName, String tableName, boolean isHudiTable) {
         try {
             HiveMetaCache metaCache = getMetaCache(resourceName);
-            metaCache.clearCache(dbName, tableName);
+            metaCache.clearCache(dbName, tableName, isHudiTable);
         } catch (DdlException e) {
-
+            LOG.warn("clean table {}.{} cache failed.", dbName, tableName,  e);
         }
     }
 

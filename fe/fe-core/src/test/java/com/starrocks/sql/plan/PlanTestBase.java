@@ -41,9 +41,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class PlanTestBase {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    public static String runningDir = "fe/mocked/PlanTest/" + UUID.randomUUID().toString() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -56,7 +53,7 @@ public class PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -854,12 +851,6 @@ public class PlanTestBase {
         }
     }
 
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
-    }
-
     public ExecPlan getExecPlan(String sql) throws Exception {
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
     }
@@ -1134,5 +1125,9 @@ public class PlanTestBase {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
+    }
+
+    public static void assertContains(String text, String pattern) {
+        Assert.assertTrue(text, text.contains(pattern));
     }
 }

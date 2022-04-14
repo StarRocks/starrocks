@@ -213,8 +213,9 @@ class HeapChunkSorter final : public ChunksSorter {
 public:
     using DataSegmentPtr = std::shared_ptr<DataSegment>;
     HeapChunkSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                    const std::vector<bool>* is_null_first, size_t offset, size_t limit, size_t size_of_chunk_batch)
-            : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
+                    const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset, size_t limit,
+                    size_t size_of_chunk_batch)
+            : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true, size_of_chunk_batch),
               _offset(offset),
               _limit(limit) {}
     ~HeapChunkSorter() = default;
@@ -234,7 +235,7 @@ public:
     uint64_t get_partition_rows() const override;
     Permutation* get_permutation() const override { return nullptr; }
 
-    void setup_runtime(RuntimeProfile* profile, const std::string& parent_profile) override;
+    void setup_runtime(RuntimeProfile* profile) override;
 
 private:
     inline size_t _number_of_rows_to_sort() const { return _offset + _limit; }

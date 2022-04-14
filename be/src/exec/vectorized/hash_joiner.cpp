@@ -95,10 +95,10 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 
     runtime_profile->add_info_string("DistributionMode", to_string(_hash_join_node.distribution_mode));
     runtime_profile->add_info_string("JoinType", to_string(_join_type));
-    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTimer");
-    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTimer");
-    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTimer");
-    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTimer");
+    _search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    _output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    _output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    _output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
     _probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     _other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     _where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
@@ -327,14 +327,14 @@ Status HashJoiner::_build(RuntimeState* state) {
     return Status::OK();
 }
 
-void HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
-                                                 bool& hit_all) {
+Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
+                                                   bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
-        ColumnPtr column = ctx->evaluate((*chunk).get());
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -361,6 +361,8 @@ void HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter
             hit_all = true;
         }
     }
+
+    return Status::OK();
 }
 
 void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
@@ -392,19 +394,21 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
     }
 }
 
-void HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
+Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
@@ -413,9 +417,11 @@ void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
@@ -424,35 +430,35 @@ void HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->set_num_rows(0);
+
+    return Status::OK();
 }
 
-void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
-        break;
+        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_semi_join_with_other_conjunct(chunk);
-        break;
+        return _process_semi_join_with_other_conjunct(chunk);
     case TJoinOp::RIGHT_ANTI_JOIN:
-        _process_right_anti_join_with_other_conjunct(chunk);
-        break;
+        return _process_right_anti_join_with_other_conjunct(chunk);
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
-        ExecNode::eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get()));
     }
+    return Status::OK();
 }
 
-void HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(_where_conjunct_evaluate_timer);
-    ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+    return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
 } // namespace starrocks::vectorized

@@ -108,8 +108,8 @@ public class QueryAnalyzer {
             }
 
             for (CTERelation withQuery : stmt.getCteRelations()) {
-                QueryRelation query = withQuery.getCteQuery();
-                process(new QueryStatement(withQuery.getCteQuery()), cteScope);
+                QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
+                process(withQuery.getCteQueryStatement(), cteScope);
 
                 /*
                  *  Because the analysis of CTE is sensitive to order
@@ -177,7 +177,11 @@ public class QueryAnalyzer {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
                 join.setLeft(resolveTableRef(join.getLeft(), scope));
-                join.setRight(resolveTableRef(join.getRight(), scope));
+                Relation rightRelation = resolveTableRef(join.getRight(), scope);
+                join.setRight(rightRelation);
+                if (rightRelation instanceof TableFunctionRelation) {
+                    join.setLateral(true);
+                }
                 return join;
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
@@ -192,7 +196,7 @@ public class QueryAnalyzer {
                         for (int fieldIdx = 0; fieldIdx < withRelationFields.getAllFields().size(); ++fieldIdx) {
                             Field originField = withRelationFields.getAllFields().get(fieldIdx);
                             outputFields.add(new Field(
-                                    originField.getName(), originField.getType(), tableRelation.getAlias(),
+                                    originField.getName(), originField.getType(), tableRelation.getResolveTableName(),
                                     originField.getOriginExpression()));
                         }
 
@@ -204,7 +208,7 @@ public class QueryAnalyzer {
                         // cte used in outer query and subquery can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
                                 cteRelation.getColumnOutputNames(),
-                                cteRelation.getCteQuery());
+                                cteRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
@@ -217,9 +221,8 @@ public class QueryAnalyzer {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
-                    ViewRelation viewRelation =
-                            new ViewRelation(tableName, view, queryStatement.getQueryRelation());
-                    viewRelation.setAlias(tableName);
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
                 } else {
                     if (table.isSupported()) {
@@ -236,7 +239,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitTable(TableRelation node, Scope outerScope) {
-            TableName tableName = node.getAlias();
+            TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
@@ -265,8 +268,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitCTE(CTERelation cteRelation, Scope context) {
-            QueryRelation query = cteRelation.getCteQuery();
-            TableName tableName = cteRelation.getAlias();
+            QueryRelation query = cteRelation.getCteQueryStatement().getQueryRelation();
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
@@ -274,7 +276,7 @@ public class QueryAnalyzer {
                 outputFields.add(new Field(cteRelation.getColumnOutputNames() == null ?
                         originField.getName() : cteRelation.getColumnOutputNames().get(fieldIdx),
                         originField.getType(),
-                        tableName,
+                        cteRelation.getResolveTableName(),
                         originField.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
@@ -291,7 +293,7 @@ public class QueryAnalyzer {
                     throw new SemanticException("Only support lateral join with UDTF");
                 }
 
-                if (!join.getType().isInnerJoin() && !join.getType().isCrossJoin()) {
+                if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
                     throw new SemanticException("Not support lateral join except inner or cross");
                 }
                 rightScope = process(join.getRight(), leftScope);
@@ -339,8 +341,8 @@ public class QueryAnalyzer {
                     throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
                 }
             } else {
-                if (join.getType().isOuterJoin() || join.getType().isSemiAntiJoin()) {
-                    throw new SemanticException(join.getType() + " requires an ON or USING clause.");
+                if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
+                    throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
                 }
             }
 
@@ -348,9 +350,9 @@ public class QueryAnalyzer {
              * New Scope needs to be constructed for select in semi/anti join
              */
             Scope scope;
-            if (join.getType().isLeftSemiAntiJoin()) {
+            if (join.getJoinOp().isLeftSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
-            } else if (join.getType().isRightSemiAntiJoin()) {
+            } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
             } else {
                 scope = new Scope(RelationId.of(join),
@@ -383,20 +385,20 @@ public class QueryAnalyzer {
 
         private void analyzeJoinHints(JoinRelation join) {
             if (join.getJoinHint().equalsIgnoreCase("BROADCAST")) {
-                if (join.getType() == JoinOperator.RIGHT_OUTER_JOIN
-                        || join.getType() == JoinOperator.FULL_OUTER_JOIN
-                        || join.getType() == JoinOperator.RIGHT_SEMI_JOIN
-                        || join.getType() == JoinOperator.RIGHT_ANTI_JOIN) {
-                    throw new SemanticException(join.getType().toString() + " does not support BROADCAST.");
+                if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
+                        || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
+                        || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
+                        || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
+                    throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
             } else if (join.getJoinHint().equalsIgnoreCase("SHUFFLE")) {
-                if (join.getType() == JoinOperator.CROSS_JOIN ||
-                        (join.getType() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
+                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
             } else if ("BUCKET".equalsIgnoreCase(join.getJoinHint()) ||
                     "COLOCATE".equalsIgnoreCase(join.getJoinHint())) {
-                if (join.getType() == JoinOperator.CROSS_JOIN) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
             } else {
@@ -406,16 +408,16 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
-            if (subquery.getAlias() == null) {
+            if (subquery.getResolveTableName() == null) {
                 throw new SemanticException("Every derived table must have its own alias");
             }
 
-            Scope queryOutputScope = process(new QueryStatement(subquery.getQuery()), context);
+            Scope queryOutputScope = process(subquery.getQueryStatement(), context);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
-                outputFields.add(
-                        new Field(field.getName(), field.getType(), subquery.getAlias(), field.getOriginExpression()));
+                outputFields.add(new Field(field.getName(), field.getType(), subquery.getResolveTableName(),
+                        field.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
             subquery.setScope(scope);
@@ -424,16 +426,15 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            Scope queryOutputScope = process(new QueryStatement(node.getQuery()), scope);
+            Scope queryOutputScope = process(node.getQueryStatement(), scope);
 
             View view = node.getView();
-            TableName tableName = node.getName();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
-                Field field =
-                        new Field(column.getName(), column.getType(), tableName, originField.getOriginExpression());
+                Field field = new Field(column.getName(), column.getType(), node.getResolveTableName(),
+                        originField.getOriginExpression());
                 fields.add(field);
             }
 
@@ -558,7 +559,7 @@ public class QueryAnalyzer {
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
-                        node.getAlias(),
+                        node.getResolveTableName(),
                         rows.get(0).get(fieldIdx)));
             }
 
@@ -605,8 +606,8 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
                 Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
-                        tableFunction.getTableFnReturnTypes().get(i), node.getAlias(),
-                        new SlotRef(node.getAlias(),
+                        tableFunction.getTableFnReturnTypes().get(i), node.getResolveTableName(),
+                        new SlotRef(node.getResolveTableName(),
                                 node.getTableFunction().getDefaultColumnNames().get(i),
                                 node.getTableFunction().getDefaultColumnNames().get(i)));
                 fields.add(field);

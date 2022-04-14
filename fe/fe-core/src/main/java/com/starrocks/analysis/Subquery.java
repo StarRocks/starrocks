@@ -29,9 +29,10 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +68,7 @@ public class Subquery extends Expr {
         if (stmt != null) {
             return "(" + stmt.toSql() + ")";
         } else {
-            return "(" + queryRelation.toSql() + ")";
+            return "(" + AST2SQL.toString(queryStatement) + ")";
         }
     }
 
@@ -98,9 +99,9 @@ public class Subquery extends Expr {
     }
 
 
-    public Subquery(QueryRelation queryBlock) {
+    public Subquery(QueryStatement queryStatement) {
         super();
-        this.queryRelation = queryBlock;
+        this.queryStatement = queryStatement;
     }
 
     /**
@@ -214,11 +215,11 @@ public class Subquery extends Expr {
             return false;
         }
 
-        if (queryRelation != null) {
-            if (((Subquery) o).getQueryRelation() == null) {
+        if (queryStatement != null) {
+            if (((Subquery) o).getQueryStatement() == null) {
                 return false;
             } else {
-                return o.equals(queryRelation);
+                return o.equals(queryStatement);
             }
         }
 
@@ -249,13 +250,9 @@ public class Subquery extends Expr {
     /**
      * Analyzed subquery is store as QueryBlock
      */
-    private QueryRelation queryRelation;
+    private QueryStatement queryStatement;
 
-    public void setQueryRelation(QueryRelation queryRelation) {
-        this.queryRelation = queryRelation;
-    }
-
-    public QueryRelation getQueryRelation() {
-        return queryRelation;
+    public QueryStatement getQueryStatement() {
+        return queryStatement;
     }
 }

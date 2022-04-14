@@ -17,26 +17,17 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeFunctionTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeFunction/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
     public void testSingle() {
         analyzeFail("select sum() from t0", "No matching function with signature: sum()");
-        analyzeFail("select now(*) from t0", "Cannot pass '*' to scalar function.");
+        analyzeFail("select now(*) from t0");
     }
 
     @Test
@@ -167,5 +158,20 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select second('2022-01-01 00:00:00')");
         //analyzeSuccess("select week('2022-01-01 00:00:00')");
         analyzeSuccess("select year('2022-01-01 00:00:00')");
+
+        analyzeSuccess("select password('root')");
+
+        analyzeSuccess("select like(ta, ta) from tall");
+        analyzeSuccess("select regexp(ta, ta) from tall");
+        analyzeSuccess("select rlike(ta, ta) from tall");
+    }
+
+    @Test
+    public void testODBCFunction() {
+        analyzeSuccess("SELECT {fn ucase(ta)} FROM tall");
+        analyzeSuccess("SELECT {fn ucase(`ta`)} FROM tall");
+        analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
+        analyzeSuccess("select { fn extract(year from th)} from tall");
+        analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
     }
 }

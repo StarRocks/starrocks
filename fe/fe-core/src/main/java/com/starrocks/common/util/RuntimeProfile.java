@@ -24,14 +24,15 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
-import com.starrocks.common.util.Counter;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,21 +51,24 @@ import java.util.TreeSet;
  */
 public class RuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
-    private static String ROOT_COUNTER = "";
-    private Counter counterTotalTime;
-    private double localTimePercent;
+    private static final String ROOT_COUNTER = "";
+    private static final Set<String> NON_MERGE_COUNTER_NAMES =
+            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum");
 
-    private Map<String, String> infoStrings = Maps.newHashMap();
-    private List<String> infoStringsDisplayOrder = Lists.newArrayList();
+    private final Counter counterTotalTime;
+
+    private final Map<String, String> infoStrings = Maps.newHashMap();
+    private final List<String> infoStringsDisplayOrder = Lists.newArrayList();
 
     // These will be hold by other thread.
-    private Map<String, Counter> counterMap = Maps.newConcurrentMap();
-    private Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
+    private final Map<String, Counter> counterMap = Maps.newConcurrentMap();
+    private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
-    private Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
-    private List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
+    private final Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
+    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
 
     private String name;
+    private double localTimePercent;
 
     public RuntimeProfile(String name) {
         this();
@@ -98,6 +102,10 @@ public class RuntimeProfile {
         childMap.clear();
     }
 
+    public Counter addCounter(String name, TUnit type) {
+        return addCounter(name, type, ROOT_COUNTER);
+    }
+
     public Counter addCounter(String name, TUnit type, String parentCounterName) {
         Counter counter = this.counterMap.get(name);
         if (counter != null) {
@@ -126,7 +134,7 @@ public class RuntimeProfile {
         }
 
         srcProfile.counterMap.forEach((name, counter) -> {
-            addCounter(name, counter.getType(), "");
+            addCounter(name, counter.getType());
             getCounter(name).setValue(counter.getValue());
         });
     }
@@ -408,6 +416,10 @@ public class RuntimeProfile {
         this.name = name;
     }
 
+    public String getName() {
+        return name;
+    }
+
     // Returns the value to which the specified key is mapped;
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
@@ -432,6 +444,11 @@ public class RuntimeProfile {
             for (Map.Entry<String, Counter> entry : profile.counterMap.entrySet()) {
                 String name = entry.getKey();
                 Counter counter = entry.getValue();
+
+                if (NON_MERGE_COUNTER_NAMES.contains(name)) {
+                    continue;
+                }
+
                 if (!counterTypes.containsKey(name)) {
                     counterTypes.put(name, counter.getType());
                     continue;
@@ -453,7 +470,7 @@ public class RuntimeProfile {
                 continue;
             }
 
-            List<Counter> counters = Lists.newArrayList();
+            List<Triple<Counter, Counter, Counter>> counters = Lists.newArrayList();
             for (int j = 0; j < profiles.size(); j++) {
                 RuntimeProfile profile = profiles.get(j);
                 Counter counter = profile.getCounter(name);
@@ -468,29 +485,41 @@ public class RuntimeProfile {
                     LOG.warn("find non-isomorphic counter, profileName={}, name={}", profile0.name, name);
                     return;
                 }
-                counters.add(counter);
+
+                Counter minCounter = profile.getCounter(mergedInfoPrefixMin + name);
+                Counter maxCounter = profile.getCounter(mergedInfoPrefixMax + name);
+                counters.add(Triple.of(counter, minCounter, maxCounter));
             }
             Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(type, counters);
 
             Counter counter0 = profile0.getCounter(name);
-            // As memtioned before, some counters may only attach one of the isomorphic profiles
+            // As memtioned before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == null) {
-                counter0 = profile0.addCounter(name, type, "");
+                counter0 = profile0.addCounter(name, type);
             }
             counter0.setValue(mergedInfo.mergedValue);
 
             // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-            // TODO(hcf) is there a better way to tell whether save extra info or not
-            if (Counter.isAverageType(counter0.getType()) &&
-                    mergedInfo.maxValue - mergedInfo.minValue >
-                            2 * mergedInfo.mergedValue) {
-                Counter minCounter =
-                        profile0.addCounter(mergedInfoPrefixMin + name, type, name);
-                Counter maxCounter =
-                        profile0.addCounter(mergedInfoPrefixMax + name, type, name);
-                minCounter.setValue(mergedInfo.minValue);
-                maxCounter.setValue(mergedInfo.maxValue);
+            double diff = mergedInfo.maxValue - mergedInfo.minValue;
+            if (Counter.isAverageType(counter0.getType())) {
+                if (diff > 5000000L && diff > mergedInfo.mergedValue / 5) {
+                    Counter minCounter =
+                            profile0.addCounter(mergedInfoPrefixMin + name, type, name);
+                    Counter maxCounter =
+                            profile0.addCounter(mergedInfoPrefixMax + name, type, name);
+                    minCounter.setValue(mergedInfo.minValue);
+                    maxCounter.setValue(mergedInfo.maxValue);
+                }
+            } else {
+                if (diff > mergedInfo.minValue) {
+                    Counter minCounter =
+                            profile0.addCounter(mergedInfoPrefixMin + name, type, name);
+                    Counter maxCounter =
+                            profile0.addCounter(mergedInfoPrefixMax + name, type, name);
+                    minCounter.setValue(mergedInfo.minValue);
+                    maxCounter.setValue(mergedInfo.maxValue);
+                }
             }
         }
 
@@ -559,4 +588,3 @@ public class RuntimeProfile {
         }
     }
 }
-

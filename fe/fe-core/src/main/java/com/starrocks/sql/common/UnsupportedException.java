@@ -1,14 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.common;
 
-import static java.lang.String.format;
-
 public class UnsupportedException extends StarRocksPlannerException {
-    private UnsupportedException(String formatString, Object... args) {
-        super(format(formatString, args), ErrorType.UNSUPPORTED);
+    private UnsupportedException(String formatString) {
+        super(formatString, ErrorType.UNSUPPORTED);
     }
 
-    public static UnsupportedException unsupportedException(String formatString, Object... args) {
-        throw new UnsupportedException(format(formatString, args));
+    public static UnsupportedException unsupportedException(String formatString) {
+        throw new UnsupportedException(formatString);
     }
 }

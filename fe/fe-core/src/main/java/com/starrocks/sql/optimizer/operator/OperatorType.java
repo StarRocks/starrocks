@@ -76,6 +76,7 @@ public enum OperatorType {
     SCALAR,
     ARRAY,
     ARRAY_ELEMENT,
+    ARRAY_SLICE,
     VARIABLE,
     CONSTANT,
     CALL,

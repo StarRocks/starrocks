@@ -1,7 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
+import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -123,5 +136,33 @@ public class StatementPlanner {
 
         ResultSink resultSink = (ResultSink) topFragment.getSink();
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
+    }
+
+    public static boolean supportedByNewParser(StatementBase statement) {
+        return statement instanceof AlterViewStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof InsertStmt
+                || statement instanceof QueryStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt;
+    }
+
+    public static boolean supportedByNewAnalyzer(StatementBase statement) {
+        return statement instanceof AlterViewStmt
+                || statement instanceof AlterWorkGroupStmt
+                || statement instanceof CreateTableAsSelectStmt
+                || statement instanceof CreateViewStmt
+                || statement instanceof CreateWorkGroupStmt
+                || statement instanceof DropWorkGroupStmt
+                || statement instanceof InsertStmt
+                || statement instanceof QueryStatement
+                || statement instanceof ShowColumnStmt
+                || statement instanceof ShowDbStmt
+                || statement instanceof ShowTableStmt
+                || statement instanceof ShowTableStatusStmt
+                || statement instanceof ShowVariablesStmt
+                || statement instanceof ShowWorkGroupStmt;
     }
 }

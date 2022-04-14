@@ -13,20 +13,11 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeInsertTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeInsertTest/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -44,5 +35,9 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into tarray(v1,v4) values (1,[NULL,9223372036854775808])");
 
         analyzeFail("insert into t0 values (170141183460469231731687303715884105728)", "Number Overflow. literal");
+
+        analyzeFail("insert into tall(ta) values(min('x'))", "Values clause cannot contain aggregations");
+        analyzeFail("insert into tall(ta) values(case min('x') when 'x' then 'x' end)", "Values clause cannot contain aggregations");
+        analyzeFail("insert into tall(ta) values(min('x') over())", "Values clause cannot contain window function");
     }
 }

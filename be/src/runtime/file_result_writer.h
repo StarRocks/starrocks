@@ -98,11 +98,11 @@ private:
     int _file_idx = 0;
 
     RuntimeProfile* _parent_profile; // profile from result sink, not owned
-    // total time cost on append batch opertion
-    RuntimeProfile::Counter* _append_row_batch_timer = nullptr;
-    // tuple convert timer, child timer of _append_row_batch_timer
+    // total time cost on append chunk operation
+    RuntimeProfile::Counter* _append_chunk_timer = nullptr;
+    // tuple convert timer, child timer of _append_chunk_timer
     RuntimeProfile::Counter* _convert_tuple_timer = nullptr;
-    // file write timer, child timer of _append_row_batch_timer
+    // file write timer, child timer of _append_chunk_timer
     RuntimeProfile::Counter* _file_write_timer = nullptr;
     // time of closing the file writer
     RuntimeProfile::Counter* _writer_close_timer = nullptr;

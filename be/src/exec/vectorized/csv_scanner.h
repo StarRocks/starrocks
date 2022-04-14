@@ -50,7 +50,7 @@ private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
     Status _parse_csv(Chunk* chunk);
-    ChunkPtr _materialize(ChunkPtr& src_chunk);
+    StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;

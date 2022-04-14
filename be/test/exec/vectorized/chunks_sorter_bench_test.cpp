@@ -120,19 +120,19 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
 
         switch (sorter_algo) {
         case FullSort: {
-            sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
+            sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "",
                                                   config::vector_chunk_size));
             expected_rows = total_rows;
             break;
         }
         case HeapSort: {
-            sorter.reset(new HeapChunkSorter(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
+            sorter.reset(new HeapChunkSorter(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
                                              limit_rows, config::vector_chunk_size));
             expected_rows = limit_rows;
             break;
         }
         case MergeSort: {
-            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, 0,
+            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
                                               limit_rows));
             expected_rows = limit_rows;
             break;

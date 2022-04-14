@@ -117,6 +117,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // for chunk arrival and blocked on receive queues of its exchange node, so among
     // threads allocated for a query in the old execution engine, only small number of
     // them do the real work on core.
+    public static final String ENABLE_PIPELINE = "enable_pipeline";
+
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
@@ -191,8 +193,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
-    @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
-    private boolean enablePipelineEngine = false;
+    public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+
+    @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
+    private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
+    private long runtimeFilterScanWaitTime = 20L;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
@@ -491,6 +498,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    public long getRuntimeFilterScanWaitTime() {
+        return runtimeFilterScanWaitTime;
+    }
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
     }
@@ -797,6 +807,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableResourceGroup = enableResourceGroup;
     }
 
+    public void setPipelineDop(int pipelineDop) {
+        this.pipelineDop = pipelineDop;
+    }
+
     public int getPipelineDop() {
         return this.pipelineDop;
     }
@@ -925,6 +939,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         final int global_runtime_filter_rpc_timeout = 400;
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
         switch (pipelineProfileLevel) {
             case 0:

@@ -292,7 +292,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Statistics.Builder estimateHMSTableScanColumns(Table table, long tableRowCount,
-                                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
         Statistics.Builder builder = Statistics.builder();
 
@@ -307,11 +307,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
                                 computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
-                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                                new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                        hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                        hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
-                        .collect(Collectors.toList());
+                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
+                    return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues());
+                }).collect(Collectors.toList());
             } else {
                 LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
             }
@@ -542,7 +543,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * 3. use totalBytes / schema size to compute if partition stats is missing
      */
     private long computeHMSTableTableRowCount(Table table, Collection<Long> selectedPartitionIds,
-                                          Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
+                                              Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
 
         long numRows = -1;
@@ -1227,10 +1228,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (predicateList.isEmpty()) {
             return statistics;
         }
+
+        Statistics result = statistics;
         for (ScalarOperator predicate : predicateList) {
-            statistics = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
         }
-        return statistics;
+
+        // avoid sample statistics filter all data, save one rows least
+        if (statistics.getOutputRowCount() > 0 && result.getOutputRowCount() == 0) {
+            return Statistics.buildFrom(result).setOutputRowCount(1).build();
+        }
+        return result;
     }
 
     @Override

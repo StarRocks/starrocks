@@ -223,6 +223,15 @@ TEST_F(ArrayFunctionsTest, array_length) {
         EXPECT_EQ(2, result->get(5).get_int32());
         EXPECT_EQ(3, result->get(6).get_int32());
     }
+
+    // [] only null
+    {
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 1);
+
+        auto result = ArrayFunctions::array_length(nullptr, {c});
+        EXPECT_EQ(1, result->size());
+        EXPECT_TRUE(result->is_null(0));
+    }
 }
 
 // NOLINTNEXTLINE

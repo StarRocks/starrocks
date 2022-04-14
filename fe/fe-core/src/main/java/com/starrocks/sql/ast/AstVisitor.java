@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
@@ -108,40 +109,40 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitQueryStatement(QueryStatement node, C context) {
-        return visitStatement(node, context);
+    public R visitQueryStatement(QueryStatement statement, C context) {
+        return visitStatement(statement, context);
     }
 
-    public R visitInsertStatement(InsertStmt node, C context) {
-        return visitStatement(node, context);
+    public R visitInsertStatement(InsertStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitShowStatement(ShowStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitShowTableStmt(ShowTableStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowTableStmt(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowDatabasesStmt(ShowDbStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowWorkGroupStmt(ShowWorkGroupStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowWorkGroupStmt(ShowWorkGroupStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowVariablesStmt(ShowVariablesStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowColumnStmt(ShowColumnStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowColumnStmt(ShowColumnStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
-    public R visitShowTableStatusStmt(ShowTableStatusStmt node, C context) {
-        return visitShowStatement(node, context);
+    public R visitShowTableStatusStmt(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ----------------- Relation ---------------
@@ -221,6 +222,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitArrayElementExpr(ArrayElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitArraySliceExpr(ArraySliceExpr node, C context) {
         return visitExpression(node, context);
     }
 

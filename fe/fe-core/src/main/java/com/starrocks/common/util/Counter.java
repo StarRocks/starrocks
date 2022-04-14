@@ -22,6 +22,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.thrift.TUnit;
+import org.apache.commons.lang3.tuple.Triple;
 
 import java.util.List;
 
@@ -62,18 +63,30 @@ public class Counter {
      * Merge all the isomorphic counters
      * The exact semantics of merge depends on TUnit
      */
-    public static MergedInfo mergeIsomorphicCounters(TUnit type, List<Counter> counters) {
+    public static MergedInfo mergeIsomorphicCounters(TUnit type, List<Triple<Counter, Counter, Counter>> counters) {
         long mergedValue = 0;
         long minValue = Long.MAX_VALUE;
         long maxValue = Long.MIN_VALUE;
 
-        for (Counter counter : counters) {
+        for (Triple<Counter, Counter, Counter> triple : counters) {
+            Counter counter = triple.getLeft();
+            Counter minCounter = triple.getMiddle();
+            Counter maxCounter = triple.getRight();
+
+            if (minCounter != null && minCounter.getValue() < minValue) {
+                minValue = minCounter.getValue();
+            }
             if (counter.getValue() < minValue) {
                 minValue = counter.getValue();
+            }
+
+            if (maxCounter != null && maxCounter.getValue() > maxValue) {
+                maxValue = maxCounter.getValue();
             }
             if (counter.getValue() > maxValue) {
                 maxValue = counter.getValue();
             }
+
             mergedValue += counter.getValue();
         }
 

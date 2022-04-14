@@ -297,4 +297,25 @@ public class CTEPlanTest extends PlanTestBase {
                 "  |  predicates: 4: v1 = 2\n" +
                 "  |  limit: 10"));
     }
+
+    @Test
+    public void testLeftJoinCTEWithConstOnPredicates() throws Exception {
+        String sql1 = "WITH \n" +
+                "    w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT * \n" +
+                "FROM t1 LEFT JOIN w_t0 \n" +
+                "ON t1.v4 = w_t0.v1 \n" +
+                "AND false;\n";
+
+        getFragmentPlan(sql1);
+
+        String sql2 = "WITH \n" +
+                "    w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT * \n" +
+                "FROM w_t0 LEFT JOIN t1 \n" +
+                "ON t1.v4 = w_t0.v1 \n" +
+                "AND true;\n";
+
+        getFragmentPlan(sql2);
+    }
 }

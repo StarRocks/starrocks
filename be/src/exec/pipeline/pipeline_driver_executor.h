@@ -48,10 +48,11 @@ public:
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
-    void worker_thread();
-    void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    void update_profile_by_level(FragmentContext* fragment_ctx, bool done);
-    void remove_non_core_metrics(FragmentContext* fragment_ctx, std::vector<RuntimeProfile*>& driver_profiles);
+    void _worker_thread();
+    void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
+    void _update_profile_by_level(FragmentContext* fragment_ctx, bool done);
+    void _remove_non_core_metrics(FragmentContext* fragment_ctx, std::vector<RuntimeProfile*>& driver_profiles);
+    void _simplify_common_metrics(RuntimeProfile* driver_profile);
 
 private:
     LimitSetter _num_threads_setter;

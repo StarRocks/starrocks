@@ -13,8 +13,9 @@ namespace starrocks::vectorized {
 
 ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                    const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                                   size_t offset, size_t limit, size_t size_of_chunk_batch)
-        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, size_of_chunk_batch),
+                                   const std::string& sort_keys, size_t offset, size_t limit,
+                                   size_t size_of_chunk_batch)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true, size_of_chunk_batch),
           _offset(offset),
           _limit(limit),
           _init_merged_segment(false) {
@@ -462,6 +463,11 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         // take sort_row_number rows from permutations.second merge-sort with _merged_segment.
         _merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, permutation_size, new_permutation.second);
 
+        if (big_chunk->reach_capacity_limit()) {
+            LOG(WARNING) << "TopN sort encounter big chunk overflow";
+            return Status::InternalError(fmt::format("TopN sort encounter big chunk overflow"));
+        }
+
         DataSegment merged_segment;
         merged_segment.init(_sort_exprs, big_chunk);
 
@@ -478,9 +484,9 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         sort_row_number = permutation_size;
     }
 
-    if (sort_row_number > std::numeric_limits<uint32_t>::max()) {
-        LOG(WARNING) << "full sort row is " << sort_row_number;
-        return Status::InternalError("Full sort in single query instance only support at most 4294967295 rows");
+    if (sort_row_number > Column::MAX_CAPACITY_LIMIT) {
+        LOG(WARNING) << "topn sort row exceed rows limit " << sort_row_number;
+        return Status::InternalError(fmt::format("TopN sort exceed rows limit {}", sort_row_number));
     }
 
     ChunkPtr big_chunk;
@@ -492,6 +498,11 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         auto& permutation = new_permutation[index_of_merging];
         big_chunk->append_safe(*segments[permutation.chunk_index].chunk, permutation.index_in_chunk, 1);
         ++index_of_merging;
+    }
+
+    if (big_chunk->reach_capacity_limit()) {
+        LOG(WARNING) << "TopN sort encounter big chunk overflow";
+        return Status::InternalError("TopN sort encounter big chunk overflow");
     }
 
     _merged_segment.init(_sort_exprs, big_chunk);

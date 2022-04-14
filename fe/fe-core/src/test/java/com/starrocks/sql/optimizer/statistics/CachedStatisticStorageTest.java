@@ -29,9 +29,6 @@ import java.util.List;
 import java.util.UUID;
 
 public class CachedStatisticStorageTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    public static String runningDir = "fe/mocked/StatisticsTest/" + UUID.randomUUID().toString() + "/";
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
@@ -73,7 +70,7 @@ public class CachedStatisticStorageTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

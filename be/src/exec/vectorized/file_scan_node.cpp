@@ -48,17 +48,17 @@ Status FileScanNode::prepare(RuntimeState* state) {
 
     // Profile
     _wait_scanner_timer = ADD_TIMER(runtime_profile(), "WaitScannerTime");
-    _scanner_total_timer = ADD_TIMER(runtime_profile(), "ScannerTotalTimer");
+    _scanner_total_timer = ADD_TIMER(runtime_profile(), "ScannerTotalTime");
 
     RuntimeProfile* p = runtime_profile()->create_child("FileScanner", true, true);
 
-    _scanner_fill_timer = ADD_TIMER(p, "FillTimer");
-    _scanner_read_timer = ADD_TIMER(p, "ReadTimer");
-    _scanner_cast_chunk_timer = ADD_TIMER(p, "CastChunkTimer");
-    _scanner_materialize_timer = ADD_TIMER(p, "MaterializeTimer");
-    _scanner_init_chunk_timer = ADD_TIMER(p, "CreateChunkTimer");
+    _scanner_fill_timer = ADD_TIMER(p, "FillTime");
+    _scanner_read_timer = ADD_TIMER(p, "ReadTime");
+    _scanner_cast_chunk_timer = ADD_TIMER(p, "CastChunkTime");
+    _scanner_materialize_timer = ADD_TIMER(p, "MaterializeTime");
+    _scanner_init_chunk_timer = ADD_TIMER(p, "CreateChunkTime");
 
-    _scanner_file_reader_timer = ADD_TIMER(p->create_child("FilePRead", true, true), "FileReadTimer");
+    _scanner_file_reader_timer = ADD_TIMER(p->create_child("FilePRead", true, true), "FileReadTime");
 
     return Status::OK();
 }

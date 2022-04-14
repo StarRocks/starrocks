@@ -7,12 +7,15 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterDescription;
+import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // this class is to describe a runtime filter.
 // this class is almost identical to TRuntimeFilterDescription in PlanNodes.thrift
@@ -28,6 +31,13 @@ public class RuntimeFilterDescription {
     private final List<TNetworkAddress> mergeNodes;
     private HashJoinNode.DistributionMode joinMode;
     private TUniqueId senderFragmentInstanceId;
+
+
+
+    private Set<TUniqueId> broadcastGRFSenders;
+
+
+    private List<TRuntimeFilterDestination> broadcastGRFDestinations;
     private int equalCount;
     private int crossExchangeNodeTimes;
     private boolean equalForNull;
@@ -172,6 +182,14 @@ public class RuntimeFilterDescription {
         senderFragmentInstanceId = value;
     }
 
+    public void setBroadcastGRFSenders(Set<TUniqueId> broadcastGRFSenders) {
+        this.broadcastGRFSenders = broadcastGRFSenders;
+    }
+
+    public void setBroadcastGRFDestinations(List<TRuntimeFilterDestination> broadcastGRFDestinations) {
+        this.broadcastGRFDestinations = broadcastGRFDestinations;
+    }
+
     public String toExplainString(int probeNodeId) {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);
@@ -201,6 +219,12 @@ public class RuntimeFilterDescription {
         }
         if (senderFragmentInstanceId != null) {
             t.setSender_finst_id(senderFragmentInstanceId);
+        }
+        if (broadcastGRFSenders != null && !broadcastGRFSenders.isEmpty()) {
+            t.setBroadcast_grf_senders(broadcastGRFSenders.stream().collect(Collectors.toList()));
+        }
+        if (broadcastGRFDestinations != null && !broadcastGRFDestinations.isEmpty()) {
+            t.setBroadcast_grf_destinations(broadcastGRFDestinations);
         }
 
         assert (joinMode != HashJoinNode.DistributionMode.NONE);

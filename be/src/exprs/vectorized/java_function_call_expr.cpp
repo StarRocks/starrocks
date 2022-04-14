@@ -136,7 +136,6 @@ struct UDFFunctionCallHelper {
             for (int i = 0; i < num_rows; ++i) {
                 auto data = env->GetObjectArrayElement((jobjectArray)result, i);
                 if (data != nullptr) {
-                    LOG(WARNING) << "result:" << helper.to_string(data);
                     slices[i] = helper.sliceVal((jstring)data, &_data_buffer[i]);
                 } else {
                     null_data[i] = true;
@@ -220,14 +219,15 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
-            const_columns.emplace_back(child->evaluate_const(context));
+            ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
+            const_columns.emplace_back(std::move(child_col));
         }
     }
     auto open_state = [this, scope]() {
         // init class loader and analyzer
         std::string libpath;
         auto function_cache = UserFunctionCache::instance();
-        RETURN_IF_ERROR(function_cache->get_libpath(_fn.id, _fn.hdfs_location, _fn.checksum, &libpath));
+        RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
         _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
         RETURN_IF_ERROR(_func_desc->udf_classloader->init());
         _func_desc->analyzer = std::make_unique<ClassAnalyzer>();

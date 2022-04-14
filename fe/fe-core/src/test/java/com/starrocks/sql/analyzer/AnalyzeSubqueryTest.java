@@ -16,18 +16,11 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeSubqueryTest {
-    private static String runningDir = "fe/mocked/AnalyzeSubquery/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -48,6 +41,7 @@ public class AnalyzeSubqueryTest {
 
         analyzeSuccess(
                 "select v1 from t0 where v2 in (select v4 from t1 where v3 = v5) or v2 = (select v4 from t1 where v3 = v5)");
+        analyzeFail("select v1 from t0 order by (select v4 from t1)", "ORDER BY clause cannot contain subquery");
     }
 
     @Test

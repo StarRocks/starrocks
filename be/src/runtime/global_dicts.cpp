@@ -13,6 +13,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
@@ -156,8 +157,8 @@ private:
     DictOptimizeContext* _dict_opt_ctx;
 };
 
-void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
-                                   int32_t targetSlotId) {
+Status DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
+                                     int32_t targetSlotId) {
     DCHECK(dict_opt_ctx->could_apply_dict_optimize);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
@@ -169,7 +170,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, need_decode_slot_id);
 
-    auto result_column = expr_ctx->evaluate(temp_chunk.get());
+    ASSIGN_OR_RETURN(auto result_column, expr_ctx->evaluate(temp_chunk.get()));
 
     ColumnViewer<TYPE_VARCHAR> viewer(result_column);
     int row_sz = result_column->size();
@@ -223,6 +224,8 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
 
     DCHECK_EQ(_mutable_dict_maps->count(targetSlotId), 0);
     _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
+
+    return Status::OK();
 }
 
 template <bool is_predicate>
@@ -258,7 +261,7 @@ void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx,
     }
 }
 
-void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx) {
+Status DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx) {
     DCHECK_EQ(conjunct->root()->type().type, TYPE_BOOLEAN);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
@@ -270,11 +273,11 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, need_decode_slot_id);
 
-    auto result_column = conjunct->evaluate(temp_chunk.get());
+    ASSIGN_OR_RETURN(auto result_column, conjunct->evaluate(temp_chunk.get()));
     // result always null
     if (result_column->only_null()) {
         dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
-        return;
+        return Status::OK();
     }
     // unpack result column
     result_column = ColumnHelper::unpack_and_duplicate_const_column(result_column->size(), result_column);
@@ -298,11 +301,13 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
             dict_opt_ctx->filter[codes[i]] &= !(null_data[i] == true);
         }
     }
+
+    return Status::OK();
 }
 
 template <bool close_original_expr, bool is_predicate, typename ExprType>
-void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
-                                            const std::vector<SlotId>& slot_ids) {
+Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+                                              const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
@@ -310,9 +315,9 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
         _check_could_apply_dict_optimize<is_predicate>(expr_ctx, &dict_ctx);
         if (dict_ctx.could_apply_dict_optimize) {
             if constexpr (is_predicate) {
-                eval_conjuncts(expr_ctx, &dict_ctx);
+                RETURN_IF_ERROR(eval_conjuncts(expr_ctx, &dict_ctx));
             } else {
-                eval_expr(state, expr_ctx, &dict_ctx, slot_ids[i]);
+                RETURN_IF_ERROR(eval_expr(state, expr_ctx, &dict_ctx, slot_ids[i]));
             }
             auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext(std::move(dict_ctx)));
             auto* replaced_expr = _free_pool.add(new ExprType(*expr_ctx->root(), dict_ctx_handle));
@@ -328,17 +333,19 @@ void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctx
             _expr_close_list.emplace_back(expr_ctx);
         }
     }
+    return Status::OK();
 }
 
 template <bool close_original_expr>
-void DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    _rewrite_expr_ctxs<close_original_expr, true, DictConjunctExpr>(pconjuncts_ctxs, state, std::vector<SlotId>{});
+Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
+    return _rewrite_expr_ctxs<close_original_expr, true, DictConjunctExpr>(pconjuncts_ctxs, state,
+                                                                           std::vector<SlotId>{});
 }
 
-template void DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                          RuntimeState* state);
-template void DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                           RuntimeState* state);
+template Status DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                            RuntimeState* state);
+template Status DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
+                                                             RuntimeState* state);
 
 void DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                        const std::vector<SlotId>& target_slotids) {

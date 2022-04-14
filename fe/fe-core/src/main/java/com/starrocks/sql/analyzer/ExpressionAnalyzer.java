@@ -8,6 +8,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
+import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -28,8 +29,6 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -53,9 +52,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -183,6 +179,16 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitArraySliceExpr(ArraySliceExpr node, Scope scope) {
+            if (!node.getChild(0).getType().isArrayType()) {
+                throw new SemanticException("cannot subscript type" +
+                        node.getChild(0).getType() + " because it is not an array");
+            }
+            node.setType(node.getChild(0).getType());
+            return null;
+        }
+
+        @Override
         public Void visitArrowExpr(ArrowExpr node, Scope scope) {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
@@ -202,9 +208,9 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < node.getChildren().size(); i++) {
                 Type type = node.getChild(i).getType();
                 if (!type.isBoolean() && !type.isNull()) {
-                    throw new SemanticException(
-                            "Operand '%s' part of predicate " + "'%s' should return type 'BOOLEAN' but " +
-                                    "returns type '%s'.", node.toSql(), node.getChild(i).toSql(), type.toSql());
+                    throw new SemanticException("Operand '%s' part of predicate " +
+                            "'%s' should return type 'BOOLEAN' but returns type '%s'.",
+                            AST2SQL.toString(node), AST2SQL.toString(node.getChild(i)), type.toSql());
                 }
             }
 
@@ -441,12 +447,14 @@ public class ExpressionAnalyzer {
 
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
-                        "left operand of " + node.getOp().toString() + " must be of type STRING: " + node.toSql());
+                        "left operand of " + node.getOp().toString() + " must be of type STRING: " +
+                                AST2SQL.toString(node));
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
-                        "right operand of " + node.getOp().toString() + " must be of type STRING: " + node.toSql());
+                        "right operand of " + node.getOp().toString() + " must be of type STRING: " +
+                                AST2SQL.toString(node));
             }
 
             // check pattern
@@ -454,7 +462,7 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + node.toSql() + "'");
+                    throw new SemanticException("Invalid regular expression in '" + AST2SQL.toString(node) + "'");
                 }
             }
 
@@ -486,7 +494,7 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + cast.getTargetTypeDef().getType().toSql() + " in sql `" +
-                        cast.getChild(0).toSql().replace("%", "%%") + "`");
+                        AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 
             cast.setType(castType);
@@ -504,6 +512,7 @@ public class ExpressionAnalyzer {
 
             Function fn;
             String fnName = node.getFnName().getFunction();
+
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
@@ -548,8 +557,7 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                         !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
-                    throw new SemanticException("No matching function with signature: %s(%s).",
-                            fnName,
+                    throw new SemanticException("No matching function with signature: %s(%s).", fnName,
                             node.getParams().isStar() ? "*" : Joiner.on(", ")
                                     .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 }
@@ -755,16 +763,9 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitSubquery(Subquery node, Scope context) {
-            QueryStmt stmt = node.getStatement();
-
-            if (!(stmt instanceof SelectStmt) && node.getQueryRelation() == null) {
-                throw new StarRocksPlannerException("A subquery must contain a single select block",
-                        ErrorType.INTERNAL_ERROR);
-            }
-
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
-            queryAnalyzer.analyze(new QueryStatement(node.getQueryRelation()), context);
-            node.setType(node.getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
+            queryAnalyzer.analyze(node.getQueryStatement(), context);
+            node.setType(node.getQueryStatement().getQueryRelation().getRelationFields().getFieldByIndex(0).getType());
             return null;
         }
 
