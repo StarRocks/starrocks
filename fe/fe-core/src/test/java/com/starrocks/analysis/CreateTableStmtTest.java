@@ -263,7 +263,6 @@ public class CreateTableStmtTest {
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
                 new KeysDesc(KeysType.DUP_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
-        expectedEx.expect(AnalysisException.class);
         stmt.analyze(analyzer);
     }
 
@@ -274,7 +273,6 @@ public class CreateTableStmtTest {
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
                 new KeysDesc(KeysType.UNIQUE_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
-        expectedEx.expect(AnalysisException.class);
         stmt.analyze(analyzer);
     }
 
