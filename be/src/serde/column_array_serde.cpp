@@ -307,11 +307,6 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::LargeBinaryColumn& column) {
-        _size += BinaryColumnSerde::max_serialized_size(column);
-        return Status::OK();
-    }
-
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         _size += FixedLengthColumnSerde<T>::max_serialized_size(column);
