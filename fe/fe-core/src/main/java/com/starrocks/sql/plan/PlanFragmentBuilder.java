@@ -1844,10 +1844,7 @@ public class PlanFragmentBuilder {
                         HashDistributionDesc.SourceType hashSourceType =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
-                        if (hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL)) {
-                            return true;
-                        }
-                        return false;
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
                     });
         }
 
@@ -1861,11 +1858,8 @@ public class PlanFragmentBuilder {
                         HashDistributionDesc.SourceType hashSourceType =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
-                        if (hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE)) {
-                            return true;
-                        }
-                        return false;
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE);
                     });
         }
 
