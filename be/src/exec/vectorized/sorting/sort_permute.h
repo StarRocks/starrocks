@@ -24,6 +24,7 @@ struct PermutationItem {
     uint32_t permutation_index;
 
     PermutationItem() = default;
+    PermutationItem(uint32_t ci, uint32_t ii) : chunk_index(ci), index_in_chunk(ii), permutation_index(0) {}
     PermutationItem(uint32_t ci, uint32_t ii, uint32_t pi)
             : chunk_index(ci), index_in_chunk(ii), permutation_index(pi) {}
 };
