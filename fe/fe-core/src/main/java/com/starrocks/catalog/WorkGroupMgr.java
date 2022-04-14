@@ -384,6 +384,7 @@ public class WorkGroupMgr implements Writable {
         } else {
             WorkGroup workGroup = id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
             ctx.getAuditEventBuilder().setResourceGroup(workGroup.getName());
+            ctx.setWorkGroup(workGroup);
             return workGroup;
         }
     }

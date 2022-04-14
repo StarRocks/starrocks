@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -135,6 +136,10 @@ public class ConnectContext {
 
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
+
+    protected PlannerProfile plannerProfile;
+
+    protected WorkGroup workGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -437,6 +442,18 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
+    }
+
+    public PlannerProfile getPlannerProfile() {
+        return plannerProfile;
+    }
+
+    public WorkGroup getWorkGroup() {
+        return workGroup;
+    }
+
+    public void setWorkGroup(WorkGroup workGroup) {
+        this.workGroup = workGroup;
     }
 
     // kill operation with no protect.

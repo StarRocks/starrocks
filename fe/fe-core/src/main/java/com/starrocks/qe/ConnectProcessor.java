@@ -43,6 +43,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlPacket;
@@ -152,6 +153,7 @@ public class ConnectProcessor {
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+            ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
@@ -418,6 +420,7 @@ public class ConnectProcessor {
         }
         ctx.setCommand(command);
         ctx.setStartTime();
+        ctx.setWorkGroup(null);
 
         switch (command) {
             case COM_INIT_DB:
