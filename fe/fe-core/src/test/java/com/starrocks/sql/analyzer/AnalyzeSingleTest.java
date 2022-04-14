@@ -325,6 +325,15 @@ public class AnalyzeSingleTest {
 
         analyzeSuccess("select right('foo', 1)");
         analyzeSuccess("select left('foo', 1)");
+
+        /**
+         * For support mysql embedded quotation`
+         * In a double-quoted string, two double-quotes are combined into one double-quote
+         */
+        QueryStatement statement = (QueryStatement) analyzeSuccess("select '\"\"' ");
+        Assert.assertEquals("'\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select \"\"\"\" ");
+        Assert.assertEquals("'\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
     }
 
     @Test
