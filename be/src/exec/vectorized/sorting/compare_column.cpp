@@ -156,21 +156,6 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::LargeBinaryColumn& column) {
-        const BinaryColumn::Container& lhs_datas = column.get_data();
-        Slice rhs_data = _rhs_value.get<Slice>();
-
-        if (_sort_order == 1) {
-            auto cmp = [&](int lhs_row) { return SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
-        } else {
-            auto cmp = [&](int lhs_row) { return -1 * SorterComparator<Slice>::compare(lhs_datas[lhs_row], rhs_data); };
-            _equal_count = compare_column_helper(_cmp_vector, cmp);
-        }
-
-        return Status::OK();
-    }
-
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         T rhs_data = _rhs_value.get<T>();
