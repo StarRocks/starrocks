@@ -28,6 +28,7 @@
 #include "runtime/tuple_row.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
+#include "storage/storage_engine.h"
 #include "storage/vectorized/delta_writer.h"
 #include "storage/vectorized/memtable.h"
 #include "util/starrocks_metrics.h"
