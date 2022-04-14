@@ -185,6 +185,11 @@ public:
 
     MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
 
+    void compaction_check();
+
+    // public for ut
+    size_t compaction_check_one_round();
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -318,6 +323,10 @@ private:
     std::vector<std::thread> _tablet_checkpoint_threads;
 
     std::thread _compaction_scheduler;
+
+    std::thread _compaction_checker_thread;
+    std::mutex _checker_mutex;
+    std::condition_variable _checker_cv;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;
