@@ -535,16 +535,6 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 }
 
 Status HashJoinNode::_build(RuntimeState* state) {
-    // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
-    // Splice the Chunks from Scan on the right table into a big Chunk
-    // In some scenarios, such as when the left and right tables are selected incorrectly
-    // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
-    // which will cause the output of wrong data.
-    // Currently, a defense needs to be added.
-    // After a better solution is available, the BigChunk mechanism can be removed.
-    if (_ht.get_build_chunk()->reach_capacity_limit()) {
-        return Status::InternalError("Total size of single column exceed the limit of hash join");
-    }
     // build hash table
     SCOPED_TIMER(_build_ht_timer);
     TRY_CATCH_BAD_ALLOC(_ht.build(state));
@@ -668,7 +658,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -706,7 +696,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (!_build_eos) {
-        TRY_CATCH_BAD_ALLOC(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain)));
 
         eval_join_runtime_filters(chunk);
 

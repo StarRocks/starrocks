@@ -84,7 +84,7 @@ PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
     column = ArrayColumn::create(large_elements, offsets);
     for (size_t i = 0; i < 10; i++) {
         large_elements->append(std::to_string(i));
-        offsets->append(i+1);
+        offsets->append(i + 1);
     }
     ASSERT_TRUE(column->has_large_column());
     ret = column->downgrade();
