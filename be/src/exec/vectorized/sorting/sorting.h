@@ -50,5 +50,143 @@ void build_tie_for_column(const ColumnPtr column, Tie* tie);
 // Append rows from permutation
 void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
+
+struct SortDesc {
+    int sort_order;
+    int null_first;
+};
+
+struct SortDescs {
+    std::vector<int> sort_orders;
+    std::vector<int> null_firsts;
+
+    SortDescs() = default;
+    ~SortDescs() = default;
+    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
+            : sort_orders(orders), null_firsts(nulls) {}
+
+    size_t num_columns() const { return sort_orders.size(); }
+
+    SortDesc get_column_desc(int col) const {
+        SortDesc desc;
+        DCHECK_LT(col, sort_orders.size());
+        desc.sort_order = sort_orders[col];
+        desc.null_first = null_firsts[col];
+        return desc;
+    }
+};
+
+struct SortedRun {
+    ChunkPtr chunk;
+    Columns orderby;
+    std::pair<uint32_t, uint32_t> range;
+
+    SortedRun() = default;
+    ~SortedRun() = default;
+    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), orderby(ichunk->columns()), range(0, ichunk->num_rows()) {}
+    SortedRun(ChunkPtr ichunk, const Columns& columns)
+            : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
+    SortedRun(ChunkPtr ichunk, size_t start, size_t end)
+            : chunk(ichunk), orderby(ichunk->columns()), range(start, end) {}
+    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
+    SortedRun& operator=(const SortedRun& rhs) {
+        if (&rhs == this) return *this;
+        chunk = rhs.chunk;
+        orderby = rhs.orderby;
+        range = rhs.range;
+        return *this;
+    }
+
+    size_t num_columns() const { return orderby.size(); }
+    size_t num_rows() const { return range.second - range.first; }
+    const Column* get_column(int index) const { return orderby[index].get(); }
+    bool empty() const { return range.second == range.first; }
+    void reset() {
+        chunk->reset();
+        orderby.clear();
+        range = {};
+    }
+    ChunkUniquePtr clone_chunk() {
+        if (range.first == 0) {
+            return chunk->clone_unique();
+        } else {
+            ChunkUniquePtr cloned = chunk->clone_empty(num_rows() - range.first);
+            cloned->append(*chunk, range.first, num_rows());
+            return cloned;
+        }
+    }
+
+    int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
+        for (int i = 0; i < orderby.size(); i++) {
+            int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
+            if (x != 0) {
+                return x;
+            }
+        }
+        return 0;
+    }
+};
+
+// Merge two sorted cusor
+class MergeTwoCursor {
+public:
+    MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor>&& left_cursor,
+                   std::unique_ptr<SimpleChunkSortCursor>&& right_cursor);
+
+    bool is_data_ready();
+    bool is_eos();
+
+    // Use it as iterator
+    // Return nullptr if no output
+    StatusOr<ChunkUniquePtr> next();
+
+    Status consume_all(ChunkConsumer output);
+    std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
+
+private:
+    ChunkProvider& as_provider() { return _chunk_provider; }
+    StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
+    bool move_cursor();
+
+    SortDescs _sort_desc;
+    SortedRun _left_run;
+    SortedRun _right_run;
+    std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
+    std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
+    ChunkProvider _chunk_provider;
+};
+
+// Merge multiple cursors in cascade way
+class MergeCursorsCascade {
+public:
+    MergeCursorsCascade() = default;
+    ~MergeCursorsCascade() = default;
+
+    Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
+    bool is_data_ready();
+    bool is_eos();
+    ChunkUniquePtr try_get_next();
+    Status consume_all(ChunkConsumer consumer);
+
+private:
+    std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
+    std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
+};
+
+// Merge algorithms
+Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
+                                   Permutation* output);
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
+                                   Permutation* output);
+Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output);
+Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
+                                   std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                   ChunkConsumer consumer);
+
+// Merge in rowwise
+Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
+                                           Permutation* output, size_t limit);
 
 } // namespace starrocks::vectorized
