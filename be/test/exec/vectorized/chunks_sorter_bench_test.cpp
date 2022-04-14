@@ -362,27 +362,7 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
                 num_rows += chunk->num_rows();
             }
         } else {
-            std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
-            for (int run = 0; run < num_runs; run++) {
-                ChunkProvider provider = [&, run](Chunk** output, bool* eos) {
-                    if (!chunk_has_suppliers[run]()) {
-                        return false;
-                    }
-                    if (!chunk_probe_suppliers[run](output)) {
-                        *eos = true;
-                    }
-                    return true;
-                };
-                input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(provider, &sort_exprs));
-            }
-
-            SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
-            std::vector<ChunkUniquePtr> output_chunks;
-            merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
-                num_rows += chunk->num_rows();
-                output_chunks.push_back(std::move(chunk));
-                return Status::OK();
-            });
+            CHECK(false) << "TODO";
         }
     }
     state.SetItemsProcessed(num_rows);
