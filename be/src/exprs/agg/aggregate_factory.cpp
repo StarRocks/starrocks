@@ -16,6 +16,7 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
+#include "exprs/agg/funnel.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
@@ -158,6 +159,11 @@ AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeRetentionAggregateFunction() {
     return std::make_shared<RetentionAggregateFunction>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeFunnelAggregateFunction() {
+    return std::make_shared<FunnelAggregateFunction<PT>>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
@@ -338,14 +344,23 @@ public:
                 auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState>(dict_merge);
             } else if (name == "retention") {
-                auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
+                auto retention = AggregateFactory::MakeRetentionAggregateFunction();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retention);
+            } else if (name == "funnel") {
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    auto funnel = AggregateFactory::MakeFunnelAggregateFunction<arg_type>();
+                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<FunnelState<arg_type>>(funnel);
+                }
             }
         } else {
             if (name == "dict_merge") {
                 return AggregateFactory::MakeDictMergeAggregateFunction();
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
+            } else if (name == "funnel") {
+                if constexpr (arg_type == TYPE_DATETIME || arg_type == TYPE_DATE) {
+                    return AggregateFactory::MakeFunnelAggregateFunction<arg_type>();
+                }
             }
         }
 
@@ -885,6 +900,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
+
+    add_array_mapping<TYPE_DATE, TYPE_BIGINT>("funnel");
+    add_array_mapping<TYPE_DATETIME, TYPE_BIGINT>("funnel");
 
     // sum, avg, distinct_sum use decimal128 as intermediate or result type to avoid overflow
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_avg");

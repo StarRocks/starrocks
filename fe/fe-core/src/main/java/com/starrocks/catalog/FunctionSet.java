@@ -75,6 +75,7 @@ public class FunctionSet {
     public static final String DICT_MERGE = "dict_merge";
     public static final String ANY_VALUE = "any_value";
     public static final String RETENTION = "retention";
+    public static final String FUNNEL = "funnel";
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_OVERLAP = "array_overlap";
@@ -630,6 +631,9 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(FUNNEL, Lists.newArrayList(Type.DATETIME, Type.BIGINT, Type.TINYINT, Type.ARRAY_BOOLEAN), Type.BIGINT, Type.VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FUNNEL, Lists.newArrayList(Type.DATE, Type.BIGINT, Type.TINYINT, Type.ARRAY_BOOLEAN), Type.BIGINT, Type.VARCHAR, false, false, false));
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available

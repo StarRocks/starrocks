@@ -78,6 +78,9 @@ public:
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
     static AggregateFunctionPtr MakeRetentionAggregateFunction();
 
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeFunnelAggregateFunction();
+
     // Hyperloglog functions:
     static AggregateFunctionPtr MakeHllUnionAggregateFunction();
 

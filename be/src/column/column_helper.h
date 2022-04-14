@@ -206,6 +206,11 @@ public:
         return std::static_pointer_cast<Type>(value);
     }
 
+    template <typename Type>
+    static inline const Type* as_raw_column(const Column* value) {
+        return down_cast<const Type*>(value);
+    }
+
     /**
      * Cast columnPtr to special type Column*
      * Plz sure actual column type by yourself
@@ -218,6 +223,12 @@ public:
     template <PrimitiveType Type>
     static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
         return cast_to_raw<Type>(value)->get_data().data();
+    }
+
+    template <PrimitiveType Type>
+    static inline RunTimeCppType<Type> get_const_value(const Column* col) {
+        const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
+        return cast_to_raw<Type>(c)->get_data()[0];
     }
 
     template <PrimitiveType Type>
