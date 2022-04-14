@@ -193,7 +193,10 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
 
     Columns sort_columns;
     for (ExprContext* expr : *_sort_exprs) {
-        sort_columns.push_back(expr->evaluate(chunk));
+        auto column = expr->evaluate(chunk);
+        // TODO: handle failure
+        CHECK(column.ok());
+        sort_columns.push_back(column.value());
     }
     return {ChunkUniquePtr(chunk), sort_columns};
 }
