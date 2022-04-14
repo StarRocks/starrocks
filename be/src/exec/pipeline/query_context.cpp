@@ -3,6 +3,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "util/thread.h"
@@ -16,6 +17,18 @@ QueryContext::QueryContext()
           _deadline(0) {}
 
 QueryContext::~QueryContext() {
+    // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
+    // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
+    // be freed before it is adopted to account memory usage of ChunkAllocator. In destructor of FragmentContextManager,
+    // the per-instance RuntimeStates that contain instance-level MemTracker is freed one by one, if there are
+    // remaining other RuntimeStates after the current RuntimeState is freed, ChunkAllocator uses the MemTracker of the
+    // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
+    // segmentation fault.
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+        _fragment_mgr.reset();
+    }
+
     if (_exec_env != nullptr) {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
