@@ -136,7 +136,10 @@ public:
         if (v1->is_constant()) {
             auto eva1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             ColumnPtr data_column = FN::template evaluate<Type, ResultType, Args...>(eva1, std::forward<Args>(args)...);
-
+            // handle nullable column based on the first item
+            if (data_column->is_nullable() && !data_column->is_null(0)) {
+                data_column = ColumnHelper::as_raw_column<NullableColumn>(data_column)->data_column();
+            }
             return ConstColumn::create(data_column, v1->size());
         } else {
             return FN::template evaluate<Type, ResultType, Args...>(v1, std::forward<Args>(args)...);
