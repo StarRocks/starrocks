@@ -365,16 +365,7 @@ Status JoinHashTable::build(RuntimeState* state) {
         }
     }
 
-    for (auto& column : _table_items->key_columns) {
-        auto ret = column->upgrade_if_overflow();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = ret.value();
-        } else {
-            continue;
-        }
-    }
+    RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
     _hash_map_type = _choose_join_hash_map();
 
@@ -512,6 +503,20 @@ void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
     default:
         break;
     }
+}
+
+Status JoinHashTable::_upgrade_key_columns_if_overflow() {
+    for (auto& column : _table_items->key_columns) {
+        auto ret = column->upgrade_if_overflow();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = ret.value();
+        } else {
+            continue;
+        }
+    }
+    return Status::OK();
 }
 
 JoinHashMapType JoinHashTable::_choose_join_hash_map() {
