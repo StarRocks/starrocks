@@ -233,14 +233,6 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::LargeBinaryColumn& column) {
-        auto& data = column.get_data();
-        for (size_t i = 1; i < column.size(); i++) {
-            (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
-        }
-        return Status::OK();
-    }
-
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         auto& data = column.get_data();
