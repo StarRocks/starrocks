@@ -2,6 +2,9 @@
 
 #include "exprs/vectorized/utility_functions.h"
 
+#include <unistd.h>
+
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
@@ -14,10 +17,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "udf/udf_internal.h"
+#include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/thread.h"
 #include "util/time.h"
@@ -63,36 +68,55 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
     }
 }
 
-ColumnPtr UtilityFunctions::uuid(FunctionContext*, const Columns& columns) {
+ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    auto col = UtilityFunctions::uuid_numeric(ctx, columns);
+    auto& uuid_data = down_cast<Int128Column*>(col.get())->get_data();
+
+    auto res = BinaryColumn::create();
+    auto& bytes = res->get_bytes();
+    auto& offsets = res->get_offset();
+
+    offsets.resize(num_rows + 1);
+    bytes.resize(33 * num_rows);
+
+    char* ptr = reinterpret_cast<char*>(bytes.data());
     for (int i = 0; i < num_rows; ++i) {
-        result.append(generate_uuid_string());
+        int64_t hi = uuid_data[i];
+        int64_t lo = uuid_data[i] >> 64;
+        offsets[i + 1] = offsets[i] + 33;
+
+        to_hex(hi, ptr);
+        ptr[16] = '-';
+        to_hex(lo, ptr + 17);
+
+        ptr += 33;
     }
 
-    return result.build(false);
+    return res;
 }
 
-inline int128_t next_uuid(int64_t timestamp, int16_t backendId, int16_t rand, int16_t tid, int16_t inc) {
+inline int128_t next_uuid(int64_t timestamp, int16_t backendId, int16_t rand, int16_t tid, int32_t inc) {
     union {
         struct {
-            int64_t timestamp;
-            int16_t backendId;
+            int64_t timestamp : 48;
+            int64_t instance : 16;
             int16_t rand;
             int16_t tid;
-            int16_t inc;
+            int32_t inc;
         } data;
         int128_t res;
     } v;
     v.data.timestamp = timestamp;
-    v.data.backendId = backendId;
+    v.data.instance = backendId;
     v.data.rand = rand;
     v.data.tid = tid;
     v.data.inc = inc;
     return v.res;
 }
 
+static std::atomic<int32_t> s_counter{};
 // thread ids
 // The number of executor threads is fixed.
 static std::atomic<int16_t> inc{};
@@ -118,18 +142,18 @@ ColumnPtr UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& column
 
     auto& data = result->get_data();
 
-    int backend_id = std::hash<std::string>()(BackendOptions::get_localhost());
-    backend_id ^= config::brpc_port;
-    // config::brpc_port
+    uint32_t intip;
+    CIDR::ip_to_int(BackendOptions::get_localhost(), &intip);
+    intip ^= config::brpc_port;
     // current thread id
     int tid = get_uniq_tid();
-    int64_t timestamp = MonotonicNanos();
-    int16_t rand = dist(mt);
+    int64_t timestamp = GetCurrentTimeMicros();
 
-    DCHECK_LE(num_rows, std::numeric_limits<int16_t>::max());
+    int16_t rand = dist(mt);
+    int32_t inc = s_counter.fetch_add(num_rows);
 
     for (int i = 0; i < num_rows; ++i) {
-        data[i] = next_uuid(timestamp, backend_id, rand, tid, i);
+        data[i] = next_uuid(timestamp, intip, rand, tid, inc - i);
     }
 
     return result;
