@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.ImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
@@ -112,13 +113,14 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 public class RuleSet {
     private static final Map<RuleSetType, List<Rule>> rewriteRules = Maps.newHashMap();
 
-    private static final List<Rule> implementRules = ImmutableList.of(
+    private static final List<Rule> allImplementRules = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
             new IcebergScanImplementationRule(),
@@ -147,6 +149,8 @@ public class RuleSet {
             new CTEConsumerImplementationRule(),
             new CTEProduceImplementationRule()
     );
+
+    private final List<Rule> implementRules = Lists.newArrayList(allImplementRules);
 
     private final List<Rule> transformRules = Lists.newArrayList();
 
@@ -319,5 +323,15 @@ public class RuleSet {
 
     public List<Rule> getRewriteRulesByType(RuleSetType type) {
         return rewriteRules.get(type);
+    }
+
+    public void removeImplementationRule(Class<? extends ImplementationRule> implementationRuleClass) {
+        Iterator<Rule> iterator = implementRules.iterator();
+        while (iterator.hasNext()) {
+            Rule rule = iterator.next();
+            if (rule.getClass() == implementationRuleClass) {
+                iterator.remove();
+            }
+        }
     }
 }

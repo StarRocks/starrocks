@@ -15,6 +15,8 @@ import com.starrocks.sql.optimizer.rewrite.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -118,6 +120,16 @@ public class Optimizer {
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
+        }
+
+        //remove hashjoin implementRule
+        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+        if ("merge".equals(joinImplementationMode)) {
+            context.getRuleSet().removeImplementationRule(HashJoinImplementationRule.class);
+        }
+
+        if ("hash".equals(joinImplementationMode)) {
+            context.getRuleSet().removeImplementationRule(MergeJoinImplementationRule.class);
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(

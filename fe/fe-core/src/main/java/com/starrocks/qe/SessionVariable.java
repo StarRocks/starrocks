@@ -194,6 +194,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
 
@@ -496,6 +498,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
+
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "auto"; // auto, merge, hash
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
@@ -900,6 +905,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSQLDigest() {
         return enableSQLDigest;
+    }
+
+    public String getJoinImplementationMode() {
+        return joinImplementationMode;
     }
 
     // Serialize to thrift object
