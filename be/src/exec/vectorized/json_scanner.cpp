@@ -360,61 +360,74 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
-    if (_empty_parser) {
-        auto st = _read_and_parse_json();
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
+    int32_t rows_read = 0;
+    while (rows_read < rows_to_read) {
+        if (_empty_parser) {
+            auto st = _read_and_parse_json();
+            if (!st.ok()) {
+                if (st.is_end_of_file()) {
+                    // all data has been exhausted.
+                    return st;
+                }
+                // Parse error.
+                _counter->num_rows_filtered++;
+                _state->append_error_msg_to_file("", st.to_string());
                 return st;
             }
-            // Parse error.
-            _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
+            _empty_parser = false;
+        }
+
+        Status st;
+        // Eliminates virtual function call.
+        if (!_scanner->_root_paths.empty()) {
+            // With json root set, expand the outer array automatically.
+            // The strip_outer_array determines whether to expand the sub-array of json root.
+            if (_scanner->_strip_outer_array) {
+                // Expand outer array automatically according to _is_ndjson.
+                if (_is_ndjson) {
+                    st = _read_rows<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
+                } else {
+                    st = _read_rows<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
+                }
+            } else {
+                if (_is_ndjson) {
+                    st = _read_rows<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
+                } else {
+                    st = _read_rows<JsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
+                }
+            }
+        } else {
+            // Without json root set, the strip_outer_array determines whether to expand outer array.
+            if (_scanner->_strip_outer_array) {
+                st = _read_rows<JsonArrayParser>(chunk, rows_to_read, &rows_read);
+            } else {
+                st = _read_rows<JsonDocumentStreamParser>(chunk, rows_to_read, &rows_read);
+            }
+        }
+
+        if (st.is_end_of_file()) {
+            // the parser is exhausted.
+            _empty_parser = true;
+        } else if (!st.ok()) {
+            chunk->set_num_rows(rows_read);
             return st;
         }
     }
 
-    // Eliminates virtual function call.
-    if (!_scanner->_root_paths.empty()) {
-        // With json root set, expand the outer array automatically.
-        // The strip_outer_array determines whether to expand the sub-array of json root.
-        if (_scanner->_strip_outer_array) {
-            // Expand outer array automatically according to _is_ndjson.
-            if (_is_ndjson) {
-                return _read_chunk<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read);
-            } else {
-                return _read_chunk<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read);
-            }
-        } else {
-            if (_is_ndjson) {
-                return _read_chunk<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read);
-            } else {
-                return _read_chunk<JsonArrayParserWithRoot>(chunk, rows_to_read);
-            }
-        }
-    } else {
-        // Without json root set, the strip_outer_array determines whether to expand outer array.
-        if (_scanner->_strip_outer_array) {
-            return _read_chunk<JsonArrayParser>(chunk, rows_to_read);
-        } else {
-            return _read_chunk<JsonDocumentStreamParser>(chunk, rows_to_read);
-        }
-    }
+    return Status::OK();
 }
 
 template <typename ParserType>
-Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read) {
+Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read) {
     simdjson::ondemand::object row;
-
     auto parser = down_cast<ParserType*>(_parser.get());
 
-    for (int32_t n = 0; n < rows_to_read; n++) {
+    while (*rows_read < rows_to_read) {
         auto st = parser->get_current(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
-                _empty_parser = true;
-                return Status::OK();
+                return st;
             }
-            chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
             _state->append_error_msg_to_file("", st.to_string());
             return st;
@@ -422,7 +435,6 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read) {
 
         st = _construct_row(&row, chunk, _slot_descs);
         if (!st.ok()) {
-            chunk->set_num_rows(n);
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
                 // hence the number of error appended to the file should be limited.
@@ -432,14 +444,13 @@ Status JsonReader::_read_chunk(Chunk* chunk, int32_t rows_to_read) {
                 LOG(WARNING) << "failed to construct row: " << st;
             }
         }
+        ++(*rows_read);
 
         st = parser->advance();
         if (!st.ok()) {
             if (st.is_end_of_file()) {
-                _empty_parser = true;
-                return Status::OK();
+                return st;
             }
-            chunk->set_num_rows(n);
             _counter->num_rows_filtered++;
             _state->append_error_msg_to_file("", st.to_string());
             return st;
