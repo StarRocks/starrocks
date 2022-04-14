@@ -66,7 +66,8 @@ TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_sh
         : _mem_tracker(mem_tracker),
           _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0) {
+          _last_update_stat_ms(0),
+          _cur_shard(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -506,6 +507,39 @@ void TabletManager::get_tablet_stat(TTabletStatResult* result) {
     }
 
     result->__set_tablets_stats(_tablet_stat_cache);
+}
+
+// return true if all tablets have been visited
+bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets) {
+    DCHECK(tablets);
+    if (batch_size == 0) {
+        return false;
+    }
+    size_t size = 0;
+    const auto& tablets_shard = _tablets_shards[_cur_shard];
+    std::shared_lock rlock(tablets_shard.lock);
+    for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+        if (_shard_visited_tablet_ids.find(tablet_id) == _shard_visited_tablet_ids.end()) {
+            tablets->push_back(tablet_ptr);
+            _shard_visited_tablet_ids.insert(tablet_id);
+            ++size;
+            if (size >= batch_size) {
+                // has enough unvisited tablets
+                // also means that not all tablets has been visited
+                return false;
+            }
+        }
+    }
+    // reach here means do not has enough tablets to pick in current shard
+    _shard_visited_tablet_ids.clear();
+    DCHECK(_tablets_shards.size() > 0);
+    _cur_shard = (_cur_shard + 1) % _tablets_shards.size();
+    if (_cur_shard == 0) {
+        // the next shard is 0, then all tablets has been visited
+        return true;
+    } else {
+        return false;
+    }
 }
 
 TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir) {
