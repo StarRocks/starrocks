@@ -423,7 +423,7 @@ public class BDBEnvironment {
                 try {
                     db.close();
                 } catch (DatabaseException exception) {
-                    LOG.error("Error closing db", exception);
+                    LOG.error("Error closing db {}", db.getDbName(), exception);
                     closeSuccess = false;
                 }
             }
@@ -435,7 +435,7 @@ public class BDBEnvironment {
                 try {
                     epochDB.close();
                 } catch (DatabaseException exception) {
-                    LOG.error("Error closing db ", exception);
+                    LOG.error("Error closing db {}", epochDB.getDbName(), exception);
                     closeSuccess = false;
                 }
             }
