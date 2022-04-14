@@ -219,7 +219,8 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     if (_phase == HashJoinPhase::PROBE || _probe_input_chunk != nullptr) {
         DCHECK(_ht_has_remain && _probe_input_chunk);
 
-        TRY_CATCH_BAD_ALLOC(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(
+                RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }
@@ -235,7 +236,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
             return chunk;
         }
 
-        TRY_CATCH_BAD_ALLOC(_ht.probe_remain(state, &chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(state, &chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             enter_eos_phase();
         }
@@ -313,19 +314,8 @@ bool HashJoiner::_has_null(const ColumnPtr& column) {
 }
 
 Status HashJoiner::_build(RuntimeState* state) {
-    // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
-    // Splice the Chunks from Scan on the right table into a big Chunk
-    // In some scenarios, such as when the left and right tables are selected incorrectly
-    // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
-    // which will cause the output of wrong data.
-    // Currently, a defense needs to be added.
-    // After a better solution is available, the BigChunk mechanism can be removed.
-    if (_ht.get_build_chunk()->reach_capacity_limit()) {
-        return Status::InternalError("Total size of single column exceed the limit of hash join");
-    }
-
     SCOPED_TIMER(_build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.build(state));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
     return Status::OK();
 }
 
