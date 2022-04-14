@@ -147,6 +147,9 @@ public:
 
     MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
+    // return true if all tablets visited
+    bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -240,6 +243,10 @@ private:
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
     // last update time of tablet stat cache
     int64_t _last_update_stat_ms;
+
+    // context for compaction checker
+    size_t _cur_shard = 0;
+    std::unordered_set<int64_t> _shard_visited_tablet_ids;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {
