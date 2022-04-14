@@ -76,8 +76,15 @@ public class ConnectContext {
     // mysql net
     protected volatile MysqlChannel mysqlChannel;
     // state
+
     protected volatile QueryState state;
     protected volatile long returnRows;
+
+    protected QueryState state;
+    // error code
+    protected String errorCode;
+    protected long returnRows;
+
     // the protocol capability which server say it can support
     protected volatile MysqlCapability serverCapability;
     // the protocol capability after server and client negotiate
@@ -331,6 +338,14 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public MysqlCapability getCapability() {

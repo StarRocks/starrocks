@@ -144,7 +144,7 @@ public class ConnectProcessor {
         long elapseMs = endTime - ctx.getStartTime();
 
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
-                .setState(ctx.getState().toString()).setQueryTime(elapseMs)
+                .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
                 .setScanRows(statistics == null ? 0 : statistics.scanRows)
                 .setReturnRows(ctx.getReturnRows())
@@ -157,6 +157,7 @@ public class ConnectProcessor {
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 // err query
                 MetricRepo.COUNTER_QUERY_ERR.increase(1L);
+                ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
             } else {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);

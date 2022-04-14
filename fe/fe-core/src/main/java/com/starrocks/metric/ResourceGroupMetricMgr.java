@@ -40,10 +40,13 @@ public class ResourceGroupMetricMgr {
 
     private static final String QUERY_RESOURCE_GROUP = "query_resource_group";
     private static final String QUERY_RESOURCE_GROUP_LATENCY = "query_resource_group_latency";
+    private static final String QUERY_RESOURCE_GROUP_ERR = "query_resource_group_err";
 
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_COUNTER_MAP
             = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, List<GaugeMetricImpl>> RESOURCE_GROUP_QUERY_LATENCY_MAP
+            = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP
             = new ConcurrentHashMap<>();
 
     //starrocks_fe_query_resource_group
@@ -70,6 +73,31 @@ public class ResourceGroupMetricMgr {
             }
         }
         RESOURCE_GROUP_QUERY_COUNTER_MAP.get(resourceGroupName).increase(num);
+    }
+
+    public static void increaseQueryErr(ConnectContext ctx, Long num) {
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        if(!sessionVariable.isEnableResourceGroup()) {
+            return;
+        }
+        WorkGroup workGroup = ctx.getWorkGroup();
+        if(workGroup == null) {
+            LOG.warn("The resource group for calculating query error metrics is empty");
+            return;
+        }
+        String resourceGroupName = workGroup.getName();
+        if(!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)) {
+            synchronized (RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP) {
+                if(!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)){
+                    LongCounterMetric metric = new LongCounterMetric(QUERY_RESOURCE_GROUP_ERR, Metric.MetricUnit.REQUESTS, "query err resource group");
+                    metric.addLabel(new MetricLabel("name", resourceGroupName));
+                    RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.put(resourceGroupName, metric);
+                    MetricRepo.addMetric(metric);
+                    LOG.info("Add {} metric, resource group name is {}", QUERY_RESOURCE_GROUP_ERR, resourceGroupName);
+                }
+            }
+        }
+        RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.get(resourceGroupName).increase(num);
     }
 
     public static void updateQueryLatency(List<QueryDetail> queryList) {
