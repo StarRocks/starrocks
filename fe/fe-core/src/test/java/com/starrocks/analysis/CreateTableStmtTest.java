@@ -238,10 +238,43 @@ public class CreateTableStmtTest {
         ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
         cols.add(col3);
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.AGG_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("AGG_KEYS table should specify aggregate type for non-key column[col3]");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithPrimaryKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        expectedEx.expect(AnalysisException.class);
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithDuplicateKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
                 new KeysDesc(KeysType.DUP_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
         expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("No aggregate function specified for 'col3'");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithUniqueKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.UNIQUE_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        expectedEx.expect(AnalysisException.class);
         stmt.analyze(analyzer);
     }
 
