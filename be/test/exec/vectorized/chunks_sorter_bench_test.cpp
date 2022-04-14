@@ -515,9 +515,6 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
 static void BM_merge_heap(benchmark::State& state) {
     do_merge_bench(state, state.range(0), true);
 }
-static void BM_merge_cascades(benchmark::State& state) {
-    do_merge_bench(state, state.range(0), false);
-}
 static void BM_merge_vertical(benchmark::State& state) {
     do_merge_two_way(state, state.range(0));
 }
@@ -571,7 +568,6 @@ BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'0
 
 // Merge
 BENCHMARK(BM_merge_heap)->DenseRange(2, 64, 4);
-BENCHMARK(BM_merge_cascades)->DenseRange(2, 64, 4);
 BENCHMARK(BM_merge_vertical)->DenseRange(2, 64, 4);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
