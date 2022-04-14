@@ -23,8 +23,8 @@
 
 #include <gtest/gtest.h>
 
-#include "column/fixed_length_column.h"
 #include "column/binary_column.h"
+#include "column/fixed_length_column.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
