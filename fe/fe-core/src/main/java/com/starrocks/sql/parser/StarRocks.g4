@@ -32,6 +32,7 @@ statement
     | CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
         comment?
         partitionExpDesc
+        distributionDesc?
         refreshSchemeDesc
         AS queryStatement
         properties?                                                                     #createMaterializedView
@@ -44,7 +45,7 @@ statement
     ;
 
 partitionExpDesc
-    : PARTITION BY ( DATE_FORMAT '(' identifier '.' identifier ')'
+    : PARTITION BY (identifier '(' identifier '.' identifier (',' string)? ')'
     | identifier '.' identifier )
     ;
 

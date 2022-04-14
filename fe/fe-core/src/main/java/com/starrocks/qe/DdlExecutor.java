@@ -107,6 +107,8 @@ public class DdlExecutor {
             catalog.dropTable((DropTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
             catalog.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
+            catalog.createMaterializedView((CreateMaterializedViewStatement) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
             catalog.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterTableStmt) {

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.PartitionDesc;
 
 import java.util.List;
@@ -13,7 +12,9 @@ public class PartitionExpDesc extends PartitionDesc {
 
     private String columnName;
 
-    private FunctionName functionName;
+    private String functionName;
+
+    private String functionArgs;
 
     public String getTableName() {
         return tableName;
@@ -23,13 +24,18 @@ public class PartitionExpDesc extends PartitionDesc {
         return columnName;
     }
 
-    public FunctionName getFunctionName() {
+    public String getFunctionName() {
         return functionName;
     }
 
-    public PartitionExpDesc(List<String> names, FunctionName functionName) {
+    public String getFunctionArgs() {
+        return functionArgs;
+    }
+
+    public PartitionExpDesc(List<String> names, String functionName, String functionArgs) {
         this.tableName = names.get(0);
         this.columnName = names.get(1);
         this.functionName = functionName;
+        this.functionArgs = functionArgs;
     }
 }

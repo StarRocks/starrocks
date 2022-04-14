@@ -20,7 +20,6 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -33,7 +32,6 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -55,12 +53,10 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -92,15 +88,18 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.PartitionExpDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -157,12 +156,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
-
-
         boolean ifNotExist = context.IF() != null;
         String mvName = context.mvName.getText();
         String comment = context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         PartitionDesc partitionDesc = (PartitionDesc) visit(context.partitionExpDesc());
+
         RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         // get query statement
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -174,19 +172,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
+        DistributionDesc distributionDesc =
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc());
         return new CreateMaterializedViewStatement(mvName, ifNotExist, comment,
-                refreshSchemeDesc, partitionDesc, properties, queryStatement);
+                refreshSchemeDesc, partitionDesc, distributionDesc, properties, queryStatement);
     }
 
     public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
-        FunctionName functionName = null;
-        if (context.DATE_FORMAT() != null) {
-            functionName = new FunctionName("date_format");
+        String functionName = null;
+        String functionArgs = null;
+        if (identifierList.size() == 3) {
+            functionName = identifierList.get(0).getValue().toLowerCase();
+            if (context.string() != null) {
+                functionArgs = context.string().getText();
+            }
+            identifierList.remove(0);
         }
         return new PartitionExpDesc(
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
-                functionName);
+                functionName, functionArgs);
     }
 
     @Override

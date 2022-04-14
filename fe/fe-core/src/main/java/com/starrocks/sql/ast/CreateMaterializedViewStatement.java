@@ -2,13 +2,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.MVColumnItem;
 import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.catalog.*;
-import com.starrocks.common.*;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.KeysType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,10 +44,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private DistributionDesc distributionDesc;
 
-    private String dbName;
-
     private KeysType myKeyType = KeysType.DUP_KEYS;
-
 
     public String getMvName() {
         return mvName;
@@ -91,6 +86,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.partitionDesc = partitionDesc;
     }
 
+    public DistributionDesc getDistributionDesc() {
+        return distributionDesc;
+    }
+
+    public void setDistributionDesc(DistributionDesc distributionDesc) {
+        this.distributionDesc = distributionDesc;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -107,30 +110,28 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.queryStatement = queryStatement;
     }
 
-    private int beginIndexOfAggregation = -1;
-    /**
-     * origin stmt: select k1, k2, v1, sum(v2) from base_table group by k1, k2, v1
-     * mvColumnItemList: [k1: {name: k1, isKey: true, aggType: null, isAggregationTypeImplicit: false},
-     * k2: {name: k2, isKey: true, aggType: null, isAggregationTypeImplicit: false},
-     * v1: {name: v1, isKey: true, aggType: null, isAggregationTypeImplicit: false},
-     * v2: {name: v2, isKey: false, aggType: sum, isAggregationTypeImplicit: false}]
-     * This order of mvColumnItemList is meaningful.
-     **/
-    private List<MVColumnItem> mvColumnItems = new ArrayList<>();
+    private List<Column> mvColumnItems = new ArrayList<>();
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
 
-    private String baseIndexName;
+    public List<Column> getMvColumnItems() {
+        return mvColumnItems;
+    }
 
+    public void setMvColumnItems(List<Column> mvColumnItems) {
+        this.mvColumnItems = mvColumnItems;
+    }
 
     public CreateMaterializedViewStatement(String mvName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, PartitionDesc partitionDesc,
-                                           Map<String, String> properties, QueryStatement queryStatement) {
+                                           DistributionDesc distributionDesc, Map<String, String> properties,
+                                           QueryStatement queryStatement) {
         this.mvName = mvName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.partitionDesc = partitionDesc;
+        this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.queryStatement = queryStatement;
     }
