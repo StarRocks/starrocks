@@ -100,7 +100,7 @@ void ChunkCursor::next_for_pipeline() {
     }
     ++_current_pos;
     if (_current_pos >= _current_chunk->num_rows()) {
-        reset_with_next_chunk_for_pipeline();
+        next_chunk_for_pipeline();
         if (_current_chunk != nullptr) {
             ++_current_pos;
         }
@@ -150,7 +150,7 @@ void ChunkCursor::_reset_with_next_chunk() {
     }
 }
 
-void ChunkCursor::reset_with_next_chunk_for_pipeline() {
+void ChunkCursor::next_chunk_for_pipeline() {
     _current_order_by_columns.clear();
     Chunk* tmp_chunk = nullptr;
     _chunk_probe_supplier(&tmp_chunk);
@@ -159,6 +159,8 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
     if (_current_chunk == nullptr) {
         return;
     }
+    DCHECK(!_current_chunk->is_empty());
+
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {
@@ -189,8 +191,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
     if (!_chunk_provider(&chunk, &_eos) || !chunk) {
         return {nullptr, Columns{}};
     }
-    DCHECK(!!chunk);
-    if (chunk->is_empty()) {
+    if (!chunk || chunk->is_empty()) {
         return {nullptr, Columns{}};
     }
 

@@ -4,6 +4,8 @@
 
 #include <queue>
 
+#include "exec/vectorized/sorting/merge.h"
+#include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 #include "util/runtime_profile.h"
 
@@ -26,8 +28,6 @@ public:
                              const ChunkHasSuppliers& chunk_has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                              const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
     bool is_data_ready();
-    void init_for_min_heap();
-
     void set_profile(RuntimeProfile* profile);
 
     // Return the next sorted chunk from this merger.
@@ -35,30 +35,26 @@ public:
     Status get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
 private:
-    RuntimeState* _state;
+    struct CursorCmpGreater {
+        // if a is greater than b.
+        inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
+    };
+
+    void init_for_min_heap();
     void collect_merged_chunks(ChunkPtr* chunk);
     void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);
+
+    RuntimeState* _state;
+    bool _is_pipeline;
 
     ChunkSupplier _single_supplier;
     ChunkProbeSupplier _single_probe_supplier;
     ChunkHasSupplier _single_has_supplier;
 
-    bool _is_pipeline;
-
-public:
     std::vector<std::unique_ptr<ChunkCursor>> _cursors;
-
-private:
-    struct CursorCmpGreater {
-        // if a is greater than b.
-        inline bool operator()(const ChunkCursor* a, const ChunkCursor* b) { return b->operator<(*a); }
-    };
     CursorCmpGreater _cursor_cmp_greater;
-
-public:
     std::vector<ChunkCursor*> _min_heap;
 
-private:
     RuntimeProfile::Counter* _total_timer = nullptr;
 
     // for multiple suppliers.
@@ -73,7 +69,7 @@ private:
      * _wait_for_data: record is it need to blocking or non-blocking.
      */
     size_t _row_number = 0;
-    ChunkCursor* _cursor;
+    ChunkCursor* _cursor = nullptr;
     ChunkPtr _current_chunk;
     ChunkPtr _result_chunk;
     std::vector<uint32_t> _selective_values;
@@ -83,6 +79,29 @@ private:
     // Actually _wait_for_data is used to distinguish whether to exit
     // because the result is sufficient or the data is insufficient.
     bool _wait_for_data = false;
+};
+
+// Merge sorted chunks in cascade style
+class CascadeChunkMerger {
+public:
+    CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile);
+    ~CascadeChunkMerger() = default;
+
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);
+
+    bool is_data_ready();
+    Status get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
+
+private:
+    RuntimeState* _state;
+    RuntimeProfile* _profile;
+
+    const std::vector<ExprContext*>* _sort_exprs;
+    SortDescs _sort_desc;
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
+
+    std::unique_ptr<MergeCursorsCascade> _merger;
 };
 
 } // namespace vectorized
