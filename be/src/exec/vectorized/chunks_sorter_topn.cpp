@@ -189,7 +189,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
         for (uint32_t i = 0; i < segments.size(); ++i) {
             uint32_t num = segments[i].chunk->num_rows();
             for (uint32_t j = 0; j < num; ++j) {
-                permutation_second[perm_index] = {i, j, perm_index};
+                permutation_second[perm_index] = {i, j};
                 ++perm_index;
             }
         }
@@ -205,7 +205,7 @@ void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t 
         size_t nums = filter_array[i].size();
         for (uint32_t j = 0; j < nums; ++j) {
             if (filter_array[i][j] == DataSegment::BEFORE_LAST_RESULT) {
-                permutation[first_size] = {i, j, first_size};
+                permutation[first_size] = {i, j};
                 ++first_size;
             }
         }
@@ -221,10 +221,10 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
         size_t nums = filter_array[i].size();
         for (uint32_t j = 0; j < nums; ++j) {
             if (filter_array[i][j] == DataSegment::BEFORE_LAST_RESULT) {
-                permutations.first[first_size] = {i, j, first_size};
+                permutations.first[first_size] = {i, j};
                 ++first_size;
             } else if (filter_array[i][j] == DataSegment::IN_LAST_RESULT) {
-                permutations.second[second_size] = {i, j, second_size};
+                permutations.second[second_size] = {i, j};
                 ++second_size;
             }
         }
