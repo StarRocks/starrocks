@@ -419,6 +419,7 @@ static void do_merge_two_way(benchmark::State& state, int num_runs) {
     SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     for (auto _ : state) {
         ChunkPtr merged(chunk1->clone_unique().release());
+        merged->reserve(num_runs * chunk1->num_rows());
         for (int i = 1; i < num_runs; i++) {
             Permutation perm;
             if (i % 2 == 0) {

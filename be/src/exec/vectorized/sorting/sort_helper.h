@@ -296,4 +296,9 @@ static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, c
     return 0;
 }
 
+static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, const Chunk& rhs, size_t lhs_row,
+                                    size_t rhs_row) {
+    return compare_chunk_row(desc, lhs.columns(), rhs.columns(), lhs_row, rhs_row);
+}
+
 } // namespace starrocks::vectorized
