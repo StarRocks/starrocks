@@ -282,7 +282,7 @@ public class UDFHelper {
             throws InvocationTargetException, IllegalAccessException {
         Object[][] inputs = (Object[][]) column;
         Object[] parameter = new Object[inputs.length];
-        int numRows = inputs[0].length;
+        System.out.println(method);
         for (int i = 0; i < numRows; ++i) {
             for (int j = 0; j < column.length; ++j) {
                 parameter[j] = inputs[j][i];
