@@ -19,7 +19,6 @@ import java.util.Set;
 public class LogicalHudiScanOperator extends LogicalScanOperator {
     private final Table.TableType tableType;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-    private Set<String> partitionColumns = Sets.newHashSet();
 
     public LogicalHudiScanOperator(Table table,
                                    Table.TableType tableType,
@@ -56,10 +55,6 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
 
     public Table.TableType getTableType() {
         return tableType;
-    }
-
-    public Set<String> getPartitionColumns() {
-        return partitionColumns;
     }
 
     @Override
