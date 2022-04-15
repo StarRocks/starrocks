@@ -275,22 +275,19 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
     return Status::OK();
 }
 
-
-static inline int compare_chunk_row(const SortDescs& desc, const Chunk& lhs, const Chunk& rhs, size_t lhs_row,
+static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, const Columns& rhs, size_t lhs_row,
                                     size_t rhs_row) {
-    DCHECK_LT(lhs_row, lhs.num_rows());
-    DCHECK_LT(rhs_row, rhs.num_rows());
-    DCHECK_EQ(lhs.num_columns(), rhs.num_columns());
-    DCHECK_LE(desc.num_columns(), lhs.num_columns());
-    DCHECK_LE(desc.num_columns(), rhs.num_columns());
+    DCHECK_EQ(lhs.size(), rhs.size());
+    DCHECK_LE(desc.num_columns(), lhs.size());
+    DCHECK_LE(desc.num_columns(), rhs.size());
 
     int num_columns = desc.num_columns();
     for (int i = 0; i < num_columns; i++) {
         DCHECK(desc.sort_orders[i] == 1 || desc.sort_orders[i] == -1);
         DCHECK(desc.null_firsts[i] == 1 || desc.null_firsts[i] == -1);
 
-        auto& lhs_column = lhs.get_column_by_index(i);
-        auto& rhs_column = rhs.get_column_by_index(i);
+        auto& lhs_column = lhs[i];
+        auto& rhs_column = rhs[i];
         int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.null_firsts[i]);
         if (x != 0) {
             return x * desc.sort_orders[i];
