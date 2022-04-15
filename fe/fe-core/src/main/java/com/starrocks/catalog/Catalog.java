@@ -1010,10 +1010,6 @@ public class Catalog {
                     }
                 }
 
-                if (role == FrontendNodeType.REPLICA) {
-                    // for compatibility
-                    role = FrontendNodeType.FOLLOWER;
-                }
                 break;
             }
 
