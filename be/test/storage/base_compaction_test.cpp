@@ -2,9 +2,9 @@
 
 #include "storage/base_compaction.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "fmt/format.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
