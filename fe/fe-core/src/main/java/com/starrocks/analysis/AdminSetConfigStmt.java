@@ -30,6 +30,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -62,6 +63,10 @@ public class AdminSetConfigStmt extends DdlStmt {
         return configs;
     }
 
+    public void setConfigs(Map<String, String> configs) {
+        this.configs = configs;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
@@ -82,5 +87,10 @@ public class AdminSetConfigStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return redirectStatus;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminSetStatement(this, context);
     }
 }

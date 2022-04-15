@@ -7102,9 +7102,13 @@ public class Catalog {
         db.replayDropFunction(functionSearchDesc);
     }
 
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
+    public void setConfig(AdminSetConfigStmt stmt) throws DdlException, AnalysisException {
         Map<String, String> configs = stmt.getConfigs();
-        Preconditions.checkState(configs.size() == 1);
+        try {
+            Preconditions.checkState(configs.size() == 1);
+        } catch (Exception e) {
+            throw new AnalysisException("config parameter size is not equal to 1", e);
+        }
 
         setFrontendConfig(configs);
 

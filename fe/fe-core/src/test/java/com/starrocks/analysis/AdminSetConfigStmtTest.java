@@ -51,7 +51,7 @@ public class AdminSetConfigStmtTest {
     public void testNormal() throws Exception {
         String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
         AdminSetConfigStmt adminSetConfigStmt =
-                (AdminSetConfigStmt) UtFrameUtils.parseAndAnalyzeStmt(stmt, connectContext);
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
     }
 
@@ -59,7 +59,7 @@ public class AdminSetConfigStmtTest {
     public void testUnknownConfig() throws Exception {
         String stmt = "admin set frontend config(\"unknown_config\" = \"unknown\");";
         AdminSetConfigStmt adminSetConfigStmt =
-                (AdminSetConfigStmt) UtFrameUtils.parseAndAnalyzeStmt(stmt, connectContext);
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
         Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
@@ -68,10 +68,11 @@ public class AdminSetConfigStmtTest {
     @Test
     public void testEmptyConfig() throws Exception {
         String stmt = "admin set frontend config;";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("config parameter size is not equal to 1");
-        AdminSetConfigStmt adminSetConfigStmt =
-                (AdminSetConfigStmt) UtFrameUtils.parseAndAnalyzeStmt(stmt, connectContext);
+        Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
     }
 }
 
