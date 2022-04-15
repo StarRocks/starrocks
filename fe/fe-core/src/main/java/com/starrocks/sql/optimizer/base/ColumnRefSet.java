@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.base;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -21,7 +22,7 @@ public class ColumnRefSet implements Cloneable {
         bitSet.set(id);
     }
 
-    public ColumnRefSet(List<ColumnRefOperator> refs) {
+    public ColumnRefSet(Collection<ColumnRefOperator> refs) {
         bitSet = new BitSet();
         for (ColumnRefOperator ref : refs) {
             bitSet.set(ref.getId());
@@ -74,7 +75,7 @@ public class ColumnRefSet implements Cloneable {
         bitSet.set(ref.getId());
     }
 
-    public void union(List<ColumnRefOperator> refs) {
+    public void union(Collection<ColumnRefOperator> refs) {
         union(new ColumnRefSet(refs));
     }
 
