@@ -36,6 +36,8 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
 
         Preconditions.checkState(table instanceof HudiTable);
         this.tableType = tableType;
+        HudiTable hudiTable = (HudiTable) table;
+        partitionColumns.addAll(hudiTable.getPartitionColumnNames());
     }
 
     private LogicalHudiScanOperator(LogicalHudiScanOperator.Builder builder) {

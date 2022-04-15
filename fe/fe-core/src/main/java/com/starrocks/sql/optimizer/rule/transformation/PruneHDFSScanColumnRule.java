@@ -138,6 +138,10 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             return scanColumns.size() != 0 && !((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
                     scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         }
+        if (scanOperator instanceof LogicalHudiScanOperator) {
+            return scanColumns.size() != 0 && !((LogicalHudiScanOperator) scanOperator).getPartitionColumns().containsAll(
+                    scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
+        }
         return scanColumns.size() != 0;
     }
 
