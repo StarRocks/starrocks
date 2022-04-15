@@ -35,6 +35,12 @@ public class UtilsTest {
         List<String> values = Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE);
         PartitionKey partitionKey = Utils.createPartitionKey(values, partColumns);
         Assert.assertEquals(values, Utils.getPartitionValues(partitionKey));
+
+        List<Column> partColumns1 = Lists.newArrayList(new Column("k1", Type.DATE), new Column("k2", Type.BOOLEAN));
+        PartitionKey partitionKey1 = Utils.createPartitionKey(Lists.newArrayList("2021-01-01", "false"), partColumns1);
+        List<String> partValues1 = Utils.getPartitionValues(partitionKey1);
+        Assert.assertEquals("2021-01-01", partValues1.get(0));
+        Assert.assertEquals("false", partValues1.get(1));
     }
 
     @Test
