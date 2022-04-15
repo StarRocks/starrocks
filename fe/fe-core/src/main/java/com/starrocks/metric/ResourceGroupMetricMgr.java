@@ -52,19 +52,20 @@ public class ResourceGroupMetricMgr {
     //starrocks_fe_query_resource_group
     public static void increaseQuery(ConnectContext ctx, Long num) {
         SessionVariable sessionVariable = ctx.getSessionVariable();
-        if(!sessionVariable.isEnableResourceGroup()) {
+        if (!sessionVariable.isEnableResourceGroup()) {
             return;
         }
         WorkGroup workGroup = ctx.getWorkGroup();
-        if(workGroup == null) {
+        if (workGroup == null) {
             LOG.warn("The resource group for calculating query metrics is empty");
             return;
         }
         String resourceGroupName = workGroup.getName();
-        if(!RESOURCE_GROUP_QUERY_COUNTER_MAP.containsKey(resourceGroupName)) {
+        if (!RESOURCE_GROUP_QUERY_COUNTER_MAP.containsKey(resourceGroupName)) {
             synchronized (RESOURCE_GROUP_QUERY_COUNTER_MAP) {
-                if(!RESOURCE_GROUP_QUERY_COUNTER_MAP.containsKey(resourceGroupName)){
-                    LongCounterMetric metric = new LongCounterMetric(QUERY_RESOURCE_GROUP, Metric.MetricUnit.REQUESTS, "query resource group");
+                if (!RESOURCE_GROUP_QUERY_COUNTER_MAP.containsKey(resourceGroupName)) {
+                    LongCounterMetric metric = new LongCounterMetric(QUERY_RESOURCE_GROUP, Metric.MetricUnit.REQUESTS,
+                            "query resource group");
                     metric.addLabel(new MetricLabel("name", resourceGroupName));
                     RESOURCE_GROUP_QUERY_COUNTER_MAP.put(resourceGroupName, metric);
                     MetricRepo.addMetric(metric);
@@ -77,19 +78,21 @@ public class ResourceGroupMetricMgr {
 
     public static void increaseQueryErr(ConnectContext ctx, Long num) {
         SessionVariable sessionVariable = ctx.getSessionVariable();
-        if(!sessionVariable.isEnableResourceGroup()) {
+        if (!sessionVariable.isEnableResourceGroup()) {
             return;
         }
         WorkGroup workGroup = ctx.getWorkGroup();
-        if(workGroup == null) {
+        if (workGroup == null) {
             LOG.warn("The resource group for calculating query error metrics is empty");
             return;
         }
         String resourceGroupName = workGroup.getName();
-        if(!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)) {
+        if (!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)) {
             synchronized (RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP) {
-                if(!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)){
-                    LongCounterMetric metric = new LongCounterMetric(QUERY_RESOURCE_GROUP_ERR, Metric.MetricUnit.REQUESTS, "query err resource group");
+                if (!RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.containsKey(resourceGroupName)) {
+                    LongCounterMetric metric =
+                            new LongCounterMetric(QUERY_RESOURCE_GROUP_ERR, Metric.MetricUnit.REQUESTS,
+                                    "query err resource group");
                     metric.addLabel(new MetricLabel("name", resourceGroupName));
                     RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP.put(resourceGroupName, metric);
                     MetricRepo.addMetric(metric);
@@ -109,7 +112,7 @@ public class ResourceGroupMetricMgr {
                     && queryDetail.getState() == QueryDetail.QueryMemState.FINISHED
                     && workGroupName != null
                     && !workGroupName.isEmpty()) {
-                if(!latencyMap.containsKey(workGroupName)) {
+                if (!latencyMap.containsKey(workGroupName)) {
                     latencyMap.put(workGroupName, new ArrayList<>());
                     latencySumMap.put(workGroupName, 0L);
                 }
@@ -117,11 +120,11 @@ public class ResourceGroupMetricMgr {
                 latencySumMap.put(workGroupName, latencySumMap.get(workGroupName) + queryDetail.getLatency());
             }
         }
-        for(String resourceGroupName : latencyMap.keySet()){
+        for (String resourceGroupName : latencyMap.keySet()) {
             List<Long> latencyList = latencyMap.get(resourceGroupName);
             Long latencySum = latencySumMap.get(resourceGroupName);
 
-            if(!RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
+            if (!RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
                 createQueryResourceGroupLatency(resourceGroupName);
             }
             List<GaugeMetricImpl> metricList = RESOURCE_GROUP_QUERY_LATENCY_MAP.get(resourceGroupName);
@@ -155,53 +158,60 @@ public class ResourceGroupMetricMgr {
     }
 
     private static void createQueryResourceGroupLatency(String resourceGroupName) {
-        if(RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
+        if (RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
             return;
-        }else {
+        } else {
             GaugeMetricImpl metricMean =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "mean of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "mean of resource group query latency");
             metricMean.addLabel(new MetricLabel("type", "mean"));
             metricMean.addLabel(new MetricLabel("name", resourceGroupName));
             metricMean.setValue(0.0);
             MetricRepo.addMetric(metricMean);
 
             GaugeMetricImpl metric50Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "median of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "median of resource group query latency");
             metric50Quantile.addLabel(new MetricLabel("type", "50_quantile"));
             metric50Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric50Quantile.setValue(0.0);
             MetricRepo.addMetric(metric50Quantile);
 
             GaugeMetricImpl metric75Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "p75 of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "p75 of resource group query latency");
             metric75Quantile.addLabel(new MetricLabel("type", "75_quantile"));
             metric75Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric75Quantile.setValue(0.0);
             MetricRepo.addMetric(metric75Quantile);
 
             GaugeMetricImpl metric90Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "p90 of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "p90 of resource group query latency");
             metric90Quantile.addLabel(new MetricLabel("type", "90_quantile"));
             metric90Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric90Quantile.setValue(0.0);
             MetricRepo.addMetric(metric90Quantile);
 
             GaugeMetricImpl metric95Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "p95 of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "p95 of resource group query latency");
             metric95Quantile.addLabel(new MetricLabel("type", "95_quantile"));
             metric95Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric95Quantile.setValue(0.0);
             MetricRepo.addMetric(metric95Quantile);
 
             GaugeMetricImpl metric99Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "p99 of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "p99 of resource group query latency");
             metric99Quantile.addLabel(new MetricLabel("type", "99_quantile"));
             metric99Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric99Quantile.setValue(0.0);
             MetricRepo.addMetric(metric99Quantile);
 
             GaugeMetricImpl metric999Quantile =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS, "p999 of resource group query latency");
+                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
+                            "p999 of resource group query latency");
             metric999Quantile.addLabel(new MetricLabel("type", "999_quantile"));
             metric999Quantile.addLabel(new MetricLabel("name", resourceGroupName));
             metric999Quantile.setValue(0.0);
