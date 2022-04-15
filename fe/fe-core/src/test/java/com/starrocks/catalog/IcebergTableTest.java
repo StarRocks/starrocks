@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import mockit.Expectations;
 import mockit.Mock;
@@ -64,7 +63,7 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergCatalog(IcebergCatalogType type, String uris) {
+            public IcebergCatalog getIcebergHiveCatalog(String uris) {
                 return icebergCatalog;
             }
         };
