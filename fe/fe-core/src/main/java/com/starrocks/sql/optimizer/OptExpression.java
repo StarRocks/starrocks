@@ -153,7 +153,8 @@ public class OptExpression {
 
     private String explain(String headlinePrefix, String detailPrefix) {
         StringBuilder sb = new StringBuilder();
-        sb.append(headlinePrefix).append(op).append('\n');
+        sb.append(headlinePrefix).
+                append(op.accept(new OptimizerTraceUtil.OperatorTracePrinter(), null)).append('\n');
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
