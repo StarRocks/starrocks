@@ -2140,7 +2140,7 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  155;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "6:Project\n" +
+        assertContains(plan, "7:Project\n" +
                 "  |  <slot 2> : 2: v2");
     }
 
