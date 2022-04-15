@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -888,6 +889,27 @@ public class PlanFragmentBuilder {
 
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                // if user set table_schema or table_name in where condition and is
+                // binary predicate operator, we can set table_schema and table_name
+                // into scan-node, which can reduce time from be to fe
+                if (predicate instanceof BinaryPredicateOperator) {
+                    if (((BinaryPredicateOperator) predicate).getBinaryType() == BinaryPredicateOperator.BinaryType.EQ) {
+                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator) {
+                            ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
+                            ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
+                            switch (columnRefOperator.getName()) {
+                                case "TABLE_SCHEMA":
+                                    scanNode.setSchemaDb(constantOperator.getVarchar());
+                                    break;
+                                case "TABLE_NAME":
+                                    scanNode.setSchemaTable(constantOperator.getVarchar());
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                }
             }
 
             context.getScanNodes().add(scanNode);
