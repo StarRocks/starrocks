@@ -696,6 +696,10 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 // in passthrough style, the number of inflight RPCs of parallel deliveries are issued is not exceeds this limit.
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
+
+// enable optimized implementation of schema change
+CONF_Bool(enable_schema_change_v2, "true");
+
 } // namespace config
 
 } // namespace starrocks
