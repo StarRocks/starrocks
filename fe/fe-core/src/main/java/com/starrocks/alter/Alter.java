@@ -315,7 +315,7 @@ public class Alter {
                                                                                 properties, TTabletMetaType.INMEMORY);
                 } else {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties, 
-                                                                                TTabletMetaType.ENABLEPERSISTENTINDEX);
+                                                                                TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

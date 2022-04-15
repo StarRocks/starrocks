@@ -71,7 +71,7 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
         this(backendId, tableIdWithSchemaHash, metaType);
         if (metaType == TTabletMetaType.INMEMORY) {
             this.isInMemory = metaValue;
-        } else if (metaType == TTabletMetaType.ENABLEPERSISTENTINDEX) {
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             this.enablePersistentIndex = metaValue;
         }
         this.latch = latch;
@@ -158,7 +158,7 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                 }
                 break;
             }
-            case ENABLEPERSISTENTINDEX: {
+            case ENABLE_PERSISTENT_INDEX: {
                 if (latch != null) {
                     // for schema change
                     for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {

@@ -1608,7 +1608,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (metaValue == olapTable.isInMemory()) {
                 return;
             }
-        } else if (metaType == TTabletMetaType.ENABLEPERSISTENTINDEX) {
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;

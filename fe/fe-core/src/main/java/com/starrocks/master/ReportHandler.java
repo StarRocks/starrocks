@@ -1019,7 +1019,7 @@ public class ReportHandler extends Daemon {
         if (!tabletToEnablePersistentIndex.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
-                                                                         TTabletMetaType.ENABLEPERSISTENTINDEX);
+                                                                         TTabletMetaType.ENABLE_PERSISTENT_INDEX);
             batchTask.addTask(task);
             if (FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);

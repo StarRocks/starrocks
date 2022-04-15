@@ -159,7 +159,7 @@ public class AgentTaskTest {
         tabletToMeta.add(new ImmutableTriple<>(tabletId1, schemaHash1, true));
         tabletToMeta.add(new ImmutableTriple<>(tabletId2, schemaHash2, false));
         modifyEnablePersistentIndexTask1 = 
-                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.ENABLEPERSISTENTINDEX);
+                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
         
         // for schema change
         MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(1);
@@ -168,7 +168,7 @@ public class AgentTaskTest {
         countDownLatch.addMark(backendId1, tabletIdWithSchemaHash);
         modifyEnablePersistentIndexTask2 = 
                 new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true, 
-                                             countDownLatch, TTabletMetaType.ENABLEPERSISTENTINDEX);
+                                             countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
         modifyInMemoryTask = 
                 new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.INMEMORY);
     }

@@ -6255,7 +6255,7 @@ public class Catalog {
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties, TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
             modifyTableInMemoryMeta(db, table, properties);
-        } else if (metaType == TTabletMetaType.ENABLEPERSISTENTINDEX) {
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             modifyTableEnablePersistentIndexMeta(db, table, properties);
         }
     }
