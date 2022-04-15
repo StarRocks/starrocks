@@ -93,6 +93,9 @@ struct TDataStreamSink {
   // degree of paralleliasm of destination
   // only used in pipeline engine
   5: optional i32 dest_dop
+
+  // Specify the columns which need to send
+  6: optional list<i32> output_columns;
 }
 
 struct TMultiCastDataStreamSink {
