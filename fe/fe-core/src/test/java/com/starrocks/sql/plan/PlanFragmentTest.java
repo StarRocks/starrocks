@@ -63,6 +63,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testColocateJoinWithProject() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 as a join t0 b on a.v1 = b.v1 and a.v1 = b.v1 + 1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";
