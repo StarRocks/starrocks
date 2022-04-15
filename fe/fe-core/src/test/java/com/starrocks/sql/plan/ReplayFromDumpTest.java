@@ -358,6 +358,24 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testSelectSubqueryWithMultiJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("18:Project\n" +
+                "  |  <slot 36> : bitmap_and(24: expr, 32: bitmap_union)\n" +
+                "  |  \n" +
+                "  17:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----16:EXCHANGE\n" +
+                "  |    \n" +
+                "  10:Project\n" +
+                "  |  <slot 24> : 21: bitmap_union"));
+    }
+
+    @Test
     public void testCountDistinctWithLimit() throws Exception {
         // check use two stage agg
         Pair<QueryDumpInfo, String> replayPair =
