@@ -38,12 +38,10 @@ public:
               _equal_ranges(equal_range),
               _perm(perm) {}
 
-    template <class ColumnType>
-    void do_merge() {
+    template <class Cmp, class LeftEqual, class RightEqual>
+    Status do_merge(Cmp cmp, LeftEqual equal_left, RightEqual equal_right) {
         std::vector<EqualRange> next_ranges;
         next_ranges.reserve(_equal_ranges->size());
-        auto left_col = down_cast<const ColumnType*>(_left_col);
-        auto right_col = down_cast<const ColumnType*>(_right_col);
 
         // Iterate each equal-range
         for (auto equal_range : *_equal_ranges) {
@@ -55,14 +53,12 @@ public:
 
             // Merge rows in the equal-range
             while (lhs < lhs_end || rhs < rhs_end) {
-                auto left_range = fetch_left(left_col, lhs, lhs_end);
-                auto right_range = fetch_right(right_col, rhs, rhs_end);
+                auto left_range = fetch_equal(lhs, lhs_end, equal_left);
+                auto right_range = fetch_equal(rhs, rhs_end, equal_right);
 
-                // TODO: optimize the compare
                 int x = 0;
                 if (lhs < lhs_end && rhs < rhs_end) {
-                    x = left_col->compare_at(left_range.first, right_range.first, *right_col, _null_first);
-                    x *= _sort_order;
+                    x = cmp(left_range.first, right_range.first);
                 } else if (lhs < lhs_end) {
                     x = -1;
                 } else if (rhs < rhs_end) {
@@ -91,33 +87,80 @@ public:
         }
 
         _equal_ranges->swap(next_ranges);
-    }
-
-    template <class ColumnType>
-    Status do_visit(const ColumnType&) {
-        do_merge<ColumnType>();
         return Status::OK();
     }
 
-    template <class ColumnType>
-    EqualRange::Range fetch_left(const ColumnType* left_col, size_t lhs, size_t lhs_end) {
+    template <class Equal>
+    EqualRange::Range fetch_equal(size_t lhs, size_t lhs_end, Equal equal) {
         uint32_t first = lhs;
         uint32_t last = lhs + 1;
-        while (last < lhs_end && left_col->compare_at(last - 1, last, *left_col, _null_first) == 0) {
+        while (last < lhs_end && equal(last - 1, last)) {
             last++;
         }
         return {first, last};
     }
 
+    // General implementation
     template <class ColumnType>
-    EqualRange::Range fetch_right(const ColumnType* right_col, size_t rhs, size_t rhs_end) {
-        uint32_t first = rhs;
-        uint32_t last = rhs + 1;
-        while (last < rhs_end && right_col->compare_at(last - 1, last, *right_col, _null_first) == 0) {
-            last++;
-        }
-        return {first, last};
+    Status do_visit(const ColumnType&) {
+        auto cmp = [&](size_t lhs_index, size_t rhs_index) {
+            int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
+            if (_sort_order == -1) {
+                x *= -1;
+            }
+            return x;
+        };
+        auto equal_left = [&](size_t lhs_index, size_t rhs_index) {
+            return _left_col->compare_at(lhs_index, rhs_index, *_left_col, _null_first) == 0;
+        };
+        auto equal_right = [&](size_t lhs_index, size_t rhs_index) {
+            return _right_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first) == 0;
+        };
+        do_merge(cmp, equal_left, equal_right);
+        return Status::OK();
     }
+
+    template <class Container, class ValueType>
+    Status merge_ordinary_column(const Container& left_data, const Container& right_data) {
+        auto cmp = [&](size_t lhs_index, size_t rhs_index) {
+            int x = SorterComparator<ValueType>::compare(left_data[lhs_index], right_data[rhs_index]);
+            if (_sort_order == -1) {
+                x *= -1;
+            }
+            return x;
+        };
+        auto cmp_left = [&](size_t lhs_index, size_t rhs_index) {
+            return SorterComparator<ValueType>::compare(left_data[lhs_index], left_data[rhs_index]) == 0;
+        };
+        auto cmp_right = [&](size_t lhs_index, size_t rhs_index) {
+            return SorterComparator<ValueType>::compare(right_data[lhs_index], right_data[rhs_index]) == 0;
+        };
+        return do_merge(cmp, cmp_left, cmp_right);
+    }
+
+    // Specific version for FixedlengthColumn
+    template <class T>
+    Status do_visit(const FixedLengthColumn<T>& _) {
+        using ColumnType = const FixedLengthColumn<T>;
+        using Container = typename ColumnType::Container;
+        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
+        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        return merge_ordinary_column<Container, T>(left_data, right_data);
+    }
+
+    template <typename SizeT>
+    Status do_visit(const BinaryColumnBase<SizeT>& _) {
+        using ColumnType = const BinaryColumnBase<SizeT>;
+        using Container = typename ColumnType::Container;
+        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
+        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        return merge_ordinary_column<Container, Slice>(left_data, right_data);
+    }
+
+    // TODO: Murphy
+    // Status do_visit(const NullableColumn& _) {
+    // return Status::NotSupported("TODO");
+    // }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
