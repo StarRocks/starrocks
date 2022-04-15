@@ -81,7 +81,7 @@ public:
 
 private:
     template <typename ParserType>
-    Status _read_chunk(Chunk* chunk, int32_t rows_to_read);
+    Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
     Status _read_and_parse_json();
 
