@@ -459,6 +459,7 @@ Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vert
 
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
     std::vector<const Chunk*> src;
+    src.reserve(chunks.size());
     for (auto& chunk : chunks) {
         src.push_back(chunk.get());
     }
@@ -473,6 +474,7 @@ void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, 
     DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
     for (size_t col_index = 0; col_index < dst->columns().size(); col_index++) {
         Columns tmp_columns;
+        tmp_columns.reserve(chunks.size());
         for (auto chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
         }
