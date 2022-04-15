@@ -35,6 +35,8 @@ statement
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
+    | ADMIN SET FRONTEND CONFIG
+        ('(' property ')')?                                                             #adminSet
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
     ;

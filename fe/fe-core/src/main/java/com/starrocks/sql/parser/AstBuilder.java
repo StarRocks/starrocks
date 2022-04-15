@@ -4,6 +4,7 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -471,6 +472,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitAdminSet(StarRocksParser.AdminSetContext context) {
+        Map<String, String> configs = new HashMap<>();
+        if (context.property() != null) {
+            StarRocksParser.PropertyContext property = context.property();
+            String configKey = property.start.getText().replace("\"", "");
+            String configValue = property.stop.getText().replace("\"", "");
+            configs.put(configKey, configValue);
+            return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+        }
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
     }
 
     @Override
