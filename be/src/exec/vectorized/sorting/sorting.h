@@ -79,6 +79,8 @@ struct SortDescs {
     }
 };
 
+// SortedRun represents part of sorted chunk, specified by the range
+// The chunk is sorted based on `orderby` columns
 struct SortedRun {
     ChunkPtr chunk;
     Columns orderby;
