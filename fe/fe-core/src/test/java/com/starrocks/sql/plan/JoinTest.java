@@ -2245,4 +2245,14 @@ public class JoinTest extends PlanTestBase {
             FeConstants.runningUnitTest = false;
         }
     }
+
+    @Test
+    public void testColocateJoinWithProject() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 as a join t0 b on a.v1 = b.v1 and a.v1 = b.v1 + 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)");
+        FeConstants.runningUnitTest = false;
+    }
 }
