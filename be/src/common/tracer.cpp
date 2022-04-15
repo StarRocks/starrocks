@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2022-present, StarRocks Limited.
 
-#include "tracer.h"
+#include "common/tracer.h"
 
-#include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+#include <opentelemetry/exporters/jaeger/jaeger_exporter.h>
 
 namespace starrocks {
 

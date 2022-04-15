@@ -2,9 +2,10 @@
 
 #pragma once
 
-#include "opentelemetry/sdk/trace/simple_processor.h"
-#include "opentelemetry/sdk/trace/tracer_provider.h"
-#include "opentelemetry/trace/provider.h"
+#include <opentelemetry/exporters/jaeger/jaeger_exporter.h>
+#include <opentelemetry/sdk/trace/simple_processor.h>
+#include <opentelemetry/sdk/trace/tracer_provider.h>
+#include <opentelemetry/trace/provider.h>
 
 namespace starrocks {
 
