@@ -121,8 +121,10 @@ public class Frontend implements Writable {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive && !isReplay) {
-                BDBHA ha = (BDBHA) Catalog.getCurrentCatalog().getHaProtocol();
-                ha.removeUnstableNode(host, Catalog.getCurrentCatalog().getFollowerCnt());
+                if (Catalog.getCurrentCatalog().getHaProtocol() instanceof BDBHA) {
+                    BDBHA ha = (BDBHA) Catalog.getCurrentCatalog().getHaProtocol();
+                    ha.removeUnstableNode(host, Catalog.getCurrentCatalog().getFollowerCnt());
+                }
             }
             isAlive = true;
             queryPort = hbResponse.getQueryPort();
@@ -158,11 +160,6 @@ public class Frontend implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         role = FrontendNodeType.valueOf(Text.readString(in));
-        if (role == FrontendNodeType.REPLICA) {
-            // this is for compatibility.
-            // we changed REPLICA to FOLLOWER
-            role = FrontendNodeType.FOLLOWER;
-        }
         host = Text.readString(in);
         editLogPort = in.readInt();
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
