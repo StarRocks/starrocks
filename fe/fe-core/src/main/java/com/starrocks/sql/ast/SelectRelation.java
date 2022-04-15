@@ -267,9 +267,12 @@ public class SelectRelation extends QueryRelation {
                 || (orderByAnalytic != null && orderByAnalytic.size() > 0);
     }
 
+    public List<OrderByElement> getSortClause() {
+        return sortClause;
+    }
+
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;
     }
 }
-
