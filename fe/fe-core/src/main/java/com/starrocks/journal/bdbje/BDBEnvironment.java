@@ -37,6 +37,7 @@ import com.sleepycat.je.rep.NoConsistencyRequiredPolicy;
 import com.sleepycat.je.rep.NodeType;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
+import com.sleepycat.je.rep.RollbackException;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
@@ -83,16 +84,27 @@ public class BDBEnvironment {
     private List<CloseSafeDatabase> openedDatabases;
 
     // mark whether environment is closing, if true, all calling to environment will fail
-    private boolean closing = false;
+    private volatile boolean closing = false;
 
-    public BDBEnvironment() {
+    private final File envHome;
+    private final String selfNodeName;
+    private final String selfNodeHostPort;
+    private final String helperHostPort;
+    private final boolean isElectable;
+
+    public BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
+                          String helperHostPort, boolean isElectable) {
+        this.envHome = envHome;
+        this.selfNodeName = selfNodeName;
+        this.selfNodeHostPort = selfNodeHostPort;
+        this.helperHostPort = helperHostPort;
+        this.isElectable = isElectable;
         openedDatabases = new ArrayList<>();
         this.lock = new ReentrantReadWriteLock(true);
     }
 
     // The setup() method opens the environment and database
-    public void setup(File envHome, String selfNodeName, String selfNodeHostPort,
-                      String helperHostPort, boolean isElectable) {
+    public void setup() {
 
         this.closing = false;
 
@@ -196,15 +208,14 @@ public class BDBEnvironment {
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
                 break;
             } catch (InsufficientLogException insufficientLogEx) {
-                NetworkRestore restore = new NetworkRestore();
-                NetworkRestoreConfig config = new NetworkRestoreConfig();
-                config.setRetainLogFiles(false); // delete obsolete log files.
-                // Use the members returned by insufficientLogEx.getLogProviders()
-                // to select the desired subset of members and pass the resulting
-                // list as the argument to config.setLogProviders(), if the
-                // default selection of providers is not suitable.
-                restore.execute(insufficientLogEx, config);
+                LOG.warn("insufficient exception, refresh and setup again", insufficientLogEx);
+                refreshLog(insufficientLogEx);
+                close();
+            } catch (RollbackException exception) {
+                LOG.warn("rollback exception, setup again", exception);
+                close();
             } catch (DatabaseException e) {
+                LOG.warn("database exception", e);
                 if (i < RETRY_TIME - 1) {
                     try {
                         Thread.sleep(5 * 1000);
@@ -217,6 +228,17 @@ public class BDBEnvironment {
                 }
             }
         }
+    }
+
+    private void refreshLog(InsufficientLogException insufficientLogEx) {
+        NetworkRestore restore = new NetworkRestore();
+        NetworkRestoreConfig config = new NetworkRestoreConfig();
+        config.setRetainLogFiles(false); // delete obsolete log files.
+        // Use the members returned by insufficientLogEx.getLogProviders()
+        // to select the desired subset of members and pass the resulting
+        // list as the argument to config.setLogProviders(), if the
+        // default selection of providers is not suitable.
+        restore.execute(insufficientLogEx, config);
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
@@ -347,7 +369,14 @@ public class BDBEnvironment {
                 names = replicatedEnvironment.getDatabaseNames();
                 break;
             } catch (InsufficientLogException e) {
-                throw e;
+                LOG.warn("catch insufficient log exception. refresh and setup again.", e);
+                refreshLog(e);
+                close();
+                setup();
+            } catch (RollbackException exception) {
+                LOG.warn("rollback exception, setup again", exception);
+                close();
+                setup();
             } catch (EnvironmentFailureException e) {
                 tried++;
                 if (tried == RETRY_TIME) {
@@ -394,7 +423,7 @@ public class BDBEnvironment {
                 try {
                     db.close();
                 } catch (DatabaseException exception) {
-                    LOG.error("Error closing db {}", db.getDb().getDatabaseName(), exception);
+                    LOG.error("Error closing db {}", db.getDatabaseName(), exception);
                     closeSuccess = false;
                 }
             }
@@ -406,7 +435,7 @@ public class BDBEnvironment {
                 try {
                     epochDB.close();
                 } catch (DatabaseException exception) {
-                    LOG.error("Error closing db {}", epochDB.getDb().getDatabaseName(), exception);
+                    LOG.error("Error closing db {}", epochDB.getDatabaseName(), exception);
                     closeSuccess = false;
                 }
             }
@@ -424,6 +453,7 @@ public class BDBEnvironment {
             }
             LOG.info("close replicated environment end");
         } finally {
+            closing = false;
             lock.writeLock().unlock();
         }
         return closeSuccess;
