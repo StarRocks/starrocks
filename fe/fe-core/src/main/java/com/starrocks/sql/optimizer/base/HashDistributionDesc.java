@@ -50,8 +50,11 @@ public class HashDistributionDesc {
         }
 
         // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
-        if (!(SourceType.LOCAL.equals(sourceType) || SourceType.SHUFFLE_AGG.equals(sourceType)) &&
-                item.columns.size() != this.columns.size()) {
+        if (SourceType.LOCAL.equals(sourceType) || SourceType.SHUFFLE_AGG.equals(sourceType)) {
+            return item.columns.containsAll(this.columns);
+        }
+
+        if (this.columns.size() != item.columns.size()) {
             return false;
         }
 
