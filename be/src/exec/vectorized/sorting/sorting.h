@@ -135,6 +135,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, 
                                    Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
 
 // Merge in rowwise
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,

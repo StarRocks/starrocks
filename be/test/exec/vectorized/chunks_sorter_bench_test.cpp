@@ -269,7 +269,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
     suite.TearDown();
 }
 
-static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merger = true) {
+static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger = true) {
     constexpr int num_columns = 3;
     constexpr int num_chunks_per_run = 8;
 
@@ -398,17 +398,19 @@ static void do_merge_two_way(benchmark::State& state, int num_runs) {
     int64_t num_rows = 0;
     SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     for (auto _ : state) {
-        ChunkPtr merged(chunk1->clone_unique().release());
-        for (int i = 1; i < num_runs; i++) {
-            Permutation perm;
+        ChunkPtr merged;
+        std::vector<ChunkPtr> inputs;
+        size_t input_rows = num_runs * chunk1->num_rows();
+        for (int i = 0; i < num_runs; i++) {
             if (i % 2 == 0) {
-                merge_sorted_chunks_two_way(sort_desc, merged, chunk1, &perm);
-                append_by_permutation(merged.get(), {merged, chunk1}, perm);
+                inputs.push_back(chunk1);
             } else {
-                merge_sorted_chunks_two_way(sort_desc, merged, chunk2, &perm);
-                append_by_permutation(merged.get(), {merged, chunk2}, perm);
+                inputs.push_back(chunk2);
             }
         }
+        merge_sorted_chunks(sort_desc, inputs, &merged);
+        ASSERT_EQ(input_rows, merged->num_rows());
+
         num_rows += merged->num_rows();
     }
 
@@ -493,7 +495,7 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
 
 // Merge sorted runs
 static void BM_merge_heap(benchmark::State& state) {
-    do_merge_bench(state, state.range(0), true);
+    do_heap_merge(state, state.range(0), true);
 }
 static void BM_merge_vertical(benchmark::State& state) {
     do_merge_two_way(state, state.range(0));

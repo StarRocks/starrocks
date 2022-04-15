@@ -243,6 +243,33 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
 }
 
+// Merge multiple chunks in two-way merge
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
+    std::vector<ChunkPtr> current(chunks);
+    while (current.size() > 1) {
+        std::vector<ChunkPtr> next_level;
+        int level_size = current.size() & ~1;
+
+        for (int i = 0; i < level_size; i += 2) {
+            Permutation perm;
+            ChunkPtr left = current[i];
+            ChunkPtr right = current[i + 1];
+            RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, left, right, &perm));
+            ;
+            ChunkPtr merged = left->clone_empty(left->num_rows() + right->num_rows());
+            append_by_permutation(merged.get(), {left, right}, perm);
+            next_level.push_back(merged);
+        }
+        if (current.size() % 2 == 1) {
+            next_level.push_back(current.back());
+        }
+        current = std::move(next_level);
+    }
+    *output = current.front();
+
+    return Status::OK();
+}
+
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left_chunk,
                                            const ChunkPtr right_chunk, Permutation* output, size_t limit) {
     constexpr int kLeftChunkIndex = 0;
