@@ -326,20 +326,20 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPt
         int cmp =
                 compare_chunk_row(descs, left_chunk->columns(), right_chunk->columns(), index_of_left, index_of_right);
         if (cmp <= 0) {
-            output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left, 0));
+            output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left));
             ++index_of_left;
         } else {
-            output->emplace_back(PermutationItem(kRightChunkIndex, index_of_right, 0));
+            output->emplace_back(PermutationItem(kRightChunkIndex, index_of_right));
             ++index_of_right;
         }
         ++index_of_merging;
     }
     while (index_of_left < left_size && index_of_merging < limit) {
-        output->emplace_back(kLeftChunkIndex, index_of_left, 0);
+        output->emplace_back(kLeftChunkIndex, index_of_left);
         ++index_of_left;
     }
     while (index_of_right < right_size && index_of_merging < limit) {
-        output->emplace_back(kRightChunkIndex, index_of_right, 0);
+        output->emplace_back(kRightChunkIndex, index_of_right);
         ++index_of_right;
     }
     return Status::OK();

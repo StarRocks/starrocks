@@ -133,7 +133,7 @@ Status ChunksSorterFullSort::_build_sorting_data(RuntimeState* state) {
 
     _sorted_permutation.resize(row_count);
     for (uint32_t i = 0; i < row_count; ++i) {
-        _sorted_permutation[i] = {0, i, i};
+        _sorted_permutation[i] = {0, i};
     }
 
     return Status::OK();
