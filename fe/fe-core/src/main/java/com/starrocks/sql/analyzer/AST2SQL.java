@@ -394,11 +394,11 @@ public class AST2SQL {
                 output.append(" ").append(visit(node.getChild(childIdx++)));
             }
             while (childIdx + 2 <= node.getChildren().size()) {
-                output.append(" WHEN " + visit(node.getChild(childIdx++)));
-                output.append(" THEN " + visit(node.getChild(childIdx++)));
+                output.append(" WHEN ").append(visit(node.getChild(childIdx++)));
+                output.append(" THEN ").append(visit(node.getChild(childIdx++)));
             }
             if (hasElseExpr) {
-                output.append(" ELSE " + visit(node.getChild(node.getChildren().size() - 1)));
+                output.append(" ELSE ").append(visit(node.getChild(node.getChildren().size() - 1)));
             }
             output.append(" END");
             return output.toString();
@@ -415,9 +415,10 @@ public class AST2SQL {
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
-            if (node.getChildren().size() == 1) {
-                sqlBuilder.append("NOT ");
+            if (CompoundPredicate.Operator.NOT.equals(node.getOp())) {
+                sqlBuilder.append("( NOT ");
                 sqlBuilder.append(printWithParentheses(node.getChild(0)));
+                sqlBuilder.append(" )");
             } else {
                 sqlBuilder.append(printWithParentheses(node.getChild(0)));
                 sqlBuilder.append(" ").append(node.getOp()).append(" ");
@@ -545,16 +546,16 @@ public class AST2SQL {
             if (intervalFirst) {
                 // Non-function-call like version with interval as first operand.
                 strBuilder.append("INTERVAL ");
-                strBuilder.append(visit(node.getChild(1)) + " ");
+                strBuilder.append(visit(node.getChild(1))).append(" ");
                 strBuilder.append(timeUnitIdent);
                 strBuilder.append(" ").append(op.toString()).append(" ");
                 strBuilder.append(visit(node.getChild(0)));
             } else {
                 // Non-function-call like version with interval as second operand.
                 strBuilder.append(visit(node.getChild(0)));
-                strBuilder.append(" " + op.toString() + " ");
+                strBuilder.append(" ").append(op.toString()).append(" ");
                 strBuilder.append("INTERVAL ");
-                strBuilder.append(visit(node.getChild(1)) + " ");
+                strBuilder.append(visit(node.getChild(1))).append(" ");
                 strBuilder.append(timeUnitIdent);
             }
             return strBuilder.toString();
