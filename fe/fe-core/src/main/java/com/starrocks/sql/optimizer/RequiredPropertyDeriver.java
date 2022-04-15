@@ -55,7 +55,12 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
     public Void visitOperator(Operator node, ExpressionContext context) {
         List<PhysicalPropertySet> requiredProps = new ArrayList<>();
         for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
-            requiredProps.add(PhysicalPropertySet.EMPTY);
+            // @todo: resolve required gather property by check child limit
+            if (!node.hasLimit() && context.getChildOperator(childIndex).hasLimit()) {
+                requiredProps.add(createLimitGatherProperty(context.getChildOperator(childIndex).getLimit()));
+            } else {
+                requiredProps.add(PhysicalPropertySet.EMPTY);
+            }
         }
         requiredProperties.add(requiredProps);
         return null;
