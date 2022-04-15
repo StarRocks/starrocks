@@ -3,6 +3,8 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
@@ -32,12 +34,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
@@ -271,7 +275,18 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     @Override
     public PhysicalPropertySet visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         Preconditions.checkState(this.childrenOutputProperties.size() == 1);
-        return requirements;
+
+        List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
+        node.getRepeatColumnRef().forEach(subRefs::retainAll);
+        Set<ColumnRefOperator> allGroupingRefs = Sets.newHashSet();
+
+        node.getRepeatColumnRef().forEach(allGroupingRefs::addAll);
+        allGroupingRefs.removeAll(subRefs);
+
+        DistributionSpec.PropertyInfo propertyInfo =
+                childrenOutputProperties.get(0).getDistributionProperty().getSpec().getPropertyInfo();
+        propertyInfo.nullableColumns.union(allGroupingRefs);
+        return childrenOutputProperties.get(0);
     }
 
     @Override
