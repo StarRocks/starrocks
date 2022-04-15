@@ -77,7 +77,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
-    auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
+    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
         auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existing_fragment_ctx) {
@@ -85,7 +85,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         }
     }
 
-    _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -127,19 +127,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-
-        // init query context
-        if (!existing_query_ctx) {
-            _query_ctx->set_init_wg_cpu_cost(wg->total_cpu_cost());
-            _query_ctx->init_query_begin_time();
-            int64_t mem_limit = wg->big_query_mem_limit();
-            if (mem_limit && mem_limit < wg->mem_tracker()->limit()) {
-                _query_ctx->init_mem_tracker(wg->mem_tracker(), mem_limit);
-            }
-
-            wg->incr_num_queries();
-        }
     }
+
+    _query_ctx->init_query(wg.get());
 
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
@@ -149,28 +139,30 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
-    if (query_options.__isset.mem_limit) {
-        auto copy_query_options = query_options;
-        copy_query_options.mem_limit *= degree_of_parallelism;
-        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id,
-                                                                        copy_query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(
+            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+
+    if (wg != nullptr && wg->use_big_query_mem_limit()) {
+        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
     } else {
-        _fragment_ctx->set_runtime_state(
-                std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
+        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(),
+                                                                      per_instance_mem_limit, degree_of_parallelism);
+        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
     }
+
+    auto query_mem_tracker = _query_ctx->mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
+
     auto* runtime_state = _fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-
-    if (wg) {
-        if (_query_ctx->mem_tracker() != nullptr) {
-            runtime_state->init_mem_trackers(query_id, _query_ctx->mem_tracker());
-        } else {
-            runtime_state->init_mem_trackers(query_id, wg->mem_tracker());
-        }
-    } else {
-        runtime_state->init_mem_trackers(query_id, nullptr);
-    }
+    // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
+    auto instance_mem_limit = query_options.__isset.mem_limit && query_options.mem_limit > 0
+                                      ? query_options.mem_limit * degree_of_parallelism
+                                      : -1L;
+    runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
     runtime_state->set_be_number(backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 

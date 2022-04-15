@@ -130,6 +130,9 @@ public:
     int64_t num_queries() const { return _num_queries; }
 
     int64_t big_query_mem_limit() const { return _big_query_mem_limit; }
+    bool use_big_query_mem_limit() const {
+        return 0 < _big_query_mem_limit && _big_query_mem_limit <= _mem_tracker->limit();
+    }
     int64_t big_query_cpu_core_second_limit() const { return _big_query_cpu_core_second_limit; }
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
 

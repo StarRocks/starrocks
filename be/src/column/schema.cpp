@@ -6,7 +6,14 @@
 
 namespace starrocks::vectorized {
 
-Schema::Schema(Fields fields) : _fields(std::move(fields)) {
+#ifdef BE_TEST
+
+Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS) {}
+
+#endif
+
+Schema::Schema(Fields fields, KeysType keys_type)
+        : _fields(std::move(fields)), _keys_type(static_cast<uint8_t>(keys_type)) {
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);

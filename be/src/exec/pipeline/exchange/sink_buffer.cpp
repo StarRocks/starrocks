@@ -4,7 +4,9 @@
 
 #include <chrono>
 
+#include "fmt/core.h"
 #include "util/time.h"
+#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -36,7 +38,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
-            _mutexes[instance_id.lo] = std::make_unique<std::mutex>();
+            _mutexes[instance_id.lo] = std::make_unique<Mutex>();
 
             PUniqueId finst_id;
             finst_id.set_hi(instance_id.hi);
@@ -58,23 +60,12 @@ SinkBuffer::~SinkBuffer() {
 
     DCHECK(is_finished());
 
-    for (auto& [_, buffer] : _buffers) {
-        while (!buffer.empty()) {
-            auto& request = buffer.front();
-            // Once the request is added to SinkBuffer, its ownership will also be transferred,
-            // so SinkBuffer needs to be responsible for the release of resources
-            request.params->release_finst_id();
-            buffer.pop();
-        }
-    }
+    _buffers.clear();
 }
 
 void SinkBuffer::add_request(TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
-        // Once the request is added to SinkBuffer, its ownership will also be transferred,
-        // so SinkBuffer needs to be responsible for the release of resources
-        request.params->release_finst_id();
         return;
     }
     if (!request.attachment.empty()) {
@@ -83,7 +74,7 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        std::lock_guard<std::mutex> l(*_mutexes[instance_id.lo]);
+        std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
         _buffers[instance_id.lo].push(request);
         _try_to_send_rpc(instance_id);
     }
@@ -258,9 +249,6 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
                 if (request.params->chunks_size() == 0) {
-                    // Once the request is added to SinkBuffer, its ownership will also be transferred,
-                    // so SinkBuffer needs to be responsible for the release of resources
-                    request.params->release_finst_id();
                     continue;
                 } else {
                     request.params->set_eos(false);
@@ -276,7 +264,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
             }
         }
 
-        request.params->set_allocated_finst_id(&_instance_id2finst_id[instance_id.lo]);
+        *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
         request.params->set_sequence(_request_seqs[instance_id.lo]++);
 
         if (!request.attachment.empty()) {
@@ -290,27 +278,29 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
             {
-                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
                 ++_num_finished_rpcs[ctx.instance_id.lo];
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             --_total_in_flight_rpc;
-            _fragment_ctx->cancel(Status::InternalError("transmit chunk rpc failed"));
-            LOG(WARNING) << "transmit chunk rpc failed";
+            std::string err_msg = fmt::format("transmit chunk rpc failed:{}", print_id(ctx.instance_id));
+            _fragment_ctx->cancel(Status::InternalError(err_msg));
+            LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
             Status status(result.status());
             {
-                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
                 ++_num_finished_rpcs[ctx.instance_id.lo];
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
             if (!status.ok()) {
                 _is_finishing = true;
                 _fragment_ctx->cancel(status);
-                LOG(WARNING) << "transmit chunk rpc failed, " << status.message();
+                LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
+                                            status.message());
             } else {
-                std::lock_guard<std::mutex> l(*_mutexes[ctx.instance_id.lo]);
+                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
                 _process_send_window(ctx.instance_id, ctx.sequence);
                 _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
                 _try_to_send_rpc(ctx.instance_id);
@@ -326,9 +316,6 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
 
-        // Once the request is added to SinkBuffer, its ownership will also be transferred,
-        // so SinkBuffer needs to be responsible for the release of resources
-        request.params->release_finst_id();
         return;
     }
 }

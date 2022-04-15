@@ -20,6 +20,7 @@ vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c)
     f.set_is_key(c.is_key());
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
+    f.set_length(c.length());
     return f;
 }
 
@@ -29,7 +30,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
         auto f = convert_field(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
 }
 
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
@@ -47,6 +48,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     }
     starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
+    f.set_length(c.length());
 
     if (type == OLAP_FIELD_TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
@@ -73,7 +75,7 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
         auto f = convert_field_to_format_v2(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
 }
 
 starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
@@ -83,7 +85,7 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
         auto f = convert_field_to_format_v2(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields));
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
 }
 
 ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema) {

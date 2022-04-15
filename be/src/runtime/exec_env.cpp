@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
@@ -132,6 +133,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     _thread_mgr = new ThreadResourceMgr();
+    // query_context_mgr keeps slotted map with 64 slot to reduce contention
+    _query_context_mgr = new pipeline::QueryContextManager(6);
+    RETURN_IF_ERROR(_query_context_mgr->init());
     _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
@@ -474,6 +478,10 @@ void ExecEnv::_destroy() {
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;
+    }
+    if (_query_context_mgr) {
+        delete _query_context_mgr;
+        _query_context_mgr = nullptr;
     }
     if (_mem_tracker) {
         delete _mem_tracker;

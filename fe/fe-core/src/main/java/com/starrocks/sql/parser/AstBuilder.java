@@ -1473,12 +1473,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
             quotedString = context.SINGLE_QUOTED_TEXT().getText();
+            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
         } else {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
+            // For support mysql embedded quotation
+            // In a double-quoted string, two double-quotes are combined into one double-quote
+            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
+                    .replace("\"\"", "\""));
         }
-
-        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
-                .replace("\"\"", "\""));
     }
 
     private static String escapeBackSlash(String str) {

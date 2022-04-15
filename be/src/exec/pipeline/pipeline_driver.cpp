@@ -322,7 +322,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
                     _workgroup->decr_num_queries();
                 }
             }
-            QueryContextManager::instance()->remove(query_id);
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

@@ -2,8 +2,11 @@
 #include "exec/pipeline/query_context.h"
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/workgroup/work_group.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "util/thread.h"
 
 namespace starrocks::pipeline {
 QueryContext::QueryContext()
@@ -14,17 +17,27 @@ QueryContext::QueryContext()
           _deadline(0) {}
 
 QueryContext::~QueryContext() {
+    // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
+    // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
+    // be freed before it is adopted to account memory usage of ChunkAllocator. In destructor of FragmentContextManager,
+    // the per-instance RuntimeStates that contain instance-level MemTracker is freed one by one, if there are
+    // remaining other RuntimeStates after the current RuntimeState is freed, ChunkAllocator uses the MemTracker of the
+    // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
+    // segmentation fault.
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+        _fragment_mgr.reset();
+    }
+
+    // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
+    // in the mid of QueryContext destruction, so use its parent MemTracker.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
     if (_exec_env != nullptr) {
         if (_is_runtime_filter_coordinator) {
             _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
-}
-
-void QueryContext::init_mem_tracker(MemTracker* parent, int64_t limit) {
-    std::string name = print_id(_query_id);
-    _mem_tracker = std::make_shared<starrocks::MemTracker>(limit, name, parent);
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -35,21 +48,100 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
-static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM = 64;
-static constexpr size_t QUERY_CONTEXT_MAP_SLOT_NUM_MASK = (1 << 6) - 1;
+int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
+                                              size_t pipeline_dop) {
+    // no mem_limit
+    if (per_instance_mem_limit == -1) {
+        return -1;
+    }
+    int64_t mem_limit = per_instance_mem_limit;
+    // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
+    static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
+    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop < mem_limit) {
+        mem_limit *= total_fragments() * pipeline_dop;
+    } else {
+        mem_limit = MEM_LIMIT_MAX;
+    }
+    // query's mem_limit never exceeds its parent's limit if it exists
+    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
+}
 
-QueryContextManager::QueryContextManager()
-        : _mutexes(QUERY_CONTEXT_MAP_SLOT_NUM),
-          _context_maps(QUERY_CONTEXT_MAP_SLOT_NUM),
-          _second_chance_maps(QUERY_CONTEXT_MAP_SLOT_NUM) {}
+void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+    std::call_once(_init_mem_tracker_once, [=]() {
+        _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
+        auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        mem_tracker_counter->set(bytes_limit);
+        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+    });
+}
 
-#ifdef BE_TEST
-QueryContextManager::QueryContextManager(int) : QueryContextManager() {}
-#endif
+void QueryContext::init_query(workgroup::WorkGroup* wg) {
+    if (wg == nullptr) {
+        return;
+    }
+    std::call_once(_init_query_once, [=]() {
+        this->set_init_wg_cpu_cost(wg->total_cpu_cost());
+        this->init_query_begin_time();
+        wg->incr_num_queries();
+    });
+}
 
-QueryContextManager::~QueryContextManager() = default;
+QueryContextManager::QueryContextManager(size_t log2_num_slots)
+        : _num_slots(1 << log2_num_slots),
+          _slot_mask(_num_slots - 1),
+          _mutexes(_num_slots),
+          _context_maps(_num_slots),
+          _second_chance_maps(_num_slots) {}
+
+Status QueryContextManager::init() {
+    try {
+        _clean_thread = std::make_shared<std::thread>(_clean_func, this);
+        Thread::set_thread_name(*_clean_thread.get(), "query_ctx_clr");
+        return Status::OK();
+    } catch (...) {
+        return Status::InternalError("Fail to create clean_thread of QueryContextManager");
+    }
+}
+void QueryContextManager::_clean_slot_unlocked(size_t i) {
+    auto& sc_map = _second_chance_maps[i];
+    auto sc_it = sc_map.begin();
+    while (sc_it != sc_map.end()) {
+        if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
+            sc_it = sc_map.erase(sc_it);
+        } else {
+            ++sc_it;
+        }
+    }
+}
+void QueryContextManager::_clean_query_contexts() {
+    for (auto i = 0; i < _num_slots; ++i) {
+        auto& mutex = _mutexes[i];
+        std::unique_lock write_lock(mutex);
+        _clean_slot_unlocked(i);
+    }
+}
+
+void QueryContextManager::_clean_func(QueryContextManager* manager) {
+    while (!manager->_is_stopped()) {
+        manager->_clean_query_contexts();
+        std::this_thread::sleep_for(milliseconds(100));
+    }
+}
+
+size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
+    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+}
+
+QueryContextManager::~QueryContextManager() {
+    if (_clean_thread) {
+        this->_stop_clean_func();
+        _clean_thread->join();
+        clear();
+    }
+}
+
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
@@ -94,7 +186,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
 }
 
 QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
@@ -115,22 +207,13 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
 }
 
 void QueryContextManager::remove(const TUniqueId& query_id) {
-    size_t i = std::hash<size_t>()(query_id.lo) & QUERY_CONTEXT_MAP_SLOT_NUM_MASK;
+    size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
     auto& sc_map = _second_chance_maps[i];
 
     std::unique_lock<std::shared_mutex> write_lock(mutex);
-
-    // clean expired query contexts in sc_map
-    auto sc_it = sc_map.begin();
-    while (sc_it != sc_map.end()) {
-        if (sc_it->second->is_expired()) {
-            sc_it = sc_map.erase(sc_it);
-        } else {
-            ++sc_it;
-        }
-    }
+    _clean_slot_unlocked(i);
     // return directly if query_ctx is absent
     auto it = context_map.find(query_id);
     if (it == context_map.end()) {
@@ -140,7 +223,7 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
     // the query context is really dead, so just cleanup
     if (it->second->is_dead()) {
         context_map.erase(it);
-    } else if (it->second->is_finished()) {
+    } else if (it->second->has_no_active_instances()) {
         // although all of active fragments of the query context terminates, but some fragments maybe comes too late
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished

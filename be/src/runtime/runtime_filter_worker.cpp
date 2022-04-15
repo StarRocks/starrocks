@@ -7,8 +7,10 @@
 #include "exec/pipeline/query_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/runtime_state.h"
@@ -25,6 +27,18 @@ class RuntimeFilterRpcClosure final : public RefCountClosure<PTransmitRuntimeFil
 public:
     int64_t seq = 0;
 };
+
+static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query_id, bool is_pipeline) {
+    if (is_pipeline) {
+        TUniqueId tquery_id;
+        tquery_id.lo = query_id.lo();
+        tquery_id.hi = query_id.hi();
+        auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(tquery_id);
+        return query_ctx == nullptr ? nullptr : query_ctx->mem_tracker();
+    } else {
+        return nullptr;
+    }
+}
 
 static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
                                     int timeout_ms, const PTransmitRuntimeFilterParams& request) {
@@ -170,6 +184,9 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
 
 void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& params,
                                                RuntimeFilterRpcClosure* rpc_closure) {
+    auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
+
     DCHECK(params.is_partial());
     int32_t filter_id = params.filter_id();
     int32_t be_number = params.build_be_number();
@@ -476,19 +493,19 @@ static inline Status receive_total_runtime_filter_pipeline(
     query_id.lo = pb_query_id.lo();
     ExecEnv::GetInstance()->add_rf_event(
             {params.query_id(), params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC_PIPELINE"});
-    auto query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    auto query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     // query_ctx is absent means that the query is finished or any fragments have not arrived, so
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
     if (!query_ctx) {
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
     }
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
-    query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+    query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     if (!query_ctx) {
         return Status::OK();
     }
     // the query is already finished, so it is needless to cache rf.
-    if (query_ctx->is_finished() || query_ctx->is_expired()) {
+    if (query_ctx->has_no_active_instances() || query_ctx->is_expired()) {
         return Status::OK();
     }
 
@@ -521,6 +538,8 @@ static inline Status receive_total_runtime_filter_pipeline(
 
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request,
                                                         RuntimeFilterRpcClosure* rpc_closure) {
+    auto mem_tracker = get_mem_tracker(request.query_id(), request.is_pipeline());
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
     vectorized::JoinRuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
@@ -581,6 +600,9 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
 void RuntimeFilterWorker::_process_send_broadcast_runtime_filter_event(
         PTransmitRuntimeFilterParams&& params, std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms) {
+    auto mem_tracker = get_mem_tracker(params.query_id(), params.is_pipeline());
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
+
     std::random_device rd;
     std::mt19937 rand(rd());
     std::shuffle(destinations.begin(), destinations.end(), rand);

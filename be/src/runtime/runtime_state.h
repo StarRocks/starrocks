@@ -89,6 +89,8 @@ public:
     // This function also initializes a user function mem tracker (in the fourth level).
     void init_mem_trackers(const TUniqueId& query_id, MemTracker* parent = nullptr);
 
+    void init_mem_trackers(int64_t instance_mem_limit, const std::shared_ptr<MemTracker>& query_mem_tracker);
+
     // for ut only
     Status init_instance_mem_tracker();
 
@@ -96,7 +98,7 @@ public:
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
     ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
-
+    pipeline::QueryContext* query_ctx() { return _query_ctx; }
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }

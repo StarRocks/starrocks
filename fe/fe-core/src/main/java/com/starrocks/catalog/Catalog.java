@@ -953,11 +953,6 @@ public class Catalog {
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
                 role = storage.getRole();
-                if (role == FrontendNodeType.REPLICA) {
-                    // for compatibility
-                    role = FrontendNodeType.FOLLOWER;
-                }
-
                 nodeName = storage.getNodeName();
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // In normal case, if ROLE file exist, role and nodeName should both exist.
@@ -1015,10 +1010,6 @@ public class Catalog {
                     }
                 }
 
-                if (role == FrontendNodeType.REPLICA) {
-                    // for compatibility
-                    role = FrontendNodeType.FOLLOWER;
-                }
                 break;
             }
 
@@ -1409,8 +1400,10 @@ public class Catalog {
         // add helper sockets
         if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
             for (Frontend fe : frontends.values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
-                    ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                    if (getHaProtocol() instanceof BDBHA) {
+                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                    }
                 }
             }
         }
@@ -2576,19 +2569,23 @@ public class Catalog {
 
             fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
-            BDBHA bdbha = (BDBHA) haProtocol;
-            if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
-                bdbha.addHelperSocket(host, editLogPort);
+            if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
-                bdbha.addUnstableNode(host, getFollowerCnt());
             }
+            if (haProtocol instanceof BDBHA) {
+                BDBHA bdbha = (BDBHA) haProtocol;
+                if (role == FrontendNodeType.FOLLOWER) {
+                    bdbha.addHelperSocket(host, editLogPort);
+                    bdbha.addUnstableNode(host, getFollowerCnt());
+                }
 
-            // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
-            // will remain in bdb.
-            // So we should remove those nodes before joining the group,
-            // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
-            // xxx. It conflicts with the socket already used by the member: xxxx)
-            bdbha.removeNodeIfExist(host, editLogPort);
+                // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
+                // will remain in bdb.
+                // So we should remove those nodes before joining the group,
+                // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
+                // xxx. It conflicts with the socket already used by the member: xxxx)
+                bdbha.removeNodeIfExist(host, editLogPort);
+            }
 
             editLog.logAddFrontend(fe);
         } finally {
@@ -2614,7 +2611,7 @@ public class Catalog {
             frontends.remove(fe.getNodeName());
             removedFrontends.add(fe.getNodeName());
 
-            if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 haProtocol.removeElectableNode(fe.getNodeName());
                 helperNodes.remove(Pair.create(host, port));
 
@@ -5254,7 +5251,7 @@ public class Catalog {
                 return;
             }
             frontends.put(fe.getNodeName(), fe);
-            if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 // DO NOT add helper sockets here, cause BDBHA is not instantiated yet.
                 // helper sockets will be added after start BDBHA
                 // But add to helperNodes, just for show
@@ -5273,8 +5270,7 @@ public class Catalog {
                 LOG.error(frontend.toString() + " does not exist.");
                 return;
             }
-            if (removedFe.getRole() == FrontendNodeType.FOLLOWER
-                    || removedFe.getRole() == FrontendNodeType.REPLICA) {
+            if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
             }
 
