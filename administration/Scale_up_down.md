@@ -15,7 +15,7 @@ FE扩缩容时要注意：
 部署好FE节点，启动完成服务。
 
 ~~~sql
-bin/start_be.sh --helper "fe_host:edit_log_port" --daemon ;
+bin/start_fe.sh --helper "fe_host:edit_log_port" --daemon ;
 --fe_host为master节点的ip
 ~~~
 
