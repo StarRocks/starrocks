@@ -67,8 +67,7 @@ class HeartbeatFlags;
 
 namespace pipeline {
 class DriverExecutor;
-class QueryContextManager;
-} // namespace pipeline
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -160,11 +159,9 @@ public:
     PluginMgr* plugin_mgr() { return _plugin_mgr; }
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
     Status init_mem_tracker();
-
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
-    void add_rf_event(const RfTracePoint& pt);
 
-    pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
+    void add_rf_event(const RfTracePoint& pt);
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -222,7 +219,6 @@ private:
     PriorityThreadPool* _etl_thread_pool = nullptr;
     PriorityThreadPool* _udf_call_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
-    starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     TMasterInfo* _master_info = nullptr;
