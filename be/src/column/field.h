@@ -117,6 +117,9 @@ public:
     bool is_key() const;
     void set_is_key(bool is_key);
 
+    int32_t length() const { return _length; }
+    void set_length(int32_t l) { _length = l; }
+
     uint8_t short_key_length() const { return _short_key_length; }
     void set_short_key_length(uint8_t n) { _short_key_length = n; }
 
@@ -156,6 +159,7 @@ private:
     CString _name;
     TypeInfoPtr _type = nullptr;
     std::vector<Field>* _sub_fields;
+    int32_t _length = 0;
     uint8_t _short_key_length;
     uint8_t _flags;
 };
