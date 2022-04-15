@@ -14,7 +14,7 @@ import java.util.List;
 public class PushDownAssertOneRowProjectRule extends TransformationRule {
     public PushDownAssertOneRowProjectRule() {
         super(RuleType.TF_PUSH_DOWN_ASSERT_ONE_ROW_PROJECT, Pattern.create(OperatorType.LOGICAL_ASSERT_ONE_ROW)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.LOGICAL_AGGR)));
     }
 
     @Override
