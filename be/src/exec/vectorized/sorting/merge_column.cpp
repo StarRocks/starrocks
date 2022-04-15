@@ -286,6 +286,12 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
 }
 
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
+                                   SortedRuns* output) {
+    CHECK(false) << "TODO";
+    return Status::NotSupported("TODO");
+}
+
 // Merge multiple chunks in two-way merge
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
     std::vector<ChunkPtr> current(chunks);

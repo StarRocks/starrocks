@@ -52,6 +52,8 @@ void build_tie_for_column(const ColumnPtr column, Tie* tie);
 // Append rows from permutation
 void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm, size_t start,
+                           size_t end);
 void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
 
 struct SortDesc {
@@ -132,11 +134,25 @@ struct SortedRun {
     }
 };
 
+// Multiple sorted chunks kept the order
+struct SortedRuns {
+    std::vector<SortedRun> chunks;
+
+    SortedRuns() = default;
+    ~SortedRuns() = default;
+    SortedRuns(ChunkPtr chunk) : chunks{SortedRun(chunk)} {}
+    SortedRuns(SortedRun run) : chunks{run} {}
+
+    size_t num_chunks() const { return chunks.size(); }
+};
+
 // Merge algorithms
 Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
                                    Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
+                                   SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
 
 // Merge in rowwise
