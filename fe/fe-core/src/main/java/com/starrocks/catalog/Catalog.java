@@ -2573,11 +2573,13 @@ public class Catalog {
 
             fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
+            if (role == FrontendNodeType.FOLLOWER) {
+                helperNodes.add(Pair.create(host, editLogPort));
+            }
             if (haProtocol instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) haProtocol;
                 if (role == FrontendNodeType.FOLLOWER) {
                     bdbha.addHelperSocket(host, editLogPort);
-                    helperNodes.add(Pair.create(host, editLogPort));
                     bdbha.addUnstableNode(host, getFollowerCnt());
                 }
 
