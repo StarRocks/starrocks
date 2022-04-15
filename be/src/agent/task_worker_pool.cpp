@@ -1027,7 +1027,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
                     break;
                 case TTabletMetaType::ENABLEPERSISTENTINDEX:
                     LOG(INFO) << "update tablet:" << tablet->tablet_id()
-                            << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
+                              << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
                     tablet->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
                     // TODO
                     // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
