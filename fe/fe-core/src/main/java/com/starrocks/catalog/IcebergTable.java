@@ -44,6 +44,7 @@ public class IcebergTable extends Table {
 
     private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
     private static final String ICEBERG_DB = "database";
     private static final String ICEBERG_TABLE = "table";
     private static final String ICEBERG_RESOURCE = "resource";
@@ -82,6 +83,14 @@ public class IcebergTable extends Table {
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG));
+    }
+
+    public String getCatalogImpl() {
+        return icebergProperties.get(ICEBERG_IMPL);
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getIcebergHiveMetastoreUris() {
@@ -144,12 +153,20 @@ public class IcebergTable extends Table {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
                 break;
+            case CUSTOM_CATALOG:
+                icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());
+                for (String key : copiedProps.keySet()) {
+                    icebergProperties.put(key, copiedProps.remove(key));
+                }
+                // todo: validate custom catalog
+                // cannot validate columns for custom catalog at present, return directly.
+                return;
             default:
                 throw new DdlException("unsupported catalog type " + type.name());
         }
         this.resourceName = resourceName;
 
-        IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(type, icebergResource.getHiveMetastoreURIs());
+        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs());
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
         // TODO: use TypeUtil#indexByName to handle nested field
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()

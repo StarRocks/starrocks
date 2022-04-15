@@ -33,12 +33,16 @@ public class IcebergResource extends Resource {
 
     private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     @SerializedName(value = "catalogType")
     private String catalogType;
 
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
+
+    @SerializedName(value = "impl")
+    private String impl;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -64,6 +68,12 @@ public class IcebergResource extends Resource {
                     throw new DdlException(ICEBERG_METASTORE_URIS + " must be set in properties");
                 }
                 break;
+            case CUSTOM_CATALOG:
+                impl = properties.get(ICEBERG_IMPL);
+                if (StringUtils.isBlank(impl)) {
+                    throw new DdlException(ICEBERG_IMPL + " must be set in properties");
+                }
+                break;
             default:
                 throw new DdlException("Unexpected catalog type: " + catalogType);
         }
@@ -76,6 +86,9 @@ public class IcebergResource extends Resource {
             case HIVE_CATALOG:
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_METASTORE_URIS, metastoreURIs));
                 break;
+            case CUSTOM_CATALOG:
+                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, impl));
+                break;
             default:
                 LOG.warn("Unexpected catalog type: " + catalogType);
                 break;
@@ -84,6 +97,10 @@ public class IcebergResource extends Resource {
 
     public String getHiveMetastoreURIs() {
         return metastoreURIs;
+    }
+
+    public String getIcebergImpl() {
+        return impl;
     }
 
     public IcebergCatalogType getCatalogType() {
