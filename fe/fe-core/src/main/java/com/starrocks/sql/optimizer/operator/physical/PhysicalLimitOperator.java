@@ -19,6 +19,10 @@ public class PhysicalLimitOperator extends PhysicalOperator {
         this.projection = projection;
     }
 
+    public long getOffset() {
+        return offset;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalLimit(this, context);

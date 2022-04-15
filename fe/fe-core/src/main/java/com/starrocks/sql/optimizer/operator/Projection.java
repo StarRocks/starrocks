@@ -147,4 +147,9 @@ public class Projection {
     public int hashCode() {
         return Objects.hash(columnRefMap.keySet());
     }
+
+    @Override
+    public String toString() {
+        return columnRefMap.values().toString();
+    }
 }

@@ -23,6 +23,7 @@ public class OptimizerContext {
     private DumpInfo dumpInfo;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
+    private OptimizerTraceInfo traceInfo;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -89,5 +90,13 @@ public class OptimizerContext {
 
     public TaskContext getTaskContext() {
         return currentTaskContext;
+    }
+
+    public void setTraceInfo(OptimizerTraceInfo traceInfo) {
+        this.traceInfo = traceInfo;
+    }
+
+    public OptimizerTraceInfo getTraceInfo() {
+        return traceInfo;
     }
 }

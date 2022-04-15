@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -42,9 +43,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
+
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
+        }
         Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session);
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+        }
 
         if (stmt instanceof QueryStatement) {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);

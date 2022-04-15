@@ -276,17 +276,17 @@ public class Group {
 
     @Override
     public String toString() {
-        return "->  " + "Group: " + id;
+        return toPrettyString("", "");
     }
 
     public String toPrettyString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
-        sb.append("->  ").append("Group: ").append(id).append('\n');
+        sb.append(headlineIndent).append("Group: ").append(id).append("\n");
         for (GroupExpression expr : logicalExpressions) {
-            sb.append(expr).append('\n');
+            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
         }
         for (GroupExpression expr : physicalExpressions) {
-            sb.append(expr).append('\n');
+            sb.append(expr.toPrettyString(headlineIndent, detailIndent));
         }
         return sb.toString();
     }
