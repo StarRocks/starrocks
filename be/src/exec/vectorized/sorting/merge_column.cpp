@@ -137,6 +137,9 @@ private:
 // 3. Repeat it until no equal-range or the last column
 class MergeTwoChunk {
 public:
+    static constexpr int kLeftChunkIndex = 0;
+    static constexpr int kRightChunkIndex = 1;
+
     static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
                                               const SortedRun& right_run, Permutation* output) {
         DCHECK(!!left_run.chunk);
@@ -144,39 +147,84 @@ public:
         DCHECK_EQ(left_run.num_columns(), right_run.num_columns());
 
         if (left_run.empty()) {
-            size_t count = right_run.range.second - right_run.range.first;
+            size_t count = right_run.num_rows();
             output->resize(count);
             for (size_t i = 0; i < count; i++) {
-                (*output)[i].chunk_index = 1;
+                (*output)[i].chunk_index = kRightChunkIndex;
                 (*output)[i].index_in_chunk = i + right_run.range.first;
             }
         } else if (right_run.empty()) {
-            size_t count = left_run.range.second - left_run.range.first;
+            size_t count = left_run.num_rows();
             output->resize(count);
             for (size_t i = 0; i < count; i++) {
-                (*output)[i].chunk_index = 0;
+                (*output)[i].chunk_index = kLeftChunkIndex;
                 (*output)[i].index_in_chunk = i + left_run.range.first;
             }
         } else {
-            std::vector<EqualRange> equal_ranges;
-            equal_ranges.emplace_back(left_run.range, right_run.range);
-            size_t count = left_run.range.second + right_run.range.second;
-            output->resize(count);
-            equal_ranges.reserve(std::max((size_t)1, count / 4));
+            int intersect = run_intersect(sort_desc, left_run, right_run);
+            if (intersect != 0) {
+                size_t left_rows = left_run.num_rows();
+                size_t right_rows = right_run.num_rows();
+                output->resize(0);
+                output->reserve(left_rows + right_rows);
 
-            for (int col = 0; col < sort_desc.num_columns(); col++) {
-                const Column* left_col = left_run.get_column(col);
-                const Column* right_col = right_run.get_column(col);
-                MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
-                Status st = left_col->accept(&merge2);
-                CHECK(st.ok());
-                if (equal_ranges.size() == 0) {
-                    break;
+                if (intersect < 0) {
+                    // TODO: avoid copy chunk if two run have no intersection
+                    for (size_t i = 0; i < left_rows; i++) {
+                        output->emplace_back(kLeftChunkIndex, i + left_run.range.first);
+                    }
+                    for (size_t i = 0; i < right_rows; i++) {
+                        output->emplace_back(kRightChunkIndex, i + right_run.range.first);
+                    }
+                } else {
+                    for (size_t i = 0; i < right_rows; i++) {
+                        output->emplace_back(kRightChunkIndex, i + right_run.range.first);
+                    }
+                    for (size_t i = 0; i < left_rows; i++) {
+                        output->emplace_back(kLeftChunkIndex, i + left_run.range.first);
+                    }
+                }
+            } else {
+                std::vector<EqualRange> equal_ranges;
+                equal_ranges.emplace_back(left_run.range, right_run.range);
+                size_t count = left_run.range.second + right_run.range.second;
+                output->resize(count);
+                equal_ranges.reserve(std::max((size_t)1, count / 4));
+
+                for (int col = 0; col < sort_desc.num_columns(); col++) {
+                    const Column* left_col = left_run.get_column(col);
+                    const Column* right_col = right_run.get_column(col);
+                    MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
+                    Status st = left_col->accept(&merge2);
+                    CHECK(st.ok());
+                    if (equal_ranges.size() == 0) {
+                        break;
+                    }
                 }
             }
         }
 
         return Status::OK();
+    }
+
+private:
+    // Check if two run has intersect, if not we don't need to merge them row by row
+    // @return 0 if two run has intersect, -1 if left is less than right, 1 if left is greater than right
+    static int run_intersect(const SortDescs& sort_desc, const SortedRun& left_run, const SortedRun& right_run) {
+        // Compare left tail with right head
+        int left_tail_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.second - 1,
+                                              right_run.range.first);
+        if (left_tail_cmp < 0) {
+            return -1;
+        }
+
+        // Compare left head with right tail
+        int left_head_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.first,
+                                              right_run.range.second - 1);
+        if (left_head_cmp > 0) {
+            return 1;
+        }
+        return 0;
     }
 };
 
@@ -205,7 +253,8 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPt
     output->reserve(limit);
 
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
-        int cmp = compare_chunk_row(descs, *left_chunk, *right_chunk, index_of_left, index_of_right);
+        int cmp =
+                compare_chunk_row(descs, left_chunk->columns(), right_chunk->columns(), index_of_left, index_of_right);
         if (cmp <= 0) {
             output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left, 0));
             ++index_of_left;

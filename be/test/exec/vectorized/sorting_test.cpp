@@ -14,57 +14,116 @@
 
 namespace starrocks::vectorized {
 
-TEST(MergeTest, merge_sorter_chunks_two_way) {
+class MergeTestFixture : public testing::TestWithParam<std::vector<std::vector<int32_t>>> {};
+
+TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    ColumnPtr col1 = ColumnHelper::create_column(type_desc, false);
-    ColumnPtr col2 = ColumnHelper::create_column(type_desc, false);
-    ColumnPtr col3 = ColumnHelper::create_column(type_desc, false);
-    ColumnPtr col4 = ColumnHelper::create_column(type_desc, false);
-    std::vector<int32_t> elements_col1{1, 1, 1, 2, 2, 3, 4, 5, 6};
-    std::vector<int32_t> elements_col2{1, 2, 2, 2, 3, 3, 6, 7, 8};
-    std::vector<int32_t> elements_col3{1, 2, 2, 2, 3, 3, 6, 7, 8};
-    std::vector<int32_t> elements_col4{2, 3, 4, 4, 4, 8, 9, 7, 11};
+    std::vector<std::vector<int32_t>> params = GetParam();
+    int total_columns = params.size();
+    ASSERT_TRUE(total_columns % 2 == 0);
+    Columns left_columns;
+    Columns right_columns;
 
-    for (int i = 0; i < elements_col1.size(); i++) {
-        col1->append_datum(Datum(elements_col1[i]));
-        col2->append_datum(Datum(elements_col2[i]));
-        col3->append_datum(Datum(elements_col3[i]));
-        col4->append_datum(Datum(elements_col4[i]));
-    }
     Chunk::SlotHashMap map;
-    map[0] = 0;
-    map[1] = 1;
-
-    ChunkPtr chunk1 = std::make_shared<Chunk>(Columns{col1, col3}, map);
-    ChunkPtr chunk2 = std::make_shared<Chunk>(Columns{col2, col4}, map);
-    Permutation perm;
-    SortDescs sort_desc({1, 1}, {-1, -1});
-    merge_sorted_chunks_two_way(sort_desc, chunk1, chunk2, &perm);
-
-    size_t expected_size = col1->size() + col2->size();
-    std::unique_ptr<Chunk> output = chunk1->clone_empty();
-    append_by_permutation(output.get(), std::vector<ChunkPtr>{chunk1, chunk2}, perm);
-    ASSERT_EQ(expected_size, perm.size());
-    Int32Column* output_column1 = down_cast<Int32Column*>(output->get_column_by_index(0).get());
-    Int32Column* output_column2 = down_cast<Int32Column*>(output->get_column_by_index(0).get());
-    Int32Column::Container& data1 = output_column1->get_data();
-    Int32Column::Container& data2 = output_column2->get_data();
-    std::vector<std::tuple<int32_t, int32_t>> rows;
-    for (int i = 0; i < data1.size(); i++) {
-        rows.emplace_back(data1[i], data2[i]);
+    int left_rows = 0, right_rows = 0;
+    int num_columns = total_columns / 2;
+    for (int i = 0; i < total_columns; i++) {
+        ColumnPtr col = ColumnHelper::create_column(type_desc, false);
+        auto& data = params[i];
+        for (int j = 0; j < data.size(); j++) {
+            col->append_datum(Datum(data[j]));
+        }
+        if (i < total_columns / 2) {
+            left_rows = data.size();
+            map[i] = i;
+            left_columns.push_back(col);
+        } else {
+            right_rows = data.size();
+            right_columns.push_back(col);
+        }
     }
+    ChunkPtr left_chunk = std::make_shared<Chunk>(left_columns, map);
+    ChunkPtr right_chunk = std::make_shared<Chunk>(right_columns, map);
+    Permutation perm;
+    SortDescs sort_desc(std::vector<int>(num_columns, 1), std::vector<int>(num_columns, -1));
+    merge_sorted_chunks_two_way(sort_desc, left_chunk, right_chunk, &perm);
 
-    ASSERT_EQ(expected_size, output_column1->size());
-    ASSERT_EQ(expected_size, data1.size());
-    ASSERT_TRUE(std::is_sorted(rows.begin(), rows.end(),
-                               [](auto x, auto y) {
-                                   if (std::get<0>(x) != std::get<0>(y)) {
-                                       return std::get<0>(x) < std::get<0>(y);
-                                   }
-                                   return std::get<1>(x) < std::get<1>(y);
-                               }))
-            << "merged data: " << fmt::format("{}", fmt::join(data1, ", "));
+    size_t expected_size = left_rows + right_rows;
+    std::unique_ptr<Chunk> output = left_chunk->clone_empty();
+    append_by_permutation(output.get(), std::vector<ChunkPtr>{left_chunk, right_chunk}, perm);
+    ASSERT_EQ(expected_size, perm.size());
+
+    std::vector<std::vector<int>> output_data;
+    for (int i = 0; i < output->num_rows(); i++) {
+        std::vector<int> row;
+        for (int j = 0; j < num_columns; j++) {
+            Column* output_col = output->get_column_by_index(j).get();
+            row.push_back(output_col->get(i).get_int32());
+        }
+        output_data.emplace_back(row);
+    }
+    auto output_string = [&]() {
+        std::string str;
+        for (auto& row : output_data) {
+            str += fmt::format("({})", fmt::join(row, ","));
+            str += ", ";
+        }
+        return str;
+    };
+    auto row_less = [&](const std::vector<int>& lhs, const std::vector<int>& rhs) {
+        for (int i = 0; i < lhs.size(); i++) {
+            if (lhs[i] != rhs[i]) {
+                return lhs[i] <= rhs[i];
+            }
+        }
+        return false;
+    };
+
+    ASSERT_EQ(expected_size, output->num_rows());
+    ASSERT_TRUE(std::is_sorted(output_data.begin(), output_data.end(), row_less)) << "merged data: " << output_string();
 }
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(
+        MergeTest, MergeTestFixture,
+        testing::Values(
+        std::vector<std::vector<int32_t>>{
+            {1, 2, 3},
+            {1, 2, 3}
+        },
+        std::vector<std::vector<int32_t>>{
+            {1, 2, 3},
+            {4, 5, 6}
+        },
+        std::vector<std::vector<int32_t>>{
+            {4, 5, 6},
+            {1, 2, 3}
+        },
+        std::vector<std::vector<int32_t>>{
+            {},
+            {1, 2, 3}
+        },
+        std::vector<std::vector<int32_t>>{
+            {1, 2, 3},
+            {}
+        },
+        std::vector<std::vector<int32_t>>{
+            {1, 3, 5},
+            {2, 4}
+        },
+        std::vector<std::vector<int32_t>>{
+            {1, 3, 5},
+            {3, 4, 5}
+        },
+        std::vector<std::vector<int32_t>>{
+                std::vector<int32_t>{1, 1, 1, 2, 2, 3, 4, 5, 6}, 
+                std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8},
+                std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8}, 
+                std::vector<int32_t>{2, 3, 4, 4, 4, 8, 9, 7, 11}
+
+        }
+));
+// clang-format on
 
 static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
