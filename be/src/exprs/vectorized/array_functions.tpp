@@ -259,20 +259,23 @@ private:
         }
 
         Int64Column* length_column = nullptr;
-        if (columns[2]->is_nullable()) {
-            is_nullable = true;
-            has_null = (columns[2]->has_null() || has_null);
+        // length_column is provided.
+        if (columns.size() > 2) {
+            if (columns[2]->is_nullable()) {
+                is_nullable = true;
+                has_null = (columns[2]->has_null() || has_null);
 
-            const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[2].get());
-            length_column = down_cast<Int64Column*>(src_nullable_column->data_column().get());
-            if (null_result) {
-                null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[2].get());
+                length_column = down_cast<Int64Column*>(src_nullable_column->data_column().get());
+                if (null_result) {
+                    null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
+                } else {
+                    null_result = NullColumn::create(*src_nullable_column->null_column());
+                }
             } else {
-                null_result = NullColumn::create(*src_nullable_column->null_column());
+                length_column = down_cast<Int64Column*>(
+                        ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[2]).get());
             }
-        } else {
-            length_column = down_cast<Int64Column*>(
-                    ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[2]).get());
         }
 
         ArrayColumn* dest_data_column = nullptr;
@@ -287,9 +290,15 @@ private:
             dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
         }
 
-        for (size_t i = 0; i < chunk_size; i++) {
-            _array_slice_item(array_column, i, dest_data_column, offset_column->get(i).get_int64(),
-                              length_column->get(i).get_int64());
+        if (columns.size() > 2) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                _array_slice_item<true>(array_column, i, dest_data_column, offset_column->get(i).get_int64(),
+                                        length_column->get(i).get_int64());
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                _array_slice_item<false>(array_column, i, dest_data_column, offset_column->get(i).get_int64(), 0);
+            }
         }
 
         if (is_nullable) {
@@ -303,6 +312,7 @@ private:
         }
     }
 
+    template <bool with_length>
     static void _array_slice_item(ArrayColumn* column, size_t index, ArrayColumn* dest_column, int64_t offset,
                                   int64_t length) {
         auto& dest_offsets = dest_column->offsets_column()->get_data();
@@ -322,7 +332,12 @@ private:
         }
 
         auto& dest_data_column = dest_column->elements_column();
-        auto end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
+        int64_t end;
+        if constexpr (with_length) {
+            end = std::max((int64_t)0, std::min((int64_t)items.size(), (offset + length)));
+        } else {
+            end = items.size();
+        }
         offset = (offset > 0 ? offset : 0);
         for (size_t i = offset; i < end; ++i) {
             if (items[i].is_null()) {
@@ -331,7 +346,10 @@ private:
                 dest_data_column->append_datum(items[i]);
             }
         }
-        dest_offsets.emplace_back(dest_offsets.back() + (end - offset));
+
+        // Protect when length < 0.
+        auto offset_delta = ((end < offset) ? 0 : end - offset);
+        dest_offsets.emplace_back(dest_offsets.back() + offset_delta);
     }
 };
 
