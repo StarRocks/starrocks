@@ -633,12 +633,13 @@ Status JsonReader::_read_and_parse_json() {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         RETURN_IF_ERROR(stream_file->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
                                                       simdjson::SIMDJSON_PADDING));
-        if (length == 0) {
+        if (_parser_buf_sz == 0) {
             return Status::EndOfFile("EOF of reading file");
         }
     }
 
     data = _parser_buf.get();
+    length = _parser_buf_sz;
 
 #endif
 
