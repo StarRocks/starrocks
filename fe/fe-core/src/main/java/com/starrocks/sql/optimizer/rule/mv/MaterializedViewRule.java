@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -226,7 +225,6 @@ public class MaterializedViewRule extends Rule {
         if (logicalOperator.getPredicate() != null) {
             ScalarOperator scalarOperator = logicalOperator.getPredicate();
             if (!scalarOperator.isConstantRef()) {
-                Preconditions.checkState(scalarOperator instanceof PredicateOperator);
                 updateTableToColumns(scalarOperator, columnIdsInPredicates);
             }
         }
