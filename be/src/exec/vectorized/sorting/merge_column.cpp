@@ -130,10 +130,10 @@ public:
             return x;
         };
         auto cmp_left = [&](size_t lhs_index, size_t rhs_index) {
-            return SorterComparator<ValueType>::compare(left_data[lhs_index], left_data[rhs_index]) == 0;
+            return left_data[lhs_index] == left_data[rhs_index];
         };
         auto cmp_right = [&](size_t lhs_index, size_t rhs_index) {
-            return SorterComparator<ValueType>::compare(right_data[lhs_index], right_data[rhs_index]) == 0;
+            return right_data[lhs_index] == right_data[rhs_index];
         };
         return do_merge(cmp, cmp_left, cmp_right);
     }
