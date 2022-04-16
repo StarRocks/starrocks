@@ -1535,57 +1535,5 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
     }
 }
-
-template<typename T>
-static ColumnPtr create_decimal_column(const int32_t precision, const int32_t scale, const std::vector<std::string>& values) {
-    auto column = DecimalV3Column<T>::create(precision, scale);
-    for (size_t i = 0;i < values.size();i ++) {
-        T value;
-        DecimalV3Cast::from_string<T>(&value, precision, scale, values[i].data(), values[i].size());
-        column->append(value);
-    }
-    return column;
-}
-
-// this ut is to verify whether UnpackConstColumnUnaryFunction can handle const column correctly.
-// the relevant changes are in https://github.com/StarRocks/starrocks/pull/5086
-// you can see more details in description.
-TEST_F(VectorizedCastExprTest, constDecimal128ToInt) {
-    expr_node.child_type_desc = gen_type_desc(TPrimitiveType::DECIMAL128);
-    expr_node.child_type = TPrimitiveType::DECIMAL128;
-    expr_node.child_type_desc.types[0].scalar_type.__set_precision(38);
-    expr_node.child_type_desc.types[0].scalar_type.__set_scale(0);
-    expr_node.type = gen_type_desc(TPrimitiveType::INT);
-
-    std::vector<std::string> decimal_values = {"0", "4294967296", "4294967296"};
-    ColumnPtr column = create_decimal_column<int128_t>(38, 0, decimal_values);
-
-    {
-        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
-        ColumnPtr const_column = ConstColumn::create(column, 1);
-        MockExpr col(expr_node, const_column);
-        expr->add_child(&col);
-
-        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ASSERT_EQ(ptr->is_constant(), true);
-        ASSERT_EQ(ptr->is_nullable(), false);
-        ASSERT_EQ(ptr->size(), 1);
-        ASSERT_EQ(ptr->get(0).get_int32(), 0);
-    }
-
-    {
-        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
-        ColumnPtr const_column = ConstColumn::create(column, 3);
-        MockExpr col(expr_node, const_column);
-        expr->add_child(&col);
-
-        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ASSERT_EQ(ptr->is_constant(), true);
-        ASSERT_EQ(ptr->is_nullable(), false);
-        ASSERT_EQ(ptr->size(), 3);
-        ASSERT_EQ(ptr->get(0).get_int32(), 0);
-    }
-}
-
 } // namespace vectorized
 } // namespace starrocks
