@@ -28,13 +28,15 @@ statement
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | SHO DATWABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                               #createView
+        comment? AS queryStatement                                                      #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
+    | BACKUP SNAPSHOT label=qualifiedName TO repository=qualifiedName ON  tables=identifierList properties # backup
+    | RESTORE SNAPSHOT label=qualifiedName FROM repository=qualifiedName ON  tables=identifierList properties  # restore
     ;
 
 explainDesc

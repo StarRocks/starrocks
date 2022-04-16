@@ -3,6 +3,7 @@ package com.starrocks.sql;
 
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -11,6 +12,7 @@ import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -148,9 +150,11 @@ public class StatementPlanner {
 
     public static boolean supportedByNewParser(StatementBase statement) {
         return statement instanceof AlterViewStmt
+                || statement instanceof BackupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
+                || statement instanceof RestoreStmt
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
@@ -159,12 +163,14 @@ public class StatementPlanner {
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return statement instanceof AlterViewStmt
+                || statement instanceof BackupStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof RestoreStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt

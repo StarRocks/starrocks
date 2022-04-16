@@ -184,6 +184,10 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WITH: 'WITH';
 YEAR: 'YEAR';
+BACKUP: 'BACKUP';
+RESTORE: 'RESTORE';
+SNAPSHOT: 'SNAPSHOT';
+TO: 'TO';
 
 EQ  : '=';
 NEQ : '<>' | '!=';

@@ -10,6 +10,7 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -38,6 +39,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -91,6 +93,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -125,6 +131,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDeleteStatement(DeleteStmt node, C context) {
         return visitStatement(node, context);
+    }
+
+    public R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitShowStatement(ShowStmt statement, C context) {
