@@ -223,6 +223,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitDropTable(StarRocksParser.DropTableContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        boolean force = context.FORCE() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, force);
+    }
+
+    @Override
+    public ParseNode visitDropView(StarRocksParser.DropViewContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, true, false);
+    }
+
+    @Override
     public ParseNode visitUse(StarRocksParser.UseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new UseStmt(identifier.getValue());
@@ -1509,12 +1526,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
             quotedString = context.SINGLE_QUOTED_TEXT().getText();
+            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
         } else {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
+            // For support mysql embedded quotation
+            // In a double-quoted string, two double-quotes are combined into one double-quote
+            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
+                    .replace("\"\"", "\""));
         }
-
-        return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
-                .replace("\"\"", "\""));
     }
 
     private static String escapeBackSlash(String str) {

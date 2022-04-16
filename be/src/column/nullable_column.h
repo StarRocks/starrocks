@@ -125,6 +125,10 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override { return _data_column->has_large_column(); }
+
     bool append_strings(const Buffer<Slice>& strs) override;
 
     bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;

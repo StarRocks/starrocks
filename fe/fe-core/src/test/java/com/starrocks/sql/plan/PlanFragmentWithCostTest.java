@@ -12,6 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -971,5 +972,36 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  repeat: repeat 2 lines [[1, 2], [1, 3], [1]]\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testOverflowFilterOnColocateJoin() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("colocate1");
+        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("colocate2");
+
+        StatisticStorage ss = catalog.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic((Table) any, "k1");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic((Table) any, "k2");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic((Table) any, "k3");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+            }
+        };
+
+        setTableStatistics(t1, 400000);
+        setTableStatistics(t2, 100);
+
+        String sql = "select * from colocate1 t1 join colocate2 t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2" +
+                " where t1.k3 = 100000";
+
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  |  join op: INNER JOIN (COLOCATE)");
+        assertContains(plan, "k3-->[NaN, NaN, 0.0, 4.0, 1.0] ESTIMATE");
     }
 }

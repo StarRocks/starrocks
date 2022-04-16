@@ -331,8 +331,8 @@ private:
     // Since the bitmap size is quite small, we can use trade memory usage for performance
     // According to experiments, there is 20% performance gain.
 
-    inline void _set_array_index(int64_t index) { _array_buffer[index] = 1; }
-    inline uint8_t _get_array_index(int64_t index) const { return _array_buffer[index]; }
+    void _set_array_index(int64_t index) { _array_buffer[index] = 1; }
+    uint8_t _get_array_index(int64_t index) const { return _array_buffer[index]; }
 
     void _init_array_buffer() {
         if constexpr (can_use_array()) {

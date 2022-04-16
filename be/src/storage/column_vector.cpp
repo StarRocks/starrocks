@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "column_vector.h"
+#include "storage/column_vector.h"
 
 #include <memory>
 

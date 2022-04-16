@@ -5,6 +5,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
+#include "util/time.h"
 
 namespace starrocks {
 namespace workgroup {
@@ -41,6 +42,18 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.version) {
         _version = twg.version;
     }
+
+    if (twg.__isset.big_query_mem_limit) {
+        _big_query_mem_limit = twg.big_query_mem_limit;
+    }
+
+    if (twg.__isset.big_query_scan_rows_limit) {
+        _big_query_scan_rows_limit = twg.big_query_scan_rows_limit;
+    }
+
+    if (twg.__isset.big_query_cpu_core_second_limit) {
+        _big_query_cpu_core_second_limit = twg.big_query_cpu_core_second_limit * NANOS_PER_SEC;
+    }
 }
 
 TWorkGroup WorkGroup::to_thrift() const {
@@ -62,6 +75,9 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_mem_limit(_memory_limit);
     twg.__set_concurrency_limit(_concurrency);
     twg.__set_num_drivers(_acc_num_drivers);
+    twg.__set_big_query_mem_limit(_big_query_mem_limit);
+    twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
+    twg.__set_big_query_cpu_core_second_limit(_big_query_cpu_core_second_limit);
     return twg;
 }
 
@@ -179,6 +195,28 @@ void WorkGroup::estimate_trend_factor_period() {
 
     _period_scaned_chunk_num = 1;
     _period_ask_chunk_num = 1;
+}
+
+bool WorkGroup::is_big_query(const QueryContext& query_context) {
+    // If there is only one query, skip it
+    if (_num_queries <= 1) {
+        return false;
+    }
+
+    // Check big query run time
+    if (_big_query_cpu_core_second_limit) {
+        int64_t wg_growth_cpu_use_cost = total_cpu_cost() - query_context.init_wg_cpu_cost();
+        if (wg_growth_cpu_use_cost > _big_query_cpu_core_second_limit) {
+            return true;
+        }
+    }
+
+    // Check scan rows number
+    if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
+        return true;
+    }
+
+    return false;
 }
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {

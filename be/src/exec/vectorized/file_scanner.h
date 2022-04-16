@@ -54,7 +54,7 @@ protected:
                                 int size);
     // materialize is used to transform source chunk depicted by src_slot_descriptors into destination
     // chunk depicted by dest_slot_descriptors
-    ChunkPtr materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast);
+    StatusOr<ChunkPtr> materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast);
 
 protected:
     RuntimeState* _state;

@@ -9,7 +9,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/date_value.h"
 #include "runtime/timestamp_value.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "udf/udf.h"
 #include "util/thrift_util.h"
 
@@ -60,10 +60,11 @@ void PipelineTestBase::_prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_expire_seconds(60);
     _query_ctx->extend_lifetime();
+    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
@@ -76,7 +77,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_chunk_size(config::vector_chunk_size);
-    _runtime_state->init_mem_trackers(query_id);
+    _runtime_state->init_mem_trackers(_query_ctx->mem_tracker()->limit(), _query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
 
     _obj_pool = _runtime_state->obj_pool();
@@ -84,7 +85,6 @@ void PipelineTestBase::_prepare() {
     ASSERT_TRUE(_pipeline_builder != nullptr);
     _pipelines.clear();
     _pipeline_builder(_fragment_ctx->runtime_state());
-    _pipelines[_pipelines.size() - 1]->set_root();
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
@@ -94,7 +94,6 @@ void PipelineTestBase::_prepare() {
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        const bool is_root = pipeline->is_root();
 
         LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
                   << " fragment_instance_id=" << print_id(params.fragment_instance_id);
@@ -102,14 +101,9 @@ void PipelineTestBase::_prepare() {
         if (pipeline->source_operator_factory()->with_morsels()) {
             // TODO(hcf) missing branch of with_morsels()
         } else {
-            if (is_root) {
-                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
-            }
-
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i);
                 drivers.emplace_back(driver);
             }
         }

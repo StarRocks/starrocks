@@ -2,6 +2,8 @@
 
 #include "env/env_broker.h"
 
+#include <fmt/format.h>
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -161,74 +163,33 @@ static Status broker_close_writer(const TNetworkAddress& broker, const TBrokerFD
     return Status::OK();
 }
 
-class BrokerRandomAccessFile : public RandomAccessFile {
+class BrokerInputStream : public io::SeekableInputStream {
 public:
-    BrokerRandomAccessFile(const TNetworkAddress& broker, std::string path, const TBrokerFD& fd, int64_t size)
-            : _broker(broker), _path(std::move(path)), _fd(fd), _size(size) {}
+    BrokerInputStream(const TNetworkAddress& broker, const TBrokerFD& fd, int64_t size)
+            : _broker(broker), _fd(fd), _offset(0), _size(size) {}
 
-    ~BrokerRandomAccessFile() override { broker_close_reader(_broker, _fd); }
+    ~BrokerInputStream() override { broker_close_reader(_broker, _fd); }
 
-    // Return OK if reached end of file in order to be compatible with posix env.
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
-        Status st = broker_pread(data, _broker, _fd, offset, &size);
-        if (st.ok()) {
-            return size;
-        }
-        LOG_IF(WARNING, !st.ok()) << "Fail to read " << _path << ", " << st.message();
-        return st;
+    StatusOr<int64_t> read(void* data, int64_t count) override {
+        RETURN_IF_ERROR(broker_pread(data, _broker, _fd, _offset, &count));
+        _offset += count;
+        return count;
     }
 
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
-        int64_t nread = size;
-        RETURN_IF_ERROR(broker_pread(data, _broker, _fd, offset, &nread));
-        if (nread < size) {
-            LOG(WARNING) << "Fail to read from " << _path << ", partial read expect=" << size << " real=" << nread;
-            return Status::IOError("Partial read");
-        }
+    StatusOr<int64_t> position() override { return _offset; }
+
+    StatusOr<int64_t> get_size() override { return _size; }
+
+    Status seek(int64_t offset) override {
+        _offset = offset;
         return Status::OK();
     }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        for (size_t i = 0; i < res_cnt; i++) {
-            RETURN_IF_ERROR(read_at_fully(offset, res[i].data, res[i].size));
-            offset += res[i].size;
-        }
-        return Status::OK();
-    }
-
-    StatusOr<uint64_t> get_size() const override { return _size; }
-
-    const std::string& filename() const override { return _path; }
 
 private:
     TNetworkAddress _broker;
-    std::string _path;
     TBrokerFD _fd;
+    int64_t _offset;
     int64_t _size;
-};
-
-class BrokerSequentialFile : public SequentialFile {
-public:
-    explicit BrokerSequentialFile(std::unique_ptr<RandomAccessFile> random_file) : _file(std::move(random_file)) {}
-
-    ~BrokerSequentialFile() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        ASSIGN_OR_RETURN(auto nread, _file->read_at(_offset, data, size));
-        _offset += nread;
-        return nread;
-    }
-
-    Status skip(uint64_t n) override {
-        _offset += n;
-        return Status::OK();
-    }
-
-    const std::string& filename() const override { return _file->filename(); }
-
-private:
-    std::unique_ptr<RandomAccessFile> _file;
-    size_t _offset = 0;
 };
 
 class BrokerWritableFile : public WritableFile {
@@ -299,8 +260,28 @@ private:
 };
 
 StatusOr<std::unique_ptr<SequentialFile>> EnvBroker::new_sequential_file(const std::string& path) {
-    ASSIGN_OR_RETURN(auto random_file, new_random_access_file(path));
-    return std::make_unique<BrokerSequentialFile>(std::move(random_file));
+    TBrokerOpenReaderRequest request;
+    TBrokerOpenReaderResponse response;
+    request.__set_path(path);
+    request.__set_clientId(get_client_id(_broker_addr));
+    request.__set_startOffset(0);
+    request.__set_version(TBrokerVersion::VERSION_ONE);
+    request.__set_properties(_properties);
+
+    Status st = call_method(_broker_addr, &BrokerServiceClient::openReader, request, &response);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to open " << path << ": " << st;
+        return st;
+    }
+    if (response.opStatus.statusCode != TBrokerOperationStatusCode::OK) {
+        LOG(WARNING) << "Fail to open " << path << ": " << response.opStatus.message;
+        return to_status(response.opStatus);
+    }
+
+    // Get file size.
+    ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
+    auto stream = std::make_shared<BrokerInputStream>(_broker_addr, response.fd, file_size);
+    return std::make_unique<SequentialFile>(std::move(stream), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(const std::string& path) {
@@ -329,7 +310,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvBroker::new_random_access_file(co
 
     // Get file size.
     ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
-    return std::make_unique<BrokerRandomAccessFile>(_broker_addr, path, response.fd, file_size);
+    auto stream = std::make_unique<BrokerInputStream>(_broker_addr, response.fd, file_size);
+    return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> EnvBroker::new_writable_file(const std::string& path) {

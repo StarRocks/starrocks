@@ -5,15 +5,15 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
 

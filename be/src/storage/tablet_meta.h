@@ -79,16 +79,16 @@ public:
     void init_from_pb(const AlterTabletPB& alter_task);
     void to_alter_pb(AlterTabletPB* alter_task);
 
-    inline const AlterTabletState& alter_state() const { return _alter_state; }
+    const AlterTabletState& alter_state() const { return _alter_state; }
     Status set_alter_state(AlterTabletState alter_state);
 
-    inline int64_t related_tablet_id() const { return _related_tablet_id; }
-    inline int32_t related_schema_hash() const { return _related_schema_hash; }
-    inline void set_related_tablet_id(int64_t related_tablet_id) { _related_tablet_id = related_tablet_id; }
-    inline void set_related_schema_hash(int32_t schema_hash) { _related_schema_hash = schema_hash; }
+    int64_t related_tablet_id() const { return _related_tablet_id; }
+    int32_t related_schema_hash() const { return _related_schema_hash; }
+    void set_related_tablet_id(int64_t related_tablet_id) { _related_tablet_id = related_tablet_id; }
+    void set_related_schema_hash(int32_t schema_hash) { _related_schema_hash = schema_hash; }
 
-    inline const AlterTabletType& alter_type() const { return _alter_type; }
-    inline void set_alter_type(AlterTabletType alter_type) { _alter_type = alter_type; }
+    const AlterTabletType& alter_type() const { return _alter_type; }
+    void set_alter_type(AlterTabletType alter_type) { _alter_type = alter_type; }
 
     friend bool operator==(const AlterTabletTask& a, const AlterTabletTask& b);
     friend bool operator!=(const AlterTabletTask& a, const AlterTabletTask& b);
@@ -140,41 +140,41 @@ public:
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
-    inline TabletTypePB tablet_type() const { return _tablet_type; }
-    inline TabletUid tablet_uid() const;
-    inline int64_t table_id() const;
-    inline int64_t partition_id() const;
-    inline int64_t tablet_id() const;
+    TabletTypePB tablet_type() const { return _tablet_type; }
+    TabletUid tablet_uid() const;
+    int64_t table_id() const;
+    int64_t partition_id() const;
+    int64_t tablet_id() const;
     void set_tablet_id(int64_t tablet_id) { _tablet_id = tablet_id; }
-    inline int32_t schema_hash() const;
-    inline int16_t shard_id() const;
-    inline void set_shard_id(int32_t shard_id);
-    inline int64_t creation_time() const;
-    inline void set_creation_time(int64_t creation_time);
-    inline int64_t cumulative_layer_point() const;
-    inline void set_cumulative_layer_point(int64_t new_point);
+    int32_t schema_hash() const;
+    int16_t shard_id() const;
+    void set_shard_id(int32_t shard_id);
+    int64_t creation_time() const;
+    void set_creation_time(int64_t creation_time);
+    int64_t cumulative_layer_point() const;
+    void set_cumulative_layer_point(int64_t new_point);
 
-    inline size_t num_rows() const;
+    size_t num_rows() const;
     // disk space occupied by tablet
-    inline size_t tablet_footprint() const;
-    inline size_t version_count() const;
+    size_t tablet_footprint() const;
+    size_t version_count() const;
     Version max_version() const;
 
-    inline TabletState tablet_state() const;
+    TabletState tablet_state() const;
     // NOTE: Normally you should NOT call this method directly but call Tablet::set_tablet_state().
     // This is a dangerous method, it may change the state from SHUTDOWN to RUNNING again, which should not happen
     // in normal cases
-    inline void set_tablet_state(TabletState state);
+    void set_tablet_state(TabletState state);
 
-    inline bool in_restore_mode() const;
+    bool in_restore_mode() const;
 
-    inline const TabletSchema& tablet_schema() const;
+    const TabletSchema& tablet_schema() const;
 
-    inline void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
+    void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
 
-    inline std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
+    std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
-    inline const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
+    const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     Status add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas);
     void modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
@@ -182,8 +182,8 @@ public:
     void revise_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
 
     void revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
-    inline const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
-    inline const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
+    const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
+    const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
     Status add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;

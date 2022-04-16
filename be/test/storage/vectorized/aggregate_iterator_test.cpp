@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/vectorized/aggregate_iterator.h"
+#include "storage/aggregate_iterator.h"
 
 #include "column/column_pool.h"
 #include "gtest/gtest.h"

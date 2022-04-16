@@ -17,11 +17,11 @@
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
@@ -74,7 +74,7 @@ Status OlapScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
-    OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());

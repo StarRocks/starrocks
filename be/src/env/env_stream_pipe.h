@@ -8,23 +8,22 @@ namespace starrocks {
 class StreamLoadPipe;
 
 // Since the StreamPipe does not have the standard
-// SequentialFile interface. The StreamPipeSequentialFile
+// SequentialFile interface. The StreamLoadPipeInputStream
 // is used to wrap the memory to provide the sequential API.
-class StreamPipeSequentialFile : public SequentialFile {
+// TODO: remove this class
+class StreamLoadPipeInputStream : public io::InputStream {
 public:
-    explicit StreamPipeSequentialFile(std::shared_ptr<StreamLoadPipe> file);
-    ~StreamPipeSequentialFile() override;
+    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file);
+    ~StreamLoadPipeInputStream() override;
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
 
     Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding = 0);
 
-    Status skip(uint64_t n) override;
-    const std::string& filename() const override { return _filename; }
+    Status skip(int64_t n) override;
 
 private:
     std::shared_ptr<StreamLoadPipe> _file;
-    std::string _filename = "StreamPipeSequentialFile";
 };
 
 } // namespace starrocks

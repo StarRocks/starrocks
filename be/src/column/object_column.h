@@ -197,6 +197,10 @@ public:
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
 
+    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+
+    bool has_large_column() const override { return false; }
+
 private:
     void _build_cache() const {
         if (_cache_ok) {

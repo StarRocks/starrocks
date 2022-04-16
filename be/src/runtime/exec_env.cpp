@@ -28,12 +28,14 @@
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/substitute.h"
 #include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -131,6 +133,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
     _thread_mgr = new ThreadResourceMgr();
+    // query_context_mgr keeps slotted map with 64 slot to reduce contention
+    _query_context_mgr = new pipeline::QueryContextManager(6);
+    RETURN_IF_ERROR(_query_context_mgr->init());
     _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
@@ -210,6 +215,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _plugin_mgr = new PluginMgr();
     _runtime_filter_worker = new RuntimeFilterWorker(this);
+    _runtime_filter_cache = new RuntimeFilterCache(8);
+    RETURN_IF_ERROR(_runtime_filter_cache->init());
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -231,6 +238,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
 const std::string& ExecEnv::token() const {
     return _master_info->token;
+}
+
+void ExecEnv::add_rf_event(const RfTracePoint& pt) {
+    std::string msg = strings::Substitute("$0($1)", std::move(pt.msg),
+                                          pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
 class SetMemTrackerForColumnPool {
@@ -408,6 +421,10 @@ void ExecEnv::_destroy() {
         delete _hdfs_scan_executor;
         _hdfs_scan_executor = nullptr;
     }
+    if (_runtime_filter_cache) {
+        delete _runtime_filter_cache;
+        _runtime_filter_cache = nullptr;
+    }
     if (_thread_pool) {
         delete _thread_pool;
         _thread_pool = nullptr;
@@ -461,6 +478,10 @@ void ExecEnv::_destroy() {
     if (_query_pool_mem_tracker) {
         delete _query_pool_mem_tracker;
         _query_pool_mem_tracker = nullptr;
+    }
+    if (_query_context_mgr) {
+        delete _query_context_mgr;
+        _query_context_mgr = nullptr;
     }
     if (_mem_tracker) {
         delete _mem_tracker;

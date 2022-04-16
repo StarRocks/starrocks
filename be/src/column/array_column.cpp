@@ -497,15 +497,11 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
         return Status::InternalError("Size of ArrayColumn exceed the limit");
     }
 
-    auto ret = _elements->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() != nullptr) {
-        _elements = ret.value();
-        return nullptr;
-    } else {
-        return nullptr;
-    }
+    return upgrade_helper_func(&_elements);
+}
+
+StatusOr<ColumnPtr> ArrayColumn::downgrade() {
+    return downgrade_helper_func(&_elements);
 }
 
 } // namespace starrocks::vectorized

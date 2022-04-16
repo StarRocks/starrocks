@@ -54,7 +54,7 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  <slot 2> : NULL\n" +
-                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS BIGINT)"));
+                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS SMALLINT)"));
 
         sql = "select v1, v3[1] + [1,2,3][1] as v, sum(v3[1]) from tarray group by v1, v order by v";
         plan = getFragmentPlan(sql);

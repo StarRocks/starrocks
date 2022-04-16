@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -16,7 +15,6 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -498,14 +496,28 @@ public class JoinTest extends PlanTestBase {
         };
 
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 3\n" +
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: 4: v4, 5: v5, 10: cast\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
                 "\n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 7: v1\n" +
+                "  |  equal join conjunct: 5: v5 = 7: v1\n" +
+                "  |  equal join conjunct: 10: cast = 8: v2\n" +
+                "  |  other join predicates: 4: v4 >= 7: v1, 5: v5 > 7: v1\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
                 "  1:EMPTYSET"));
     }
 
@@ -2128,7 +2140,7 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  155;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("6:Project\n" +
+        Assert.assertTrue(plan.contains("7:Project\n" +
                 "  |  <slot 2> : 2: v2"));
     }
 
@@ -2230,5 +2242,15 @@ public class JoinTest extends PlanTestBase {
             sessionVariable.setParallelExecInstanceNum(parallelExecInstanceNum);
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testColocateJoinWithProject() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 as a join t0 b on a.v1 = b.v1 and a.v1 = b.v1 + 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)");
+        FeConstants.runningUnitTest = false;
     }
 }

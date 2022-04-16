@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "env/env_memory.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/beta_rowset.h"
@@ -14,7 +15,6 @@
 #include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
@@ -32,12 +32,10 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
     }
-    auto rs = MutableIndex::create(sizeof(Key));
-    ASSERT_TRUE(rs.ok());
-    std::unique_ptr<MutableIndex> idx = std::move(rs).value();
+    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key)));
 
     // test insert
-    ASSERT_TRUE(idx->insert(keys.size(), keys.data(), values.data()).ok());
+    ASSERT_OK(idx->insert(keys.size(), keys.data(), values.data()));
     // insert duplicate should return error
     ASSERT_FALSE(idx->insert(keys.size(), keys.data(), values.data()).ok());
 
@@ -153,11 +151,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         PersistentIndex index(kPersistentIndexDir);
         //ASSERT_TRUE(index.create(sizeof(Key), version).ok());
 
-        ASSERT_TRUE(index.load(index_meta).ok());
-        ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
-        ASSERT_TRUE(index.insert(N, keys.data(), values.data(), false).ok());
-        ASSERT_TRUE(index.commit(&index_meta).ok());
-        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(1, 0)));
+        ASSERT_OK(index.insert(N, keys.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
 
         std::vector<IndexValue> old_values(keys.size());
         ASSERT_TRUE(index.prepare(EditVersion(2, 0)).ok());

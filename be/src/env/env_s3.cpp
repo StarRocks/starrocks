@@ -47,51 +47,6 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     }
 }
 
-// Wrap a `starrocks::io::SeekableInputStream` into `starrocks::RandomAccessFile`.
-// this wrapper will be deleted after we merged `starrocks::RandomAccessFile` and
-// `starrocks::io:RandomAccessFile` into one class,
-class RandomAccessFileAdapter : public RandomAccessFile {
-public:
-    explicit RandomAccessFileAdapter(std::unique_ptr<io::SeekableInputStream> input, std::string path)
-            : _input(std::move(input)), _object_path(std::move(path)), _object_size(0) {}
-
-    ~RandomAccessFileAdapter() override = default;
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override;
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override;
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override;
-    StatusOr<uint64_t> get_size() const override;
-    const std::string& filename() const override { return _object_path; }
-
-private:
-    std::unique_ptr<io::SeekableInputStream> _input;
-    std::string _object_path;
-    mutable uint64_t _object_size;
-};
-
-StatusOr<int64_t> RandomAccessFileAdapter::read_at(int64_t offset, void* data, int64_t size) const {
-    return _input->read_at(offset, data, size);
-}
-
-Status RandomAccessFileAdapter::read_at_fully(int64_t offset, void* data, int64_t size) const {
-    return _input->read_at_fully(offset, data, size);
-}
-
-Status RandomAccessFileAdapter::readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const {
-    for (size_t i = 0; i < res_cnt; i++) {
-        RETURN_IF_ERROR(RandomAccessFileAdapter::read_at_fully(offset, res[i].data, res[i].size));
-        offset += res[i].size;
-    }
-    return Status::OK();
-}
-
-StatusOr<uint64_t> RandomAccessFileAdapter::get_size() const {
-    if (_object_size == 0) {
-        ASSIGN_OR_RETURN(_object_size, _input->get_size());
-    }
-    return _object_size;
-}
-
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
 class OutputStreamAdapter : public WritableFile {
 public:
@@ -241,9 +196,7 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        return Status::NotSupported("EnvS3::new_sequential_file");
-    }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
 
     // FIXME: `new_writable_file()` will not truncate an already-exist file/object, which does not satisfy
     // the API requirement.
@@ -319,8 +272,18 @@ StatusOr<std::unique_ptr<RandomAccessFile>> EnvS3::new_random_access_file(const 
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
     auto client = new_s3client(uri);
-    auto input_stream = std::make_unique<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
-    return std::make_unique<RandomAccessFileAdapter>(std::move(input_stream), path);
+    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
+}
+
+StatusOr<std::unique_ptr<SequentialFile>> EnvS3::new_sequential_file(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
+    }
+    auto client = new_s3client(uri);
+    auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
+    return std::make_unique<SequentialFile>(std::move(input_stream), path);
 }
 
 StatusOr<std::unique_ptr<WritableFile>> EnvS3::new_writable_file(const std::string& fname) {

@@ -193,7 +193,7 @@ Status MysqlTableWriter::append(vectorized::Chunk* chunk) {
     // eval output expr
     vectorized::Columns result_columns(_output_expr_ctxs.size());
     for (int i = 0; i < _output_expr_ctxs.size(); ++i) {
-        result_columns[i] = _output_expr_ctxs[i]->evaluate(chunk);
+        ASSIGN_OR_RETURN(result_columns[i], _output_expr_ctxs[i]->evaluate(chunk));
     }
 
     RETURN_IF_ERROR(_build_viewers(result_columns));

@@ -833,6 +833,19 @@ build_vpack() {
     make install
 }
 
+# opentelemetry
+build_opentelemetry() {
+    check_if_source_exist $OPENTELEMETRY_SOURCE
+
+    cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF -DWITH_STL=ON -DWITH_JAEGER=ON ..
+    make -j$PARALLEL
+    make install
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -875,6 +888,7 @@ build_mariadb
 build_aliyun_oss_jars
 build_aws_cpp_sdk
 build_vpack
+build_opentelemetry
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

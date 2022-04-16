@@ -143,7 +143,8 @@ void ChunkCursor::_reset_with_next_chunk() {
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {
-        _current_order_by_columns.push_back(expr_ctx->evaluate(_current_chunk.get()));
+        auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
+        _current_order_by_columns.push_back(std::move(col));
     }
 }
 
@@ -159,7 +160,8 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {
-        _current_order_by_columns.push_back(expr_ctx->evaluate(_current_chunk.get()));
+        auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
+        _current_order_by_columns.push_back(std::move(col));
     }
 }
 

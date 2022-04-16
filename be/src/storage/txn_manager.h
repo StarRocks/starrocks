@@ -158,13 +158,13 @@ private:
     typedef std::unordered_map<TxnKey, std::map<TabletInfo, TabletTxnInfo>, TxnKeyHash, TxnKeyEqual> txn_tablet_map_t;
     typedef std::unordered_map<int64_t, std::unordered_set<int64_t>> txn_partition_map_t;
 
-    inline std::shared_mutex& _get_txn_map_lock(TTransactionId transactionId);
+    std::shared_mutex& _get_txn_map_lock(TTransactionId transactionId);
 
-    inline txn_tablet_map_t& _get_txn_tablet_map(TTransactionId transactionId);
+    txn_tablet_map_t& _get_txn_tablet_map(TTransactionId transactionId);
 
-    inline txn_partition_map_t& _get_txn_partition_map(TTransactionId transactionId);
+    txn_partition_map_t& _get_txn_partition_map(TTransactionId transactionId);
 
-    inline std::mutex& _get_txn_lock(TTransactionId transactionId);
+    std::mutex& _get_txn_lock(TTransactionId transactionId);
 
     // insert or remove (transaction_id, partition_id) from _txn_partition_map
     // get _txn_map_lock before calling

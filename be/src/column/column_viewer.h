@@ -59,15 +59,15 @@ public:
         _null_data = _null_column->get_data().data();
     }
 
-    inline const RunTimeCppType<Type> value(const size_t idx) const { return _data[idx & _not_const_mask]; }
+    const RunTimeCppType<Type> value(const size_t idx) const { return _data[idx & _not_const_mask]; }
 
-    inline const bool is_null(const size_t idx) const { return _null_data[idx & _null_mask]; }
+    const bool is_null(const size_t idx) const { return _null_data[idx & _null_mask]; }
 
-    inline size_t size() const { return _column->size(); }
+    size_t size() const { return _column->size(); }
 
-    inline const NullColumnPtr& null_column() const { return _null_column; };
+    const NullColumnPtr& null_column() const { return _null_column; };
 
-    inline typename RunTimeColumnType<Type>::Ptr column() const { return _column; };
+    typename RunTimeColumnType<Type>::Ptr column() const { return _column; };
 
 private:
     // column ptr

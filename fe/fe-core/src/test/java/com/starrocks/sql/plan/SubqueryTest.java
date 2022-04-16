@@ -117,4 +117,15 @@ public class SubqueryTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+    @Test
+    public void testAssertWithJoin() throws Exception {
+        String sql = "SELECT max(1) FROM t0 WHERE 1 = (SELECT t1.v4 FROM t0, t1 WHERE t1.v4 IN (SELECT t1.v4 FROM  t1))";
+        String explainString = getFragmentPlan(sql);
+        Assert.assertTrue(explainString.contains("  8:Project\n" +
+                "  |  <slot 7> : 7: v4\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
+    }
+
 }

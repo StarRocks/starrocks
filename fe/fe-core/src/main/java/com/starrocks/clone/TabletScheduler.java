@@ -724,18 +724,24 @@ public class TabletScheduler extends MasterDaemon {
         stat.counterReplicaUnavailableErr.incrementAndGet();
         try {
             handleReplicaVersionIncomplete(tabletCtx, batchTask);
-            LOG.info("succeed to find version incomplete replica from tablet relocating. tablet id: {}",
-                    tabletCtx.getTabletId());
+            LOG.info(
+                    "succeed to find version incomplete replica from tablet relocating. tablet: {} replicas: {} {}->{}",
+                    tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
+                    tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
         } catch (SchedException e) {
             if (e.getStatus() == Status.SCHEDULE_FAILED) {
                 LOG.info("failed to find version incomplete replica from tablet relocating. " +
-                        "reason : [{}], tablet id: [{}], try to find a new backend", e.getMessage(), tabletCtx.getTabletId());
+                                "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
+                        tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
+                        tabletCtx.getDestBackendId());
                 // the dest or src slot may be taken after calling handleReplicaVersionIncomplete(),
                 // so we need to release these slots first.
                 // and reserve the tablet in TabletSchedCtx so that it can continue to be scheduled.
                 tabletCtx.releaseResource(this, true);
                 handleReplicaMissing(tabletCtx, batchTask);
-                LOG.info("succeed to find new backend for tablet relocating. tablet id: {}", tabletCtx.getTabletId());
+                LOG.info("succeed to find new backend for tablet relocating. tablet: {} replicas: {} {}->{}",
+                        tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
+                        tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
             } else {
                 throw e;
             }
@@ -990,6 +996,8 @@ public class TabletScheduler extends MasterDaemon {
             replica.setState(ReplicaState.DECOMMISSION);
             // set priority to normal because it may wait for a long time. Remain it as VERY_HIGH may block other task.
             tabletCtx.setOrigPriority(Priority.NORMAL);
+            LOG.info("decommission tablet:" + tabletCtx.getTabletId() + " type:" + tabletCtx.getType() + " replica:" +
+                    replica.getBackendId() + " reason:" + reason, " watermark:" + nextTxnId);
             throw new SchedException(Status.SCHEDULE_FAILED, "set watermark txn " + nextTxnId);
         } else if (replica.getState() == ReplicaState.DECOMMISSION && replica.getWatermarkTxnId() != -1) {
             long watermarkTxnId = replica.getWatermarkTxnId();

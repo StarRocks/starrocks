@@ -101,6 +101,11 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+    if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
+        fprintf(stderr, "you need replace bin dir of be with new version.\n");
+        exit(-1);
+    }
+
     // S2 will crashes when deserialization fails and FLAGS_s2debug was true.
     FLAGS_s2debug = false;
 
@@ -304,7 +309,6 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-    starrocks::pipeline::QueryContextManager::instance()->clear();
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

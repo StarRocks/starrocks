@@ -30,8 +30,8 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/vectorized/chunk_iterator.h"
 
 namespace starrocks {
 
@@ -125,7 +125,7 @@ public:
     Status load();
 
     const TabletSchema& schema() const { return *_schema; }
-    inline void set_schema(const TabletSchema* schema) { _schema = schema; }
+    void set_schema(const TabletSchema* schema) { _schema = schema; }
 
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;

@@ -188,6 +188,7 @@ BACKUP: 'BACKUP';
 RESTORE: 'RESTORE';
 SNAPSHOT: 'SNAPSHOT';
 TO: 'TO';
+FORCE: 'FORCE';
 
 EQ  : '=';
 NEQ : '<>' | '!=';

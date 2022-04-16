@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,7 +46,9 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -107,6 +110,37 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
+    @FEFunction(name = "date_trunc", argTypes = {"VARCHAR", "DATETIME"}, returnType = "DATETIME")
+    public static ConstantOperator dateTrunc(ConstantOperator fmt, ConstantOperator date) {
+        switch (fmt.getVarchar()) {
+            case "second":
+                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.SECONDS));
+            case "minute":
+                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.MINUTES));
+            case "hour":
+                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.HOURS));
+            case "day":
+                return ConstantOperator.createDatetime(date.getDatetime().truncatedTo(ChronoUnit.DAYS));
+            case "month":
+                return ConstantOperator.createDatetime(
+                        date.getDatetime().with(TemporalAdjusters.firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS));
+            case "year":
+                return ConstantOperator.createDatetime(
+                        date.getDatetime().with(TemporalAdjusters.firstDayOfYear()).truncatedTo(ChronoUnit.DAYS));
+            case "week":
+                return ConstantOperator.createDatetime(
+                        date.getDatetime().with(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS));
+            case "quarter":
+                int year = date.getDatetime().getYear();
+                int month = date.getDatetime().getMonthValue();
+                int quarterMonth = (month - 1) / 3 * 3 + 1;
+                LocalDateTime quarterDate = LocalDateTime.of(year, quarterMonth, 1, 0, 0);
+                return ConstantOperator.createDatetime(quarterDate);
+            default:
+                throw new IllegalArgumentException(fmt + " not supported in date_trunc format string");
+        }
+    }
+
     @FEFunction.List(list = {
             @FEFunction(name = "date_format", argTypes = {"DATETIME", "VARCHAR"}, returnType = "VARCHAR"),
             @FEFunction(name = "date_format", argTypes = {"DATE", "VARCHAR"}, returnType = "VARCHAR")
@@ -131,10 +165,12 @@ public class ScalarOperatorFunctions {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
 
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt = LocalDateTime.from(builder.toFormatter().parse(date.getVarchar()));
+            LocalDateTime ldt = LocalDateTime.from(
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
-            LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
+            LocalDate ld = LocalDate.from(
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -142,7 +178,8 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
-        LocalDate ld = LocalDate.from(builder.toFormatter().parse(date.getVarchar()));
+        LocalDate ld = LocalDate.from(
+                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 

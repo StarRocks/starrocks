@@ -8,25 +8,33 @@
 
 namespace starrocks {
 
-StreamPipeSequentialFile::StreamPipeSequentialFile(std::shared_ptr<StreamLoadPipe> file) : _file(std::move(file)) {}
+StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file) : _file(std::move(file)) {}
 
-StreamPipeSequentialFile::~StreamPipeSequentialFile() {
+StreamLoadPipeInputStream::~StreamLoadPipeInputStream() {
     _file->close();
 }
 
-StatusOr<int64_t> StreamPipeSequentialFile::read(void* data, int64_t size) {
+StatusOr<int64_t> StreamLoadPipeInputStream::read(void* data, int64_t size) {
     bool eof = false;
     size_t nread = size;
     RETURN_IF_ERROR(_file->read(static_cast<uint8_t*>(data), &nread, &eof));
     return nread;
 }
 
-Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
+Status StreamLoadPipeInputStream::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
     return _file->read_one_message(buf, length, padding);
 }
 
-Status StreamPipeSequentialFile::skip(uint64_t n) {
-    return _file->seek(n);
+Status StreamLoadPipeInputStream::skip(int64_t n) {
+    std::unique_ptr<char[]> buf(new char[n]);
+    do {
+        ASSIGN_OR_RETURN(auto r, read(buf.get(), n));
+        if (r == 0) {
+            break;
+        }
+        n -= r;
+    } while (n > 0);
+    return Status::OK();
 }
 
 } // namespace starrocks

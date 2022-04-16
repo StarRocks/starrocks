@@ -77,7 +77,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
-    auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
+    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
         auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existing_fragment_ctx) {
@@ -85,7 +85,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         }
     }
 
-    _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
+    _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -129,6 +129,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         DCHECK(wg != nullptr);
     }
 
+    _query_ctx->init_query(wg.get());
+
     int32_t degree_of_parallelism = 1;
     if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
         degree_of_parallelism = request.pipeline_dop;
@@ -137,19 +139,30 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
-    if (query_options.__isset.mem_limit) {
-        auto copy_query_options = query_options;
-        copy_query_options.mem_limit *= degree_of_parallelism;
-        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id,
-                                                                        copy_query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(
+            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+
+    if (wg != nullptr && wg->use_big_query_mem_limit()) {
+        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
     } else {
-        _fragment_ctx->set_runtime_state(
-                std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
+        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(),
+                                                                      per_instance_mem_limit, degree_of_parallelism);
+        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
     }
+
+    auto query_mem_tracker = _query_ctx->mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
+
     auto* runtime_state = _fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    runtime_state->init_mem_trackers(query_id, wg != nullptr ? wg->mem_tracker() : nullptr);
+    // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
+    auto instance_mem_limit = query_options.__isset.mem_limit && query_options.mem_limit > 0
+                                      ? query_options.mem_limit * degree_of_parallelism
+                                      : -1L;
+    runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
     runtime_state->set_be_number(backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
@@ -235,14 +248,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     size_t driver_id = 0;
-    size_t num_root_drivers = 0;
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
         VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
-        const bool is_root = pipeline->is_root();
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only OlapScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
@@ -256,13 +267,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(degree_of_parallelism);
             DCHECK(morsel_queue_per_driver.size() == degree_of_parallelism);
 
-            if (is_root) {
-                num_root_drivers += degree_of_parallelism;
-            }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
-                                                                    driver_id++, is_root);
+                DriverPtr driver =
+                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (wg != nullptr) {
@@ -279,14 +287,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 drivers.emplace_back(std::move(driver));
             }
         } else {
-            if (is_root) {
-                num_root_drivers += degree_of_parallelism;
-            }
-
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
-                                                                    driver_id++, is_root);
+                DriverPtr driver =
+                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));
             }
@@ -294,7 +298,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
-    _fragment_ctx->set_num_root_drivers(num_root_drivers);
     _fragment_ctx->set_drivers(std::move(drivers));
 
     if (wg != nullptr) {
@@ -393,7 +396,6 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
             _fragment_ctx->pipelines().back()->add_op_factory(sink_op);
-            _fragment_ctx->pipelines().back()->unset_root();
         }
 
         // ==== create source/sink pipelines ====
@@ -427,7 +429,6 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);
             auto pp = std::make_shared<Pipeline>(context->next_pipe_id(), ops);
-            pp->set_root();
             _fragment_ctx->pipelines().emplace_back(pp);
         }
     }
