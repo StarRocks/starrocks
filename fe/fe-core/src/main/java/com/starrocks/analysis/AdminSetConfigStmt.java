@@ -63,12 +63,8 @@ public class AdminSetConfigStmt extends DdlStmt {
         return configs;
     }
 
-    public void setConfigs(Map<String, String> configs) {
-        this.configs = configs;
-    }
-
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
 
         if (configs.size() != 1) {
