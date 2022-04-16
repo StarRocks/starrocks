@@ -16,7 +16,7 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            vectorized::ColumnPtr column = ColumnHelper::create_column(slot->type(), true, false, 1);
+            vectorized::ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(1);
             chunk->append_column(column, slot->id());
         }
