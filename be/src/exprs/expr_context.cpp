@@ -25,6 +25,7 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
@@ -190,12 +191,16 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
         CHECK(!chunk->is_empty());
     }
 #endif
-    auto ptr = e->evaluate(this, chunk);
-    DCHECK(ptr != nullptr);
-    if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
-        ptr->resize(chunk->num_rows());
+    try {
+        auto ptr = e->evaluate(this, chunk);
+        DCHECK(ptr != nullptr);
+        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
+            ptr->resize(chunk->num_rows());
+        }
+        return ptr;
+    } catch (std::runtime_error& e) {
+        return Status::RuntimeError(fmt::format("Expr evaluate meet error:{}", e.what()));
     }
-    return ptr;
 }
 
 } // namespace starrocks
