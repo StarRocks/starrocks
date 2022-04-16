@@ -43,6 +43,20 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\",\n" + 
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+        // for primary key table
+        starRocksAssert.withTable("CREATE TABLE `primary_table` ( \n" +
+                "`tags_id` int(11) NOT NULL COMMENT \"\", \n" + 
+                "`timestamp` datetime NOT NULL COMMENT \"\", \n" +
+                "`k3` varchar(65533) NOT NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP \n" + 
+                "PRIMARY KEY(`tags_id`, `timestamp`) \n" +
+                "COMMENT \"OLAP\" \n" +
+                "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         
@@ -83,6 +97,15 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
         String sql = "select timestamp\n" +
                 "               from metrics_detail where value is NULL limit 10;";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+    }
+
+    @Test 
+    public void testFilterPrimaryKeyTable() throws Exception {
+        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        String sql = "select timestamp\n" +
+                "               from primary_table where k3 = \"test\" limit 10;";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
