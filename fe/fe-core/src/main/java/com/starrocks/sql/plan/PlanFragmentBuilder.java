@@ -280,21 +280,14 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggTableValueColumnAndPrimaryKeyColumnNames = new HashSet<String>();
-                if (referenceTable.getKeysType().isAggregationFamily()) {
+                Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+                if (referenceTable.getKeysType().isAggregationFamily() || referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     List<Column> fullColumn = referenceTable.getFullSchema();
                     for (Column col : fullColumn) {
                         if (!col.isKey()) {
-                            aggTableValueColumnAndPrimaryKeyColumnNames.add(col.getName());
+                            aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
                         }
                     }
-                }
-
-                if (referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    List<Column> fullColumn = referenceTable.getFullSchema();
-                    for (Column col : fullColumn) {
-                        aggTableValueColumnAndPrimaryKeyColumnNames.add(col.getName());
-                    } 
                 }
 
                 for (ScalarOperator predicate : predicates) {
@@ -322,7 +315,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnAndPrimaryKeyColumnNames);
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
             }
         }
 

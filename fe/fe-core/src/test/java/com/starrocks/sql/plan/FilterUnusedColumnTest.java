@@ -105,7 +105,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
     public void testFilterPrimaryKeyTable() throws Exception {
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
         String sql = "select timestamp\n" +
-                "               from primary_table where tags_id > 10 limit 10;";
+                "               from primary_table where k3 = \"test\" limit 10;";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
