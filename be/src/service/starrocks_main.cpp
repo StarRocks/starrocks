@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
     }
 
     if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
-        fprintf(stderr, "you need replace bin dir be be with new version.\n");
+        fprintf(stderr, "you need replace bin dir of be with new version.\n");
         exit(-1);
     }
 
