@@ -32,6 +32,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -196,7 +197,7 @@ public class PropertyAnalyzer {
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
-            throws AnalysisException {
+            throws SemanticException {
         String key = "default.";
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -205,7 +206,7 @@ public class PropertyAnalyzer {
         }
         short replicationNum = Short.parseShort(properties.get(key));
         if (replicationNum <= 0) {
-            throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
+            throw new SemanticException("Replication num should larger than 0. (suggested 3)");
         }
         return replicationNum;
     }

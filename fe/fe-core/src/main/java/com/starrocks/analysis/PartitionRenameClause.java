@@ -21,10 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -50,15 +49,6 @@ public class PartitionRenameClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(partitionName)) {
-            throw new AnalysisException("Partition name is not set");
-        }
-
-        if (Strings.isNullOrEmpty(newPartitionName)) {
-            throw new AnalysisException("New partition name is not set");
-        }
-
-        FeNameFormat.checkPartitionName(newPartitionName);
     }
 
     @Override
@@ -74,5 +64,10 @@ public class PartitionRenameClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitPartitionRenameClause(this, context);
     }
 }

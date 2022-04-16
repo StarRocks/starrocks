@@ -21,13 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -55,27 +50,6 @@ public class AlterTableStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        if (tbl == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
-        }
-        tbl.analyze(analyzer);
-
-        CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
-
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
-                PrivPredicate.ALTER)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "ALTER TABLE",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tbl.getTbl());
-        }
-        if (ops == null || ops.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_ALTER_OPERATION);
-        }
-        for (AlterClause op : ops) {
-            op.analyze(analyzer);
-        }
     }
 
     @Override
@@ -109,5 +83,10 @@ public class AlterTableStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterTableStatement(this, context);
     }
 }

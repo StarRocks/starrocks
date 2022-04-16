@@ -26,6 +26,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,15 @@ public class ReplacePartitionClause extends AlterTableClause {
         this.properties = properties;
     }
 
+    public PartitionNames getPartitionNamesObject(){
+        return partitionNames;
+    }
+
+    public PartitionNames getTempPartitionNamesObject(){
+        return tempPartitionNames;
+    }
+
+
     public List<String> getPartitionNames() {
         return partitionNames.getPartitionNames();
     }
@@ -80,27 +90,16 @@ public class ReplacePartitionClause extends AlterTableClause {
         return useTempPartitionName;
     }
 
+    public void setStrictRange(boolean strictRange) {
+        isStrictRange = strictRange;
+    }
+
+    public void setUseTempPartitionName(boolean useTempPartitionName) {
+        this.useTempPartitionName = useTempPartitionName;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (partitionNames == null || tempPartitionNames == null) {
-            throw new AnalysisException("No partition specified");
-        }
-
-        partitionNames.analyze(analyzer);
-        tempPartitionNames.analyze(analyzer);
-
-        if (partitionNames.isTemp() || !tempPartitionNames.isTemp()) {
-            throw new AnalysisException("Only support replace partitions with temp partitions");
-        }
-
-        this.isStrictRange =
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_STRICT_RANGE, true);
-        this.useTempPartitionName = PropertyAnalyzer.analyzeBooleanProp(properties,
-                PropertyAnalyzer.PROPERTIES_USE_TEMP_PARTITION_NAME, false);
-
-        if (properties != null && !properties.isEmpty()) {
-            throw new AnalysisException("Unknown properties: " + properties.keySet());
-        }
     }
 
     @Override
@@ -121,5 +120,10 @@ public class ReplacePartitionClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitReplacePartitionClause(this, context);
     }
 }

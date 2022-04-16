@@ -23,32 +23,39 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class CreateIndexClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
-
+    
     @Test
     public void testNormal() throws AnalysisException {
         CreateIndexClause clause = new CreateIndexClause(new TableName("db", "table"), new IndexDef("index1",
                 Lists.newArrayList("col1"), IndexDef.IndexType.BITMAP, "balabala"), false);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("CREATE INDEX index1 ON `db`.`table` (`col1`) USING BITMAP COMMENT 'balabala'",
                 clause.toSql());
 
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDuplIndex() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testDuplIndex() {
         CreateIndexClause clause = new CreateIndexClause(new TableName("db", "table"), null, false);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
 
     }
 }

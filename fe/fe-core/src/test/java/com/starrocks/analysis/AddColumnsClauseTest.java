@@ -26,6 +26,11 @@ import com.starrocks.analysis.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,11 +38,13 @@ import org.junit.Test;
 import java.util.List;
 
 public class AddColumnsClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
@@ -50,19 +57,19 @@ public class AddColumnsClauseTest {
                 new DefaultValueDef(true, new StringLiteral("0")), "");
         columns.add(definition);
         AddColumnsClause clause = new AddColumnsClause(columns, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN (`col1` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\", "
                 + "`col2` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\")", clause.toString());
 
         clause = new AddColumnsClause(columns, "", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN (`col1` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\", "
                         + "`col2` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\")",
                 clause.toString());
         Assert.assertNull(clause.getRollupName());
 
         clause = new AddColumnsClause(columns, "testTable", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
 
         Assert.assertEquals("ADD COLUMN (`col1` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\", "
                         + "`col2` int(11) NOT NULL DEFAULT \"0\" COMMENT \"\") IN `testTable`",
@@ -71,7 +78,7 @@ public class AddColumnsClauseTest {
         Assert.assertEquals("testTable", clause.getRollupName());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testNoDefault() throws AnalysisException {
         List<ColumnDef> columns = Lists.newArrayList();
         ColumnDef definition = new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)));
@@ -80,15 +87,15 @@ public class AddColumnsClauseTest {
         columns.add(definition);
         AddColumnsClause clause = new AddColumnsClause(columns, null, null);
 
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testNoColumn() throws AnalysisException {
         AddColumnsClause clause = new AddColumnsClause(null, null, null);
 
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 }

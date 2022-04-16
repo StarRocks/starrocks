@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 
 // Column position used when add column
 public class ColumnPosition {
@@ -42,12 +43,12 @@ public class ColumnPosition {
         this.lastCol = col;
     }
 
-    public void analyze() throws AnalysisException {
+    public void analyze() throws SemanticException {
         if (this == FIRST) {
             return;
         }
         if (Strings.isNullOrEmpty(lastCol)) {
-            throw new AnalysisException("Column is empty.");
+            throw new SemanticException("Column is empty.");
         }
     }
 

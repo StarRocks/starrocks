@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,10 @@ public class ReorderColumnsClause extends AlterTableClause {
         return rollupName;
     }
 
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
+    }
+
     public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE);
         this.columnsByPos = cols;
@@ -52,17 +57,6 @@ public class ReorderColumnsClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnsByPos == null || columnsByPos.isEmpty()) {
-            throw new AnalysisException("No column in reorder columns clause.");
-        }
-        for (String col : columnsByPos) {
-            if (Strings.isNullOrEmpty(col)) {
-                throw new AnalysisException("Empty column in reorder columns.");
-            }
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
     }
 
     @Override
@@ -91,5 +85,10 @@ public class ReorderColumnsClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitReorderColumnsClause(this, context);
     }
 }

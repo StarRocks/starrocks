@@ -24,6 +24,11 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -31,13 +36,15 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ModifyColumnClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
-
+    
     @Test
     public void testNormal(@Mocked ColumnDef definition) throws AnalysisException {
         Column column = new Column("tsetCol", Type.INT);
@@ -57,7 +64,7 @@ public class ModifyColumnClauseTest {
         };
 
         ModifyColumnClause clause = new ModifyColumnClause(definition, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("MODIFY COLUMN `testCol` INT", clause.toString());
         Assert.assertEquals(column, clause.getColumn());
         Assert.assertNull(clause.getProperties());
@@ -65,23 +72,23 @@ public class ModifyColumnClauseTest {
         Assert.assertNull(clause.getRollupName());
 
         clause = new ModifyColumnClause(definition, ColumnPosition.FIRST, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("MODIFY COLUMN `testCol` INT FIRST", clause.toString());
         Assert.assertEquals(ColumnPosition.FIRST, clause.getColPos());
 
         clause = new ModifyColumnClause(definition, new ColumnPosition("testCol2"), null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("MODIFY COLUMN `testCol` INT AFTER `testCol2`", clause.toString());
 
         clause = new ModifyColumnClause(definition, new ColumnPosition("testCol2"), "testRollup", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("MODIFY COLUMN `testCol` INT AFTER `testCol2` IN `testRollup`", clause.toString());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoColDef() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoColDef() {
         ModifyColumnClause clause = new ModifyColumnClause(null, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 }

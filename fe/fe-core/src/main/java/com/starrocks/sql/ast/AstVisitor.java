@@ -1,6 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AddColumnClause;
+import com.starrocks.analysis.AddColumnsClause;
+import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AddRollupClause;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -15,14 +20,20 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropColumnClause;
+import com.starrocks.analysis.DropIndexClause;
+import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropRollupClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -37,8 +48,16 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ModifyColumnClause;
+import com.starrocks.analysis.ModifyPartitionClause;
+import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.PartitionRenameClause;
+import com.starrocks.analysis.ReorderColumnsClause;
+import com.starrocks.analysis.ReplacePartitionClause;
+import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -49,7 +68,9 @@ import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -78,6 +99,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
+    }
+
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
@@ -160,6 +185,87 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    // ----------------- AlterClause ---------------
+
+    public R visitAddColumnClause(AddColumnClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAddColumnsClause(AddColumnsClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAddPartitionClause(AddPartitionClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAddRollupClause(AddRollupClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitColumnRenameClause(ColumnRenameClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitCreateIndexClause(CreateIndexClause statement, C context) {
+        return visit(statement, context);
+    }
+
+    public R visitDropColumnClause(DropColumnClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitDropIndexClause(DropIndexClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitDropPartitionClause(DropPartitionClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitDropRollupClause(DropRollupClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitModifyColumnClause(ModifyColumnClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitModifyPartitionClause(ModifyPartitionClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitModifyTablePropertiesClause(ModifyTablePropertiesClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitPartitionRenameClause(PartitionRenameClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitReorderColumnsClause(ReorderColumnsClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitReplacePartitionClause(ReplacePartitionClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitRollupRenameClause(RollupRenameClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitSwapTableClause(SwapTableClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitPartitionNames(PartitionNames statement, C context) {
+        return visitNode(statement, context);
+    }
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {

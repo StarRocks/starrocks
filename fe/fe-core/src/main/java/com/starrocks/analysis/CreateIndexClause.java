@@ -25,6 +25,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Index;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -67,14 +68,12 @@ public class CreateIndexClause extends AlterTableClause {
         return tableName;
     }
 
+    public void setIndex(Index index) {
+        this.index = index;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (indexDef == null) {
-            throw new AnalysisException("index definition expected.");
-        }
-        indexDef.analyze();
-        this.index = new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
-                indexDef.getComment());
     }
 
     @Override
@@ -84,5 +83,10 @@ public class CreateIndexClause extends AlterTableClause {
         } else {
             return "CREATE " + indexDef.toSql(tableName.toSql());
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateIndexClause(this, context);
     }
 }

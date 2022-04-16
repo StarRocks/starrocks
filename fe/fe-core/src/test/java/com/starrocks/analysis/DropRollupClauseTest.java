@@ -21,31 +21,37 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class DropRollupClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
-    public void testNormal() throws AnalysisException {
+    public void testNormal() {
         DropRollupClause clause = new DropRollupClause("testRollup", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("DROP ROLLUP `testRollup`", clause.toString());
         Assert.assertEquals("testRollup", clause.getRollupName());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoRollup() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoRollup() {
         DropRollupClause clause = new DropRollupClause("", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 }

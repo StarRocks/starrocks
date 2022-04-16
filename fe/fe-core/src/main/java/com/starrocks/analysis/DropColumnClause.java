@@ -21,11 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -44,6 +42,10 @@ public class DropColumnClause extends AlterTableClause {
         return rollupName;
     }
 
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
+    }
+
     public DropColumnClause(String colName, String rollupName, Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE);
         this.colName = colName;
@@ -53,12 +55,6 @@ public class DropColumnClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(colName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, colName);
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
     }
 
     @Override
@@ -79,5 +75,10 @@ public class DropColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropColumnClause(this, context);
     }
 }

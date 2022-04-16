@@ -254,7 +254,11 @@ public enum ErrorCode {
     ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
             "Create table like does not support create view."),
     ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
-            "set config failed: %s");
+            "set config failed: %s"),
+    ERROR_NO_NEW_TABLE_NAME(5077, new byte[] {'4', '2', '0', '0', '0'},
+            "New Table name is not set"),
+    ERROR_NO_COLUMN_DEFINITION(5078, new byte[] {'4', '2', '0', '0', '0'},
+            "No column definition in add column clause.");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

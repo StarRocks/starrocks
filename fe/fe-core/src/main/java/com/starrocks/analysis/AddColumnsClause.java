@@ -21,13 +21,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -49,6 +46,18 @@ public class AddColumnsClause extends AlterTableClause {
         return rollupName;
     }
 
+    public List<ColumnDef> getColumnDefs() {
+        return columnDefs;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
+    }
+
+    public void setColumns(List<Column> columns) {
+        this.columns = columns;
+    }
+
     public AddColumnsClause(List<ColumnDef> columnDefs, String rollupName, Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE);
         this.columnDefs = columnDefs;
@@ -58,25 +67,6 @@ public class AddColumnsClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnDefs == null || columnDefs.isEmpty()) {
-            throw new AnalysisException("Columns is empty in add columns clause.");
-        }
-        for (ColumnDef colDef : columnDefs) {
-            colDef.analyze(true);
-
-            if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, colDef.getName());
-            }
-        }
-
-        // Make sure return null if rollup name is empty.
-        rollupName = Strings.emptyToNull(rollupName);
-
-        columns = Lists.newArrayList();
-        for (ColumnDef columnDef : columnDefs) {
-            Column col = columnDef.toColumn();
-            columns.add(col);
-        }
     }
 
     @Override
@@ -106,5 +96,10 @@ public class AddColumnsClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddColumnsClause(this, context);
     }
 }

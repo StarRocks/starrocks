@@ -26,6 +26,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -33,14 +38,16 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class AddColumnClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @Mocked
     ColumnDef definition;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
@@ -74,33 +81,33 @@ public class AddColumnClauseTest {
         };
 
         AddColumnClause clause = new AddColumnClause(definition, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN `testCol` INT", clause.toString());
 
         clause = new AddColumnClause(definition, ColumnPosition.FIRST, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN `testCol` INT FIRST", clause.toString());
 
         clause = new AddColumnClause(definition, new ColumnPosition("testCol2"), null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN `testCol` INT AFTER `testCol2`", clause.toString());
 
         clause = new AddColumnClause(definition, new ColumnPosition("testCol2"), "testRollup", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD COLUMN `testCol` INT AFTER `testCol2` IN `testRollup`", clause.toString());
         Assert.assertNull(clause.getProperties());
         Assert.assertEquals(new ColumnPosition("testCol2").toString(), clause.getColPos().toSql());
         Assert.assertEquals("testRollup", clause.getRollupName());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoColDef() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoColDef() {
         AddColumnClause clause = new AddColumnClause(null, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testNoDefault() throws AnalysisException {
         new Expectations() {
             {
@@ -129,11 +136,11 @@ public class AddColumnClauseTest {
             }
         };
         AddColumnClause clause = new AddColumnClause(definition, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testAggPos() throws AnalysisException {
         new Expectations() {
             {
@@ -162,11 +169,11 @@ public class AddColumnClauseTest {
             }
         };
         AddColumnClause clause = new AddColumnClause(definition, ColumnPosition.FIRST, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testAddValueToFirst() throws AnalysisException {
         new Expectations() {
             {
@@ -195,7 +202,7 @@ public class AddColumnClauseTest {
             }
         };
         AddColumnClause clause = new AddColumnClause(definition, ColumnPosition.FIRST, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 }

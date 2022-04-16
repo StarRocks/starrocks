@@ -21,17 +21,12 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 // used to create one rollup
 // syntax:
@@ -61,6 +56,10 @@ public class AddRollupClause extends AlterTableClause {
         return baseRollupName;
     }
 
+    public void setBaseRollupName(String baseRollupName) {
+        this.baseRollupName = baseRollupName;
+    }
+
     public AddRollupClause(String rollupName, List<String> columnNames,
                            List<String> dupKeys, String baseRollupName,
                            Map<String, String> properties) {
@@ -74,21 +73,6 @@ public class AddRollupClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        FeNameFormat.checkTableName(rollupName);
-
-        if (columnNames == null || columnNames.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
-        }
-        Set<String> colSet = Sets.newHashSet();
-        for (String col : columnNames) {
-            if (Strings.isNullOrEmpty(col)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, col);
-            }
-            if (!colSet.add(col)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, col);
-            }
-        }
-        baseRollupName = Strings.emptyToNull(baseRollupName);
     }
 
     @Override
@@ -118,5 +102,10 @@ public class AddRollupClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddRollupClause(this, context);
     }
 }

@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -41,8 +42,8 @@ public class ColumnPositionTest {
         Assert.assertFalse(pos.isFirst());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoCol() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testNoCol() {
         ColumnPosition pos = new ColumnPosition("");
         pos.analyze();
         Assert.fail("No exception throws.");

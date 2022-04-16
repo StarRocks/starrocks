@@ -4,6 +4,8 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -138,6 +140,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // -------------------------------- Statement ------------------------------
+
+    @Override
+    public ParseNode visitAlterTable(StarRocksParser.AlterTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
+        return new AlterTableStmt(targetTableName, alterClauses);
+    }
 
     @Override
     public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {

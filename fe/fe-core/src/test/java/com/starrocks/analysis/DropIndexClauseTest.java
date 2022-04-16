@@ -21,31 +21,36 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class DropIndexClauseTest {
-
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
     public void testNormal() throws UserException {
         DropIndexClause clause = new DropIndexClause("index1", new TableName("db", "table"), false);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("DROP INDEX index1 ON `db`.`table`", clause.toSql());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoIndex() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testNoIndex() {
         DropIndexClause clause = new DropIndexClause("", new TableName("db", "table"), false);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
     }
 }

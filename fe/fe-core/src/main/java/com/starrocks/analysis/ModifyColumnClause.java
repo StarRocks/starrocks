@@ -21,10 +21,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -52,6 +52,18 @@ public class ModifyColumnClause extends AlterTableClause {
         return rollupName;
     }
 
+    public ColumnDef getColumnDef() {
+        return columnDef;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
+    }
+
+    public void setColumn(Column column) {
+        this.column = column;
+    }
+
     public ModifyColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollup,
                               Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE);
@@ -63,18 +75,6 @@ public class ModifyColumnClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnDef == null) {
-            throw new AnalysisException("No column definition in modify column clause.");
-        }
-        columnDef.analyze(true);
-        if (colPos != null) {
-            colPos.analyze();
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-
-        column = columnDef.toColumn();
     }
 
     @Override
@@ -98,5 +98,10 @@ public class ModifyColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitModifyColumnClause(this, context);
     }
 }

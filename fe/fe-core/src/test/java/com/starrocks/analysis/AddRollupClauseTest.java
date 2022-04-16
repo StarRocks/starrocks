@@ -23,23 +23,30 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class AddRollupClauseTest {
-    private static Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @BeforeClass
-    public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
     public void testNormal() throws AnalysisException {
         AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"),
                 null, "baseRollup", null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`) FROM `baseRollup`", clause.toString());
         Assert.assertEquals("baseRollup", clause.getBaseRollupName());
         Assert.assertEquals("testRollup", clause.getRollupName());
@@ -47,41 +54,41 @@ public class AddRollupClauseTest {
         Assert.assertNull(clause.getProperties());
 
         clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)", clause.toString());
 
         clause = new AddRollupClause("testRollup", Lists.newArrayList("col1", "col2"), null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("ADD ROLLUP `testRollup` (`col1`, `col2`)",
                 clause.toString());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testNoRollup() throws AnalysisException {
         AddRollupClause clause = new AddRollupClause("", Lists.newArrayList("col1", "col2"), null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testNoCol() throws AnalysisException {
         AddRollupClause clause = new AddRollupClause("testRollup", null, null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testDupCol() throws AnalysisException {
         AddRollupClause clause = new AddRollupClause("testRollup",
                 Lists.newArrayList("col1", "col1"), null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testInvalidCol() throws AnalysisException {
         AddRollupClause clause = new AddRollupClause("testRollup", Lists.newArrayList("", "col1"), null, null, null);
-        clause.analyze(analyzer);
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
         Assert.fail("No exception throws.");
     }
 }

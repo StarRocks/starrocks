@@ -21,9 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -41,9 +41,6 @@ public class DropRollupClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(rollupName)) {
-            throw new AnalysisException("No rollup in delete rollup.");
-        }
     }
 
     @Override
@@ -66,5 +63,10 @@ public class DropRollupClause extends AlterTableClause {
 
     public String getRollupName() {
         return rollupName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropRollupClause(this, context);
     }
 }

@@ -3,6 +3,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
@@ -15,7 +17,9 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -46,6 +50,18 @@ public class Analyzer {
         public void analyze(StatementBase statement, ConnectContext session) {
             statement.setClusterName(session.getClusterName());
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+            AlterStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
+
+            return super.visitAlterViewStatement(statement, context);
         }
 
         @Override
@@ -127,6 +143,19 @@ public class Analyzer {
             DeleteAnalyzer.analyze(node, context);
             return null;
         }
+
+        @Override
+        public Void visitSwapTableClause(SwapTableClause statement, ConnectContext context) {
+            AlterTableClauseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitTableRenameClause(TableRenameClause statement, ConnectContext context) {
+            AlterTableClauseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
     }
 
     private static void analyzeAnalyzeStmt(AnalyzeStmt node, ConnectContext session) {

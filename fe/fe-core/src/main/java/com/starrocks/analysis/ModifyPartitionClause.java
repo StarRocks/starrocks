@@ -32,6 +32,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -80,44 +81,9 @@ public class ModifyPartitionClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (partitionNames == null || (!needExpand && partitionNames.isEmpty())) {
-            throw new AnalysisException("Partition names is not set or empty");
-        }
-
-        if (partitionNames.stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
-            throw new AnalysisException("there are empty partition name");
-        }
-
-        if (properties == null || properties.isEmpty()) {
-            throw new AnalysisException("Properties is not set");
-        }
-
-        // check properties here
-        checkProperties(Maps.newHashMap(properties));
     }
 
-    // Check the following properties' legality before modifying partition.
-    // 1. replication_num
-    // 2. storage_medium && storage_cooldown_time
-    // 3. in_memory
-    // 4. tablet type
-    private void checkProperties(Map<String, String> properties) throws AnalysisException {
-        // 1. data property
-        DataProperty newDataProperty = null;
-        newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
-        Preconditions.checkNotNull(newDataProperty);
 
-        // 2. replication num
-        short newReplicationNum = (short) -1;
-        newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
-        Preconditions.checkState(newReplicationNum != (short) -1);
-
-        // 3. in memory
-        PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-
-        // 4. tablet type
-        PropertyAnalyzer.analyzeTabletType(properties);
-    }
 
     @Override
     public Map<String, String> getProperties() {
@@ -149,5 +115,10 @@ public class ModifyPartitionClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitModifyPartitionClause(this, context);
     }
 }

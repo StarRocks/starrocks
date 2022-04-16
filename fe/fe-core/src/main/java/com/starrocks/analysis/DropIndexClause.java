@@ -22,9 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import org.apache.commons.lang.StringUtils;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -59,9 +58,6 @@ public class DropIndexClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        if (StringUtils.isEmpty(indexName)) {
-            throw new AnalysisException("index name is excepted");
-        }
     }
 
     @Override
@@ -72,5 +68,10 @@ public class DropIndexClause extends AlterTableClause {
             stringBuilder.append(" ON ").append(tableName.toSql());
         }
         return stringBuilder.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropIndexClause(this, context);
     }
 }

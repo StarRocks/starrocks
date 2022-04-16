@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -72,13 +73,6 @@ public class PartitionNames implements ParseNode, Writable {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (partitionNames.isEmpty()) {
-            throw new AnalysisException("No partition specifed in partition lists");
-        }
-        // check if partition name is not empty string
-        if (partitionNames.stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
-            throw new AnalysisException("there are empty partition name");
-        }
     }
 
     @Override
@@ -110,5 +104,10 @@ public class PartitionNames implements ParseNode, Writable {
     public static PartitionNames read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, PartitionNames.class);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitPartitionNames(this, context);
     }
 }
