@@ -55,7 +55,7 @@ public class CastOperator extends CallOperator {
             return false;
         }
         CastOperator that = (CastOperator) o;
-        return isImplicit == that.isImplicit && type == that.type;
+        return isImplicit == that.isImplicit && type.equals(that.type);
     }
 
     @Override
