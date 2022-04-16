@@ -279,6 +279,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         List<ColumnStatistic> columnStatisticList;
         try {
+<<<<<<< HEAD
             Map<String, HiveColumnStats> hiveColumnStatisticMap =
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
@@ -290,6 +291,24 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                             hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
                             hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
+=======
+            if (optimizerContext.getSessionVariable().enableHiveColumnStats()) {
+                Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                        tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
+                                map(ColumnRefOperator::getName).collect(Collectors.toList()));
+                List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
+                        computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                        .collect(Collectors.toList());
+                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
+                    return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues());
+                }).collect(Collectors.toList());
+            } else {
+                LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
+            }
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
             columnStatisticList = Collections.nCopies(requiredColumns.size(), ColumnStatistic.unknown());
@@ -332,13 +351,31 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder;
     }
 
+<<<<<<< HEAD
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+=======
+    private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
+                                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                    int outputRowCount) {
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        builder.setOutputRowCount(outputRowCount);
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
+<<<<<<< HEAD
         return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
@@ -349,15 +386,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+=======
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
+<<<<<<< HEAD
         return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+=======
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
+<<<<<<< HEAD
         return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
@@ -368,6 +415,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+=======
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
     }
 
     @Override
@@ -408,6 +459,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+    }
+
+    @Override
+    public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+    }
+
+>>>>>>> 03591bb4 (Update mysql/es external table output row count (#5152))
     /**
      * At present, we only have table-level statistics. When partition prune occurs,
      * the statistics of the Partition column need to be adjusted to avoid subsequent estimation errors.
