@@ -552,7 +552,6 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
                 LOG(WARNING) << "Fail to link " << from << " to " << to << ": " << res;
                 break;
             }
-            VLOG(1) << "Linked " << from << " to " << to;
             linked_success_files.emplace_back(std::move(to));
         }
         if (!res.ok()) {
@@ -760,8 +759,8 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
         RETURN_IF_ERROR(env->link_file(from, to));
-        LOG(INFO) << "Linked " << from << " to " << to;
     }
+    LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
     if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_FULL) {
