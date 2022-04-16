@@ -64,6 +64,7 @@ void PipelineTestBase::_prepare() {
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_expire_seconds(60);
     _query_ctx->extend_lifetime();
+    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
@@ -76,7 +77,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_chunk_size(config::vector_chunk_size);
-    _runtime_state->init_mem_trackers(query_id);
+    _runtime_state->init_mem_trackers(_query_ctx->mem_tracker()->limit(), _query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
 
     _obj_pool = _runtime_state->obj_pool();
