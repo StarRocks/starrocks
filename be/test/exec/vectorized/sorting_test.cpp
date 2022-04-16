@@ -116,6 +116,14 @@ INSTANTIATE_TEST_SUITE_P(
             {3, 4, 5}
         },
         std::vector<std::vector<int32_t>>{
+            {1, 2, 2},
+            {2, 2, 3}
+        },
+        std::vector<std::vector<int32_t>>{
+            {2, 2, 2},
+            {2, 2, 3}
+        },
+        std::vector<std::vector<int32_t>>{
                 std::vector<int32_t>{1, 1, 1, 2, 2, 3, 4, 5, 6}, 
                 std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8},
                 std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8}, 

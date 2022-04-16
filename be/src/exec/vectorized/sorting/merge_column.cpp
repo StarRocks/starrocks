@@ -52,10 +52,9 @@ public:
             size_t output_index = lhs + rhs;
 
             // Merge rows in the equal-range
+            auto left_range = fetch_equal(lhs, lhs_end, equal_left);
+            auto right_range = fetch_equal(rhs, rhs_end, equal_right);
             while (lhs < lhs_end || rhs < rhs_end) {
-                auto left_range = fetch_equal(lhs, lhs_end, equal_left);
-                auto right_range = fetch_equal(rhs, rhs_end, equal_right);
-
                 int x = 0;
                 if (lhs < lhs_end && rhs < rhs_end) {
                     x = cmp(left_range.first, right_range.first);
@@ -65,20 +64,22 @@ public:
                     x = 1;
                 }
 
+                if (x == 0) {
+                    next_ranges.emplace_back(left_range, right_range);
+                }
                 if (x <= 0) {
-                    lhs = left_range.second;
                     for (size_t i = left_range.first; i < left_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kLeftIndex, i);
                     }
+                    lhs = left_range.second;
+                    left_range = fetch_equal(lhs, lhs_end, equal_left);
                 }
                 if (x >= 0) {
-                    rhs = right_range.second;
                     for (size_t i = right_range.first; i < right_range.second; i++) {
                         (*_perm)[output_index++] = PermutationItem(kRightIndex, i);
                     }
-                }
-                if (x == 0) {
-                    next_ranges.emplace_back(left_range, right_range);
+                    rhs = right_range.second;
+                    right_range = fetch_equal(rhs, rhs_end, equal_right);
                 }
             }
 
