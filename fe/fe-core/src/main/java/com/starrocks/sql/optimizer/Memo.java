@@ -151,6 +151,7 @@ public class Memo {
 
     // Merge srcGroup to dstGroup, srcGroup will be deleted
     private void mergeGroup(Group srcGroup, Group dstGroup) {
+        groups.remove(srcGroup);
         // Reset root group, rewrite rule maybe eliminate the root group
         if (srcGroup == rootGroup) {
             rootGroup = dstGroup;
