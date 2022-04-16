@@ -68,11 +68,10 @@ public class AdminSetConfigStmtTest {
     @Test
     public void testEmptyConfig() throws Exception {
         String stmt = "admin set frontend config;";
-        AdminSetConfigStmt adminSetConfigStmt =
-                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("config parameter size is not equal to 1");
-        Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
     }
 }
 
