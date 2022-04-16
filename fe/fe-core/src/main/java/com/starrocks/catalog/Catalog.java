@@ -170,6 +170,7 @@ import com.starrocks.master.Checkpoint;
 import com.starrocks.master.MetaHelper;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.mv.MaterializedViewJobManager;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -440,6 +441,8 @@ public class Catalog {
     private WorkGroupMgr workGroupMgr;
 
     private StarOSAgent starOSAgent;
+
+    private MaterializedViewJobManager materializedViewJobManager;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -752,6 +755,10 @@ public class Catalog {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public MaterializedViewJobManager getMaterializedViewJobManager() {
+        return materializedViewJobManager;
     }
 
     // Use tryLock to avoid potential dead lock
