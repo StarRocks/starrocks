@@ -74,7 +74,7 @@ Stream Load 导入语句：
 
 ~~~bash
 curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
-    -H " columns:__op ='delete'" -T demo.csv \
+    -H "columns:__op='delete'" -T demo.csv \
     http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
 ~~~
 
@@ -107,7 +107,7 @@ Stream Load 导入语句：
 
 ~~~bash
 curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
-    -H " columns: c1,c2,c3,pk=c1, col0=c2,__op=c3 " -T demo.csv \
+    -H " columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
     http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
 ~~~
 
@@ -121,7 +121,7 @@ load label demo_db.label4 (
     into table demo_tbl1
     format as "csv"
     (c1,c2,c3)
-    set (pk=c1, col0=c2, __op=c3)
+    set (pk=c1,col0=c2,__op=c3)
 ) with broker "broker1";
 ~~~
 
@@ -250,7 +250,7 @@ DISTRIBUTED BY HASH(`pk`) BUCKETS 3
 
 ~~~sql
 CREATE ROUTINE LOAD demo_db.label6 ON demo_tbl2
-COLUMNS(pk, col0,__op)
+COLUMNS(pk,col0,__op)
 PROPERTIES
 (
     "desired_concurrent_number" = "3",
