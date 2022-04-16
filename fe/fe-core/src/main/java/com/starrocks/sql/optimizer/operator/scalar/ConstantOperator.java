@@ -20,6 +20,7 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.util.List;
@@ -60,7 +61,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.")
-                    .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL).toFormatter();
+                    .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL)
+                    .toFormatter().withResolverStyle(ResolverStyle.STRICT);
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
