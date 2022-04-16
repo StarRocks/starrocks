@@ -143,7 +143,7 @@ private:
 
     FragmentContext* const _fragment_ctx;
 
-    std::vector<int32_t> _output_columns;
+    const std::vector<int32_t>& _output_columns;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
