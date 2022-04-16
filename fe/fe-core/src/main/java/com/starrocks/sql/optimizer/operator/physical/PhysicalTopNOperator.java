@@ -88,18 +88,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     }
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
-        ColumnRefSet dictSet = new ColumnRefSet();
-        dictColIds.forEach(dictSet::union);
-        // Now we disable DictOptimize when order by predicate couldn't push down
-        final ScalarOperator predicate = getPredicate();
-        if (predicate != null) {
-            final ColumnRefSet predicateUsedColumns = getPredicate().getUsedColumns();
-            for (Integer dictColId : dictColIds) {
-                if (predicateUsedColumns.contains(dictColId)) {
-                    resultSet.union(dictColId);
-                }
-            }
-        }
+        // nothing to do
     }
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
