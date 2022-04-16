@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -279,12 +280,12 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggTableValueColumnNames = new HashSet<String>();
-                if (referenceTable.getKeysType().isAggregationFamily()) {
+                Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+                if (referenceTable.getKeysType().isAggregationFamily() || referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     List<Column> fullColumn = referenceTable.getFullSchema();
                     for (Column col : fullColumn) {
                         if (!col.isKey()) {
-                            aggTableValueColumnNames.add(col.getName());
+                            aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
                         }
                     }
                 }
@@ -314,7 +315,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnNames);
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
             }
         }
 
