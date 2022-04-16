@@ -1535,5 +1535,6 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_JSON>(cast_expr, &json));
     }
 }
+
 } // namespace vectorized
 } // namespace starrocks
