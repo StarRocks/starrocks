@@ -306,7 +306,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
                                 map(ColumnRefOperator::getName).collect(Collectors.toList()));
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                                computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                        computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
                 columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
                     return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
@@ -364,9 +364,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
-                                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                    int outputRowCount) {
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
-        builder.setOutputRowCount(1);
+        builder.setOutputRowCount(outputRowCount);
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -374,22 +375,26 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
     }
 
     @Override
@@ -432,12 +437,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
     }
 
     /**
