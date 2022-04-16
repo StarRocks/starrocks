@@ -40,12 +40,12 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.COUNT)
                     .add("sum").add("sum_distinct").add(FunctionSet.MULTI_DISTINCT_SUM).add("avg").add("variance")
                     .add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
-                    .add("stddev").add("stddev_pop").add("stddev_samp").build();
+                    .add("std").add("stddev").add("stddev_pop").add("stddev_samp").build();
 
     public static final Set<String> DECIMAL_AGG_VARIANCE_STDDEV_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
                     .add("variance").add("variance_pop").add("var_pop").add("variance_samp").add("var_samp")
-                    .add("stddev").add("stddev_pop").add("stddev_samp").build();
+                    .add("std").add("stddev").add("stddev_pop").add("stddev_samp").build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
