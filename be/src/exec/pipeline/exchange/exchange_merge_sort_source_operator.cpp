@@ -18,8 +18,7 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
             config::exchg_node_buffer_size_bytes, _unique_metrics, true, nullptr, true,
             // ExchangeMergeSort will never perform pipeline level shuffle
             DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, true);
-    _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
-    return Status::OK();
+    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
@@ -46,7 +45,7 @@ Status ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
-    get_next_merging(state, &chunk);
+    RETURN_IF_ERROR(get_next_merging(state, &chunk));
     eval_runtime_bloom_filters(chunk.get());
     return std::move(chunk);
 }
