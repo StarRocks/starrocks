@@ -152,7 +152,6 @@ public class Memo {
     // Merge srcGroup to dstGroup, srcGroup will be deleted
     private void mergeGroup(Group srcGroup, Group dstGroup) {
         groups.remove(srcGroup);
-
         // Reset root group, rewrite rule maybe eliminate the root group
         if (srcGroup == rootGroup) {
             rootGroup = dstGroup;
@@ -198,11 +197,16 @@ public class Memo {
                 // set unused.
                 groupExpression.getGroup().removeGroupExpression(groupExpression);
                 groupExpression.setUnused(true);
+                GroupExpression existGroupExpression = groupExpressions.get(groupExpression);
+                if (!needMerge(groupExpression.getGroup(), existGroupExpression.getGroup())) {
+                    // groupExpression and existGroupExpression are in the same group， use existGroupExpression to
+                    // replace the bestExpression in the group
+                    groupExpression.getGroup().replaceBestExpression(groupExpression, existGroupExpression);
+                }
             }
         }
 
         dstGroup.mergeGroup(srcGroup);
-
         // When some rule merge two groups to one group, or
         // the GroupExpressions of one group are all removed.
         // The group is empty, We should remove it.

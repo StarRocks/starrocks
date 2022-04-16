@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -163,6 +164,23 @@ public class Group {
         lowestCostExpressions.put(newProperty, lowestExpression);
     }
 
+    public void replaceBestExpression(GroupExpression oldGroupExpression, GroupExpression newGroupExpression) {
+        Map<PhysicalPropertySet, Pair<Double, GroupExpression>> needReplaceBestExpressions = Maps.newHashMap();
+        for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
+                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
+            Pair<Double, GroupExpression> pair = entry.getValue();
+            if (pair.second.equals(oldGroupExpression)) {
+                needReplaceBestExpressions.put(entry.getKey(), new Pair<>(pair.first, newGroupExpression));
+                iterator.remove();
+            }
+        }
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : needReplaceBestExpressions
+                .entrySet()) {
+            lowestCostExpressions.put(entry.getKey(), entry.getValue());
+        }
+    }
+
     public GroupExpression getBestExpression(PhysicalPropertySet physicalPropertySet) {
         if (hasBestExpression(physicalPropertySet)) {
             return lowestCostExpressions.get(physicalPropertySet).second;
@@ -187,6 +205,8 @@ public class Group {
         other.getPhysicalExpressions().removeAll(physicalExpressions);
         logicalExpressions.addAll(other.getLogicalExpressions());
         physicalExpressions.addAll(other.getPhysicalExpressions());
+        other.logicalExpressions.clear();
+        other.physicalExpressions.clear();
         for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : other.lowestCostExpressions
                 .entrySet()) {
             GroupExpression bestGroupExpression = entry.getValue().second;
