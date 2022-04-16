@@ -103,6 +103,12 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void quartersAdd() {
+        assertEquals("2017-09-23T09:23:55",
+                ScalarOperatorFunctions.quartersAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
     public void daysAdd() {
         assertEquals("2015-04-02T09:23:55",
                 ScalarOperatorFunctions.daysAdd(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
@@ -399,6 +405,12 @@ public class ScalarOperatorFunctionsTest {
     public void monthsSub() {
         assertEquals("2014-05-23T09:23:55",
                 ScalarOperatorFunctions.monthsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
+    }
+
+    @Test
+    public void quartersSub() {
+        assertEquals("2012-09-23T09:23:55",
+                ScalarOperatorFunctions.quartersSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());
     }
 
     @Test

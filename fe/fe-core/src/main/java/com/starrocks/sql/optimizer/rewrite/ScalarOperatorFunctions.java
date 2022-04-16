@@ -86,6 +86,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
     }
 
+    @FEFunction(name = "quarters_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    public static ConstantOperator quartersAdd(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(date.getDatetime().plusMonths(quarter.getInt() * 3));
+    }
+
     @FEFunction.List(list = {
             @FEFunction(name = "adddate", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
             @FEFunction(name = "date_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
@@ -191,6 +196,11 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "months_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
     public static ConstantOperator monthsSub(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMonths(month.getInt()));
+    }
+
+    @FEFunction(name = "quarters_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    public static ConstantOperator quartersSub(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(date.getDatetime().minusMonths(quarter.getInt() * 3));
     }
 
     @FEFunction.List(list = {

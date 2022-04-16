@@ -351,6 +351,8 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
+    [50370, 'quarters_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_add'],
+    [50371, 'quarters_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_sub'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

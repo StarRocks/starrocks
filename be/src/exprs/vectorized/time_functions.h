@@ -276,6 +276,14 @@ public:
     DEFINE_VECTORIZED_FN(months_sub);
 
     /**
+     * @param: [timestmap, quarter]
+     * @paramType columns: [TimestampColumn, IntColumn]
+     * @return TimestampColumn
+     */
+    DEFINE_VECTORIZED_FN(quarters_add);
+    DEFINE_VECTORIZED_FN(quarters_sub);
+
+    /**
      * @param: [timestmap, month]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn

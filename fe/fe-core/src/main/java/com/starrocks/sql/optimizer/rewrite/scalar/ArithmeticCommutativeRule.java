@@ -25,6 +25,8 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
             .put(FunctionSet.YEARS_SUB, FunctionSet.YEARS_ADD)
             .put(FunctionSet.MONTHS_ADD, FunctionSet.MONTHS_SUB)
             .put(FunctionSet.MONTHS_SUB, FunctionSet.MONTHS_ADD)
+            .put(FunctionSet.QUARTERS_ADD, FunctionSet.QUARTERS_SUB)
+            .put(FunctionSet.QUARTERS_SUB, FunctionSet.QUARTERS_ADD)
             .put(FunctionSet.DAYS_ADD, FunctionSet.DAYS_SUB)
             .put(FunctionSet.DAYS_SUB, FunctionSet.DAYS_ADD)
             .put(FunctionSet.ADDDATE, FunctionSet.SUBDATE)

@@ -113,6 +113,8 @@ public class FunctionSet {
     public static final String MONTH = "month";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
+    public static final String QUARTERS_ADD = "quarters_add";
+    public static final String QUARTERS_SUB = "quarters_sub";
     public static final String DAY = "day";
     public static final String DAYS_ADD = "days_add";
     public static final String DAYS_SUB = "days_sub";

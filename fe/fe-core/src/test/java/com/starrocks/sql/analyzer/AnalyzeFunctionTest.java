@@ -99,6 +99,14 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
+        queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 quarter)");
+        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 QUARTER)",
+                AST2SQL.toString(queryStatement.getQueryRelation()));
+
+        queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01 00:00:00', interval 2 quarter)");
+        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 QUARTER)",
+                AST2SQL.toString(queryStatement.getQueryRelation()));
+
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 minute)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
                 AST2SQL.toString(queryStatement.getQueryRelation()));

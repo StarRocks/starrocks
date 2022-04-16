@@ -201,7 +201,11 @@ JulianDate date::add(JulianDate date, int count) {
         return date + count;
     } else if constexpr (UNIT == TimeUnit::WEEK) {
         return date + 7 * count;
-    } else if constexpr (UNIT == TimeUnit::MONTH) {
+    } else if constexpr (UNIT == TimeUnit::MONTH || UNIT == TimeUnit::QUARTER) {
+        if constexpr (UNIT == TimeUnit::QUARTER) {
+            count *= 3;
+        }
+
         int year, month, day;
         to_date_with_cache(date, &year, &month, &day);
 

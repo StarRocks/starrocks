@@ -521,6 +521,10 @@ DEFINE_TIME_ADD_AND_SUB_FN(years, TimeUnit::YEAR);
 // months_sub
 DEFINE_TIME_ADD_AND_SUB_FN(months, TimeUnit::MONTH);
 
+// quarters_add
+// quaters_sub
+DEFINE_TIME_ADD_AND_SUB_FN(quarters, TimeUnit::QUARTER);
+
 // weeks_add
 // weeks_sub
 DEFINE_TIME_ADD_AND_SUB_FN(weeks, TimeUnit::WEEK);
