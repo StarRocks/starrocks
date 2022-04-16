@@ -7102,7 +7102,7 @@ public class Catalog {
         db.replayDropFunction(functionSearchDesc);
     }
 
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException, AnalysisException {
+    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         Map<String, String> configs = stmt.getConfigs();
         Preconditions.checkState(configs.size() == 1);
 
