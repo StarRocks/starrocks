@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -279,14 +280,21 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggTableValueColumnNames = new HashSet<String>();
+                Set<String> aggTableValueColumnAndPrimaryKeyColumnNames = new HashSet<String>();
                 if (referenceTable.getKeysType().isAggregationFamily()) {
                     List<Column> fullColumn = referenceTable.getFullSchema();
                     for (Column col : fullColumn) {
                         if (!col.isKey()) {
-                            aggTableValueColumnNames.add(col.getName());
+                            aggTableValueColumnAndPrimaryKeyColumnNames.add(col.getName());
                         }
                     }
+                }
+
+                if (referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    List<Column> fullColumn = referenceTable.getFullSchema();
+                    for (Column col : fullColumn) {
+                        aggTableValueColumnAndPrimaryKeyColumnNames.add(col.getName());
+                    } 
                 }
 
                 for (ScalarOperator predicate : predicates) {
@@ -314,7 +322,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnNames);
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnAndPrimaryKeyColumnNames);
             }
         }
 
