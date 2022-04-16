@@ -3,8 +3,6 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -15,9 +13,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
