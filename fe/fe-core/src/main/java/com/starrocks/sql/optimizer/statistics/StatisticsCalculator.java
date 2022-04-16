@@ -376,25 +376,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                10000);
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                10000);
+                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                5000);
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                5000);
+                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
     }
 
     @Override
@@ -438,13 +438,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                20000);
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
     }
 
     @Override
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                20000);
+                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
     }
 
     /**
