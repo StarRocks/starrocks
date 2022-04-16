@@ -28,8 +28,6 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     private boolean isEnforced;
 
-    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
                                 SortPhase sortPhase,
@@ -45,15 +43,6 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
-    }
-
-    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
-        return globalDicts;
-    }
-
-    public void setGlobalDicts(
-            List<Pair<Integer, ColumnDict>> globalDicts) {
-        this.globalDicts = globalDicts;
     }
 
     public SortPhase getSortPhase() {

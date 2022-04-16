@@ -291,7 +291,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     OptExpression result = OptExpression.create(newTopN, newChildExpr);
                     result.setStatistics(optExpression.getStatistics());
                     result.setLogicalProperty(optExpression.getLogicalProperty());
-                    newTopN.setGlobalDicts(context.globalDicts);
                     return visitProjectionAfter(result, context);
                 } else {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), 0, context);

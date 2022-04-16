@@ -1371,15 +1371,15 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
                         topN.getOffset(),
-                        inputFragment, topN);
+                        inputFragment);
             } else {
-                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr, topN);
+                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
             }
         }
 
         private PlanFragment buildFinalTopNFragment(ExecPlan context, long limit, long offset,
                                                     PlanFragment inputFragment,
-                                                    OptExpression optExpr, PhysicalTopNOperator topN) {
+                                                    OptExpression optExpr) {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(), false,
                     DistributionSpec.DistributionType.GATHER);
@@ -1397,7 +1397,7 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
-            fragment.setQueryGlobalDicts(topN.getGlobalDicts());
+            fragment.setQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
 
             context.getFragments().add(fragment);
             return fragment;
@@ -1405,7 +1405,7 @@ public class PlanFragmentBuilder {
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       OrderSpec orderSpec, long limit, long offset,
-                                                      PlanFragment inputFragment, PhysicalTopNOperator topN) {
+                                                      PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = new ArrayList<>();
             List<Expr> sortExprs = new ArrayList<>();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
@@ -1471,7 +1471,6 @@ public class PlanFragmentBuilder {
             sortNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(sortNode);
-            inputFragment.setQueryGlobalDicts(topN.getGlobalDicts());
             estimateDopOfTopN(inputFragment);
             return inputFragment;
         }
