@@ -679,7 +679,6 @@ public class GlobalStateMgr {
         this.analyzeManager = new AnalyzeManager();
 
         this.starOSAgent = new StarOSAgent();
-        this.materializedViewJobManager = new MaterializedViewJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -816,7 +815,7 @@ public class GlobalStateMgr {
         return starOSAgent;
     }
 
-    public MaterializedViewJobManager getMaterializedViewJobScheduler() {
+    public MaterializedViewJobManager getMaterializedViewJobManager() {
         return materializedViewJobManager;
     }
 

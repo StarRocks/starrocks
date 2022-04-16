@@ -6,11 +6,14 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 
-public class MaterializedViewPartitionRefreshTask extends MaterializedViewRefreshTask {
+public class MaterializedViewPartitionRefreshTask
+        extends MaterializedViewRefreshTask implements IMaterializedViewRefreshTask {
 
     private static final Logger LOG = LogManager.getLogger(MaterializedViewPartitionRefreshTask.class);
     private String refreshSQL;
@@ -20,10 +23,20 @@ public class MaterializedViewPartitionRefreshTask extends MaterializedViewRefres
     }
 
     @Override
-    public void runTask() throws Exception {
-        ConnectContext ctx = new ConnectContext();
-        ctx.setQueryId(UUIDUtil.genUUID());
-        executeSQL(refreshSQL, ctx);
+    public void runTask() {
+        startTime = LocalDateTime.now();
+        status = Constants.MaterializedViewTaskStatus.RUNNING;
+        try {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setQueryId(UUIDUtil.genUUID());
+            executeSQL(refreshSQL, ctx);
+            status = Constants.MaterializedViewTaskStatus.SUCCESS;
+        } catch (Exception ex) {
+            status = Constants.MaterializedViewTaskStatus.FAILED;
+            LOG.warn(ex.getMessage());
+            errMsg = ex.getMessage();
+        }
+        endTime = LocalDateTime.now();
     }
 
     @Override
@@ -50,6 +63,7 @@ public class MaterializedViewPartitionRefreshTask extends MaterializedViewRefres
                 ", startTime=" + startTime +
                 ", endTime=" + endTime +
                 ", status=" + status +
+                ", retryTime=" + retryTime +
                 ", errMsg='" + errMsg + '\'' +
                 '}';
     }

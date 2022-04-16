@@ -7,7 +7,7 @@ import com.starrocks.statistic.Constants;
 
 import java.time.LocalDateTime;
 
-public class MaterializedViewRefreshTask  implements IMaterializedViewRefreshTask {
+public class MaterializedViewRefreshTask {
 
     @SerializedName("startTime")
     protected LocalDateTime startTime;
@@ -17,6 +17,9 @@ public class MaterializedViewRefreshTask  implements IMaterializedViewRefreshTas
 
     @SerializedName("status")
     protected Constants.MaterializedViewTaskStatus status = Constants.MaterializedViewTaskStatus.PENDING;
+
+    @SerializedName("retryTime")
+    protected int retryTime = 0;
 
     @SerializedName("errMsg")
     protected String errMsg;
@@ -45,22 +48,12 @@ public class MaterializedViewRefreshTask  implements IMaterializedViewRefreshTas
         this.status = status;
     }
 
-    @Override
-    public void beginTask() {
-        startTime = LocalDateTime.now();
+    public int getRetryTime() {
+        return retryTime;
     }
 
-    @Override
-    public void runTask() throws Exception {}
-
-    @Override
-    public void finishTask() {
-        endTime = LocalDateTime.now();
-    }
-
-    @Override
-    public IMaterializedViewRefreshTask cloneTask() {
-        return new MaterializedViewPartitionRefreshTask();
+    public void setRetryTime(int retryTime) {
+        this.retryTime = retryTime;
     }
 
     public String getErrMsg() {

@@ -3,18 +3,12 @@
 package com.starrocks.mv;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class MaterializedViewSchedulerInfo implements Writable {
+public class MaterializedViewSchedulerInfo {
 
     @SerializedName("id")
     private Long id;
@@ -28,17 +22,12 @@ public class MaterializedViewSchedulerInfo implements Writable {
     @SerializedName("timeUnit")
     private TimeUnit timeUnit;
 
-    @SerializedName("jobBuilder")
-    private MaterializedViewRefreshJobBuilder jobBuilder;
-
     private ScheduledFuture<?> future;
 
-    public MaterializedViewSchedulerInfo(LocalDateTime startTime, Long period, TimeUnit timeUnit,
-                                         MaterializedViewRefreshJobBuilder jobBuilder) {
+    public MaterializedViewSchedulerInfo(LocalDateTime startTime, Long period, TimeUnit timeUnit) {
         this.startTime = startTime;
         this.period = period;
         this.timeUnit = timeUnit;
-        this.jobBuilder = jobBuilder;
     }
 
     public Long getId() {
@@ -57,22 +46,27 @@ public class MaterializedViewSchedulerInfo implements Writable {
         this.startTime = startTime;
     }
 
+    public Long getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(Long period) {
+        this.period = period;
+    }
+
+    public TimeUnit getTimeUnit() {
+        return timeUnit;
+    }
+
+    public void setTimeUnit(TimeUnit timeUnit) {
+        this.timeUnit = timeUnit;
+    }
+
     public ScheduledFuture<?> getFuture() {
         return future;
     }
 
     public void setFuture(ScheduledFuture<?> future) {
         this.future = future;
-    }
-
-    public static MaterializedViewSchedulerInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedViewSchedulerInfo.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
     }
 }

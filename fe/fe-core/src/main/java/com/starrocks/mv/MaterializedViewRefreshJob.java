@@ -3,23 +3,17 @@ package com.starrocks.mv;
 
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-public class MaterializedViewRefreshJob implements Writable {
+public class MaterializedViewRefreshJob {
 
     private static final Logger LOG = LogManager.getLogger(MaterializedViewRefreshJob.class);
     public static final long DEFAULT_UNASSIGNED_ID = -1;
@@ -40,7 +34,7 @@ public class MaterializedViewRefreshJob implements Writable {
     private Constants.MaterializedViewRefreshMode mode;
 
     @SerializedName("triggerType")
-    private Constants.MaterializedViewRefreshTriggerType triggerType;
+    private Constants.MaterializedViewTriggerType triggerType;
 
     @SerializedName("createTime")
     private LocalDateTime createTime;
@@ -57,8 +51,6 @@ public class MaterializedViewRefreshJob implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
-    @SerializedName("retryTime")
-    protected int retryTime = 0;
     @SerializedName("mergeCount")
     private Integer mergeCount = 0;
 
@@ -104,11 +96,11 @@ public class MaterializedViewRefreshJob implements Writable {
         this.mode = mode;
     }
 
-    public Constants.MaterializedViewRefreshTriggerType getTriggerType() {
+    public Constants.MaterializedViewTriggerType getTriggerType() {
         return triggerType;
     }
 
-    public void setTriggerType(Constants.MaterializedViewRefreshTriggerType triggerType) {
+    public void setTriggerType(Constants.MaterializedViewTriggerType triggerType) {
         this.triggerType = triggerType;
     }
 
@@ -174,34 +166,17 @@ public class MaterializedViewRefreshJob implements Writable {
             return;
         }
         for (IMaterializedViewRefreshTask task : tasks) {
-            if (task.getStatus() == Constants.MaterializedViewTaskStatus.FAILED) {
-                task.setStatus(Constants.MaterializedViewTaskStatus.PENDING);
-            }
             if (task.getStatus() == Constants.MaterializedViewTaskStatus.PENDING) {
-                task.beginTask();
-                task.setStatus(Constants.MaterializedViewTaskStatus.RUNNING);
-                try {
-                    task.runTask();
-                    task.setStatus(Constants.MaterializedViewTaskStatus.SUCCESS);
-                } catch (Throwable ex) {
-                    task.setStatus(Constants.MaterializedViewTaskStatus.FAILED);
-                    LOG.warn("materialized view refresh task failed. jobId:{}", id, ex);
-                    task.setErrMsg(ex.getMessage());
-                }
-                task.finishTask();
+                task.runTask();
             }
         }
     }
 
-    public Constants.MaterializedViewJobStatus updateStatusAfterDone() {
-        if (status == Constants.MaterializedViewJobStatus.RUNNING ||
-                status == Constants.MaterializedViewJobStatus.RETRYING) {
+    public void updateStatusAfterDone() {
+        if (status == Constants.MaterializedViewJobStatus.RUNNING) {
             if (tasks == null) {
                 status = Constants.MaterializedViewJobStatus.FAILED;
-                return status;
-            } else if (tasks.size() == 0) {
-                status = Constants.MaterializedViewJobStatus.SUCCESS;
-                return status;
+                return;
             }
             Map<Constants.MaterializedViewTaskStatus, Long> result = tasks.stream().collect(
                     Collectors.groupingBy(IMaterializedViewRefreshTask::getStatus, Collectors.counting())
@@ -215,7 +190,6 @@ public class MaterializedViewRefreshJob implements Writable {
                 status = Constants.MaterializedViewJobStatus.PARTIAL_SUCCESS;
             }
         }
-        return status;
     }
 
     public Integer getMergeCount() {
@@ -223,15 +197,7 @@ public class MaterializedViewRefreshJob implements Writable {
     }
 
     public void incrementMergeCount() {
-        ++this.mergeCount;
-    }
-
-    public int getRetryTime() {
-        return retryTime;
-    }
-
-    public void incrementRetryTime() {
-        ++this.retryTime;
+        this.mergeCount = mergeCount + 1;
     }
 
     @Override
@@ -248,20 +214,7 @@ public class MaterializedViewRefreshJob implements Writable {
                 ", endTime=" + endTime +
                 ", tasks=" + tasks +
                 ", properties=" + properties +
-                ", retryTime=" + retryTime +
                 ", mergeCount=" + mergeCount +
                 '}';
     }
-
-    public static MaterializedViewRefreshJob read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, MaterializedViewRefreshJob.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
 }
