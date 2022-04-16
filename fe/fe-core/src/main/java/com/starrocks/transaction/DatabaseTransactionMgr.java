@@ -690,7 +690,7 @@ public class DatabaseTransactionMgr {
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica  
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                if (!errReplicas.contains(replica.getId()) && replica.getLastFailedVersion() < 0) {
+                                if (!errReplicas.contains(replica.getId())) {
                                     if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++healthReplicaNum;
                                     } else if (unfinishedBackends != null
