@@ -39,6 +39,8 @@ public:
     static Status save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
                        const RowsetMetaPB& rowset_meta_pb);
 
+    static Status flush(KVStore* meta);
+
     static Status remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
 
     static string get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id);

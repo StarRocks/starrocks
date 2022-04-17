@@ -97,7 +97,8 @@ Status LoadChannel::add_batch(const PTabletWriterAddBatchRequest& request,
     Status st;
     if (request.has_eos() && request.eos()) {
         bool finished = false;
-        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec));
+        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec,
+                                       request.tablet_ids()));
         if (finished) {
             std::lock_guard<std::mutex> l(_lock);
             _tablets_channels.erase(index_id);
@@ -140,7 +141,8 @@ Status LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request,
     Status st;
     if (request.has_eos() && request.eos()) {
         bool finished = false;
-        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec));
+        RETURN_IF_ERROR(channel->close(request.sender_id(), &finished, request.partition_ids(), tablet_vec,
+                                       request.tablet_ids()));
         if (finished) {
             std::lock_guard<std::mutex> l(_lock);
             _tablets_channels.erase(index_id);

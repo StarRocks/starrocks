@@ -235,6 +235,10 @@ Status KVStore::compact() {
     return to_status(st);
 }
 
+Status KVStore::flush() {
+    return to_status(_db->FlushWAL(true));
+}
+
 std::string KVStore::get_stats() {
     rocksdb::ColumnFamilyHandle* handle = _handles[META_COLUMN_FAMILY_INDEX];
     std::string stats;

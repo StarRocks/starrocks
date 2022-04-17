@@ -67,6 +67,8 @@ public:
 
     Status compact();
 
+    Status flush();
+
     std::string get_stats();
 
     bool get_live_sst_files_size(uint64_t* live_sst_files_size);

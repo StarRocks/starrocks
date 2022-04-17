@@ -39,6 +39,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TPublishVersionRequest& publi
 OLAPStatus EnginePublishVersionTask::finish() {
     OLAPStatus res = OLAP_SUCCESS;
     int64_t transaction_id = _publish_version_req.transaction_id;
+    std::vector<TabletSharedPtr> tablets;
 
     // each partition
     for (auto& par_ver_info : _publish_version_req.partition_version_infos) {
@@ -87,6 +88,8 @@ OLAPStatus EnginePublishVersionTask::finish() {
                 res = OLAP_ERR_PUSH_TABLE_NOT_EXIST;
                 continue;
             }
+
+            tablets.push_back(tablet);
 
             if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
                 VLOG(1) << "UpdateManager::on_rowset_published tablet:" << tablet->tablet_id()
@@ -146,6 +149,17 @@ OLAPStatus EnginePublishVersionTask::finish() {
                 }
             }
         }
+    }
+
+    /*
+        Persist txn to make the meta crash-safe.
+        We persist txn in 2 place:
+        1. when all delta writers are finished, the txn is committed.
+        2. when the the txn version is published.
+    */
+    auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to persist transactions, tablets num: " << tablets.size() << " err: " << st;
     }
 
     VLOG(1) << "finish to publish version on transaction."
