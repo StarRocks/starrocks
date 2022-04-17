@@ -401,12 +401,15 @@ public class CreateTableStmt extends DdlStmt {
         if (engineName.equals("olap")) {
             // analyze partition
             if (partitionDesc != null) {
-                if (partitionDesc.getType() != PartitionType.RANGE) {
-                    throw new AnalysisException("Currently only support range partition with engine type olap");
+                if (partitionDesc.getType() == PartitionType.RANGE){
+                    RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                    rangePartitionDesc.analyze(columnDefs, properties);
+                }else if (partitionDesc.getType() == PartitionType.LIST){
+                    ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                    listPartitionDesc.analyze(columnDefs, properties);
+                }else{
+                    throw new AnalysisException("Currently only support range and list partition with engine type olap");
                 }
-
-                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-                rangePartitionDesc.analyze(columnDefs, properties);
             }
 
             // analyze distribution

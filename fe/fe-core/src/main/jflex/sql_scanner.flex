@@ -308,6 +308,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("random", new Integer(SqlParserSymbols.KW_RANDOM));
         keywordMap.put("range", new Integer(SqlParserSymbols.KW_RANGE));
         keywordMap.put("range", new Integer(SqlParserSymbols.KW_RANGE));
+        keywordMap.put("list", new Integer(SqlParserSymbols.KW_LIST));
         keywordMap.put("read", new Integer(SqlParserSymbols.KW_READ));
         keywordMap.put("real", new Integer(SqlParserSymbols.KW_DOUBLE));
         keywordMap.put("recover", new Integer(SqlParserSymbols.KW_RECOVER));

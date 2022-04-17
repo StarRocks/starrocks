@@ -67,6 +67,14 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testSingleListPartition(){
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.tbl3\n" + "(k1 varchar(40), k2 int)\n" + "duplicate key(k1)\n"
+                        + "partition by list(k2)\n" + "(partition p1 values in (\"shanghai\",\"beijing\"))\n"
+                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
     public void testNormal() throws DdlException {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tbl1\n" + "(k1 int, k2 int)\n" + "duplicate key(k1)\n"

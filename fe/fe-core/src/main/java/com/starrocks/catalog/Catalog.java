@@ -43,58 +43,10 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AddRollupClause;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.*;
 import com.starrocks.analysis.AdminCheckTabletsStmt.CheckType;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropFunctionStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropPartitionClause;
-import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.MultiRangePartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionRenameClause;
-import com.starrocks.analysis.RangePartitionDesc;
-import com.starrocks.analysis.RecoverDbStmt;
-import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
-import com.starrocks.analysis.ReplacePartitionClause;
-import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
-import com.starrocks.analysis.SingleRangePartitionDesc;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TruncateTableStmt;
-import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database.DbState;
@@ -3958,11 +3910,16 @@ public class Catalog {
         if (partitionDesc != null) {
             // gen partition id first
             if (partitionDesc instanceof RangePartitionDesc) {
-                RangePartitionDesc rangeDesc = (RangePartitionDesc) partitionDesc;
-                for (SingleRangePartitionDesc desc : rangeDesc.getSingleRangePartitionDescs()) {
+                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                for (SingleRangePartitionDesc desc : rangePartitionDesc.getSingleRangePartitionDescs()) {
                     long partitionId = getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
+            }else if (partitionDesc instanceof ListPartitionDesc){
+                ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                listPartitionDesc.findAllParitionName().forEach(partitionName -> partitionNameToId.put(partitionName,getNextId()));
+            }else{
+                throw new DdlException("Currently only support range and list partition with engine type olap");
             }
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else {

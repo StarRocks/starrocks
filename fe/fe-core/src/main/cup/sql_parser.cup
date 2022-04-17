@@ -258,7 +258,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_PRIMARY,
     KW_PROC, KW_PROCEDURE, KW_PROCESSLIST, KW_PROPERTIES, KW_PROPERTY, KW_PERCENTILE, KW_PERCENTILE_UNION,
     KW_QUERY, KW_QUOTA,
-    KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
+    KW_RANDOM, KW_RANGE, KW_LIST, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPAIR, KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_REPLICA, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS, KW_REFRESH,
     KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SELECT, KW_SEMI, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SETS, KW_SET_VAR, KW_SHOW,
@@ -428,6 +428,12 @@ nonterminal SingleRangePartitionDesc single_range_partition_desc;
 nonterminal MultiRangePartitionDesc multi_range_partition_desc;
 nonterminal List<PartitionDesc> opt_range_partition_desc_list;
 nonterminal List<PartitionDesc> range_partition_desc_list;
+
+nonterminal List<PartitionDesc> opt_list_partition_desc_list;
+nonterminal List<PartitionDesc> list_partition_desc_list;
+nonterminal PartitionDesc list_partition_desc;
+nonterminal List<List<String>> multi_list_partition_desc;
+nonterminal List<String> multi_list_partition_item_desc;
 
 nonterminal List<AccessPrivilege> privilege_list;
 nonterminal List<String> string_list;
@@ -1915,6 +1921,12 @@ opt_partition ::=
     {:
         RESULT = new RangePartitionDesc(columns, list);
     :}
+    /* List partition */
+    | KW_PARTITION KW_BY KW_LIST LPAREN ident_list:columns RPAREN
+            LPAREN opt_list_partition_desc_list:list RPAREN
+    {:
+        RESULT = new ListPartitionDesc(columns, list);
+    :}
     ;
 
 opt_distribution ::=
@@ -1983,6 +1995,63 @@ opt_keys ::=
         RESULT = new KeysDesc(KeysType.AGG_KEYS, keys);
     :}
     ;
+
+opt_list_partition_desc_list ::=
+    {:
+        RESULT = null;
+    :}
+	| list_partition_desc_list:list
+	{:
+		RESULT = list;
+	:}
+	;
+
+list_partition_desc_list ::=
+    list_partition_desc_list:list COMMA list_partition_desc:desc
+    {:
+        list.add(desc);
+        RESULT = list;
+    :}
+    | list_partition_desc:desc
+    {:
+        RESULT = Lists.newArrayList(desc);
+    :}
+    ;
+
+list_partition_desc ::=
+    KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
+        string_list:values RPAREN opt_key_value_map:properties
+    {:
+        RESULT = new SingleListPartitionDesc(ifNotExists, partName, values, properties);
+    :}
+    | KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
+        multi_list_partition_desc:multiValues RPAREN opt_key_value_map:properties
+    {:
+        RESULT = new MultiListPartitionDesc(ifNotExists, partName, multiValues, properties);
+    :}
+    ;
+
+multi_list_partition_desc ::=
+    multi_list_partition_desc:list COMMA multi_list_partition_item_desc:desc
+    {:
+        list.add(desc);
+        RESULT = list;
+    :}
+    | multi_list_partition_item_desc:desc
+    {:
+        List<List<String>> arrayList = new ArrayList();
+        arrayList.add(desc);
+        RESULT = arrayList;
+    :}
+    ;
+
+multi_list_partition_item_desc ::=
+    LPAREN string_list:values LPAREN
+    {:
+        RESULT = values;
+    :}
+    ;
+
 
 opt_range_partition_desc_list ::=
 	/* Empty */
