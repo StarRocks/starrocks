@@ -8,7 +8,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/vectorized/sorted_chunks_merger.h"
+#include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {

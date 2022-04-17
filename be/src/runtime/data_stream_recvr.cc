@@ -21,11 +21,8 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <google/protobuf/stubs/common.h>
-
 #include <condition_variable>
 #include <deque>
-#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,7 +33,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/vectorized/sorted_chunks_merger.h"
+#include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"

@@ -11,7 +11,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "runtime/user_function_cache.h"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"

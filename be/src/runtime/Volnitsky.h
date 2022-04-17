@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "StringSearcher.h"
+#include "runtime/StringSearcher.h"
 
 namespace starrocks {
 namespace vectorized {

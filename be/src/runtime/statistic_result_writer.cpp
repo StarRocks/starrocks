@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "runtime/vectorized/statistic_result_writer.h"
+#include "runtime/statistic_result_writer.h"
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
