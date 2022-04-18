@@ -283,14 +283,11 @@ static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, c
 
     int num_columns = desc.num_columns();
     for (int i = 0; i < num_columns; i++) {
-        DCHECK(desc.sort_orders[i] == 1 || desc.sort_orders[i] == -1);
-        DCHECK(desc.null_firsts[i] == 1 || desc.null_firsts[i] == -1);
-
         auto& lhs_column = lhs[i];
         auto& rhs_column = rhs[i];
-        int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.null_firsts[i]);
+        int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.get_column_desc(i).null_first);
         if (x != 0) {
-            return x * desc.sort_orders[i];
+            return x * desc.get_column_desc(i).sort_order;
         }
     }
     return 0;

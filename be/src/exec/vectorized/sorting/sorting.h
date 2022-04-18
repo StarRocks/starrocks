@@ -59,25 +59,29 @@ void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, 
 struct SortDesc {
     int sort_order;
     int null_first;
+
+    SortDesc() = default;
+    SortDesc(int order, int null) : sort_order(order), null_first(null) {}
 };
 
 struct SortDescs {
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
+    std::vector<SortDesc> descs;
 
     SortDescs() = default;
     ~SortDescs() = default;
-    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls)
-            : sort_orders(orders), null_firsts(nulls) {}
+    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls) {
+        DCHECK_EQ(orders.size(), nulls.size());
+        descs.reserve(orders.size());
+        for (int i = 0; i < orders.size(); i++) {
+            descs.push_back(SortDesc(orders[i], nulls[i]));
+        }
+    }
 
-    size_t num_columns() const { return sort_orders.size(); }
+    size_t num_columns() const { return descs.size(); }
 
     SortDesc get_column_desc(int col) const {
-        SortDesc desc;
-        DCHECK_LT(col, sort_orders.size());
-        desc.sort_order = sort_orders[col];
-        desc.null_first = null_firsts[col];
-        return desc;
+        DCHECK_LT(col, descs.size());
+        return descs[col];
     }
 };
 
