@@ -969,7 +969,6 @@ public class ExpressionTest extends PlanTestBase {
     public void testDecimalReuse() throws Exception {
         String sql = "select id_decimal + 1, id_decimal + 2 from test_all_type";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "common expressions:\n" +
                 "  |  <slot 13> : CAST(10: id_decimal AS DECIMAL64(18,2))");
     }
