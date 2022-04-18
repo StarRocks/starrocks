@@ -650,6 +650,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
                 continue;
             }
 
+            if (!tablet_ptr->updates()->get_update_compaction_lock().try_lock()) {
+                continue;
+            }
+            tablet_ptr->updates()->get_update_compaction_lock().unlock();
+
             if (tablet_ptr->data_dir()->path_hash() != data_dir->path_hash() || !tablet_ptr->is_used() ||
                 !tablet_ptr->init_succeeded()) {
                 continue;

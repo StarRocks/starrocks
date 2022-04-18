@@ -217,6 +217,11 @@ public:
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
 
+    // update compaction lock
+    void obtain_update_compaction_lock() { _update_compaction_lock.lock(); }
+    void release_update_compaction_lock() { _update_compaction_lock.unlock(); }
+    std::mutex& get_update_compaction_lock() { return _update_compaction_lock; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -346,6 +351,8 @@ private:
     mutable std::mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
+
+    std::mutex _update_compaction_lock;
 
     // used to stop apply thread when shutting-down this tablet
     std::atomic<bool> _apply_stopped = false;

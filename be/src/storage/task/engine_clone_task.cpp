@@ -504,6 +504,9 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
     tablet->obtain_header_wrlock();
     DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
 
+    tablet->obtain_update_compaction_lock();
+    DeferOp update_compaction_lock_release_guard([&tablet]() { tablet->release_base_compaction_lock(); });
+
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());

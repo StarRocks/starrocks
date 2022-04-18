@@ -39,6 +39,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet_meta.h"
+#include "storage/tablet_updates.h"
 #include "storage/tuple.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
@@ -172,6 +173,18 @@ public:
     void obtain_cumulative_lock() { _cumulative_lock.lock(); }
     void release_cumulative_lock() { _cumulative_lock.unlock(); }
     std::mutex& get_cumulative_lock() { return _cumulative_lock; }
+
+    // update compaction lock
+    void obtain_update_compaction_lock() {
+        if (updates()) {
+            updates()->obtain_update_compaction_lock();
+        }
+    }
+    void release_update_compaction_lock() {
+        if (updates()) {
+            updates()->release_update_compaction_lock();
+        }
+    }
 
     std::shared_mutex& get_migration_lock() { return _migration_lock; }
     // should use with migration lock.
