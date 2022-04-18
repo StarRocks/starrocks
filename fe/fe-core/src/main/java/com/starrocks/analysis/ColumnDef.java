@@ -206,7 +206,7 @@ public class ColumnDef {
                 throw new AnalysisException(
                         String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
             }
-        } else if (type.isHllType() || type.isPercentile()) {
+        } else if (type.isBitmapType() || type.isHllType() || type.isPercentile()) {
             throw new AnalysisException(String.format("No aggregate function specified for '%s'", name));
         }
 

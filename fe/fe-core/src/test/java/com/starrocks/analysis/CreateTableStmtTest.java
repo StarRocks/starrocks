@@ -263,6 +263,8 @@ public class CreateTableStmtTest {
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
                 new KeysDesc(KeysType.DUP_KEYS, colsName), null,
                 hashDistributioin, null, null, "");
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("No aggregate function specified for 'col3'");
         stmt.analyze(analyzer);
     }
 
