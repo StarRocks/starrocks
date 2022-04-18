@@ -3,17 +3,23 @@ package com.starrocks.mv;
 
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-public class MaterializedViewRefreshJob {
+public class MaterializedViewRefreshJob implements Writable {
 
     private static final Logger LOG = LogManager.getLogger(MaterializedViewRefreshJob.class);
     public static final long DEFAULT_UNASSIGNED_ID = -1;
@@ -172,11 +178,11 @@ public class MaterializedViewRefreshJob {
         }
     }
 
-    public void updateStatusAfterDone() {
+    public Constants.MaterializedViewJobStatus updateStatusAfterDone() {
         if (status == Constants.MaterializedViewJobStatus.RUNNING) {
             if (tasks == null) {
                 status = Constants.MaterializedViewJobStatus.FAILED;
-                return;
+                return status;
             }
             Map<Constants.MaterializedViewTaskStatus, Long> result = tasks.stream().collect(
                     Collectors.groupingBy(IMaterializedViewRefreshTask::getStatus, Collectors.counting())
@@ -190,6 +196,7 @@ public class MaterializedViewRefreshJob {
                 status = Constants.MaterializedViewJobStatus.PARTIAL_SUCCESS;
             }
         }
+        return status;
     }
 
     public Integer getMergeCount() {
@@ -217,4 +224,16 @@ public class MaterializedViewRefreshJob {
                 ", mergeCount=" + mergeCount +
                 '}';
     }
+
+    public static MaterializedViewRefreshJob read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, MaterializedViewRefreshJob.class);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+    }
+
 }

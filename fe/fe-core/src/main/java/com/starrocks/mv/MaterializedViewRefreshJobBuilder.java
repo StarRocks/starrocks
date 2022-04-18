@@ -5,6 +5,7 @@ package com.starrocks.mv;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.statistic.Constants;
 
 import java.time.LocalDateTime;
@@ -13,12 +14,23 @@ import java.util.Map;
 
 public class MaterializedViewRefreshJobBuilder  {
 
+    @SerializedName("dbId")
     private final long dbId;
+
+    @SerializedName("mvTableId")
     private final long mvTableId;
+
+    @SerializedName("mode")
     private Constants.MaterializedViewRefreshMode mode = Constants.MaterializedViewRefreshMode.ASYNC;
+
+    @SerializedName("triggerType")
     private Constants.MaterializedViewTriggerType triggerType = Constants.MaterializedViewTriggerType.AUTO;
-    private List<IMaterializedViewRefreshTask> tasks;
+
+    @SerializedName("properties")
     private Map<String, String> properties;
+
+    private List<IMaterializedViewRefreshTask> tasks;
+
 
     public static MaterializedViewRefreshJobBuilder newBuilder(long dbId, long mvTableId) {
         return new MaterializedViewRefreshJobBuilder(dbId, mvTableId);

@@ -3,12 +3,18 @@
 package com.starrocks.mv;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class MaterializedViewSchedulerInfo {
+public class MaterializedViewSchedulerInfo implements Writable {
 
     @SerializedName("id")
     private Long id;
@@ -22,12 +28,17 @@ public class MaterializedViewSchedulerInfo {
     @SerializedName("timeUnit")
     private TimeUnit timeUnit;
 
+    @SerializedName("jobBuilder")
+    private MaterializedViewRefreshJobBuilder jobBuilder;
+
     private ScheduledFuture<?> future;
 
-    public MaterializedViewSchedulerInfo(LocalDateTime startTime, Long period, TimeUnit timeUnit) {
+    public MaterializedViewSchedulerInfo(LocalDateTime startTime, Long period, TimeUnit timeUnit,
+                                         MaterializedViewRefreshJobBuilder jobBuilder) {
         this.startTime = startTime;
         this.period = period;
         this.timeUnit = timeUnit;
+        this.jobBuilder = jobBuilder;
     }
 
     public Long getId() {
@@ -68,5 +79,16 @@ public class MaterializedViewSchedulerInfo {
 
     public void setFuture(ScheduledFuture<?> future) {
         this.future = future;
+    }
+
+    public static MaterializedViewSchedulerInfo read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, MaterializedViewSchedulerInfo.class);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
     }
 }
