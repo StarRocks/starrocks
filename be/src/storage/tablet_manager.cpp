@@ -1386,8 +1386,21 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     }
 
     std::unique_lock l(_get_tablets_shard_lock(tablet_id));
-    if (_get_tablet_unlocked(tablet_id, true, nullptr) != nullptr) {
-        return Status::InternalError("tablet already exist");
+    // TODO: if old tablet exists, should do an atomic "replace_or_add" approach instead
+    auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
+    if (old_tablet_ptr != nullptr) {
+        if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
+            Status st = delete_shutdown_tablet(tablet_id);
+            if (st.ok() || st.is_not_found()) {
+                LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id;
+            } else {
+                LOG(WARNING) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet failed tablet:"
+                             << tablet_id << " st:" << st;
+                return st;
+            }
+        } else {
+            return Status::InternalError("tablet already exist");
+        }
     }
 
     RETURN_IF_ERROR(meta_store->write_batch(&wb));

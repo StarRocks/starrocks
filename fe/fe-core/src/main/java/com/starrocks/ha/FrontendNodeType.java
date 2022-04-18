@@ -25,7 +25,6 @@ public enum FrontendNodeType {
     MASTER,
     FOLLOWER,
     OBSERVER,
-    REPLICA,
     INIT,
     UNKNOWN
 }

@@ -3,11 +3,11 @@
 #include "storage/convert_helper.h"
 
 #include <gtest/gtest.h>
-#include <runtime/decimalv3.h>
 
 #include <string>
 #include <vector>
 
+#include "runtime/decimalv3.h"
 #include "storage/chunk_helper.h"
 #include "storage/types.h"
 #include "testutil/parallel_test.h"

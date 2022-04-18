@@ -44,11 +44,21 @@ public class HashDistributionDesc {
         if (item == this) {
             return true;
         }
-        return isColumnsSatisfy(this.columns, item.columns);
-    }
 
-    public static boolean isColumnsSatisfy(List<Integer> left, List<Integer> right) {
-        return right.containsAll(left);
+        if (this.columns.size() > item.columns.size()) {
+            return false;
+        }
+
+        // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
+        if (SourceType.LOCAL.equals(sourceType) || SourceType.SHUFFLE_AGG.equals(sourceType)) {
+            return item.columns.containsAll(this.columns);
+        }
+
+        if (this.columns.size() != item.columns.size()) {
+            return false;
+        }
+
+        return this.columns.equals(item.columns);
     }
 
     public boolean isLocalShuffle() {
@@ -64,7 +74,7 @@ public class HashDistributionDesc {
     }
 
     public boolean isBucketJoin() {
-        return this.sourceType == sourceType.BUCKET_JOIN;
+        return this.sourceType == SourceType.BUCKET_JOIN;
     }
 
     @Override

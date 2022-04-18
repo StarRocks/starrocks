@@ -22,9 +22,7 @@
 #include "runtime/data_stream_sender.h"
 
 #include <arpa/inet.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
@@ -49,11 +47,8 @@
 #include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
-#include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -382,7 +377,8 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
-          _enable_exchange_pass_through(enable_exchange_pass_through) {
+          _enable_exchange_pass_through(enable_exchange_pass_through),
+          _output_columns(sink.output_columns) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
@@ -553,7 +549,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         // 2. serialize input chunk to pchunk
         RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
         _current_request_bytes += pchunk->data().size();
-        // 3. if request bytes exceede the threshold, send current request
+        // 3. if request bytes exceed the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(&_chunk_request, &attachment);

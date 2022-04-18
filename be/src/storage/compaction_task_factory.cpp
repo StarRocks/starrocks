@@ -18,13 +18,7 @@
 namespace starrocks {
 
 std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() {
-    auto iterator_num_res = _get_segment_iterator_num();
-    if (!iterator_num_res.ok()) {
-        LOG(WARNING) << "fail to get segment iterator num. tablet=" << _tablet->tablet_id()
-                     << ", err=" << iterator_num_res.status().to_string();
-        return nullptr;
-    }
-    size_t segment_iterator_num = iterator_num_res.value();
+    size_t segment_iterator_num = Rowset::get_segment_num(_input_rowsets);
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
     CompactionAlgorithm algorithm =
@@ -61,18 +55,6 @@ std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() 
             ExecEnv::GetInstance()->compaction_mem_tracker());
     compaction_task->set_mem_tracker(mem_tracker.release());
     return compaction_task;
-}
-
-StatusOr<size_t> CompactionTaskFactory::_get_segment_iterator_num() {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    vectorized::TabletReader reader(_tablet, _output_version, schema);
-    vectorized::TabletReaderParams reader_params;
-    reader_params.reader_type =
-            _compaction_type == CUMULATIVE_COMPACTION ? READER_CUMULATIVE_COMPACTION : READER_BASE_COMPACTION;
-    RETURN_IF_ERROR(reader.prepare());
-    std::vector<ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(reader.get_segment_iterators(reader_params, &seg_iters));
-    return seg_iters.size();
 }
 
 } // namespace starrocks

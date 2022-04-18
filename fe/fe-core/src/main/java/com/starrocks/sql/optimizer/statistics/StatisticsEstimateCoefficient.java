@@ -23,4 +23,10 @@ public class StatisticsEstimateCoefficient {
     public static final double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
     // used in compute extra cost for multi distinct function, estimate whether to trigger streaming
     public static final double STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT = 0.8;
+    // default mysql external table output rows
+    public static final int DEFAULT_MYSQL_OUTPUT_ROWS = 10000;
+    // default es external table output rows
+    public static final int DEFAULT_ES_OUTPUT_ROWS = 5000;
+    // default JDBC external table output rows, JDBC maybe is a distribute system
+    public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
 }

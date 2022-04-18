@@ -27,7 +27,7 @@ import java.util.List;
 
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
-public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, ExpressionContext>  {
+public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, ExpressionContext> {
     private PhysicalPropertySet requirements;
     // children best group expression
     private List<GroupExpression> childrenBestExprList;
@@ -137,11 +137,38 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
         childrenOutputProperties.set(childIndex, newChildInputProperty);
     }
 
-    private void transToBucketShuffleJoin(HashDistributionDesc leftLocalDistributionDesc,
+    private void transToBucketShuffleJoin(HashDistributionSpec leftLocalDistributionSpec,
                                           List<Integer> leftShuffleColumns, List<Integer> rightShuffleColumns) {
         List<Integer> bucketShuffleColumns = Lists.newArrayList();
+        HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
         for (int leftScanColumn : leftLocalDistributionDesc.getColumns()) {
             int index = leftShuffleColumns.indexOf(leftScanColumn);
+            if (index == -1) {
+                /*
+                 * Given the following example：
+                 *      SELECT * FROM A JOIN B ON A.a = B.b
+                 *      JOIN C ON B.b = C.c
+                 *      JOIN D ON C.c = D.d
+                 *      JOIN E ON D.d = E.e
+                 * We focus on the third join `.. join D ON C.c = D.d`
+                 * leftShuffleColumns: [C.d]
+                 * rightShuffleColumns: [D.d]
+                 * leftScanColumn: A.a
+                 * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
+                 *
+                 * So we can get A.a's equivalent column C.c from joinEquivalentColumns
+                 */
+                DistributionSpec.PropertyInfo propertyInfo = leftLocalDistributionSpec.getPropertyInfo();
+                int[] joinEquivalentColumnsColumns = propertyInfo.getEquivalentJoinOnColumns(leftScanColumn);
+                // TODO(hcf) Is the lookup strategy right?
+                for (int alternativeLeftScanColumn : joinEquivalentColumnsColumns) {
+                    index = leftShuffleColumns.indexOf(alternativeLeftScanColumn);
+                    if (index != -1) {
+                        break;
+                    }
+                }
+                Preconditions.checkState(index != -1, "Cannot find join equivalent column");
+            }
             bucketShuffleColumns.add(rightShuffleColumns.get(index));
         }
 
@@ -171,11 +198,13 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
             enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
             context.getMemo().insertEnforceExpression(enforcer, childGroup);
 
-            enforcer.updatePropertyWithCost(newOutputProperty, child.getInputProperties(childOutputProperty), childCosts);
+            enforcer.updatePropertyWithCost(newOutputProperty, child.getInputProperties(childOutputProperty),
+                    childCosts);
             childGroup.setBestExpression(enforcer, childCosts, newOutputProperty);
 
             if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-                enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(PhysicalPropertySet.EMPTY));
+                enforcer.addValidOutputInputProperties(newOutputProperty,
+                        Lists.newArrayList(PhysicalPropertySet.EMPTY));
                 enforcer.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
             }
         } else {
@@ -284,12 +313,12 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
                                 rightShuffleColumns)) {
                     return visitOperator(node, context);
                 } else {
-                    transToBucketShuffleJoin(leftDistributionDesc, leftShuffleColumns, rightShuffleColumns);
+                    transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                     return visitOperator(node, context);
                 }
             } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isJoinShuffle()) {
                 // bucket join
-                transToBucketShuffleJoin(leftDistributionDesc, leftShuffleColumns, rightShuffleColumns);
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 return visitOperator(node, context);
             } else if (leftDistributionDesc.isJoinShuffle() && rightDistributionDesc.isLocalShuffle()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
