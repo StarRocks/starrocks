@@ -1,22 +1,13 @@
 package com.starrocks.analysis;
 
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.*;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.thrift.TTabletType;
-import org.checkerframework.checker.nullness.qual.Nullable;
-import org.jcodings.util.Hash;
 
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ListPartitionDesc extends PartitionDesc {
@@ -24,11 +15,6 @@ public class ListPartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private List<SingleListPartitionDesc> singleListPartitionDescs;
     private List<MultiListPartitionDesc> multiListPartitionDescs;
-    private DataProperty partitionDataProperty;
-    private Short replicationNum;
-    private boolean isInMemory = false;
-    private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
-    private Long versionInfo;
 
     public ListPartitionDesc(List<String> partitionColNames,
                               List<PartitionDesc> partitionDescs) {
@@ -79,10 +65,10 @@ public class ListPartitionDesc extends PartitionDesc {
                     if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
                         throw new AnalysisException("The partition column could not be aggregated column");
                     }
-                   /* if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
+                    if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
-                    }*/
+                    }
                     found = true;
                     break;
                 }
@@ -100,7 +86,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 if (!multiListParttionName.add(desc.getPartitionName())) {
                     throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
                 }
-                desc.analyze(columnDefs, tableProperties);
+                desc.analyze(columnDefs, tableProperties, partitionColNames);
             }
         }
     }
@@ -120,10 +106,56 @@ public class ListPartitionDesc extends PartitionDesc {
 
     @Override
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) throws DdlException {
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo();
+        List<Column> partitionColumns = this.toPartitionColumns(columns);
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type,partitionColumns);
+        this.singleListPartitionDescs.forEach(desc -> {
+            long partitionId = partitionNameToId.get(desc.getPartitionName());
+            listPartitionInfo.setDataProperty(partitionId,desc.getPartitionDataProperty());
+            listPartitionInfo.setIsInMemory(partitionId,desc.isInMemory());
+            listPartitionInfo.setTabletType(partitionId,desc.getTabletType());
+            listPartitionInfo.setReplicationNum(partitionId,desc.getReplicationNum());
+            listPartitionInfo.setValues(partitionId,desc.getValues());
+        });
+        this.multiListPartitionDescs.forEach(desc -> {
+            long partitionId = partitionNameToId.get(desc.getPartitionName());
+            listPartitionInfo.setDataProperty(partitionId,desc.getPartitionDataProperty());
+            listPartitionInfo.setIsInMemory(partitionId,desc.isInMemory());
+            listPartitionInfo.setTabletType(partitionId,desc.getTabletType());
+            listPartitionInfo.setReplicationNum(partitionId,desc.getReplicationNum());
+            listPartitionInfo.setMultiValues(partitionId,desc.getMultiValues());
+        });
+        return listPartitionInfo;
+    }
 
-
-        return null;
+    /**
+     * check and getPartitionColumns
+     * @param columns columns from table
+     * @return
+     * @throws DdlException
+     */
+    private List<Column> toPartitionColumns(List<Column> columns) throws DdlException {
+        List<Column> partitionColumns = Lists.newArrayList();
+        for (String colName : partitionColNames) {
+            boolean find = false;
+            for (Column column : columns) {
+                if (column.getName().equalsIgnoreCase(colName)) {
+                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
+                        throw new DdlException("The partition column could not be aggregated column");
+                    }
+                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                        throw new DdlException(String.format("Invalid partition column '%s': %s",
+                                column.getName(), "invalid data type " + column.getType()));
+                    }
+                    partitionColumns.add(column);
+                    find = true;
+                    break;
+                }
+            }
+            if (!find) {
+                throw new DdlException("Partition column[" + colName + "] does not found");
+            }
+        }
+        return partitionColumns ;
     }
 
     @Override
@@ -136,13 +168,13 @@ public class ListPartitionDesc extends PartitionDesc {
         sb.append(")(\n");
         if (!multiListPartitionDescs.isEmpty()) {
             String multiList = multiListPartitionDescs.stream()
-                    .map(item -> "    " + item.toSql())
+                    .map(item -> "  " + item.toSql())
                     .collect(Collectors.joining(",\n"));
             sb.append(multiList);
         }
         if (!singleListPartitionDescs.isEmpty()) {
             String sinleList = singleListPartitionDescs.stream()
-                    .map(item -> "    " + item.toSql())
+                    .map(item -> "  " + item.toSql())
                     .collect(Collectors.joining(",\n"));
             sb.append(sinleList);
         }

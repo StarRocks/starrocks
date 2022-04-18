@@ -5,11 +5,8 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.ListPartitionItemDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import org.apache.hadoop.io.compress.SplittableCompressionCodec;
-
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class MultiListPartitionDesc extends ListPartitionItemDesc {
@@ -27,15 +24,24 @@ public class MultiListPartitionDesc extends ListPartitionItemDesc {
         this.partitionProperties = partitionProperties;
     }
 
+    public List<List<String>> getMultiValues(){
+        return this.multiValues;
+    }
+
     @Override
     public String getPartitionName(){
         return this.partitionName;
     }
 
     @Override
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
+    public Map<String, String> getPartitionProperties() {
+        return this.partitionProperties;
+    }
+
+    public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties,
+                        List<String> partitionColNames) throws AnalysisException {
         for (List<String> values : this.multiValues){
-            if (values.size() != columnDefs.size()){
+            if (values.size() != partitionColNames.size()){
                 throw new AnalysisException("(" + String.join(",",values) + ") size should be equal to partition column size ");
             }
         }

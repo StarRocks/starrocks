@@ -28,6 +28,26 @@ public class ListPartitionItemDesc extends PartitionDesc {
         throw new NotImplementedException();
     }
 
+    public Map<String, String> getPartitionProperties() {
+        throw new NotImplementedException();
+    }
+
+    public DataProperty getPartitionDataProperty(){
+        return this.partitionDataProperty;
+    }
+
+    public Short getReplicationNum() {
+        return this.replicationNum;
+    }
+
+    public boolean isInMemory() {
+        return this.isInMemory;
+    }
+
+    public TTabletType getTabletType() {
+        return this.tabletType;
+    }
+
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
@@ -36,7 +56,7 @@ public class ListPartitionItemDesc extends PartitionDesc {
         Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
-        Map<String, String> copiedPartitionProperties = Optional.ofNullable(tableProperties)
+        Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.getPartitionProperties())
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
 

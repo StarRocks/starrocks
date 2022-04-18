@@ -42,9 +42,18 @@ public class SingleListPartitionDesc extends ListPartitionItemDesc {
         this.partitionProperties = partitionProperties;
     }
 
+    public List<String> getValues(){
+        return this.values;
+    }
+
     @Override
     public String getPartitionName(){
         return this.partitionName;
+    }
+
+    @Override
+    public Map<String, String> getPartitionProperties() {
+        return this.partitionProperties;
     }
 
     @Override

@@ -4142,7 +4142,8 @@ public class Catalog {
                     Partition partition = createPartition(db, olapTable, partitionId, tableName, version, tabletIdSet);
                     buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
-                } else if (partitionInfo.getType() == PartitionType.RANGE) {
+                } else if (partitionInfo.getType() == PartitionType.RANGE
+                        || partitionInfo.getType() == PartitionType.LIST) {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
@@ -4568,7 +4569,8 @@ public class Catalog {
             if (separatePartition) {
                 partitionId = Lists.newArrayList();
             }
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.getType() == PartitionType.RANGE
+                    || partitionInfo.getType() == PartitionType.LIST) {
                 sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
             }
 

@@ -2046,7 +2046,7 @@ multi_list_partition_desc ::=
     ;
 
 multi_list_partition_item_desc ::=
-    LPAREN string_list:values LPAREN
+    LPAREN string_list:values RPAREN
     {:
         RESULT = values;
     :}
