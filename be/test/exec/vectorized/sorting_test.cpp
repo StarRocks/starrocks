@@ -8,6 +8,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"

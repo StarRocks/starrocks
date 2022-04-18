@@ -2,6 +2,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/vectorized/chunk_cursor.h"
