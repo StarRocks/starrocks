@@ -2,11 +2,12 @@
 
 #include "storage/chunk_aggregator.h"
 
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <vector>
 
 #include "column/column_helper.h"
-#include "gtest/gtest.h"
 #include "storage/column_aggregate_func.h"
 
 namespace starrocks::vectorized {

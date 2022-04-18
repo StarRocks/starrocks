@@ -2,8 +2,9 @@
 
 #include "storage/row_source_mask.h"
 
+#include <gtest/gtest.h>
+
 #include "common/config.h"
-#include "gtest/gtest.h"
 #include "storage/olap_define.h"
 #include "util/file_utils.h"
 

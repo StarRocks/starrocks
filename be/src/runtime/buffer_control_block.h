@@ -77,7 +77,7 @@ public:
     void get_batch(GetResultBatchCtx* ctx);
 
     // close buffer block, set _status to exec_status and set _is_close to true;
-    // called because data has been read or error happend.
+    // called because data has been read or error happened.
     Status close(Status exec_status);
     // this is called by RPC, called from coordinator
     Status cancel();

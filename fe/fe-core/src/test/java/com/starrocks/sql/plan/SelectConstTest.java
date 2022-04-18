@@ -121,4 +121,10 @@ public class SelectConstTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL");
     }
+
+    @Test
+    public void testDoubleCastWithoutScientificNotation() throws Exception {
+        String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
+        assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
+    }
 }

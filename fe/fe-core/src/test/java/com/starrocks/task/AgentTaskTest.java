@@ -21,6 +21,7 @@
 
 package com.starrocks.task;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.Pair;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TKeysType;
@@ -38,8 +40,11 @@ import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
+import org.apache.commons.lang3.tuple.Triple;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -91,6 +96,9 @@ public class AgentTaskTest {
     private AgentTask rollupTask;
     private AgentTask schemaChangeTask;
     private AgentTask cancelDeleteTask;
+    private AgentTask modifyEnablePersistentIndexTask1;
+    private AgentTask modifyEnablePersistentIndexTask2;
+    private AgentTask modifyInMemoryTask;
 
     @Before
     public void setUp() throws AnalysisException {
@@ -143,6 +151,26 @@ public class AgentTaskTest {
                 new SchemaChangeTask(null, backendId1, dbId, tableId, partitionId, indexId1,
                         tabletId1, replicaId1, columns, schemaHash2, schemaHash1,
                         shortKeyNum, storageType, null, 0, TKeysType.AGG_KEYS);
+        
+        // modify tablet meta
+        // <tablet id, tablet schema hash, tablet in memory/ tablet enable persistent index>
+        // for report handle
+        List<Triple<Long, Integer, Boolean>> tabletToMeta = Lists.newArrayList();
+        tabletToMeta.add(new ImmutableTriple<>(tabletId1, schemaHash1, true));
+        tabletToMeta.add(new ImmutableTriple<>(tabletId2, schemaHash2, false));
+        modifyEnablePersistentIndexTask1 = 
+                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+        
+        // for schema change
+        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(1);
+        Set<Pair<Long, Integer>> tabletIdWithSchemaHash = new HashSet();
+        tabletIdWithSchemaHash.add(Pair.create(tabletId1, schemaHash1));
+        countDownLatch.addMark(backendId1, tabletIdWithSchemaHash);
+        modifyEnablePersistentIndexTask2 = 
+                new UpdateTabletMetaInfoTask(backendId1, tabletIdWithSchemaHash, true, 
+                                             countDownLatch, TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+        modifyInMemoryTask = 
+                new UpdateTabletMetaInfoTask(backendId1, tabletToMeta, TTabletMetaType.INMEMORY);
     }
 
     @Test
@@ -214,6 +242,23 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.SCHEMA_CHANGE, request6.getTask_type());
         Assert.assertEquals(schemaChangeTask.getSignature(), request6.getSignature());
         Assert.assertNotNull(request6.getAlter_tablet_req());
+
+        // modify enable_persistent_index
+        TAgentTaskRequest request7 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask1);
+        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request7.getTask_type());
+        Assert.assertEquals(modifyEnablePersistentIndexTask1.getSignature(), request7.getSignature());
+        Assert.assertNotNull(request7.getUpdate_tablet_meta_info_req());
+
+        TAgentTaskRequest request8 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyEnablePersistentIndexTask2);
+        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request8.getTask_type());
+        Assert.assertEquals(modifyEnablePersistentIndexTask2.getSignature(), request8.getSignature());
+        Assert.assertNotNull(request8.getUpdate_tablet_meta_info_req());
+
+        // modify in_memory
+        TAgentTaskRequest request9 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyInMemoryTask);
+        Assert.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request9.getTask_type());
+        Assert.assertEquals(modifyInMemoryTask.getSignature(), request9.getSignature());
+        Assert.assertNotNull(request9.getUpdate_tablet_meta_info_req());
     }
 
     @Test

@@ -23,6 +23,7 @@ package com.starrocks.alter;
 
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
@@ -59,7 +60,9 @@ public class AlterJobV2Test {
                 .withTable(
                         "CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable(
-                        "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                        "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable(
+                        "CREATE TABLE test.properties_change_test(k1 int, v1 int) primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -123,6 +126,58 @@ public class AlterJobV2Test {
                 (ShowAlterStmt) UtFrameUtils.parseAndAnalyzeStmt(showAlterStmtStr, connectContext);
         ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
         ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getMetaData());
+        System.out.println(showResultSet.getResultRows());
+    }
+
+    @Test
+    public void testModifyTableProperties() throws Exception {
+        // 1. process a modify table properties job(enable_persistent_index)
+        String alterStmtStr = "alter table test.properties_change_test set ('enable_persistent_index' = 'true');";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
+        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+        // 2. check alter job
+        Map<Long, AlterJobV2> alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        Assert.assertEquals(1, alterJobs.size());
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                Thread.sleep(1000);
+            }
+            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+        // 3. check enable persistent index
+        String showCreateTableStr = "show create table test.properties_change_test;";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(showCreateTableStr, connectContext);
+        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getMetaData());
+        System.out.println(showResultSet.getResultRows());
+
+        // 4. process a modify table properties job(in_memory)
+        String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr2, connectContext);
+        Catalog.getCurrentCatalog().getAlterInstance().processAlterTable(alterTableStmt);
+
+        // 4. check alter job
+        alterJobs = Catalog.getCurrentCatalog().getSchemaChangeHandler().getAlterJobsV2();
+        Assert.assertEquals(1, alterJobs.size());
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                Thread.sleep(1000);
+            }
+            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+        // 5. check enable persistent index
+        showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(showCreateTableStr, connectContext);
+        showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
