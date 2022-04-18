@@ -1540,9 +1540,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 processDropColumn((DropColumnClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
                 // modify column
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support modify column");
-                }
                 processModifyColumn((ModifyColumnClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
