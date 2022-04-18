@@ -12,6 +12,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -173,6 +174,13 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2048, merged->get(1).get_int32());
 }
 
+void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
+    for (ExprContext* ctx : exprs) {
+        delete ctx;
+    }
+    exprs.clear();
+}
+
 TEST(MergeTest, merge_sorted_stream) {
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
@@ -193,6 +201,7 @@ TEST(MergeTest, merge_sorted_stream) {
         null_first.push_back(true);
         map[i] = i;
     }
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
 
     std::vector<ChunkProvider> chunk_providers;
     std::vector<int> chunk_probe_index(num_runs, 0);
