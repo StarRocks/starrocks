@@ -180,7 +180,8 @@ public class DefaultPredicateSelectivityEstimator {
         }
 
         private boolean isLessOrGreatValueCompleteOverlap(double doubleValue,
-                                                          ColumnStatistic columnStatistic, BinaryPredicateOperator.BinaryType binaryType) {
+                                                          ColumnStatistic columnStatistic,
+                                                          BinaryPredicateOperator.BinaryType binaryType) {
             if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) && doubleValue > columnStatistic.getMaxValue()) {
                 return true;
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) && doubleValue >= columnStatistic.getMaxValue()) {
