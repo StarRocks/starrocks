@@ -492,4 +492,16 @@ std::string ArrayColumn::debug_string() const {
     return ss.str();
 }
 
+StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::InternalError("Size of ArrayColumn exceed the limit");
+    }
+
+    return upgrade_helper_func(&_elements);
+}
+
+StatusOr<ColumnPtr> ArrayColumn::downgrade() {
+    return downgrade_helper_func(&_elements);
+}
+
 } // namespace starrocks::vectorized

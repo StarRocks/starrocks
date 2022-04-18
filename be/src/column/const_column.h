@@ -211,9 +211,17 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
+    bool reach_capacity_limit() const override {
+        return _data->reach_capacity_limit() || _size > Column::MAX_CAPACITY_LIMIT;
+    }
 
     void check_or_die() const override;
+
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override { return _data->has_large_column(); }
 
 private:
     ColumnPtr _data;

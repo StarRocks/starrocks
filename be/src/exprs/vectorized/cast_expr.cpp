@@ -900,7 +900,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
  */
 struct CastToString {
     template <typename Type, typename ResultType>
-    static inline std::string apply(const Type& v) {
+    static std::string apply(const Type& v) {
         if constexpr (IsDate<Type> || IsTimestamp<Type> || IsDecimal<Type>) {
             // DateValue, TimestampValue, DecimalV2
             return v.to_string();

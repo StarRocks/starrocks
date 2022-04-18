@@ -21,7 +21,7 @@ public:
      */
     ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                          const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                         const std::string& sort_keys, size_t size_of_chunk_batch);
+                         const std::string& sort_keys);
     ~ChunksSorterFullSort() override;
 
     // Append a Chunk for sort.

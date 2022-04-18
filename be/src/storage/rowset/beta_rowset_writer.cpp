@@ -21,6 +21,8 @@
 
 #include "storage/rowset/beta_rowset_writer.h"
 
+#include <fmt/format.h>
+
 #include <ctime>
 #include <memory>
 
@@ -29,18 +31,18 @@
 #include "common/logging.h"
 #include "env/env.h"
 #include "runtime/exec_env.h"
+#include "segment_options.h"
 #include "serde/column_array_serde.h"
+#include "storage/aggregate_iterator.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
+#include "storage/merge_iterator.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/aggregate_iterator.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/merge_iterator.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {
@@ -421,19 +423,14 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     // schema change with sorting create temporary segment files first
     // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {
-        if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS) {
+        if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
             itr = new_heap_merge_iterator(seg_iterators);
-        } else if (_context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+        } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
+                   _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
         } else {
-            for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
-                auto old_path =
-                        BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                RETURN_IF_ERROR_WITH_WARN(_env->rename_file(old_path, new_path), "Fail to rename file");
-            }
-            _context.write_tmp = false;
-            return Status::OK();
+            return Status::NotSupported(fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
+                                                    _context.tablet_schema->keys_type()));
         }
         _context.write_tmp = false;
     } else {

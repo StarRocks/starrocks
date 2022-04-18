@@ -29,6 +29,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/vectorized/time_types.h"
 #include "storage/collection.h"
+#include "storage/convert_helper.h"
 #include "storage/decimal12.h"
 #include "storage/decimal_type_info.h"
 #include "storage/olap_common.h"
@@ -36,7 +37,6 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/uint24.h"
-#include "storage/vectorized/convert_helper.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/slice.h"

@@ -1081,19 +1081,6 @@ public class Config extends ConfigBase {
     public static boolean using_old_load_usage_pattern = false;
 
     /**
-     * If the jvm memory used percent(heap or old mem pool) exceed this threshold, checkpoint thread will
-     * not work to avoid OOM.
-     */
-    @ConfField(mutable = true)
-    public static long metadata_checkopoint_memory_threshold = 60;
-
-    /**
-     * If set to true, the checkpoint thread will make the checkpoint regardless of the jvm memory used percent.
-     */
-    @ConfField(mutable = true)
-    public static boolean force_do_metadata_checkpoint = false;
-
-    /**
      * control rollup job concurrent limit
      */
     @ConfField(mutable = true)
@@ -1277,6 +1264,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of agent task for one be. currently only for drop task.
+     */
+    @ConfField(mutable = true)
+    public static int max_agent_tasks_send_per_be = 10000;
+
+    /**
      * num of thread to handle hive meta load concurrency.
      */
     @ConfField
@@ -1348,12 +1341,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean check_java_version = true;
-
-    /**
-     * timeout for shutdown hook execute
-     */
-    @ConfField(mutable = true)
-    public static long shutdown_hook_timeout_sec = 60;
 
     /**
      * connection and socket timeout for broker client

@@ -130,7 +130,8 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     {
         SCOPED_TIMER(_common_sub_expr_compute_timer);
         for (size_t i = 0; i < _common_sub_slot_ids.size(); ++i) {
-            (*chunk)->append_column(_common_sub_expr_ctxs[i]->evaluate((*chunk).get()), _common_sub_slot_ids[i]);
+            ASSIGN_OR_RETURN(auto col, _common_sub_expr_ctxs[i]->evaluate((*chunk).get()));
+            (*chunk)->append_column(std::move(col), _common_sub_slot_ids[i]);
         }
         RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
     }
@@ -140,7 +141,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     {
         SCOPED_TIMER(_expr_compute_timer);
         for (size_t i = 0; i < _slot_ids.size(); ++i) {
-            result_columns[i] = _expr_ctxs[i]->evaluate((*chunk).get());
+            ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate((*chunk).get()));
 
             if (result_columns[i]->only_null()) {
                 result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);

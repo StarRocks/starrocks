@@ -89,10 +89,9 @@ public:
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
                                      rocksdb::WriteBatch& batch);
 
-    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                       const TabletMetaSharedPtr& tablet_meta);
+    static Status save(DataDir* store, const TabletMetaSharedPtr& tablet_meta);
 
-    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, const TabletMetaPB& meta_pb);
+    static Status save(DataDir* store, const TabletMetaPB& meta_pb);
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
@@ -144,7 +143,8 @@ public:
 
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
-                                      std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
+                                      std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,

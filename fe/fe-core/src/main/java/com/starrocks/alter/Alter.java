@@ -68,6 +68,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -306,9 +307,16 @@ public class Alter {
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = alterClause.getProperties();
-                // currently, only in memory property could reach here
-                Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
-                ((SchemaChangeHandler) schemaChangeHandler).updateTableInMemoryMeta(db, tableName, properties);
+                // currently, only in memory property and enable persistent index property could reach here
+                Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) || 
+                                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, 
+                                                                                properties, TTabletMetaType.INMEMORY);
+                } else {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties, 
+                                                                                TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
             }

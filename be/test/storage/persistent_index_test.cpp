@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "env/env_memory.h"
+#include "storage/chunk_helper.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/beta_rowset.h"
@@ -14,7 +15,6 @@
 #include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/coding.h"
@@ -32,12 +32,10 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
     }
-    auto rs = MutableIndex::create(sizeof(Key));
-    ASSERT_TRUE(rs.ok());
-    std::unique_ptr<MutableIndex> idx = std::move(rs).value();
+    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key)));
 
     // test insert
-    ASSERT_TRUE(idx->insert(keys.size(), keys.data(), values.data()).ok());
+    ASSERT_OK(idx->insert(keys.size(), keys.data(), values.data()));
     // insert duplicate should return error
     ASSERT_FALSE(idx->insert(keys.size(), keys.data(), values.data()).ok());
 
@@ -105,8 +103,8 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
 
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
     Env* env = Env::Default();
-    const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
-    const std::string kIndexFile = "./ut_dir/persistent_index_test/index.l0.0.0";
+    const std::string kPersistentIndexDir = "./persistent_index_test";
+    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
     bool created;
     ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -153,11 +151,11 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         PersistentIndex index(kPersistentIndexDir);
         //ASSERT_TRUE(index.create(sizeof(Key), version).ok());
 
-        ASSERT_TRUE(index.load(index_meta).ok());
-        ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
-        ASSERT_TRUE(index.insert(N, keys.data(), values.data(), false).ok());
-        ASSERT_TRUE(index.commit(&index_meta).ok());
-        ASSERT_TRUE(index.on_commited().ok());
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(1, 0)));
+        ASSERT_OK(index.insert(N, keys.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
 
         std::vector<IndexValue> old_values(keys.size());
         ASSERT_TRUE(index.prepare(EditVersion(2, 0)).ok());
@@ -346,7 +344,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
 
 void build_persistent_index_from_tablet(size_t N) {
     Env* env = Env::Default();
-    const std::string kPersistentIndexDir = "./ut_dir/persistent_index_test";
+    const std::string kPersistentIndexDir = "./persistent_index_test";
     bool created;
     ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -447,6 +445,78 @@ PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
     build_persistent_index_from_tablet(250000);
     // flush l1
     build_persistent_index_from_tablet(1000000);
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_replace) {
+    Env* env = Env::Default();
+    const std::string kPersistentIndexDir = "./persistent_index_test";
+    const std::string kIndexFile = "./persistent_index_test/index.l0.0.0";
+    bool created;
+    ASSERT_OK(env->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = uint64_t;
+    PersistentIndexMetaPB index_meta;
+    // insert
+    vector<Key> keys;
+    vector<IndexValue> values;
+    vector<uint32_t> src_rssid;
+    vector<IndexValue> replace_values;
+    int N = 1000000;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        replace_values.emplace_back(i * 3);
+    }
+
+    for (int i = 0; i < N / 2; i++) {
+        src_rssid.emplace_back(0);
+    }
+    for (int i = N / 2; i < N; i++) {
+        src_rssid.emplace_back(1);
+    }
+
+    ASSIGN_OR_ABORT(auto block_mgr, fs::fs_util::block_manager("posix://"));
+    std::unique_ptr<fs::WritableBlock> wblock;
+    fs::CreateBlockOptions wblock_opts({kIndexFile});
+    ASSERT_TRUE((block_mgr->create_block(wblock_opts, &wblock)).ok());
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    PersistentIndex index(kPersistentIndexDir);
+
+    ASSERT_TRUE(index.load(index_meta).ok());
+    ASSERT_TRUE(index.prepare(EditVersion(1, 0)).ok());
+    ASSERT_TRUE(index.insert(N, keys.data(), values.data(), false).ok());
+    ASSERT_TRUE(index.commit(&index_meta).ok());
+    ASSERT_TRUE(index.on_commited().ok());
+
+    std::vector<IndexValue> get_values(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
+    ASSERT_EQ(keys.size(), get_values.size());
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+
+    //replace
+    std::vector<uint32_t> failed(keys.size());
+    Status st = index.try_replace(N, keys.data(), replace_values.data(), src_rssid, &failed);
+    ASSERT_TRUE(st.ok());
+    std::vector<IndexValue> new_get_values(keys.size());
+    ASSERT_TRUE(index.get(keys.size(), keys.data(), new_get_values.data()).ok());
+    ASSERT_EQ(keys.size(), new_get_values.size());
+    for (int i = 0; i < N / 2; i++) {
+        ASSERT_EQ(replace_values[i], new_get_values[i]);
+    }
+    for (int i = N / 2; i < N; i++) {
+        ASSERT_EQ(values[i], new_get_values[i]);
+    }
+    ASSERT_TRUE(FileUtils::remove_all(kPersistentIndexDir).ok());
 }
 
 } // namespace starrocks

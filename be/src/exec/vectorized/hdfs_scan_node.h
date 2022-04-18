@@ -76,8 +76,8 @@ private:
     void _decompose_conjunct_ctxs();
 
     Status _start_scan_thread(RuntimeState* state);
-    void _init_partition_values_map();
-    bool _filter_partition(const std::vector<ExprContext*>& partition_exprs);
+    Status _init_partition_values_map();
+    StatusOr<bool> _filter_partition(const std::vector<ExprContext*>& partition_exprs);
     Status _find_and_insert_hdfs_file(const THdfsScanRange& scan_range);
     Status _create_and_init_scanner(RuntimeState* state, const HdfsFileDesc& hdfs_file_desc);
 

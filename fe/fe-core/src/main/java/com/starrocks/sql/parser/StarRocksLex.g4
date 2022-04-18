@@ -69,6 +69,7 @@ FILTER: 'FILTER';
 FIRST: 'FIRST';
 FIRST_VALUE: 'FIRST_VALUE';
 FLOAT: 'FLOAT';
+FN: 'FN';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
 FORMAT: 'FORMAT';
@@ -107,12 +108,13 @@ LIKE: 'LIKE';
 LIMIT: 'LIMIT';
 LOCAL: 'LOCAL';
 LOGICAL: 'LOGICAL';
+MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
 MERGE: 'MERGE';
 MIN: 'MIN';
-MAX: 'MAX';
 MINUTE: 'MINUTE';
 MINUS: 'MINUS';
+MOD: 'MOD';
 MONTH: 'MONTH';
 NONE: 'NONE';
 NOT: 'NOT';
@@ -182,6 +184,7 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WITH: 'WITH';
 YEAR: 'YEAR';
+FORCE: 'FORCE';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -196,14 +199,17 @@ MINUS_SYMBOL: '-';
 ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
+
 LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_AND: '&&';
+LOGICAL_NOT: '!';
 
 INT_DIV: 'DIV';
 BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
-LOGICAL_NOT: '!';
+
 ARROW: '->';
 AT: '@';
 

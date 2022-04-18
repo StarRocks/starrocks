@@ -262,7 +262,7 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
 Status UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
     for (size_t i = 0; i < _child_expr_lists[_child_idx].size(); i++) {
         auto* dest_slot = _tuple_desc->slots()[i];
-        ColumnPtr column = _child_expr_lists[_child_idx][i]->evaluate(src_chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr column, _child_expr_lists[_child_idx][i]->evaluate(src_chunk.get()));
         _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
     }
     RETURN_IF_HAS_ERROR(_child_expr_lists[_child_idx]);
@@ -271,7 +271,7 @@ Status UnionNode::_move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_ch
 
 Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
     for (size_t i = 0; i < _const_expr_lists[_const_expr_list_idx].size(); i++) {
-        ColumnPtr column = _const_expr_lists[_const_expr_list_idx][i]->evaluate(nullptr);
+        ASSIGN_OR_RETURN(ColumnPtr column, _const_expr_lists[_const_expr_list_idx][i]->evaluate(nullptr));
         auto* dest_slot = _tuple_desc->slots()[i];
 
         _move_column(dest_chunk, column, dest_slot, 1);

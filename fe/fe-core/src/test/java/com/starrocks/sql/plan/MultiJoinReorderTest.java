@@ -224,7 +224,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testTwoJoinRootGreedy2() throws Exception {
         connectContext.getSessionVariable().disableDPJoinReorder();
         connectContext.getSessionVariable().enableGreedyJoinReorder();
-        String sql = "select * from t1 " +
+        String sql = "select t0.v1 from t1 " +
                 "join t3 on t1.v4 = t3.v1 " +
                 "join t0 on t1.v4 = t0.v2 " +
                 "join (select * from t1 join t3 on t1.v4 = t3.v1 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
@@ -451,7 +451,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testTwoJoinRootDP2() throws Exception {
         connectContext.getSessionVariable().enableDPJoinReorder();
         connectContext.getSessionVariable().disableGreedyJoinReorder();
-        String sql = "select * from t1 " +
+        String sql = "select t0.v1 from t1 " +
                 "join t3 on t1.v4 = t3.v1 " +
                 "join t0 on t1.v4 = t0.v2 " +
                 "join (select * from t1 join t3 on t1.v4 = t3.v1 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
@@ -496,5 +496,14 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("17:CROSS JOIN"));
+    }
+
+    @Test
+    public void testInsertWithMultiJoin() throws Exception {
+        String sql = "insert into test_all_type(t1b, t1c, t1d, t1a) select v1,v4,v7,t1b from (" +
+                "select v1,v4 from t0 join t1 on v1 = v4 ) a join (" +
+                "select t1a, null as t1b,v7 from test_all_type join t2 on t1a = v7) b on v1 = t1a";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 27> : CAST(NULL AS VARCHAR(20))"));
     }
 }

@@ -29,18 +29,18 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/rowset/vectorized/segment_options.h"
+#include "rowset_options.h"
+#include "segment_options.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
+#include "storage/delete_predicates.h"
+#include "storage/empty_iterator.h"
+#include "storage/merge_iterator.h"
+#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/chunk_iterator.h"
-#include "storage/vectorized/delete_predicates.h"
-#include "storage/vectorized/empty_iterator.h"
-#include "storage/vectorized/merge_iterator.h"
-#include "storage/vectorized/projection_iterator.h"
-#include "storage/vectorized/union_iterator.h"
 #include "util/file_utils.h"
 
 namespace starrocks {

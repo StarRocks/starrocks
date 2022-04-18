@@ -12,7 +12,7 @@ namespace vectorized {
 // MAX USE 22 bits
 typedef int32_t JulianDate;
 
-// Timestamp: {Jualian Date}{microsecond in one day, 0 ~ 86400000000}
+// Timestamp: {Julian Date}{microsecond in one day, 0 ~ 86400000000}
 // JulianDate use high 22 bits, microsecond use low 40 bits
 typedef int64_t Timestamp;
 
@@ -46,6 +46,8 @@ static const int64_t USECS_PER_DAY = 86400000000;
 static const int64_t USECS_PER_HOUR = 3600000000;
 static const int64_t USECS_PER_MINUTE = 60000000;
 static const int64_t USECS_PER_SEC = 1000000;
+
+static const int64_t NANOSECS_PER_USEC = 1000;
 
 // Corresponding to TimeUnit
 static constexpr int64_t USECS_PER_UNIT[] = {
@@ -177,6 +179,8 @@ public:
     static int to_string(Timestamp timestamp, char* s, size_t n);
 
     inline static double time_to_literal(double time);
+
+    inline static Timestamp of_epoch_second(int seconds, int microseconds);
 
 public:
     // MAX_DATE | USECS_PER_DAY
@@ -342,6 +346,13 @@ double timestamp::time_to_literal(double time) {
     uint64_t minute = t / 60 % 60;
     uint64_t second = t % 60;
     return hour * 10000 + minute * 100 + second;
+}
+
+Timestamp timestamp::of_epoch_second(int seconds, int nanoseconds) {
+    int days = seconds / SECS_PER_DAY;
+    JulianDate jd = days + date::UNIX_EPOCH_JULIAN;
+    return timestamp::from_julian_and_time(jd,
+                                           seconds % SECS_PER_DAY * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
 }
 
 struct JulianToDateEntry {

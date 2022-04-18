@@ -38,8 +38,6 @@ import org.junit.rules.ExpectedException;
 import java.util.UUID;
 
 public class DynamicPartitionTableTest {
-    private static String runningDir = "fe/mocked/DynamicPartitionTableTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -51,18 +49,13 @@ public class DynamicPartitionTableTest {
         FeConstants.default_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
 
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
-    }
-
-    @AfterClass
-    public static void TearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     private static void createTable(String sql) throws Exception {

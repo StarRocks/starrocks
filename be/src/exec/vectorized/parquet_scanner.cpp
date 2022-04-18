@@ -131,8 +131,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
                                    cast_chunk->num_rows());
         }
     }
-
-    auto dest_chunk = materialize(*chunk, cast_chunk);
+    ASSIGN_OR_RETURN(auto dest_chunk, materialize(*chunk, cast_chunk));
     *chunk = dest_chunk;
     _chunk_start_idx = 0;
     return Status::OK();

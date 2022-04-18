@@ -40,12 +40,12 @@ const uint8_t* read_little_endian_64(const uint8_t* buff, uint64_t* value) {
     return buff + sizeof(*value);
 }
 
-uint8_t* write_raw(const void* data, int64_t size, uint8_t* buff) {
+uint8_t* write_raw(const void* data, size_t size, uint8_t* buff) {
     strings::memcpy_inlined(buff, data, size);
     return buff + size;
 }
 
-const uint8_t* read_raw(const uint8_t* buff, void* target, int64_t size) {
+const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     strings::memcpy_inlined(target, buff, size);
     return buff + size;
 }
@@ -76,35 +76,55 @@ public:
 
 class BinaryColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::BinaryColumn& column) {
-        const vectorized::BinaryColumn::Bytes& bytes = column.get_bytes();
-        const vectorized::Offsets& offsets = column.get_offset();
-        return bytes.size() + offsets.size() * sizeof(vectorized::BinaryColumn::Offset) + sizeof(uint32_t) * 2;
+    template <typename T>
+    static int64_t max_serialized_size(const vectorized::BinaryColumnBase<T>& column) {
+        const auto& bytes = column.get_bytes();
+        const auto& offsets = column.get_offset();
+        return bytes.size() + offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset) + sizeof(T) * 2;
     }
 
-    static uint8_t* serialize(const vectorized::BinaryColumn& column, uint8_t* buff) {
-        const vectorized::BinaryColumn::Bytes& bytes = column.get_bytes();
-        const vectorized::Offsets& offsets = column.get_offset();
+    template <typename T>
+    static uint8_t* serialize(const vectorized::BinaryColumnBase<T>& column, uint8_t* buff) {
+        const auto& bytes = column.get_bytes();
+        const auto& offsets = column.get_offset();
 
-        uint32_t bytes_size = bytes.size() * sizeof(uint8_t);
-        buff = write_little_endian_32(bytes_size, buff);
+        T bytes_size = bytes.size() * sizeof(uint8_t);
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            buff = write_little_endian_32(bytes_size, buff);
+        } else {
+            buff = write_little_endian_64(bytes_size, buff);
+        }
         buff = write_raw(bytes.data(), bytes_size, buff);
 
-        uint32_t offsets_size = offsets.size() * sizeof(vectorized::BinaryColumn::Offset);
-        buff = write_little_endian_32(offsets_size, buff);
+        //TODO: if T is uint32_t, `offsets_size` may be overflow
+        T offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            buff = write_little_endian_32(offsets_size, buff);
+        } else {
+            buff = write_little_endian_64(offsets_size, buff);
+        }
         buff = write_raw(offsets.data(), offsets_size, buff);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::BinaryColumn* column) {
-        uint32_t bytes_size = 0;
-        buff = read_little_endian_32(buff, &bytes_size);
+    template <typename T>
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::BinaryColumnBase<T>* column) {
+        T bytes_size = 0;
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            buff = read_little_endian_32(buff, &bytes_size);
+        } else {
+            buff = read_little_endian_64(buff, &bytes_size);
+        }
         column->get_bytes().resize(bytes_size);
         buff = read_raw(buff, column->get_bytes().data(), bytes_size);
 
-        uint32_t offsets_size = 0;
-        buff = read_little_endian_32(buff, &offsets_size);
-        raw::make_room(&column->get_offset(), offsets_size / sizeof(vectorized::BinaryColumn::Offset));
+        T offsets_size = 0;
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            buff = read_little_endian_32(buff, &offsets_size);
+        } else {
+            buff = read_little_endian_64(buff, &offsets_size);
+        }
+        raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
         buff = read_raw(buff, column->get_offset().data(), offsets_size);
         return buff;
     }
@@ -281,7 +301,8 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         _size += BinaryColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
@@ -328,7 +349,8 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         _cur = BinaryColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
@@ -379,7 +401,8 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(vectorized::BinaryColumn* column) {
+    template <typename T>
+    Status do_visit(vectorized::BinaryColumnBase<T>* column) {
         _cur = BinaryColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }

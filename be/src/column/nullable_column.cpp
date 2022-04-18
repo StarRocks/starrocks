@@ -351,4 +351,16 @@ void NullableColumn::check_or_die() const {
     _null_column->check_or_die();
 }
 
+StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
+    if (_null_column->reach_capacity_limit()) {
+        return Status::InternalError("Size of NullableColumn exceed the limit");
+    }
+
+    return upgrade_helper_func(&_data_column);
+}
+
+StatusOr<ColumnPtr> NullableColumn::downgrade() {
+    return downgrade_helper_func(&_data_column);
+}
+
 } // namespace starrocks::vectorized

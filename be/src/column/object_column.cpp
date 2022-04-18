@@ -277,6 +277,14 @@ std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
     return _pool[idx].to_string();
 }
 
+template <typename T>
+StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
+    if (reach_capacity_limit()) {
+        return Status::InternalError("Size of ObjectColumn exceed the limit");
+    }
+    return nullptr;
+}
+
 template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;

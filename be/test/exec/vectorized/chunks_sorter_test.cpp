@@ -12,7 +12,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
-#include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -126,12 +126,12 @@ public:
         _chunk_2 = std::make_shared<Chunk>(columns2, map);
         _chunk_3 = std::make_shared<Chunk>(columns3, map);
 
-        _expr_cust_key = std::make_unique<SlotRef>(TypeDescriptor(TYPE_INT), 0, 0);     // refer to cust_key
-        _expr_nation = std::make_unique<SlotRef>(TypeDescriptor(TYPE_VARCHAR), 0, 1);   // refer to nation
-        _expr_region = std::make_unique<SlotRef>(TypeDescriptor(TYPE_VARCHAR), 0, 2);   // refer to region
-        _expr_mkt_sgmt = std::make_unique<SlotRef>(TypeDescriptor(TYPE_VARCHAR), 0, 3); // refer to mkt_sgmt
-        _expr_constant = std::make_unique<SlotRef>(TypeDescriptor(TYPE_SMALLINT), 0,
-                                                   4); // refer to constant value
+        _expr_cust_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
+        _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
+        _expr_region = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 2);   // refer to region
+        _expr_mkt_sgmt = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 3); // refer to mkt_sgmt
+        _expr_constant = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_SMALLINT),
+                                                     4); // refer to constant value
         _runtime_state = _create_runtime_state();
     }
 
@@ -150,7 +150,7 @@ protected:
 
     std::shared_ptr<RuntimeState> _runtime_state;
     ChunkPtr _chunk_1, _chunk_2, _chunk_3;
-    std::unique_ptr<SlotRef> _expr_cust_key, _expr_nation, _expr_region, _expr_mkt_sgmt, _expr_constant;
+    std::unique_ptr<ColumnRef> _expr_cust_key, _expr_nation, _expr_region, _expr_mkt_sgmt, _expr_constant;
 };
 
 void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
@@ -171,7 +171,7 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     sorter.set_compare_strategy(ColumnInc);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
@@ -270,7 +270,7 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunksSorterTest, topn_sort_with_limit) {
-    std::vector<std::tuple<std::string, SlotRef*, std::vector<int32_t>>> test_cases = {
+    std::vector<std::tuple<std::string, ColumnRef*, std::vector<int32_t>>> test_cases = {
             {"cust_key", _expr_cust_key.get(),
              std::vector<int32_t>{2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58, 69, 70, 71}},
             {"nation", _expr_nation.get(),
@@ -338,7 +338,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -385,7 +385,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -434,7 +434,7 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -484,7 +484,7 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
 
     for (auto strategy : all_compare_strategy()) {
         std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2);
+        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
         sorter.set_compare_strategy(strategy);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         sorter.update(_runtime_state.get(), _chunk_1);
@@ -895,3 +895,8 @@ TEST_F(ChunksSorterTest, test_tie) {
 }
 
 } // namespace starrocks::vectorized
+
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

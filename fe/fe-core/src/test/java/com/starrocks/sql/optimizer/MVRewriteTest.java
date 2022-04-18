@@ -32,12 +32,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class MVRewriteTest {
-    private static String baseDir = "fe";
-    private static String runningDir = baseDir + "/mocked/MaterializedViewFunctionTest/"
-            + UUID.randomUUID().toString() + "/";
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
     private static final String HR_DB_NAME = "db1";
@@ -58,7 +53,7 @@ public class MVRewriteTest {
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
@@ -118,7 +113,6 @@ public class MVRewriteTest {
     @AfterClass
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("ods_order");
-        UtFrameUtils.cleanStarRocksFeDir(baseDir);
     }
 
     @Test
@@ -1205,6 +1199,14 @@ public class MVRewriteTest {
         String query =
                 "select * from ods_order where bank_transaction_id not in (select sum(cast(salary as smallint)) as ssalary from " +
                         EMPS_TABLE_NAME + " group by deptno)";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testPredicateIsCallOperator() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno "
+                + "from " + EMPS_TABLE_NAME + ";";
+        String query = "select count(*) from " + EMPS_TABLE_NAME + " where bitmap_contains(to_bitmap(1),2)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
 }

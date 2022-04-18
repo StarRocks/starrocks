@@ -440,7 +440,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-                _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk.get());
+                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()));
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 
@@ -522,6 +522,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+
+    _buffer->set_finishing();
     return Status::OK();
 }
 

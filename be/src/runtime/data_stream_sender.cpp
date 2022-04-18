@@ -22,9 +22,7 @@
 #include "runtime/data_stream_sender.h"
 
 #include <arpa/inet.h>
-#include <thrift/protocol/TDebugProtocol.h>
 
-#include <algorithm>
 #include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
@@ -49,11 +47,8 @@
 #include "util/block_compression.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
-#include "util/debug_util.h"
-#include "util/network_util.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -89,13 +84,10 @@ public:
         if (_closure != nullptr && _closure->unref()) {
             delete _closure;
         }
-        // release this before request destruct
-        _brpc_request.release_finst_id();
 
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
             delete _chunk_closure;
         }
-        _chunk_request.release_finst_id();
     }
 
     // Initialize channel.
@@ -214,12 +206,12 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     // initialize brpc request
     _finst_id.set_hi(_fragment_instance_id.hi);
     _finst_id.set_lo(_fragment_instance_id.lo);
-    _brpc_request.set_allocated_finst_id(&_finst_id);
+    *_brpc_request.mutable_finst_id() = _finst_id;
     _brpc_request.set_node_id(_dest_node_id);
     _brpc_request.set_sender_id(_parent->_sender_id);
     _brpc_request.set_be_number(_parent->_be_number);
 
-    _chunk_request.set_allocated_finst_id(&_finst_id);
+    *_chunk_request.mutable_finst_id() = _finst_id;
     _chunk_request.set_node_id(_dest_node_id);
     _chunk_request.set_sender_id(_parent->_sender_id);
     _chunk_request.set_be_number(_parent->_be_number);
@@ -276,12 +268,11 @@ Status DataStreamSender::Channel::send_one_chunk(const vectorized::Chunk* chunk,
 
 Status DataStreamSender::Channel::send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment) {
     RETURN_IF_ERROR(_wait_prev_request());
-    params->set_allocated_finst_id(&_finst_id);
+    *params->mutable_finst_id() = _finst_id;
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
     params->set_be_number(_parent->_be_number);
     auto status = _do_send_chunk_rpc(params, attachment);
-    params->release_finst_id();
     return status;
 }
 
@@ -557,7 +548,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         // 2. serialize input chunk to pchunk
         RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
         _current_request_bytes += pchunk->data().size();
-        // 3. if request bytes exceede the threshold, send current request
+        // 3. if request bytes exceed the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(&_chunk_request, &attachment);
@@ -586,7 +577,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-                _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk);
+                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk));
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 

@@ -28,6 +28,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"

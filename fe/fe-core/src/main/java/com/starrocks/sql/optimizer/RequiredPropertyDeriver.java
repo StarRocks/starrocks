@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
@@ -56,7 +55,12 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
     public Void visitOperator(Operator node, ExpressionContext context) {
         List<PhysicalPropertySet> requiredProps = new ArrayList<>();
         for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
-            requiredProps.add(PhysicalPropertySet.EMPTY);
+            // @todo: resolve required gather property by check child limit
+            if (!node.hasLimit() && context.getChildOperator(childIndex).hasLimit()) {
+                requiredProps.add(createLimitGatherProperty(context.getChildOperator(childIndex).getLimit()));
+            } else {
+                requiredProps.add(PhysicalPropertySet.EMPTY);
+            }
         }
         requiredProperties.add(requiredProps);
         return null;
@@ -150,23 +154,6 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         }
 
-        return null;
-    }
-
-    @Override
-    public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
-        List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
-        node.getRepeatColumnRef().forEach(subRefs::retainAll);
-
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
-        if (subRefs.isEmpty()) {
-            return null;
-        }
-
-        DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toList()),
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG)));
-        requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(property)));
         return null;
     }
 

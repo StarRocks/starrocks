@@ -40,7 +40,7 @@ public:
     static void send_error(HttpRequest* request, HttpStatus status);
 
     // send 200(OK) reply with content
-    static inline void send_reply(HttpRequest* request, const std::string& content) {
+    static void send_reply(HttpRequest* request, const std::string& content) {
         send_reply(request, HttpStatus::OK, content);
     }
 

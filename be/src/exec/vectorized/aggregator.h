@@ -122,7 +122,7 @@ public:
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
-    void evaluate_exprs(vectorized::Chunk* chunk);
+    Status evaluate_exprs(vectorized::Chunk* chunk);
 
     void output_chunk_by_streaming(vectorized::ChunkPtr* chunk);
 
@@ -460,7 +460,7 @@ private:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     // initial const columns for i'th FunctionContext.
-    void _evaluate_const_columns(int i);
+    Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
     vectorized::Columns _create_agg_result_columns();
@@ -472,7 +472,7 @@ private:
                             const vectorized::Columns& agg_result_columns);
 
     void _evaluate_group_by_exprs(vectorized::Chunk* chunk);
-    void _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);
+    Status _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>

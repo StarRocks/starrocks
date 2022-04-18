@@ -737,7 +737,8 @@ public class EditLog {
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
-                case OperationType.OP_MODIFY_REPLICATION_NUM: {
+                case OperationType.OP_MODIFY_REPLICATION_NUM: 
+                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     catalog.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1331,6 +1332,10 @@ public class EditLog {
 
     public void logModifyInMemory(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_IN_MEMORY, info);
+    }
+
+    public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

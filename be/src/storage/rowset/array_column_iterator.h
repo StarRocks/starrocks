@@ -2,8 +2,8 @@
 
 #pragma once
 
+#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 

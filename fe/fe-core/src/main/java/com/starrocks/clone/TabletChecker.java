@@ -219,6 +219,11 @@ public class TabletChecker extends MasterDaemon {
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        if (partition.isUseStarOS()) {
+                            // replicas are managed by StarOS and cloud storage.
+                            continue;
+                        }
+
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.

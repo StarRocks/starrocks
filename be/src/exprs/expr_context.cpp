@@ -25,9 +25,11 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
+#include "common/statusor.h"
 #include "exprs/expr.h"
-#include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
@@ -141,13 +143,6 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-bool ExprContext::is_nullable() {
-    if (_root->is_slotref()) {
-        return SlotRef::is_nullable(_root);
-    }
-    return false;
-}
-
 Status ExprContext::get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val) {
     return Status::OK();
 }
@@ -185,23 +180,27 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-ColumnPtr ExprContext::evaluate(vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
     return evaluate(_root, chunk);
 }
 
-ColumnPtr ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
         CHECK(!chunk->is_empty());
     }
 #endif
-    auto ptr = e->evaluate(this, chunk);
-    DCHECK(ptr != nullptr);
-    if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
-        ptr->resize(chunk->num_rows());
+    try {
+        auto ptr = e->evaluate(this, chunk);
+        DCHECK(ptr != nullptr);
+        if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
+            ptr->resize(chunk->num_rows());
+        }
+        return ptr;
+    } catch (std::runtime_error& e) {
+        return Status::RuntimeError(fmt::format("Expr evaluate meet error:{}", e.what()));
     }
-    return ptr;
 }
 
 } // namespace starrocks

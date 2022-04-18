@@ -574,7 +574,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          * avoid hash joins without equivalence conditions
          */
         if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
-                && !node.getType().isCrossJoin() && !node.getType().isInnerJoin()) {
+                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
 
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
 
@@ -588,10 +588,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         ExpressionMapping outputExpressionMapping;
-        if (node.getType().isLeftSemiAntiJoin()) {
+        if (node.getJoinOp().isLeftSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(leftPlan.getRootBuilder().getFieldMappings()));
-        } else if (node.getType().isRightSemiAntiJoin()) {
+        } else if (node.getJoinOp().isRightSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
         } else {
@@ -602,7 +602,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
-                .setJoinType(node.getType())
+                .setJoinType(node.getJoinOp())
                 .setOnPredicate(onPredicate)
                 .setJoinHint(node.getJoinHint())
                 .build();

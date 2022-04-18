@@ -28,11 +28,11 @@
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks {
 

@@ -20,6 +20,7 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.util.List;
@@ -60,7 +61,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.")
-                    .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL).toFormatter();
+                    .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL)
+                    .toFormatter().withResolverStyle(ResolverStyle.STRICT);
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
@@ -259,6 +261,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (type.isDate()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
             return String.format("%04d-%02d-%02d", time.getYear(), time.getMonthValue(), time.getDayOfMonth());
+        } else if (type.isDouble()) {
+            double val = (double) Optional.ofNullable(value).orElse((double) 0);
+            BigDecimal decimal = BigDecimal.valueOf(val);
+            return decimal.toPlainString();
         }
 
         return String.valueOf(value);

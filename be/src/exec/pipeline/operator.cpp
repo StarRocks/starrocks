@@ -6,6 +6,8 @@
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -44,6 +46,8 @@ Status Operator::prepare(RuntimeState* state) {
     _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
+
+    _total_cost_cpu_time_ns_counter = ADD_TIMER(_common_metrics, "OperatorTotalCostCpuTime");
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
@@ -165,6 +169,17 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
+        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+        for (auto& [filter_id, desc] : descriptors) {
+            if (desc->is_local() || desc->runtime_filter() != nullptr) {
+                continue;
+            }
+            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+            if (grf == nullptr) {
+                continue;
+            }
+            desc->set_shared_runtime_filter(grf);
+        }
     }
     return Status::OK();
 }

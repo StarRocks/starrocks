@@ -76,7 +76,7 @@ public:
     ~Tablet() override;
 
     Status init();
-    inline bool init_succeeded();
+    bool init_succeeded();
 
     bool is_used();
 
@@ -88,8 +88,8 @@ public:
     Status revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
 
-    inline const int64_t cumulative_layer_point() const;
-    inline void set_cumulative_layer_point(int64_t new_point);
+    const int64_t cumulative_layer_point() const;
+    void set_cumulative_layer_point(int64_t new_point);
 
     size_t tablet_footprint(); // disk space occupied by tablet
     size_t num_rows();
@@ -97,15 +97,15 @@ public:
     Version max_version() const;
 
     // propreties encapsulated in TabletSchema
-    inline KeysType keys_type() const;
-    inline size_t num_columns() const;
-    inline size_t num_key_columns() const;
-    inline size_t num_short_key_columns() const;
-    inline size_t num_rows_per_row_block() const;
-    inline CompressKind compress_kind() const;
-    inline size_t next_unique_id() const;
-    inline size_t row_size() const;
-    inline size_t field_index(const string& field_name) const;
+    KeysType keys_type() const;
+    size_t num_columns() const;
+    size_t num_key_columns() const;
+    size_t num_short_key_columns() const;
+    size_t num_rows_per_row_block() const;
+    CompressKind compress_kind() const;
+    size_t next_unique_id() const;
+    size_t row_size() const;
+    size_t field_index(const string& field_name) const;
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
@@ -153,27 +153,27 @@ public:
     Status set_alter_state(AlterTabletState state);
 
     // meta lock
-    inline void obtain_header_rdlock() { _meta_lock.lock_shared(); }
-    inline void obtain_header_wrlock() { _meta_lock.lock(); }
-    inline void release_header_lock() { _meta_lock.unlock(); }
-    inline std::shared_mutex& get_header_lock() { return _meta_lock; }
+    void obtain_header_rdlock() { _meta_lock.lock_shared(); }
+    void obtain_header_wrlock() { _meta_lock.lock(); }
+    void release_header_lock() { _meta_lock.unlock(); }
+    std::shared_mutex& get_header_lock() { return _meta_lock; }
 
     // ingest lock
-    inline void obtain_push_lock() { _ingest_lock.lock(); }
-    inline void release_push_lock() { _ingest_lock.unlock(); }
-    inline std::mutex& get_push_lock() { return _ingest_lock; }
+    void obtain_push_lock() { _ingest_lock.lock(); }
+    void release_push_lock() { _ingest_lock.unlock(); }
+    std::mutex& get_push_lock() { return _ingest_lock; }
 
     // base lock
-    inline void obtain_base_compaction_lock() { _base_lock.lock(); }
-    inline void release_base_compaction_lock() { _base_lock.unlock(); }
-    inline std::mutex& get_base_lock() { return _base_lock; }
+    void obtain_base_compaction_lock() { _base_lock.lock(); }
+    void release_base_compaction_lock() { _base_lock.unlock(); }
+    std::mutex& get_base_lock() { return _base_lock; }
 
     // cumulative lock
-    inline void obtain_cumulative_lock() { _cumulative_lock.lock(); }
-    inline void release_cumulative_lock() { _cumulative_lock.unlock(); }
-    inline std::mutex& get_cumulative_lock() { return _cumulative_lock; }
+    void obtain_cumulative_lock() { _cumulative_lock.lock(); }
+    void release_cumulative_lock() { _cumulative_lock.unlock(); }
+    std::mutex& get_cumulative_lock() { return _cumulative_lock; }
 
-    inline std::shared_mutex& get_migration_lock() { return _migration_lock; }
+    std::shared_mutex& get_migration_lock() { return _migration_lock; }
     // should use with migration lock.
     bool is_migrating() const { return _is_migrating; }
     // should use with migration lock.
@@ -223,12 +223,12 @@ public:
 
     void calculate_cumulative_point();
     // TODO(ygl):
-    inline bool is_primary_replica() { return false; }
+    bool is_primary_replica() { return false; }
 
     // TODO(ygl):
     // eco mode means power saving in new energy car
     // eco mode also means save money in starrocks
-    inline bool in_eco_mode() { return false; }
+    bool in_eco_mode() { return false; }
 
     void do_tablet_meta_checkpoint();
 
@@ -268,6 +268,12 @@ public:
     void stop_compaction();
 
     void reset_compaction(CompactionType type);
+
+    bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
+
+    void set_enable_persistent_index(bool enable_persistent_index) {
+        return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
+    }
 
 protected:
     void on_shutdown() override;

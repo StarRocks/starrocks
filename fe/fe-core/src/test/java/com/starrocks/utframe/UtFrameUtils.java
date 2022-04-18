@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -90,11 +91,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
+    private final static AtomicInteger INDEX = new AtomicInteger(0);
+
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
             "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
@@ -117,25 +121,6 @@ public class UtFrameUtils {
             "\"in_memory\" = \"false\",\n" +
             "\"storage_format\" = \"DEFAULT\"\n" +
             ");";
-
-    static {
-        try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
-            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
-
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/");
-            addMockBackend(10001);
-
-            // sleep to wait first heartbeat
-            int retry = 0;
-            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
-                    retry++ < 600) {
-                Thread.sleep(100);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
@@ -226,7 +211,7 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    private static void startFEServer(String runningDir) throws EnvVarNotSetException, IOException,
+    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
             FeStartException, NotInitException {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
@@ -239,13 +224,40 @@ public class UtFrameUtils {
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
         // set additional fe config
-        feConfMap.put("edit_log_port", String.valueOf(8110));
+
+        if (startBDB) {
+            feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
+        }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
-        frontend.start(new String[0]);
+        frontend.start(startBDB, new String[0]);
     }
 
-    public static void createMinStarRocksCluster(String runningDir) {
+    public static void createMinStarRocksCluster(boolean startBDB) {
+        try {
+            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
+
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            addMockBackend(10001);
+
+            // sleep to wait first heartbeat
+            int retry = 0;
+            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+                    retry++ < 600) {
+                Thread.sleep(100);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void createMinStarRocksClusterWithBDB() {
+        createMinStarRocksCluster(true);
+    }
+
+    public static void createMinStarRocksCluster() {
+        createMinStarRocksCluster(false);
     }
 
     public static void addMockBackend(int backendId) throws Exception {
@@ -321,6 +333,7 @@ public class UtFrameUtils {
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
+
         try {
             // update session variable by adding optional hints.
             if (statementBase instanceof QueryStatement &&
@@ -338,6 +351,24 @@ public class UtFrameUtils {
             }
 
             ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+
+            if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
+                    !statementBase.isExplain()) {
+                String viewName = "view" + INDEX.getAndIncrement();
+                String createView = "create view " + viewName + " as " + originStmt;
+                CreateViewStmt createTableStmt =
+                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                try {
+                    StatementBase viewStatement =
+                            com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                    throw e;
+                }
+            }
+
             OperatorStrings operatorPrinter = new OperatorStrings();
             return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
         } finally {

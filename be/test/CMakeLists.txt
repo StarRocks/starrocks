@@ -20,7 +20,6 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/s3_uri_test.cpp
-        ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
@@ -31,7 +30,6 @@ set(EXEC_FILES
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/chunks_sorter_heapsorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
         ./exec/vectorized/json_scanner_test.cpp
@@ -119,10 +117,12 @@ set(EXEC_FILES
         ./http/message_body_sink_test.cpp
         ./http/stream_load_test.cpp
         ./io/array_input_stream_test.cpp
+        ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
+        ./io/seekable_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
@@ -138,6 +138,7 @@ set(EXEC_FILES
         ./storage/persistent_index_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
+        ./storage/tablet_mgr_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/beta_rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
@@ -172,25 +173,25 @@ set(EXEC_FILES
         ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
         ./storage/base_and_cumulative_compaction_policy_test.cpp
-        ./storage/vectorized/aggregate_iterator_test.cpp
-        ./storage/vectorized/chunk_aggregator_test.cpp
-        ./storage/vectorized/chunk_helper_test.cpp
-        ./storage/vectorized/column_aggregator_test.cpp
-        ./storage/vectorized/column_predicate_test.cpp
-        ./storage/vectorized/conjunctive_predicates_test.cpp
-        ./storage/vectorized/convert_helper_test.cpp
-        ./storage/vectorized/merge_iterator_test.cpp
-        ./storage/vectorized/memtable_test.cpp
-        ./storage/vectorized/projection_iterator_test.cpp
-        ./storage/vectorized/push_handler_test.cpp
-        ./storage/vectorized/range_test.cpp
-        ./storage/vectorized/row_source_mask_test.cpp
-        ./storage/vectorized/union_iterator_test.cpp
-        ./storage/vectorized/unique_iterator_test.cpp
-        ./storage/vectorized/cumulative_compaction_test.cpp
-        ./storage/vectorized/base_compaction_test.cpp
-        ./storage/vectorized/rowset_merger_test.cpp
-        ./storage/vectorized/schema_change_test.cpp
+        ./storage/aggregate_iterator_test.cpp
+        ./storage/chunk_aggregator_test.cpp
+        ./storage/chunk_helper_test.cpp
+        ./storage/column_aggregator_test.cpp
+        ./storage/column_predicate_test.cpp
+        ./storage/conjunctive_predicates_test.cpp
+        ./storage/convert_helper_test.cpp
+        ./storage/merge_iterator_test.cpp
+        ./storage/memtable_test.cpp
+        ./storage/projection_iterator_test.cpp
+        ./storage/push_handler_test.cpp
+        ./storage/range_test.cpp
+        ./storage/row_source_mask_test.cpp
+        ./storage/union_iterator_test.cpp
+        ./storage/unique_iterator_test.cpp
+        ./storage/cumulative_compaction_test.cpp
+        ./storage/base_compaction_test.cpp
+        ./storage/rowset_merger_test.cpp
+        ./storage/schema_change_test.cpp
         ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -313,3 +314,7 @@ TARGET_LINK_LIBRARIES(bytes_test
 add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
 TARGET_LINK_LIBRARIES(starrocks_column_to_arrow_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_column_to_arrow_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
+add_executable(engine_storage_migration_task_test ./storage/task/engine_storage_migration_task_test.cpp)
+TARGET_LINK_LIBRARIES(engine_storage_migration_task_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(engine_storage_migration_task_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

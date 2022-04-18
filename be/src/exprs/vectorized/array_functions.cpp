@@ -11,6 +11,8 @@ namespace starrocks::vectorized {
 
 ColumnPtr ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     Column* arg0 = columns[0].get();
     const size_t num_rows = arg0->size();
 

@@ -442,7 +442,7 @@ public class SystemInfoService {
         return seqChooseBackendIds(backendNum, needAlive, isCreate, clusterName, backends);
     }
 
-    // choose backends by round robin
+    // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,

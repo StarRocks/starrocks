@@ -310,11 +310,9 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
     string snapshot_path;
     auto st = SnapshotManager::instance()->make_snapshot(snapshot_request, &snapshot_path);
     if (!st.ok()) {
-        LOG(WARNING) << "fail to make_snapshot. tablet_id=" << snapshot_request.tablet_id
-                     << ", schema_hash=" << snapshot_request.schema_hash << ", msg=" << st.to_string();
+        LOG(WARNING) << "fail to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " msg:" << st.to_string();
     } else {
-        LOG(INFO) << "success to make_snapshot. tablet_id=" << snapshot_request.tablet_id
-                  << ", schema_hash=" << snapshot_request.schema_hash << ", snapshot_path: " << snapshot_path;
+        LOG(INFO) << "success to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " path:" << snapshot_path;
         t_agent_result.__set_snapshot_path(snapshot_path);
     }
 
@@ -326,9 +324,9 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
 void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
     Status ret_st = SnapshotManager::instance()->release_snapshot(snapshot_path);
     if (!ret_st.ok()) {
-        LOG(WARNING) << "Fail to release_snapshot. snapshot_path: " << snapshot_path;
+        LOG(WARNING) << "Fail to release_snapshot. snapshot_path:" << snapshot_path;
     } else {
-        LOG(INFO) << "success to release_snapshot. snapshot_path=" << snapshot_path;
+        LOG(INFO) << "success to release_snapshot. snapshot_path:" << snapshot_path;
     }
     ret_st.to_thrift(&t_agent_result.status);
 }

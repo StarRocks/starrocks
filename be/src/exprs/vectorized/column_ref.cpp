@@ -2,12 +2,16 @@
 
 #include "exprs/vectorized/column_ref.h"
 
+#include "exprs/expr.h"
+
 namespace starrocks::vectorized {
 
 ColumnRef::ColumnRef(const TExprNode& node)
         : Expr(node, true), _column_id(node.slot_ref.slot_id), _tuple_id(node.slot_ref.tuple_id) {}
 
 ColumnRef::ColumnRef(const SlotDescriptor* desc) : Expr(desc->type(), true), _column_id(desc->id()) {}
+
+ColumnRef::ColumnRef(const TypeDescriptor& type, SlotId slot) : Expr(type, true), _column_id(slot) {}
 
 int ColumnRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     slot_ids->push_back(_column_id);

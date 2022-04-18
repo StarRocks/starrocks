@@ -29,10 +29,10 @@
 #include <vector>
 
 #include "runtime/mem_pool.h"
+#include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/vectorized/range.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"

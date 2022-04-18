@@ -7,7 +7,7 @@
 #include "env/env.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/orc_proto.pb.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -56,7 +56,7 @@ public:
         doRead(_cache_buffer.data(), length, offset);
     }
 
-    inline bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
         if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
             ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
             return true;
@@ -112,6 +112,7 @@ public:
     bool is_slot_evaluated(SlotId id) { return _dict_filter_eval_cache.find(id) != _dict_filter_eval_cache.end(); }
     void onStartingPickRowGroups() override;
     void onEndingPickRowGroups() override;
+    void setWriterTimezone(const std::string& tz) override;
 
 private:
     const HdfsScannerParams& _scanner_params;
@@ -130,11 +131,21 @@ private:
     // 2. and check if range.start <= `offset`
     std::map<uint64_t, uint64_t> _scan_ranges;
     OrcScannerAdapter* _adapter;
+    int64_t _writer_tzoffset_in_seconds;
 };
 
 void OrcRowReaderFilter::onStartingPickRowGroups() {}
 
 void OrcRowReaderFilter::onEndingPickRowGroups() {}
+
+void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
+    cctz::time_zone writer_tzinfo;
+    if (tz == "" || !TimezoneUtils::find_cctz_time_zone(tz, writer_tzinfo)) {
+        _writer_tzoffset_in_seconds = _adapter->tzoffset_in_seconds();
+    } else {
+        _writer_tzoffset_in_seconds = TimezoneUtils::to_utc_offset(writer_tzinfo);
+    }
+}
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
                                        const HdfsFileReaderParam& reader_params, OrcScannerAdapter* adapter)
@@ -143,7 +154,8 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
           _current_stripe_index(0),
           _init_use_dict_filter_slots(false),
           _can_do_filter_on_orc_cvb(true),
-          _adapter(adapter) {
+          _adapter(adapter),
+          _writer_tzoffset_in_seconds(adapter->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
@@ -186,7 +198,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr min_col = min_chunk->columns()[i];
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
-            Status st = OrcScannerAdapter::decode_min_max_value(slot, stats, min_col, max_col);
+            int64_t tz_offset_in_seconds = _adapter->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
+            Status st = _adapter->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }
@@ -215,8 +228,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
     for (auto& min_max_conjunct_ctx : _reader_params.min_max_conjunct_ctxs) {
-        auto min_col = min_max_conjunct_ctx->evaluate(min_chunk.get());
-        auto max_col = min_max_conjunct_ctx->evaluate(max_chunk.get());
+        // TODO: add a warning log here
+        auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
+        auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
         auto min = min_col->get(0).get_int8();
         auto max = max_col->get(0).get_int8();
         if (min == 0 && max == 0) {
@@ -489,7 +503,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    chunk_size = ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter);
+                    ASSIGN_OR_RETURN(chunk_size,
+                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
                     if (chunk_size == 0) {
                         break;
                     }
