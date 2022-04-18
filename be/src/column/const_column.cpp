@@ -15,7 +15,6 @@ ConstColumn::ConstColumn(ColumnPtr data) : _data(std::move(data)), _size(0) {
 }
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
-    DCHECK_LE(_data->size(), 1);
     DCHECK(!_data->is_constant());
 }
 
@@ -69,7 +68,7 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
 
 void ConstColumn::check_or_die() const {
     if (_size > 0) {
-        CHECK_LE(_data->size(), 1);
+        CHECK_GE(_data->size(), 1);
     }
     _data->check_or_die();
 }
