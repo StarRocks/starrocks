@@ -260,7 +260,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |default_storage_medium|HDD|默认的存储介质，值为 HDD/SSD。在创建表/分区时，如果没有指定存储介质，那么会使用该值|
 |schedule_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目|
 |tablet_balancer_strategy|disk_and_tablet|Tablet 均衡策略，值为 disk_and_tablet 或 be_load_score|
-|tablet_stat_update_interval_second 300 FE 向每个 BE 请求收集 tablet 信息的时间间隔，默认 5min|
+|tablet_stat_update_interval_second |300 |FE 向每个 BE 请求收集 tablet 信息的时间间隔，默认 5min|
 
 * **其他**
 
