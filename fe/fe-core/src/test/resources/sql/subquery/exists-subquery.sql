@@ -1,24 +1,24 @@
 [sql]
-select t0.v1 from t0 where exists (select t3.v2 from t3)
+select t0.v1 from t0 where exists (select t3.v11 from t3)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
-            SCAN (columns[4: v1] predicate[null]) Limit 1
+            SCAN (columns[4: v10] predicate[null]) Limit 1
 [end]
 
 [sql]
-select t0.v1 from t0 where exists (select t3.v2 from t3 where t0.v3 = t3.v3)
+select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
-LEFT SEMI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v3] predicate[null])
+        SCAN (columns[6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where not exists (select t3.v2 from t3)
+select t0.v1 from t0 where not exists (select t3.v11 from t3)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
@@ -26,66 +26,66 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{8: count=count(8: count)}] group by [[]] having [8: count = 0]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{8: count=count(1)}] group by [[]] having [null]
-                    SCAN (columns[4: v1] predicate[null])
+                    SCAN (columns[4: v10] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where not exists (select t3.v2 from t3 where t0.v3 = t3.v3)
+select t0.v1 from t0 where not exists (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
-LEFT ANTI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT ANTI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v3] predicate[null])
+        SCAN (columns[6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where exists (select t3.v2 from t3 where t0.v3 = t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12) and t0.v2 = 3
 [result]
-LEFT SEMI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v3] predicate[null])
+        SCAN (columns[6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where not exists (select t3.v2 from t3 where t0.v3 = t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where not exists (select t3.v11 from t3 where t0.v3 = t3.v12) and t0.v2 = 3
 [result]
-LEFT ANTI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT ANTI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v3] predicate[null])
+        SCAN (columns[6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where exists (select t3.v2 from t3 where t0.v3 = t3.v3 and t3.v1 = 123) and t0.v2 = 3
+select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12 and t3.v10 = 123) and t0.v2 = 3
 [result]
-LEFT SEMI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 6: v3] predicate[4: v1 = 123])
+        SCAN (columns[4: v10, 6: v12] predicate[4: v10 = 123])
 [end]
 
 [sql]
-select t0.v1 from t0 where not exists (select t3.v2 from t3 where t0.v3 = t3.v3 and t3.v1 = 123) and t0.v2 = 3
+select t0.v1 from t0 where not exists (select t3.v11 from t3 where t0.v3 = t3.v12 and t3.v10 = 123) and t0.v2 = 3
 [result]
-LEFT ANTI JOIN (join-predicate [3: v3 = 6: v3] post-join-predicate [null])
+LEFT ANTI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 6: v3] predicate[4: v1 = 123])
+        SCAN (columns[4: v10, 6: v12] predicate[4: v10 = 123])
 [end]
 
 [sql]
-select t0.v1 from t0 where exists (select t3.v2 from t3 where t3.v1 = 123)
+select t0.v1 from t0 where exists (select t3.v11 from t3 where t3.v10 = 123)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
-            SCAN (columns[4: v1] predicate[4: v1 = 123]) Limit 1
+            SCAN (columns[4: v10] predicate[4: v10 = 123]) Limit 1
 [end]
 
 [sql]
-select t0.v1 from t0 where not exists (select t3.v2 from t3 where t3.v1 = 123)
+select t0.v1 from t0 where not exists (select t3.v11 from t3 where t3.v10 = 123)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
@@ -93,7 +93,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         AGGREGATE ([GLOBAL] aggregate [{8: count=count(8: count)}] group by [[]] having [8: count = 0]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{8: count=count(1)}] group by [[]] having [null]
-                    SCAN (columns[4: v1] predicate[4: v1 = 123])
+                    SCAN (columns[4: v10] predicate[4: v10 = 123])
 [end]
 
 [sql]
