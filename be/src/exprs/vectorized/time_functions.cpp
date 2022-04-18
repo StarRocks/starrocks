@@ -596,13 +596,13 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
     return Status::OK();
 }
 
-#define DEFINE_DATETIME_FLOOR_FN(UNIT)                                                  \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(datetime_floor_##UNIT##Impl, v, period) {          \
-        TimestampValue result = v;                                                      \
-        result.floor_to_##UNIT##_period(period);                             \
-        return result;                                                                  \
-    }                                                                                   \
-                                                                                        \
+#define DEFINE_DATETIME_FLOOR_FN(UNIT)                                         \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(datetime_floor_##UNIT##Impl, v, period) { \
+        TimestampValue result = v;                                             \
+        result.floor_to_##UNIT##_period(period);                               \
+        return result;                                                         \
+    }                                                                          \
+                                                                               \
     DEFINE_TIME_CALC_FN(datetime_floor_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 // datetime_floor_to_second
