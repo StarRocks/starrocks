@@ -106,6 +106,32 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t4` (\n" +
+                "  `v13` bigint NULL COMMENT \"\",\n" +
+                "  `v14` bigint NULL COMMENT \"\",\n" +
+                "  `v15` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v13`, `v14`, v15)\n" +
+                "DISTRIBUTED BY HASH(`v13`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `colocate_t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
                 "  `v3` bigint NULL\n" +
@@ -115,7 +141,50 @@ public class PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"colocate_with\" = \"colocate_group_1\"" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `colocate_t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"colocate_with\" = \"colocate_group_1\"" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `colocate_t2` (\n" +
+                "  `v7` bigint NULL COMMENT \"\",\n" +
+                "  `v8` bigint NULL COMMENT \"\",\n" +
+                "  `v9` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v7`, `v8`, v9)\n" +
+                "DISTRIBUTED BY HASH(`v7`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"colocate_with\" = \"colocate_group_2\"" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `colocate_t3` (\n" +
+                "  `v10` bigint NULL COMMENT \"\",\n" +
+                "  `v11` bigint NULL COMMENT \"\",\n" +
+                "  `v12` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v10`, `v11`, v12)\n" +
+                "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"colocate_with\" = \"colocate_group_2\"" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
@@ -890,6 +959,10 @@ public class PlanTestBase {
         Assert.assertTrue(text, text.contains(pattern));
     }
 
+    public static void assertNotContains(String text, String pattern) {
+        Assert.assertFalse(text, text.contains(pattern));
+    }
+
     protected static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(rowCount);
@@ -1077,7 +1150,7 @@ public class PlanTestBase {
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
                         } catch (Error error) {
-                            collector.addError(new Throwable("\n" + sql.toString(), error));
+                            collector.addError(new Throwable("\n" + sql, error));
                         }
 
                         hasResult = false;

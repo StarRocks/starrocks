@@ -743,7 +743,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql151() throws Exception {
         String sql =
-                "select * from t1 inner join t3 on t1.v4 = t3.v1 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
+                "select * from t1 inner join t3 on t1.v4 = t3.v10 right semi join test_all_type as a on t3.v10 = a.t1a and 1 > 2;";
         testView(sql);
     }
 
@@ -1182,7 +1182,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql255() throws Exception {
         String sql =
-                "select t3.v1 from t3 inner join test_all_type on t3.v2 = test_all_type.id_decimal and t3.v2 > true";
+                "select t3.v10 from t3 inner join test_all_type on t3.v11 = test_all_type.id_decimal and t3.v11 > true";
         testView(sql);
     }
 
@@ -1316,7 +1316,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void test284() throws Exception {
         String sql = "select t1.* from t0, t2, t3, t1 where t1.v4 = t2.v7 " +
-                "and t1.v4 = t3.v1 and t3.v1 = t0.v1";
+                "and t1.v4 = t3.v10 and t3.v10 = t0.v1";
         testView(sql);
     }
 
@@ -1527,6 +1527,7 @@ public class ViewPlanTest extends PlanTestBase {
         String sql = "SELECT * FROM (VALUES(1,2,3),(4,5,6),(7,8,9)) T";
         testView(sql);
     }
+
     @Test
     public void test313() throws Exception {
         String sql = "select * from t0,t1 inner join t2 on v4 = v7";
