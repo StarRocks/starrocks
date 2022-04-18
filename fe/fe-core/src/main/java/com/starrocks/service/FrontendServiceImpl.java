@@ -263,7 +263,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
 
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
-        int limit = params.limit;
+        long limit = params.limit;
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -476,7 +476,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
-        int limit = params.limit;
+        long limit = params.limit;
         if (db != null) {
             db.readLock();
             try {
