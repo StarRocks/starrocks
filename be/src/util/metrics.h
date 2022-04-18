@@ -361,11 +361,13 @@ public:
         }
 
         for (auto& it : _collectors) {
+            LOG(INFO) << "metric collect:" << it.first;
             it.second->collect(_name, it.first, visitor);
         }
     }
 
     void trigger_hook() {
+        LOG(INFO) << "trigger_hook";
         std::shared_lock lock(_mutex);
         unprotected_trigger_hook();
     }
@@ -373,6 +375,7 @@ public:
 private:
     void unprotected_trigger_hook() {
         for (const auto& it : _hooks) {
+            LOG(INFO) << "trigger_hook:" << it.first;
             it.second();
         }
     }

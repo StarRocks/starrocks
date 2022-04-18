@@ -80,10 +80,8 @@ public class ConnectContext {
     protected volatile QueryState state;
     protected volatile long returnRows;
 
-    protected QueryState state;
     // error code
-    protected String errorCode;
-    protected long returnRows;
+    protected String errorCode = "";
 
     // the protocol capability which server say it can support
     protected volatile MysqlCapability serverCapability;
@@ -143,8 +141,6 @@ public class ConnectContext {
 
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
-
-    protected PlannerProfile plannerProfile;
 
     protected WorkGroup workGroup;
 
@@ -457,10 +453,6 @@ public class ConnectContext {
 
     public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
         this.currentSqlDbIds = currentSqlDbIds;
-    }
-
-    public PlannerProfile getPlannerProfile() {
-        return plannerProfile;
     }
 
     public WorkGroup getWorkGroup() {
