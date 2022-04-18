@@ -2,14 +2,15 @@
 
 #include "storage/merge_iterator.h"
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <memory>
 #include <vector>
 
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "gtest/gtest.h"
-#include "storage/vectorized/vector_chunk_iterator.h"
+#include "storage/vector_chunk_iterator.h"
 
 namespace starrocks::vectorized {
 
