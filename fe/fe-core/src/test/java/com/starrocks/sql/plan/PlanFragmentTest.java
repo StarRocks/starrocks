@@ -50,9 +50,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         starRocksAssert.withTable("create table test.colocate1\n" +
-                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                "properties(\"replication_num\" = \"1\"," +
-                "\"colocate_with\" = \"group1\");")
+                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                        "properties(\"replication_num\" = \"1\"," +
+                        "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
@@ -292,8 +292,9 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(10,5)) * cast(v2 as decimal64(9,7)) from t0";
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n"));
+        Assert.assertTrue(planFragment.contains(
+                "  1:Project\n" +
+                        "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -1153,7 +1154,8 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testWindowFunctionTest() throws Exception {
         String sql = "select sum(id_decimal - ifnull(id_decimal, 0)) over (partition by t1c) from test_all_type";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
+        Assert.assertTrue(
+                plan.contains("decimal_literal:TDecimalLiteral(value:0, integer_value:00 00 00 00 00 00 00 00)"));
     }
 
     @Test
@@ -4279,7 +4281,7 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select k5 from bigtable where k5 * 2 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(5: k5 AS DECIMAL64(18,3)) * 2 <= 3"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: 5: k5 * 2 <= 3"));
 
         sql = "select k5 from bigtable where 2 / k5 <= 3";
         planFragment = getFragmentPlan(sql);
@@ -5426,8 +5428,8 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
-                "  |  group by: [4: expr, DECIMAL64(18,0), true]"));
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: [4: expr, DECIMAL128(28,0), true]"));
         Config.enable_decimal_v3 = false;
     }
 

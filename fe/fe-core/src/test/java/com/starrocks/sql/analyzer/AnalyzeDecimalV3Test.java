@@ -696,7 +696,7 @@ public class AnalyzeDecimalV3Test {
                     ((LogicalProjectOperator) logicalPlan.getRoot().getOp()).getColumnRefMap()
                             .get(logicalPlan.getOutputColumn().get(0));
 
-            Type decimal128p38s5 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 12);
+            Type decimal128p38s5 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 12);
             Assert.assertEquals(op.getChild(0).getType(), decimal128p38s5);
             Assert.assertEquals(op.getChild(1).getType(), decimal128p38s5);
         }

@@ -147,6 +147,8 @@ public class ArithmeticExpr extends Expr {
                 "Types of lhs and rhs must be DecimalV3");
         final PrimitiveType lhsPtype = lhsType.getPrimitiveType();
         final PrimitiveType rhsPtype = rhsType.getPrimitiveType();
+        final int lhsPrecision = lhsType.getPrecision();
+        final int rhsPrecision = rhsType.getPrecision();
         final int lhsScale = lhsType.getScalarScale();
         final int rhsScale = rhsType.getScalarScale();
 
@@ -160,6 +162,7 @@ public class ArithmeticExpr extends Expr {
         result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
         result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
         int returnScale = 0;
+        int returnPrecision = 0;
         switch (op) {
             case ADD:
             case SUBTRACT:
@@ -168,20 +171,37 @@ public class ArithmeticExpr extends Expr {
                 break;
             case MULTIPLY:
                 returnScale = lhsScale + rhsScale;
-                // promote type result type of multiplication if it is too narrow to hold all significant bits
-                if (returnScale > maxPrecision) {
-                    final int maxPrecisionOfDecimal128 =
-                            PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-                    // decimal128 is already the widest decimal types, so throw an error if scale of result exceeds 38
-                    Preconditions.checkState(widerType != PrimitiveType.DECIMAL128,
-                            String.format("Return scale(%d) exceeds maximum value(%d)", returnScale,
-                                    maxPrecisionOfDecimal128));
-                    widerType = PrimitiveType.DECIMAL128;
-                    maxPrecision = maxPrecisionOfDecimal128;
-                    result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-                    result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+                returnPrecision = lhsPrecision + rhsPrecision;
+                final int maxDecimalPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                if (returnPrecision <= maxDecimalPrecision) {
+                    // returnPrecision <= 38, result never overflows, use the narrowest decimal type that can holds the result.
+                    // for examples:
+                    // decimal32(4,3) * decimal32(4,3) => decimal32(8,6);
+                    // decimal64(15,3) * decimal32(9,4) => decimal128(24,7).
+                    PrimitiveType commonPtype = ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale).getPrimitiveType();
+                    // a common type shall never be narrower than type of lhs and rhs
+                    commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, lhsPtype);
+                    commonPtype = PrimitiveType.getWiderDecimalV3Type(commonPtype, rhsPtype);
+                    result.returnType = ScalarType.createDecimalV3Type(commonPtype, returnPrecision, returnScale);
+                    result.lhsTargetType = ScalarType.createDecimalV3Type(commonPtype, lhsPrecision, lhsScale);
+                    result.rhsTargetType = ScalarType.createDecimalV3Type(commonPtype, rhsPrecision, rhsScale);
+                    return result;
+                } else if (returnScale <= maxDecimalPrecision) {
+                    // returnPrecision > 38 and returnScale <= 38, the multiplication is computable but the result maybe
+                    // overflow, so use decimal128 arithmetic and adopt maximum decimal precision(38) as precision of
+                    // the result.
+                    // for examples:
+                    // decimal128(23,5) * decimal64(18,4) => decimal128(38, 9).
+                    result.returnType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, maxDecimalPrecision, returnScale);
+                    result.lhsTargetType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, lhsPrecision, lhsScale);
+                    result.rhsTargetType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, rhsPrecision, rhsScale);
+                    return result;
+                } else {
+                    // returnScale > 38, so it is cannot be represented as decimal.
+                    throw new AnalysisException(
+                            String.format("Return scale(%d) exceeds maximum value(%d), please cast decimal type to low-precision one",
+                                    returnScale, maxDecimalPrecision));
                 }
-                break;
             case INT_DIVIDE:
             case DIVIDE:
                 if (lhsScale <= 6) {
