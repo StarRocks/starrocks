@@ -11,12 +11,14 @@ namespace starrocks::pipeline {
 Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
 
-    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
+    // AssertNumRows should return exactly one row, report error if more than one row, return null if empty input
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            chunk->append_column(ColumnHelper::create_column(slot->type(), true, false, 1), slot->id());
+            vectorized::ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            column->append_nulls(1);
+            chunk->append_column(column, slot->id());
         }
     }
 
