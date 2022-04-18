@@ -58,12 +58,7 @@ public class HashDistributionDesc {
             return false;
         }
 
-        for (int i = 0; i < this.columns.size(); i++) {
-            if (!Objects.equals(this.columns.get(i), item.columns.get(i))) {
-                return false;
-            }
-        }
-        return true;
+        return this.columns.equals(item.columns);
     }
 
     public boolean isLocalShuffle() {
