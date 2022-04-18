@@ -722,6 +722,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     std::lock_guard lg(_index_lock);
     // 2. load index
+    bool enable_persistent_index = _tablet.get_enable_persistent_index();
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -791,8 +792,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     // release resource
     // update state only used once, so delete it
     manager->update_state_cache().remove(state_entry);
-    // index may be used for later commits, so keep in cache
-    manager->index_cache().release(index_entry);
     int64_t t_index = MonotonicMillis();
 
     size_t ndelvec = new_deletes.size();
@@ -908,6 +907,15 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         LOG(ERROR) << msg;
         _set_error(msg);
         return;
+    }
+
+    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
+    // we should try to remove the index_entry from cache
+    // Otherwise index may be used for later commits, keep in cache
+    if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+        manager->index_cache().remove(index_entry);
+    } else {
+        manager->index_cache().release(index_entry);
     }
     _update_total_stats(version_info.rowsets);
     int64_t t_write = MonotonicMillis();
@@ -1178,6 +1186,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
               << " rowset:" << rowset_id;
     // 1. load index
+    bool enable_persistent_index = _tablet.get_enable_persistent_index();
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -1228,8 +1237,6 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
     // release memory
     _compaction_state.reset();
-    // index may be used for later commits, so keep in cache
-    manager->index_cache().release(index_entry);
     int64_t t_index_delvec = MonotonicMillis();
 
     PersistentIndexMetaPB index_meta;
@@ -1280,6 +1287,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         LOG(ERROR) << msg;
         _set_error(msg);
         return;
+    }
+
+    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
+    // we should try to remove the index_entry from cache
+    // Otherwise index may be used for later commits, keep in cache
+    if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+        manager->index_cache().remove(index_entry);
+    } else {
+        manager->index_cache().release(index_entry);
     }
 
     {
@@ -2623,6 +2639,7 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    bool enable_persistent_index = tablet->get_enable_persistent_index();
     auto& index = index_entry->value();
     auto st = index.load(tablet);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
@@ -2641,9 +2658,15 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
         auto& pks = *upserts[i];
         index.get(pks, (*rss_rowids)[i]);
     }
-    // index may be used for later commits, keep in cache
-    manager->index_cache().release(index_entry);
 
+    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
+    // we should try to remove the index_entry from cache
+    // Otherwise index may be used for later commits, keep in cache
+    if (enable_persistent_index ^ tablet->get_enable_persistent_index()) {
+        manager->index_cache().remove(index_entry);
+    } else {
+        manager->index_cache().release(index_entry);
+    }
     return Status::OK();
 }
 

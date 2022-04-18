@@ -91,6 +91,7 @@ import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1588,10 +1589,8 @@ public class SchemaChangeHandler extends AlterHandler {
         LOG.info("send clear alter task for table {}, number: {}", olapTable.getName(), batchTask.getTaskNum());
     }
 
-    /**
-     * Update all partitions' in-memory property of table
-     */
-    public void updateTableInMemoryMeta(Database db, String tableName, Map<String, String> properties)
+    public void updateTableMeta(Database db, String tableName, Map<String, String> properties,
+                                TTabletMetaType metaType)
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
         OlapTable olapTable;
@@ -1603,18 +1602,29 @@ public class SchemaChangeHandler extends AlterHandler {
             db.readUnlock();
         }
 
-        boolean isInMemory = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
-        if (isInMemory == olapTable.isInMemory()) {
+        boolean metaValue = false;
+        if (metaType == TTabletMetaType.INMEMORY) {
+            metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
+            if (metaValue == olapTable.isInMemory()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
+            if (metaValue == olapTable.enablePersistentIndex()) {
+                return;
+            }
+        } else {
+            LOG.warn("meta type: {} does not support", metaType);
             return;
         }
 
         for (Partition partition : partitions) {
-            updatePartitionInMemoryMeta(db, olapTable.getName(), partition.getName(), isInMemory);
+            updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
         }
 
         db.writeLock();
         try {
-            Catalog.getCurrentCatalog().modifyTableInMemoryMeta(db, olapTable, properties);
+            Catalog.getCurrentCatalog().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             db.writeUnlock();
         }
@@ -1649,7 +1659,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
         for (String partitionName : partitionNames) {
             try {
-                updatePartitionInMemoryMeta(db, olapTable.getName(), partitionName, isInMemory);
+                //updatePartitionInMemoryMeta(db, olapTable.getName(), partitionName, isInMemory);
+                updatePartitionTabletMeta(db, olapTable.getName(), partitionName, isInMemory, TTabletMetaType.INMEMORY);
             } catch (Exception e) {
                 String errMsg = "Failed to update partition[" + partitionName + "]'s 'in_memory' property. " +
                         "The reason is [" + e.getMessage() + "]";
@@ -1662,10 +1673,11 @@ public class SchemaChangeHandler extends AlterHandler {
      * Update one specified partition's in-memory property by partition name of table
      * This operation may return partial successfully, with a exception to inform user to retry
      */
-    public void updatePartitionInMemoryMeta(Database db,
-                                            String tableName,
-                                            String partitionName,
-                                            boolean isInMemory) throws DdlException {
+    public void updatePartitionTabletMeta(Database db,
+                                          String tableName,
+                                          String partitionName,
+                                          boolean metaValue,
+                                          TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id,schemaHash>
         Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
         db.readLock();
@@ -1697,7 +1709,7 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Map.Entry<Long, Set<Pair<Long, Integer>>> kv : beIdToTabletIdWithHash.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
             UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(kv.getKey(), kv.getValue(),
-                    isInMemory, countDownLatch);
+                    metaValue, countDownLatch, metaType);
             batchTask.addTask(task);
         }
         if (!FeConstants.runningUnitTest) {
