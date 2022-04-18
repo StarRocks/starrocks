@@ -75,8 +75,6 @@ protected:
     RuntimeProfile _runtime_profile;
 
 private:
-    StatusOr<size_t> _get_segment_iterator_num();
-
     // merge rows from vectorized reader and write into `_output_rs_writer`.
     // return Status::OK() and set statistics into `*stats_output`.
     // return others on error
