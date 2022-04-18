@@ -173,14 +173,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAdminSet(StarRocksParser.AdminSetContext context) {
         Map<String, String> configs = new HashMap<>();
-        if (context.property() != null) {
-            StarRocksParser.PropertyContext property = context.property();
-            String configKey = property.start.getText().replace("\"", "");
-            String configValue = property.stop.getText().replace("\"", "");
-            configs.put(configKey, configValue);
-            return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
-        }
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+        Property property = (Property) visitProperty(context.property());
+        String configKey = property.getKey();
+        String configValue = property.getValue();
+        configs.put(configKey, configValue);
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
     }
 
     @Override
