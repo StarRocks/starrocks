@@ -43,24 +43,28 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
             }
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
             //reorder predicate
-            predicateReorder(compoundPredicateOperator, optExpression.getStatistics());
+            optExpression.getOp().setPredicate(predicateReorder(compoundPredicateOperator, optExpression.getStatistics()));
             return optExpression;
         }
 
-        private void predicateReorder(ScalarOperator scalarOperator, Statistics statistics) {
+        private ScalarOperator predicateReorder(ScalarOperator scalarOperator, Statistics statistics) {
+            // todo need to think partition columns & distribution columns & index
             // get conjunctive predicate
             List<ScalarOperator> conjunctiveScalarOperators = Utils.extractConjuncts(scalarOperator);
             if (conjunctiveScalarOperators.size() <= 1) {
-                return;
-            }
-            if (conjunctiveScalarOperators.size() > 1) {
+                return scalarOperator;
+            } else {
                 DefaultPredicateSelectivityEstimator selectivityEstimator = new DefaultPredicateSelectivityEstimator();
                 conjunctiveScalarOperators.sort((o1, o2) -> {
                     if (selectivityEstimator.estimate(o1, statistics) > selectivityEstimator.estimate(o2, statistics)) {
                         return 1;
+                    } else if (selectivityEstimator.estimate(o1, statistics) < selectivityEstimator.estimate(o2, statistics)) {
+                        return -1;
+                    } else {
+                        return 0;
                     }
-                    return 0;
                 });
+                return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, conjunctiveScalarOperators);
             }
         }
     }
