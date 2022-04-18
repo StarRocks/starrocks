@@ -631,6 +631,9 @@ CONF_mInt32(sys_minidump_interval, "600");
 // requests will fail.
 CONF_Int16(tablet_max_versions, "1000");
 
+// The maximum number of pending versions allowed for a primary key tablet
+CONF_mInt32(tablet_max_pending_versions, "1000");
+
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
