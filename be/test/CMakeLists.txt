@@ -174,25 +174,25 @@ set(EXEC_FILES
         ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
         ./storage/base_and_cumulative_compaction_policy_test.cpp
-        ./storage/vectorized/aggregate_iterator_test.cpp
-        ./storage/vectorized/chunk_aggregator_test.cpp
-        ./storage/vectorized/chunk_helper_test.cpp
-        ./storage/vectorized/column_aggregator_test.cpp
-        ./storage/vectorized/column_predicate_test.cpp
-        ./storage/vectorized/conjunctive_predicates_test.cpp
-        ./storage/vectorized/convert_helper_test.cpp
-        ./storage/vectorized/merge_iterator_test.cpp
-        ./storage/vectorized/memtable_test.cpp
-        ./storage/vectorized/projection_iterator_test.cpp
-        ./storage/vectorized/push_handler_test.cpp
-        ./storage/vectorized/range_test.cpp
-        ./storage/vectorized/row_source_mask_test.cpp
-        ./storage/vectorized/union_iterator_test.cpp
-        ./storage/vectorized/unique_iterator_test.cpp
-        ./storage/vectorized/cumulative_compaction_test.cpp
-        ./storage/vectorized/base_compaction_test.cpp
-        ./storage/vectorized/rowset_merger_test.cpp
-        ./storage/vectorized/schema_change_test.cpp
+        ./storage/aggregate_iterator_test.cpp
+        ./storage/chunk_aggregator_test.cpp
+        ./storage/chunk_helper_test.cpp
+        ./storage/column_aggregator_test.cpp
+        ./storage/column_predicate_test.cpp
+        ./storage/conjunctive_predicates_test.cpp
+        ./storage/convert_helper_test.cpp
+        ./storage/merge_iterator_test.cpp
+        ./storage/memtable_test.cpp
+        ./storage/projection_iterator_test.cpp
+        ./storage/push_handler_test.cpp
+        ./storage/range_test.cpp
+        ./storage/row_source_mask_test.cpp
+        ./storage/union_iterator_test.cpp
+        ./storage/unique_iterator_test.cpp
+        ./storage/cumulative_compaction_test.cpp
+        ./storage/base_compaction_test.cpp
+        ./storage/rowset_merger_test.cpp
+        ./storage/schema_change_test.cpp
         ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp

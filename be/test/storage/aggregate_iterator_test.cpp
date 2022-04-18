@@ -4,7 +4,7 @@
 
 #include "column/column_pool.h"
 #include "gtest/gtest.h"
-#include "storage/vectorized/vector_chunk_iterator.h"
+#include "storage/vector_chunk_iterator.h"
 
 namespace starrocks::vectorized {
 
