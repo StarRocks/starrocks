@@ -95,12 +95,19 @@ public enum AggregateType {
         compatibilityMap.put(MAX, EnumSet.copyOf(primitiveTypeList));
 
         primitiveTypeList.clear();
+
+        EnumSet<PrimitiveType> replaceObject = EnumSet.allOf(PrimitiveType.class);
+        replaceObject.remove(PrimitiveType.HLL);
+        replaceObject.remove(PrimitiveType.PERCENTILE);
+        replaceObject.remove(PrimitiveType.INVALID_TYPE);
+        compatibilityMap.put(REPLACE, EnumSet.copyOf(replaceObject));
+
         // all types except bitmap, hll, percentile and complex types.
         EnumSet<PrimitiveType> excObject = EnumSet.allOf(PrimitiveType.class);
+        excObject.remove(PrimitiveType.BITMAP);
         excObject.remove(PrimitiveType.HLL);
         excObject.remove(PrimitiveType.PERCENTILE);
         excObject.remove(PrimitiveType.INVALID_TYPE);
-        compatibilityMap.put(REPLACE, EnumSet.copyOf(excObject));
 
         compatibilityMap.put(REPLACE_IF_NOT_NULL, EnumSet.copyOf(excObject));
 
