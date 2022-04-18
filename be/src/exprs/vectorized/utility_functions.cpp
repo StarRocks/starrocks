@@ -82,10 +82,14 @@ ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
     bytes.resize(33 * num_rows);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
+
+    for (int i = 0; i < num_rows; ++i) {
+        offsets[i + 1] = offsets[i] + 33;
+    }
+
     for (int i = 0; i < num_rows; ++i) {
         int64_t hi = uuid_data[i];
         int64_t lo = uuid_data[i] >> 64;
-        offsets[i + 1] = offsets[i] + 33;
 
         to_hex(hi, ptr);
         ptr[16] = '-';
