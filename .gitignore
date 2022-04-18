@@ -38,6 +38,9 @@ tags
 .tags
 *.vim
 compile_commands.json
+.factorypath
+.classpath
+.vimspector.json
 
 
 #ignore eclipse project file & idea project file

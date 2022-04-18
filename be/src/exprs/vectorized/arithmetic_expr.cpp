@@ -28,7 +28,8 @@ public:
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         if constexpr (pt_is_decimal<Type>) {
-            return VectorizedStrictDecimalBinaryFunction<OP, false>::template evaluate<Type>(l, r);
+            // Enable overflow checking in decimal arithmetic
+            return VectorizedStrictDecimalBinaryFunction<OP, true>::template evaluate<Type>(l, r);
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
