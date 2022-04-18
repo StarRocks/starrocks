@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 
-#include <boost/thread/thread.hpp>
 #include <sstream>
 
 #include "gen_cpp/FrontendService.h"
