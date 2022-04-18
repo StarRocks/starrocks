@@ -159,7 +159,7 @@ private:
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
 
     // map from range value to partition_id
-    // sorted in ascending orderi by range for binary search
+    // sorted in ascending order by range for binary search
     std::vector<PartitionInfo*> _partition_infos;
 
     // This array record the channel start point in _row_indexes

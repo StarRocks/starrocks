@@ -21,9 +21,7 @@
 
 #include <mariadb/mysql.h>
 
-#include <memory>
 #include <string_view>
-#include <type_traits>
 #include <variant>
 
 #include "column/column_helper.h"
@@ -36,7 +34,6 @@
 #include "runtime/primitive_type_infra.h"
 #include "storage/null_predicate.h"
 #include "util/radix_sort.h"
-#include "util/slice.h"
 
 #define __StarRocksMysql MYSQL
 #include <sstream>
