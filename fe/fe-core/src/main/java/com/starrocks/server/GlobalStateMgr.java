@@ -228,6 +228,7 @@ import com.starrocks.master.MetaHelper;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mv.MaterializedViewJobManager;
+import com.starrocks.mv.MaterializedViewJobScheduler;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -501,6 +502,7 @@ public class GlobalStateMgr {
     private StarOSAgent starOSAgent;
 
     private MaterializedViewJobManager materializedViewJobManager;
+    private MaterializedViewJobScheduler materializedViewJobScheduler;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -817,6 +819,10 @@ public class GlobalStateMgr {
 
     public MaterializedViewJobManager getMaterializedViewJobManager() {
         return materializedViewJobManager;
+    }
+
+    public MaterializedViewJobScheduler getMaterializedViewJobScheduler() {
+        return materializedViewJobScheduler;
     }
 
     // Use tryLock to avoid potential dead lock

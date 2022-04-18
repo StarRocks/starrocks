@@ -65,10 +65,13 @@ public class MaterializedViewJobScheduler {
                     MaterializedViewRefreshJob job = runningJobMap.get(mvTableId);
                     Future<?> future = job.getFuture();
                     if (future.isDone()) {
-                        job.updateStatusAfterDone();
+                        Constants.MaterializedViewJobStatus jobStatus = job.updateStatusAfterDone();
                         runningIterator.remove();
                         jobHistory.addFirst(job);
-                        // log JobIsDone
+                        MaterializedViewRefreshJobStatusChange statusChange =
+                                new MaterializedViewRefreshJobStatusChange(job.getMvTableId(), job.getId(),
+                                        Constants.MaterializedViewJobStatus.RUNNING, jobStatus);
+                        // Catalog.getCurrentCatalog().getEditLog().logRefreshJobStatusChange(statusChange);
                     }
                 }
 
@@ -86,7 +89,11 @@ public class MaterializedViewJobScheduler {
                             pendingJob.setStatus(Constants.MaterializedViewJobStatus.RUNNING);
                             runningJobMap.put(mvTableId, pendingJob);
                             Catalog.getCurrentCatalog().getMaterializedViewJobManager().addRefreshJob(pendingJob);
-                            // log addRefreshJob
+                            MaterializedViewRefreshJobStatusChange statusChange =
+                                    new MaterializedViewRefreshJobStatusChange(pendingJob.getMvTableId(),
+                                            pendingJob.getId(), Constants.MaterializedViewJobStatus.PENDING,
+                                            Constants.MaterializedViewJobStatus.PENDING);
+                            // Catalog.getCurrentCatalog().getEditLog().logRefreshJobStatusChange(statusChange);
                         }
                     }
                 }
@@ -105,20 +112,23 @@ public class MaterializedViewJobScheduler {
         long initialDelay = duration.getSeconds();
         ScheduledFuture<?> future = periodScheduled.scheduleAtFixedRate(() -> addPendingJob(builder.build()),
                 initialDelay, period, timeUnit);
-        MaterializedViewSchedulerInfo info = new MaterializedViewSchedulerInfo(startTime, period, timeUnit);
+        MaterializedViewSchedulerInfo info = new MaterializedViewSchedulerInfo(startTime, period, timeUnit, builder);
         long scheduledId = Catalog.getCurrentCatalog().getNextId();
         info.setId(scheduledId);
         info.setFuture(future);
         periodScheduledManager.put(scheduledId, info);
-        // log registerScheduledJob
+        // Catalog.getCurrentCatalog().getEditLog().logRegisterScheduledJob(info);
         return scheduledId;
     }
 
     public void deregisterScheduledJob(Long scheduledId) {
         MaterializedViewSchedulerInfo info = periodScheduledManager.get(scheduledId);
         ScheduledFuture<?> future = info.getFuture();
-        future.cancel(true);
-        // log deregisterScheduledJob
+        if (future != null) {
+            future.cancel(true);
+        }
+        periodScheduledManager.remove(scheduledId);
+        // Catalog.getCurrentCatalog().getEditLog().logDeregisterScheduledJob(scheduledId);
     }
 
     public boolean addPendingJob(MaterializedViewRefreshJob job) {
@@ -137,7 +147,7 @@ public class MaterializedViewJobScheduler {
         } else {
             mergeOrOfferJob(jobQueue, job);
         }
-        // log addPendingJob
+        // Catalog.getCurrentCatalog().getEditLog().logAddPendingJob(job);
         return true;
     }
 
@@ -177,7 +187,11 @@ public class MaterializedViewJobScheduler {
                 runningJob.setStatus(Constants.MaterializedViewJobStatus.CANCELED);
                 runningJobMap.remove(mvTableId);
                 jobHistory.addFirst(runningJob);
-                // log cancelJob
+                MaterializedViewRefreshJobStatusChange statusChange =
+                        new MaterializedViewRefreshJobStatusChange(mvTableId,
+                                jobId, Constants.MaterializedViewJobStatus.RUNNING,
+                                Constants.MaterializedViewJobStatus.CANCELED);
+                // Catalog.getCurrentCatalog().getEditLog().logRefreshJobStatusChange(statusChange);
                 return true;
             }
             // cancel pending job
@@ -194,7 +208,11 @@ public class MaterializedViewJobScheduler {
                         pendingJob.setStatus(Constants.MaterializedViewJobStatus.CANCELED);
                         jobHistory.addFirst(pendingJob);
                         queueIter.remove();
-                        // log cancelJob
+                        MaterializedViewRefreshJobStatusChange statusChange =
+                                new MaterializedViewRefreshJobStatusChange(mvTableId,
+                                        jobId, Constants.MaterializedViewJobStatus.PENDING,
+                                        Constants.MaterializedViewJobStatus.CANCELED);
+                        // Catalog.getCurrentCatalog().getEditLog().logRefreshJobStatusChange(statusChange);
                         return true;
                     }
                 }
@@ -234,5 +252,61 @@ public class MaterializedViewJobScheduler {
 
     private void unlock() {
         this.lock.unlock();
+    }
+
+    public void replayRegisterScheduledJob(MaterializedViewSchedulerInfo info) {
+        periodScheduledManager.put(info.getId(), info);
+    }
+
+    public void replayDeregisterScheduledJob(long scheduledId) {
+        periodScheduledManager.remove(scheduledId);
+    }
+
+    public void replayAddPendingJob(MaterializedViewRefreshJob job) {
+        Queue<MaterializedViewRefreshJob> jobQueue = pendingJobMap.get(job.getId());
+        if (jobQueue == null) {
+            jobQueue = Queues.newConcurrentLinkedQueue();
+            jobQueue.offer(job);
+            pendingJobMap.put(job.getMvTableId(), jobQueue);
+        } else {
+            mergeOrOfferJob(jobQueue, job);
+        }
+    }
+
+    public void replayJobStatusChange(MaterializedViewRefreshJobStatusChange statusChange) {
+        Constants.MaterializedViewJobStatus fromStatus = statusChange.getFromStatus();
+        Constants.MaterializedViewJobStatus toStatus = statusChange.getToStatus();
+        long mvTableId = statusChange.getMvTableId();
+        if (fromStatus == Constants.MaterializedViewJobStatus.PENDING) {
+            if (toStatus == Constants.MaterializedViewJobStatus.RUNNING) {
+                Queue<MaterializedViewRefreshJob> jobQueue = pendingJobMap.get(mvTableId);
+                if (jobQueue != null && jobQueue.size() != 0) {
+                    MaterializedViewRefreshJob pendingJob = jobQueue.poll();
+                    pendingJob.setStatus(Constants.MaterializedViewJobStatus.RUNNING);
+                    runningJobMap.put(mvTableId, pendingJob);
+                    Catalog.getCurrentCatalog().getMaterializedViewJobManager().addRefreshJob(pendingJob);
+                }
+            } else if (toStatus == Constants.MaterializedViewJobStatus.CANCELED) {
+                Queue<MaterializedViewRefreshJob> pendingJobQueue = pendingJobMap.get(mvTableId);
+                if (pendingJobQueue != null) {
+                    Iterator<MaterializedViewRefreshJob> queueIter = pendingJobQueue.iterator();
+                    while (queueIter.hasNext()) {
+                        MaterializedViewRefreshJob pendingJob = queueIter.next();
+                        if (pendingJob.getId() == statusChange.getJobId()) {
+                            pendingJob.setStatus(toStatus);
+                            jobHistory.addFirst(pendingJob);
+                            queueIter.remove();
+                        }
+                    }
+                }
+            }
+        } else if (fromStatus == Constants.MaterializedViewJobStatus.RUNNING) {
+            if (toStatus == Constants.MaterializedViewJobStatus.SUCCESS |
+                    toStatus == Constants.MaterializedViewJobStatus.CANCELED) {
+                MaterializedViewRefreshJob job = runningJobMap.remove(mvTableId);
+                job.setStatus(toStatus);
+                jobHistory.addFirst(job);
+            }
+        }
     }
 }
