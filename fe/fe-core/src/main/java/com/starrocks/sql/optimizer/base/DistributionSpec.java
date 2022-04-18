@@ -45,20 +45,28 @@ public class DistributionSpec {
         }
 
         public void addJoinEquivalentPair(int leftColumn, int rightColumn) {
-            ColumnRefSet columns = null;
-            if (joinEquivalentColumns.containsKey(leftColumn)) {
-                columns = joinEquivalentColumns.get(leftColumn);
-            }
-            if (joinEquivalentColumns.containsKey(rightColumn)) {
-                columns = joinEquivalentColumns.get(rightColumn);
-            }
-            if (columns == null) {
+            ColumnRefSet leftColumns = null;
+            ColumnRefSet rightColumns = null;
+            leftColumns = joinEquivalentColumns.get(leftColumn);
+            rightColumns = joinEquivalentColumns.get(rightColumn);
+            ColumnRefSet columns;
+            if (leftColumns == null && rightColumns == null) {
                 columns = new ColumnRefSet();
+                joinEquivalentColumns.put(leftColumn, columns);
+                joinEquivalentColumns.put(rightColumn, columns);
+            } else if (leftColumns == null) {
+                columns = rightColumns;
+                joinEquivalentColumns.put(leftColumn, columns);
+            } else if (rightColumns == null) {
+                columns = leftColumns;
+                joinEquivalentColumns.put(rightColumn, columns);
+            } else {
+                leftColumns.union(rightColumns);
+                columns = leftColumns;
+                joinEquivalentColumns.put(rightColumn, columns);
             }
             columns.union(leftColumn);
             columns.union(rightColumn);
-            joinEquivalentColumns.putIfAbsent(leftColumn, columns);
-            joinEquivalentColumns.putIfAbsent(rightColumn, columns);
         }
 
         public boolean isEquivalentJoinOnColumns(int leftColumn, int rightColumn) {
