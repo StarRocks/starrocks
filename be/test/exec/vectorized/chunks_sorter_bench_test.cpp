@@ -271,7 +271,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Compare
 
 static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merger = true) {
     constexpr int num_columns = 3;
-    constexpr int num_chunks_per_run = 8;
+    constexpr int num_chunks_per_run = 1;
 
     ChunkSorterBase suite;
     suite.SetUp();
@@ -306,42 +306,25 @@ static void do_merge_bench(benchmark::State& state, int num_runs, bool use_merge
 
         for (int i = 0; i < num_runs; i++) {
             ChunkSupplier chunk_supplier = [&, i](Chunk** output) -> Status {
-                if (chunk_input_index[i]++ > num_chunks_per_run) {
-                    *output = nullptr;
-                } else {
-                    // state.PauseTiming();
-                    auto cloned = base_chunk->clone_unique();
-                    for (auto& col : cloned->columns()) {
-                        Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
-                        int start = chunk_input_index[i] * config::vector_chunk_size;
-                        for (auto& x : intcolumn->get_data()) {
-                            x += start;
-                        }
+                if (output) {
+                    if (++chunk_input_index[i] > num_chunks_per_run) {
+                        *output = nullptr;
+                    } else {
+                        *output = base_chunk->clone_unique().release();
                     }
-                    if (output) *output = cloned.release();
-                    // state.ResumeTiming();
                 }
                 return Status::OK();
             };
             ChunkProbeSupplier chunk_probe_supplier = [&, i](Chunk** output) -> bool {
-                if (chunk_probe_index[i]++ > num_chunks_per_run) {
-                    *output = nullptr;
-                    return false;
-                } else {
-                    // state.PauseTiming();
-                    auto cloned = base_chunk->clone_unique();
-                    for (auto& col : cloned->columns()) {
-                        Int32Column::Ptr intcolumn = ColumnHelper::as_column<Int32Column>(col);
-                        int start = chunk_input_index[i] * config::vector_chunk_size;
-                        for (auto& x : intcolumn->get_data()) {
-                            x += start;
-                        }
+                if (output) {
+                    if (++chunk_probe_index[i] > num_chunks_per_run) {
+                        *output = nullptr;
+                        return false;
+                    } else {
+                        *output = base_chunk->clone_unique().release();
                     }
-                    if (output) *output = cloned.release();
-                    // state.ResumeTiming();
-
-                    return true;
                 }
+                return true;
             };
             ChunkHasSupplier chunk_has_supplier = [&]() -> bool { return true; };
             chunk_suppliers.emplace_back(chunk_supplier);
