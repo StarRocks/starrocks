@@ -58,4 +58,9 @@ public:
     static void convert_to_native_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
 };
+
+template <bool handle_null>
+jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+void release_jvalue(bool is_boxed, jvalue val);
+void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 } // namespace starrocks::vectorized
