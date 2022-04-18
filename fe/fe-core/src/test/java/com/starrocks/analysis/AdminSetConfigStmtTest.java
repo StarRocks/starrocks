@@ -64,14 +64,5 @@ public class AdminSetConfigStmtTest {
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
         Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
     }
-
-    @Test
-    public void testEmptyConfig() throws Exception {
-        String stmt = "admin set frontend config;";
-        expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("config parameter size is not equal to 1");
-        AdminSetConfigStmt adminSetConfigStmt =
-                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-    }
 }
 
