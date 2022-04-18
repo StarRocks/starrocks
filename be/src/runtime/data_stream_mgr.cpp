@@ -169,7 +169,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
 }
 
 Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
-    std::shared_ptr<DataStreamRecvr> targert_recvr;
+    std::shared_ptr<DataStreamRecvr> target_recvr;
     VLOG_QUERY << "deregister_recvr(): fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     size_t hash_value = get_hash_value(fragment_instance_id, node_id);
     {
@@ -178,7 +178,7 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
         while (range.first != range.second) {
             const std::shared_ptr<DataStreamRecvr>& recvr = range.first->second;
             if (recvr->fragment_instance_id() == fragment_instance_id && recvr->dest_node_id() == node_id) {
-                targert_recvr = recvr;
+                target_recvr = recvr;
                 _fragment_stream_set.erase(std::make_pair(recvr->fragment_instance_id(), recvr->dest_node_id()));
                 _receiver_map.erase(range.first);
                 break;
@@ -189,8 +189,8 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
 
     // Notify concurrent add_data() requests that the stream has been terminated.
     // cancel_stream maybe take a long time, so we handle it out of lock.
-    if (targert_recvr) {
-        targert_recvr->cancel_stream();
+    if (target_recvr) {
+        target_recvr->cancel_stream();
         return Status::OK();
     } else {
         std::stringstream err;

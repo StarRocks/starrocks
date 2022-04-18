@@ -76,7 +76,7 @@ class QueryContextManager;
 // once to properly initialise service state.
 class ExecEnv {
 public:
-    // Initial exec enviorment. must call this to init all
+    // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
     static void destroy(ExecEnv* exec_env);
 

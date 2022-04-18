@@ -2,6 +2,9 @@
 
 #include "storage/conjunctive_predicates.h"
 
+#include <gtest/gtest-param-test.h>
+#include <gtest/gtest.h>
+
 #include <vector>
 
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -10,8 +13,6 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "gtest/gtest-param-test.h"
-#include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"

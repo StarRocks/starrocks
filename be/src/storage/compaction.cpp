@@ -63,13 +63,7 @@ Status Compaction::do_compaction_impl() {
     _output_version = Version(_input_rowsets.front()->start_version(), _input_rowsets.back()->end_version());
 
     // choose vertical or horizontal compaction algorithm
-    auto iterator_num_res = _get_segment_iterator_num();
-    if (!iterator_num_res.ok()) {
-        LOG(WARNING) << "fail to get segment iterator num. tablet=" << _tablet->tablet_id()
-                     << ", err=" << iterator_num_res.status().to_string();
-        return iterator_num_res.status();
-    }
-    size_t segment_iterator_num = iterator_num_res.value();
+    size_t segment_iterator_num = Rowset::get_segment_num(_input_rowsets);
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
     CompactionAlgorithm algorithm =
@@ -151,17 +145,6 @@ Status Compaction::do_compaction_impl() {
                               << " rowset:" << _output_rowset->rowset_id() << " " << st;
 
     return Status::OK();
-}
-
-StatusOr<size_t> Compaction::_get_segment_iterator_num() {
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    TabletReader reader(_tablet, _output_version, schema);
-    TabletReaderParams reader_params;
-    reader_params.reader_type = compaction_type();
-    RETURN_IF_ERROR(reader.prepare());
-    std::vector<ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(reader.get_segment_iterators(reader_params, &seg_iters));
-    return seg_iters.size();
 }
 
 Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
