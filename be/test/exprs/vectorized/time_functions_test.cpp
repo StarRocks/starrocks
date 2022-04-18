@@ -2516,8 +2516,8 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
-                TimestampValue::create(0001, 1, 1, 1, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0),
-                TimestampValue::create(2021, 1, 1, 1, 0, 0),   TimestampValue::create(2021, 1, 1, 0, 0, 0)};
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0),
+                TimestampValue::create(2021, 1, 1, 0, 0, 0),   TimestampValue::create(2021, 1, 1, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
