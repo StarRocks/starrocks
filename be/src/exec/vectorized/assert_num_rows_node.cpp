@@ -62,8 +62,9 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
         chunk = std::make_shared<vectorized::Chunk>();
         for (const auto& desc : row_desc().tuple_descriptors()) {
             for (const auto& slot : desc->slots()) {
-                chunk->append_column(ColumnHelper::create_column(slot->type(), true, false, _desired_num_rows),
-                                     slot->id());
+                auto column = ColumnHelper::create_column(slot->type(), true);
+                column->append_nulls(_desired_num_rows);
+                chunk->append_column(column, slot->id());
             }
         }
 
