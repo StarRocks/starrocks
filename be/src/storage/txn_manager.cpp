@@ -322,21 +322,21 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     int64_t duration_ns = 0;
     SCOPED_RAW_TIMER(&duration_ns);
 
-    std::unordered_set<std::string> persited;
+    std::unordered_set<std::string> persisted;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {
             continue;
         }
         auto path = tablet->data_dir()->path();
         // skip persisted meta.
-        if (persited.find(path) != persited.end()) continue;
+        if (persisted.find(path) != persisted.end()) continue;
 
         auto st = tablet->data_dir()->get_meta()->flush();
         if (!st.ok()) {
             LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
             return st;
         }
-        persited.insert(path);
+        persisted.insert(path);
     }
 
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
