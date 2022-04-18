@@ -113,6 +113,8 @@ public:
 
     const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
 
+    const std::vector<int32_t>& output_columns() { return _output_columns; }
+
 private:
     class Channel;
 
@@ -204,6 +206,9 @@ private:
     std::vector<TPlanFragmentDestination> _destinations;
 
     bool _enable_exchange_pass_through = false;
+
+    // Specify the columns which need to send
+    std::vector<int32_t> _output_columns;
 };
 
 } // namespace starrocks
