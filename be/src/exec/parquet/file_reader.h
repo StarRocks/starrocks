@@ -91,7 +91,8 @@ private:
     static Status _check_magic(const uint8_t* file_magic);
 
     // decode min/max value from row group stats
-    static Status _decode_min_max_column(const tparquet::ColumnMetaData& column_meta,
+    static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
+                                         const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                          const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
                                          vectorized::ColumnPtr* max_column);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
