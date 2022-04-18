@@ -62,7 +62,7 @@ struct SortedRun {
     }
 };
 
-// Multiple sorted chunks kept the order
+// Multiple sorted chunks kept the order, without any intersection
 struct SortedRuns {
     std::vector<SortedRun> chunks;
 
@@ -71,7 +71,17 @@ struct SortedRuns {
     SortedRuns(ChunkPtr chunk) : chunks{SortedRun(chunk)} {}
     SortedRuns(SortedRun run) : chunks{run} {}
 
+    SortedRun& get_run(int i) { return chunks[i]; }
+    ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }
     size_t num_chunks() const { return chunks.size(); }
+
+    ChunkPtr assemble() const {
+        ChunkPtr result = chunks.front().chunk;
+        for (int i = 1; i < chunks.size(); i++) {
+            result->merge(std::move(*chunks[i].chunk));
+        }
+        return result;
+    }
 };
 
 // Merge two sorted cusor
@@ -129,7 +139,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
                                    Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
                                    SortedRuns* output);
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,

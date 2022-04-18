@@ -288,35 +288,64 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
 }
 
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
-                                   SortedRuns* output) {
-    CHECK(false) << "TODO";
-    return Status::NotSupported("TODO");
+Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector<ExprContext*>* sort_exprs,
+                                   const SortedRuns& left, const SortedRuns& right, SortedRuns* output) {
+    int left_index = -1;
+    int right_index = -1;
+    auto left_cursor = std::make_unique<SimpleChunkSortCursor>(
+            [&](Chunk** output, bool* eos) {
+                if (output) {
+                    if (++left_index < left.num_chunks()) {
+                        // TODO: avoid copy
+                        *output = left.get_chunk(left_index)->clone_unique().release();
+                        return true;
+                    } else {
+                        *eos = true;
+                        return false;
+                    }
+                }
+                return true;
+            },
+            sort_exprs);
+    auto right_cursor = std::make_unique<SimpleChunkSortCursor>(
+            [&](Chunk** output, bool* eos) {
+                if (output) {
+                    if (++right_index < right.num_chunks()) {
+                        *output = right.get_chunk(right_index)->clone_unique().release();
+                        return true;
+                    } else {
+                        *eos = true;
+                        return false;
+                    }
+                }
+                return true;
+            },
+            sort_exprs);
+    MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
+    ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
+        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release())));
+        return Status::OK();
+    };
+    return merger.consume_all(consumer);
 }
 
 // Merge multiple chunks in two-way merge
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
-    std::vector<ChunkPtr> current(chunks);
-    while (current.size() > 1) {
-        std::vector<ChunkPtr> next_level;
-        int level_size = current.size() & ~1;
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
+    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
+    while (queue.size() > 1) {
+        SortedRuns left = queue.front();
+        queue.pop_front();
+        SortedRuns right = queue.front();
+        queue.pop_front();
 
-        for (int i = 0; i < level_size; i += 2) {
-            Permutation perm;
-            ChunkPtr left = current[i];
-            ChunkPtr right = current[i + 1];
-            RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, left, right, &perm));
+        SortedRuns merged;
+        RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, sort_exprs, left, right, &merged));
 
-            ChunkPtr merged = left->clone_empty(left->num_rows() + right->num_rows());
-            append_by_permutation(merged.get(), {left, right}, perm);
-            next_level.push_back(merged);
-        }
-        if (current.size() % 2 == 1) {
-            next_level.push_back(current.back());
-        }
-        current = std::move(next_level);
+        queue.push_back(merged);
     }
-    *output = current.front();
+
+    *output = queue.front().assemble();
 
     return Status::OK();
 }
@@ -329,7 +358,6 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPt
     size_t left_size = left_chunk->num_rows();
     size_t right_size = right_chunk->num_rows();
     output->reserve(limit);
-
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
         int cmp =
                 compare_chunk_row(descs, left_chunk->columns(), right_chunk->columns(), index_of_left, index_of_right);
