@@ -270,6 +270,10 @@ public class PlanFragmentBuilder {
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
             if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
                 List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+                // if outputColumns is empty, skip this optimization
+                if (outputColumns.isEmpty()) {
+                    return;
+                }
                 Set<Integer> outputColumnIds = new HashSet<Integer>();
                 for (ColumnRefOperator colref : outputColumns) {
                     outputColumnIds.add(colref.getId());
