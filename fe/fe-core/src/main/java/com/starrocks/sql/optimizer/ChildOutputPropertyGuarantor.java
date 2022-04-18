@@ -167,6 +167,7 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
                         break;
                     }
                 }
+                Preconditions.checkState(index != -1, "Cannot find join equivalent column");
             }
             bucketShuffleColumns.add(rightShuffleColumns.get(index));
         }
