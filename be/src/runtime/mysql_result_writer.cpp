@@ -23,14 +23,11 @@
 
 #include <column/column_helper.h>
 
-#include "column/binary_column.h"
 #include "column/const_column.h"
-#include "column/nullable_column.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
-#include "util/date_func.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {

@@ -394,7 +394,7 @@ void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, con
                          << exec_state->fragment_instance_id();
         }
     }
-    // NOTE: 'exec_state' is desconstructed here without lock
+    // NOTE: 'exec_state' is deconstructed here without lock
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
