@@ -185,7 +185,6 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
 
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
-    LOG(INFO) << "submitting task. type=" << type_str << ", signature=" << signature;
 
     if (_register_task_info(task_type, signature)) {
         // Set the receiving time of task so that we can determine whether it is timed out later
@@ -197,10 +196,10 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
             task_count_in_queue = _tasks.size();
             _worker_thread_condition_variable->notify_one();
         }
-        LOG(INFO) << "success to submit task. type=" << type_str << ", signature=" << signature
+        LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
                   << ", task_count_in_queue=" << task_count_in_queue;
     } else {
-        LOG(INFO) << "fail to register task. type=" << type_str << ", signature=" << signature;
+        LOG(INFO) << "Submit task failed, already exists type=" << type_str << ", signature=" << signature;
     }
 }
 
@@ -731,7 +730,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         std::vector<TabletInfo> tablet_infos;
         tablet_infos.reserve(tablet_related_rs.size());
 
-        // vector for tablet publishing version status, which collects the execution results of the correspoding tablet.
+        // vector for tablet publishing version status, which collects the execution results of the corresponding tablet.
         std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
 
         size_t idx = 0;

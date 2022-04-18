@@ -417,7 +417,8 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
 StatusOr<IteratorList> TabletUpdates::read(int64_t version, const vectorized::Schema& schema,
                                            const vectorized::RowsetReadOptions& options) {
     if (_error) {
-        return Status::InternalError("tablet updates is in error state");
+        return Status::InternalError(Substitute("read failed, tablet updates is in error state: tablet:$0 $1",
+                                                _tablet.tablet_id(), _error_msg));
     }
     std::vector<RowsetSharedPtr> rowsets;
     RETURN_IF_ERROR(get_applied_rowsets(version, &rowsets));
@@ -431,29 +432,29 @@ StatusOr<IteratorList> TabletUpdates::read(int64_t version, const vectorized::Sc
 
 Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     if (_error) {
-        return Status::InternalError("tablet updates is in error state");
+        return Status::InternalError(Substitute("rowset_commit failed, tablet updates is in error state: tablet:$0 $1",
+                                                _tablet.tablet_id(), _error_msg));
     }
     Status st;
     {
         std::lock_guard wl(_lock);
         if (version <= _edit_version_infos.back()->version.major()) {
-            LOG(WARNING) << "ignored already committed version " << version << " of tablet " << _tablet.tablet_id();
+            LOG(WARNING) << "ignored already committed version " << version << " of tablet " << _tablet.tablet_id()
+                         << " txn:" << rowset->txn_id();
             _ignore_rowset_commit(version, rowset);
             return Status::OK();
         } else if (version > _edit_version_infos.back()->version.major() + 1) {
-            if (_pending_commits.size() > 100) {
+            if (_pending_commits.size() >= config::tablet_max_pending_versions) {
                 // there must be something wrong, return error rather than accepting more commits
                 string msg = Substitute(
-                        "rowset commit failed too many pending rowsets tablet:$0 version:$1 "
-                        "pending:$2",
-                        _tablet.tablet_id(), version, _pending_commits.size());
+                        "rowset commit failed too many pending rowsets tablet:$0 version:$1 txn:$2 #pending:$3",
+                        _tablet.tablet_id(), version, rowset->txn_id(), _pending_commits.size());
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             }
             if (!_pending_commits.emplace(version, rowset).second) {
-                LOG(WARNING) << "ignore add rowset to pending commits, same version already "
-                                "exists version:"
-                             << version << " " << _debug_string(false, false);
+                LOG(WARNING) << "ignore add rowset to pending commits, same version already exists version:" << version
+                             << " txn:" << rowset->txn_id() << " " << _debug_string(false, false);
                 _ignore_rowset_commit(version, rowset);
             } else {
                 st = TabletMetaManager::pending_rowset_commit(
@@ -461,19 +462,21 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                         RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
                 if (!st.ok()) {
                     LOG(WARNING) << "add rowset to pending commits failed tablet:" << _tablet.tablet_id()
-                                 << " version:" << version << " " << st << " " << _debug_string(false, true);
+                                 << " version:" << version << " txn:" << rowset->txn_id() << " " << st << " "
+                                 << _debug_string(false, true);
                     return st;
                 }
                 LOG(INFO) << "add rowset to pending commits tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " #pending:" << _pending_commits.size();
+                          << " txn:" << rowset->txn_id() << " #pending:" << _pending_commits.size();
             }
             return Status::OK();
         }
         st = _rowset_commit_unlocked(version, rowset);
         if (st.ok()) {
-            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version << " "
-                      << rowset->rowset_id().to_string() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
-                      << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+            LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
+                      << " txn:" << rowset->txn_id() << " " << rowset->rowset_id().to_string()
+                      << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
+                      << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
@@ -482,7 +485,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     }
     if (!st.ok()) {
         LOG(WARNING) << "rowset commit failed tablet:" << _tablet.tablet_id() << " version:" << version
-                     << " pending:" << _pending_commits.size() << " msg:" << st;
+                     << " txn:" << rowset->txn_id() << " pending:" << _pending_commits.size() << " msg:" << st;
     }
     return st;
 }
@@ -560,7 +563,7 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
             int64_t version = itr->first;
             if (version <= current_version) {
                 LOG(WARNING) << "ignore pending rowset tablet: " << _tablet.tablet_id() << " version:" << version
-                             << " #pending:" << _pending_commits.size();
+                             << " txn:" << itr->second->txn_id() << " #pending:" << _pending_commits.size();
                 _ignore_rowset_commit(version, itr->second);
                 itr = _pending_commits.erase(itr);
             } else if (version == current_version + 1) {
@@ -568,14 +571,15 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
                 auto st = _rowset_commit_unlocked(version, rowset);
                 if (!st.ok()) {
                     LOG(ERROR) << "commit rowset (pending) failed tablet: " << _tablet.tablet_id()
-                               << " version:" << version << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                               << " version:" << version << " txn:" << rowset->txn_id()
+                               << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
                                << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
                                << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                                << " #pending:" << _pending_commits.size() << " " << st.to_string();
                     return;
                 }
                 LOG(INFO) << "commit rowset (pending) tablet:" << _tablet.tablet_id() << " version:" << version
-                          << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                          << " txn:" << rowset->txn_id() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
                           << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
                           << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                           << " #pending:" << _pending_commits.size();
@@ -591,7 +595,7 @@ void TabletUpdates::_try_commit_pendings_unlocked() {
 void TabletUpdates::_ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     auto st = RowsetMetaManager::remove(_tablet.data_dir()->get_meta(), _tablet.tablet_uid(), rowset->rowset_id());
     LOG_IF(WARNING, !st.ok()) << "Failed to remove rowset meta tablet:" << _tablet.tablet_id() << " version:" << version
-                              << " rowset: " << rowset->rowset_id().to_string();
+                              << " txn:" << rowset->txn_id() << " rowset: " << rowset->rowset_id().to_string();
 }
 
 Status TabletUpdates::save_meta() {
@@ -922,10 +926,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
-              << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #op(upsert:" << rowset->num_rows()
-              << " del:" << delete_op << ") #del:" << old_total_del << "+" << new_del << "=" << total_del
-              << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
+              << " txn:" << rowset->txn_id() << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " "
+              << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
+              << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
+              << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
                             t_delvec - t_index, t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
@@ -1379,7 +1383,8 @@ std::set<uint32_t> TabletUpdates::_active_rowsets() {
 
 void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     if (_error) {
-        LOG(WARNING) << "tablet updates is in error state, cannot remove_expired_versions";
+        LOG(WARNING) << Substitute("remove_expired_versions failed, tablet updates is in error state: tablet:$0 $1",
+                                   _tablet.tablet_id(), _error_msg);
         return;
     }
     /// Remove expired versions from memory.
@@ -1510,7 +1515,8 @@ static const size_t compaction_result_rows_threashold = 10000000;
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (_error) {
-        return Status::InternalError("tablet updates is in error state, cannot do compaction");
+        return Status::InternalError(Substitute("compaction failed, tablet updates is in error state: tablet:$0 $1",
+                                                _tablet.tablet_id(), _error_msg));
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
@@ -1832,7 +1838,8 @@ void TabletUpdates::_set_error(const string& msg) {
 
 RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
     if (_error) {
-        LOG(WARNING) << "tablet updates in error state, cannot get_delta_rowset";
+        LOG(WARNING) << Substitute("get_delta_rowset failed, tablet updates is in error state: tablet:$0 $1",
+                                   _tablet.tablet_id(), _error_msg);
         return nullptr;
     }
     std::lock_guard lg(_lock);
@@ -1863,9 +1870,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                           EditVersion* full_edit_version) {
     if (_error) {
         return Status::InternalError(
-                Substitute("tablet updates in error state, cannot get_applied_rowsets failed, "
-                           "tablet in error state, tablet:$0",
-                           _tablet.tablet_id()));
+                Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
+                           _tablet.tablet_id(), _error_msg));
     }
     // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
@@ -2298,7 +2304,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
     } while (0)
 
     if (_error.load()) {
-        return Status::InternalError("tablet in error state");
+        return Status::InternalError(Substitute("load snapshot failed, tablet updates is in error state: tablet:$0 $1",
+                                                _tablet.tablet_id(), _error_msg));
     }
     // disable compaction temporarily when doing load_snapshot
     _last_compaction_time_ms = UnixMillis();
