@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -16,7 +15,6 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -2142,7 +2140,7 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  155;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("6:Project\n" +
+        Assert.assertTrue(plan.contains("7:Project\n" +
                 "  |  <slot 2> : 2: v2"));
     }
 
@@ -2244,5 +2242,15 @@ public class JoinTest extends PlanTestBase {
             sessionVariable.setParallelExecInstanceNum(parallelExecInstanceNum);
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testColocateJoinWithProject() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select a.v1 from t0 as a join t0 b on a.v1 = b.v1 and a.v1 = b.v1 + 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)");
+        FeConstants.runningUnitTest = false;
     }
 }

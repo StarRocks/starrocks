@@ -219,14 +219,21 @@ public class ExpressionTest extends PlanTestBase {
                 + " as j "
                 + "where j.x3 > 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Project\n"
-                + "  |  <slot 1> : 1: v1\n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: 3: v3 > 1\n"
-                + "  |  \n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0\n"));
+        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+                "  |  predicates: 3: v3 > 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 10\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode"));
     }
 
     @Test(expected = SemanticException.class)

@@ -45,8 +45,8 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("HostName").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
-            .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
-            .add("LastHeartbeat").add("ErrMsg").add("StartTime").add("Version")
+            .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
+            .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
     public static final int HOSTNAME_INDEX = 2;
@@ -103,12 +103,8 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            boolean isMaster = fe.getHost().equals(masterIp);
-            if (isMaster) {
-                info.add("MASTER");
-            } else {
-                info.add(fe.getRole().name());
-            }
+            info.add(fe.getRole().name());
+            info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
             info.add(Integer.toString(catalog.getClusterId()));
             info.add(String.valueOf(isJoin(allFeHosts, fe)));
@@ -121,6 +117,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Long.toString(fe.getReplayedJournalId()));
             }
             info.add(TimeUtils.longToTimeString(fe.getLastUpdateTime()));
+            info.add(String.valueOf(isHelperNode(helperNodes, fe)));
             info.add(fe.getHeartbeatErrMsg());
 
             if (fe.isAlive()) {
