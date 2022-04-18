@@ -448,7 +448,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
@@ -576,7 +576,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
