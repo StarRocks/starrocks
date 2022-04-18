@@ -5,8 +5,6 @@ package com.starrocks.planner;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,6 +54,7 @@ public class MultiCastPlanFragment extends PlanFragment {
             DataStreamSink streamSink = new DataStreamSink(f.getId());
             streamSink.setPartition(DataPartition.RANDOM);
             streamSink.setFragment(this);
+            streamSink.setOutputColumnIds(f.getReceiveColumns());
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
         }
