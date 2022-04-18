@@ -1517,6 +1517,9 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         return Status::InternalError("illegal state: another compaction is running");
     }
     std::unique_lock lock(get_update_compaction_lock(), std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return Status::OK();
+    }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
     {
