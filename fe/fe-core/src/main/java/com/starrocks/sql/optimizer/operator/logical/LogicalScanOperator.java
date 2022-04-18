@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
     protected final Table table;
@@ -34,6 +36,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
     protected final ImmutableMap<String, PartitionColumnFilter> columnFilters;
+    protected Set<String> partitionColumns = Sets.newHashSet();
 
     public LogicalScanOperator(
             OperatorType type,
@@ -77,6 +80,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             return projection.getOutputColumns();
         }
         return new ArrayList<>(colRefToColumnMetaMap.keySet());
+    }
+
+    public Set<String> getPartitionColumns() {
+        return partitionColumns;
     }
 
     @Override
