@@ -2,7 +2,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;

@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class PartitionProperties extends PartitionDesc{
+public class PartitionProperties extends PartitionDesc {
 
     private DataProperty partitionDataProperty;
     private Short replicationNum;
@@ -30,7 +30,7 @@ public class PartitionProperties extends PartitionDesc{
 
     @Override
     public DataProperty getPartitionDataProperty() {
-       return this.partitionDataProperty;
+        return this.partitionDataProperty;
     }
 
     @Override
@@ -69,13 +69,15 @@ public class PartitionProperties extends PartitionDesc{
                 DataProperty.DEFAULT_DATA_PROPERTY);
 
         // analyze replication num
-        this.replicationNum = PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.default_replication_num);
+        this.replicationNum =
+                PropertyAnalyzer.analyzeReplicationNum(allProperties, FeConstants.default_replication_num);
 
         // analyze version info
         this.versionInfo = PropertyAnalyzer.analyzeVersionInfo(allProperties);
 
         // analyze in memory
-        this.isInMemory = PropertyAnalyzer.analyzeBooleanProp(allProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        this.isInMemory =
+                PropertyAnalyzer.analyzeBooleanProp(allProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
         // analyze tabletType
         this.tabletType = PropertyAnalyzer.analyzeTabletType(allProperties);
@@ -86,6 +88,5 @@ public class PartitionProperties extends PartitionDesc{
             throw new AnalysisException("Unknown properties: " + mapJoiner.join(allProperties));
         }
     }
-
 
 }

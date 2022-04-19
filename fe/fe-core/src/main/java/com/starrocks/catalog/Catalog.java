@@ -76,6 +76,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -3963,10 +3964,11 @@ public class Catalog {
                     long partitionId = getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
-            }else if (partitionDesc instanceof ListPartitionDesc){
+            } else if (partitionDesc instanceof ListPartitionDesc) {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
-                listPartitionDesc.findAllParitionName().forEach(partitionName -> partitionNameToId.put(partitionName,getNextId()));
-            }else{
+                listPartitionDesc.findAllParitionName()
+                        .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
+            } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);

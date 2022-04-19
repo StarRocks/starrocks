@@ -1111,7 +1111,7 @@ public class OlapTable extends Table {
             partitionInfo = SinglePartitionInfo.read(in);
         } else if (partType == PartitionType.RANGE) {
             partitionInfo = RangePartitionInfo.read(in);
-        } else if (partType == PartitionType.LIST){
+        } else if (partType == PartitionType.LIST) {
             partitionInfo = ListPartitionInfo.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
@@ -1462,7 +1462,7 @@ public class OlapTable extends Table {
         }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                                       Boolean.valueOf(enablePersistentIndex).toString());
+                        Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
     }
 
