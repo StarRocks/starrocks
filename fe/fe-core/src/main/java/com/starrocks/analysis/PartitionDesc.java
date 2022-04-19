@@ -45,7 +45,7 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public void analyze(int partitionColSize, Map<String, String> otherProperties) throws AnalysisException{
+    public void analyze(int partitionColSize, Map<String, String> otherProperties) throws AnalysisException {
         throw new NotImplementedException();
     }
 
@@ -59,15 +59,8 @@ public class PartitionDesc implements ParseNode {
     }
 
     /**
-     * get the partition name
-     * @return
-     */
-    public String getPartitionName() {
-        throw new NotImplementedException();
-    }
-
-    /**
-     * get if user set [if not exists] in partition clause
+     * if user set [if not exists] statement in partition clause
+     *
      * @return
      */
     public boolean isSetIfNotExists() {
@@ -76,9 +69,14 @@ public class PartitionDesc implements ParseNode {
 
     /**
      * get partition properties
+     *
      * @return
      */
     public Map<String, String> getProperties() {
+        throw new NotImplementedException();
+    }
+
+    public String getPartitionName() {
         throw new NotImplementedException();
     }
 

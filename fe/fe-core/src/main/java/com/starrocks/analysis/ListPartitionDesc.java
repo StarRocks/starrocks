@@ -1,5 +1,6 @@
-package com.starrocks.analysis;
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -10,14 +11,20 @@ import com.starrocks.common.DdlException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ *  entrance describe for list partition
+ */
 public class ListPartitionDesc extends PartitionDesc {
 
+    // describe for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
+    private final List<SingleListPartitionDesc> singleListPartitionDescs;
+    // describe for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
+    private final List<MultiListPartitionDesc> multiListPartitionDescs;
+
     private final List<String> partitionColNames;
-    private List<SingleListPartitionDesc> singleListPartitionDescs;
-    private List<MultiListPartitionDesc> multiListPartitionDescs;
 
     public ListPartitionDesc(List<String> partitionColNames,
-                              List<PartitionDesc> partitionDescs) {
+                             List<PartitionDesc> partitionDescs) {
         super.type = PartitionType.LIST;
         this.partitionColNames = partitionColNames;
         this.singleListPartitionDescs = Lists.newArrayList();
@@ -33,7 +40,7 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    public List<String> findAllParitionName(){
+    public List<String> findAllParitionName() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
         this.multiListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -44,13 +51,13 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         this.analyzePartitionColumns(columnDefs);
-        // analyze single property
+        // analyze single list property
         this.analyzeSingleListPartition(tableProperties);
         // analyze multi list partition
         this.analyzeMultiListPartition(tableProperties);
     }
 
-    private void analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException{
+    private void analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
         if (partitionColNames == null || partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }
@@ -79,7 +86,7 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException{
+    private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException {
         Set<String> multiListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (this.multiListPartitionDescs.size() != 0) {
             for (MultiListPartitionDesc desc : this.multiListPartitionDescs) {
@@ -91,44 +98,43 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException{
+    private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException {
         Set<String> singListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleListPartitionDesc desc : this.singleListPartitionDescs) {
             if (!singListParttionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
-            }
-            if (this.partitionColNames.size() != 1) {
-                throw new AnalysisException("Partition column size should be one when use single list partition ");
             }
             desc.analyze(this.partitionColNames.size(), copiedProperties);
         }
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) throws DdlException {
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+            throws DdlException {
         List<Column> partitionColumns = this.toPartitionColumns(columns);
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type,partitionColumns);
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
         this.singleListPartitionDescs.forEach(desc -> {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
-            listPartitionInfo.setDataProperty(partitionId,desc.getPartitionDataProperty());
-            listPartitionInfo.setIsInMemory(partitionId,desc.isInMemory());
-            listPartitionInfo.setTabletType(partitionId,desc.getTabletType());
-            listPartitionInfo.setReplicationNum(partitionId,desc.getReplicationNum());
-            listPartitionInfo.setValues(partitionId,desc.getValues());
+            listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
+            listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
+            listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
+            listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
+            listPartitionInfo.setValues(partitionId, desc.getValues());
         });
         this.multiListPartitionDescs.forEach(desc -> {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
-            listPartitionInfo.setDataProperty(partitionId,desc.getPartitionDataProperty());
-            listPartitionInfo.setIsInMemory(partitionId,desc.isInMemory());
-            listPartitionInfo.setTabletType(partitionId,desc.getTabletType());
-            listPartitionInfo.setReplicationNum(partitionId,desc.getReplicationNum());
-            listPartitionInfo.setMultiValues(partitionId,desc.getMultiValues());
+            listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
+            listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
+            listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
+            listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
+            listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
         });
         return listPartitionInfo;
     }
 
     /**
      * check and getPartitionColumns
+     *
      * @param columns columns from table
      * @return
      * @throws DdlException
@@ -155,7 +161,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 throw new DdlException("Partition column[" + colName + "] does not found");
             }
         }
-        return partitionColumns ;
+        return partitionColumns;
     }
 
     @Override

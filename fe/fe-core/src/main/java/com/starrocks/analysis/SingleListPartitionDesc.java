@@ -1,31 +1,15 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/SingleRangePartitionDesc.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
+
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SingleListPartitionDesc extends PartitionProperties {
@@ -36,14 +20,14 @@ public class SingleListPartitionDesc extends PartitionProperties {
     private final Map<String, String> partitionProperties;
 
     public SingleListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
-                                 Map<String, String> partitionProperties) {
+                                   Map<String, String> partitionProperties) {
         this.ifNotExists = ifNotExists;
-        this.partitionName = partitionName ;
+        this.partitionName = partitionName;
         this.values = values;
         this.partitionProperties = partitionProperties;
     }
 
-    public List<String> getValues(){
+    public List<String> getValues() {
         return this.values;
     }
 
@@ -64,6 +48,15 @@ public class SingleListPartitionDesc extends PartitionProperties {
 
     @Override
     public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
+        if (partitionColSize != 1) {
+            throw new AnalysisException("Partition column size should be one when use single list partition ");
+        }
+        Set<String> treeSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (String value : values) {
+            if (!treeSet.add(value)) {
+                throw new AnalysisException("Duplicated value" + value);
+            }
+        }
         super.analyzeProperties(tableProperties);
     }
 
@@ -71,7 +64,7 @@ public class SingleListPartitionDesc extends PartitionProperties {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION ").append(this.partitionName).append(" VALUES IN (");
-        sb.append(this.values.stream().map(value -> "\"" + value + "\"")
+        sb.append(this.values.stream().map(value -> "\'" + value + "\'")
                 .collect(Collectors.joining(",")));
         sb.append(")");
         if (partitionProperties != null && !partitionProperties.isEmpty()) {

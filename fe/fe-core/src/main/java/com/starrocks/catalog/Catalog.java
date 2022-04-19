@@ -3905,7 +3905,7 @@ public class Catalog {
 
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
-        PartitionInfo partitionInfo = null;
+        PartitionInfo partitionInfo;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
             // gen partition id first
@@ -3919,7 +3919,7 @@ public class Catalog {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
                 listPartitionDesc.findAllParitionName().forEach(partitionName -> partitionNameToId.put(partitionName,getNextId()));
             }else{
-                throw new DdlException("Currently only support range and list partition with engine type olap");
+                throw new DdlException("Currently only support range or list partition with engine type olap");
             }
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else {

@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -21,31 +23,36 @@ public class PartitionProperties extends PartitionDesc{
     private TTabletType tabletType;
     private Long versionInfo;
 
+    @Override
     public short getReplicationNum() {
         return this.replicationNum;
     }
 
+    @Override
     public DataProperty getPartitionDataProperty() {
        return this.partitionDataProperty;
     }
 
+    @Override
     public Long getVersionInfo() {
         return this.versionInfo;
     }
 
+    @Override
     public TTabletType getTabletType() {
         return this.tabletType;
     }
 
+    @Override
     public boolean isInMemory() {
         return this.isInMemory;
     }
 
-    public void analyzeProperties(Map<String, String> otherProperties) throws AnalysisException {
+    public void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
 
         // copy one. because ProperAnalyzer will remove entry after analyze
-        Map<String, String> copiedTableProperties = Optional.ofNullable(otherProperties)
+        Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
         Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.getProperties())

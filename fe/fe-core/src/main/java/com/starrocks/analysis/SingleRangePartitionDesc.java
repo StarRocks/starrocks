@@ -112,7 +112,6 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         partitionKeyDesc.analyze(partColNum);
 
-
         if (otherProperties != null) {
             if (properties == null) {
                 this.properties = otherProperties;

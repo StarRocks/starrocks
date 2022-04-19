@@ -2,18 +2,20 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MultiListPartitionDesc extends PartitionProperties {
 
     private final boolean ifNotExists;
-    private final String partitionName ;
+    private final String partitionName;
     private final List<List<String>> multiValues;
     private final Map<String, String> partitionProperties;
 
@@ -25,7 +27,7 @@ public class MultiListPartitionDesc extends PartitionProperties {
         this.partitionProperties = partitionProperties;
     }
 
-    public List<List<String>> getMultiValues(){
+    public List<List<String>> getMultiValues() {
         return this.multiValues;
     }
 
@@ -46,11 +48,21 @@ public class MultiListPartitionDesc extends PartitionProperties {
 
     @Override
     public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
-        for (List<String> values : this.multiValues){
-            if (values.size() != partitionColSize){
-                throw new AnalysisException("(" + String.join(",",values) + ") size should be equal to partition column size ");
+        for (List<String> values : this.multiValues) {
+            if (values.size() != partitionColSize) {
+                throw new AnalysisException(
+                        "(" + String.join(",", values) + ") size should be equal to partition column size ");
             }
         }
+
+        Set<String> treeSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (List<String> values : multiValues) {
+            String val2str = String.join(",",values);
+            if (!treeSet.add(val2str)) {
+                throw new AnalysisException("Duplicated value (" + val2str + ")");
+            }
+        }
+
         super.analyzeProperties(tableProperties);
     }
 
@@ -59,8 +71,8 @@ public class MultiListPartitionDesc extends PartitionProperties {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION ").append(this.partitionName).append(" VALUES IN (");
         String items = this.multiValues.stream()
-                .map(values -> "(" + values.stream().map(value -> "\"" + value + "\"")
-                                .collect(Collectors.joining(","))+")")
+                .map(values -> "(" + values.stream().map(value -> "'" + value + "'")
+                        .collect(Collectors.joining(",")) + ")")
                 .collect(Collectors.joining(","));
         sb.append(items);
         sb.append(")");
