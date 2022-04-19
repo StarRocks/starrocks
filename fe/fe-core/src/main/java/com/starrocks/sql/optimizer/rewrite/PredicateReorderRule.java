@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -21,7 +22,9 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        root.getOp().accept(handler, root, null);
+        if (FeConstants.OPEN_PREDICATE_REORDER) {
+            root.getOp().accept(handler, root, null);
+        }
         return root;
     }
 

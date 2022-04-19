@@ -46,6 +46,7 @@ public class ReplayFromDumpTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+        FeConstants.OPEN_PREDICATE_REORDER = false;
     }
 
     public String getModelContent(String filename, String model) {

@@ -2,10 +2,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class RangeExtractTest extends PlanTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.OPEN_PREDICATE_REORDER = false;
+    }
 
     @Test
     public void testRangePredicate1() throws Exception {

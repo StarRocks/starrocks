@@ -65,4 +65,6 @@ public class FeConstants {
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
     public static final int default_tablet_number = 128;
+    //predicate reorder
+    public static boolean OPEN_PREDICATE_REORDER = true;
 }
