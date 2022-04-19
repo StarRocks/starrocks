@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.iceberg.IcebergCatalog;
+import com.starrocks.external.iceberg.IcebergCustomCatalogTest;
 import com.starrocks.external.iceberg.IcebergUtil;
 import mockit.Expectations;
 import mockit.Mock;
@@ -85,6 +86,43 @@ public class IcebergTableTest {
 
                 iTable.schema();
                 result = schema;
+            }
+        };
+
+        properties.put("resource", resourceName);
+        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+        Assert.assertEquals(tableName, table.getTable());
+        Assert.assertEquals(db, table.getDb());
+    }
+
+    @Test
+    public void testCustomWithResourceName(@Mocked com.starrocks.catalog.Catalog catalog,
+                                     @Mocked ResourceMgr resourceMgr,
+                                     @Mocked IcebergCatalog icebergCatalog) throws DdlException {
+        Resource icebergResource = new IcebergResource(resourceName);
+        Map<String, String> resourceProperties = Maps.newHashMap();
+        resourceProperties.put("starrocks.catalog-type", "custom");
+        resourceProperties.put("iceberg.catalog-impl", IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
+        icebergResource.setProperties(resourceProperties);
+
+        new MockUp<IcebergUtil>() {
+            @Mock
+            public IcebergCatalog getIcebergCustomCatalog(String impl, Map<String, String> icebergProperties) {
+                return icebergCatalog;
+            }
+        };
+
+        new Expectations() {
+            {
+                com.starrocks.catalog.Catalog.getCurrentCatalog();
+                result = catalog;
+                minTimes = 0;
+
+                catalog.getResourceMgr();
+                result = resourceMgr;
+
+                resourceMgr.getResource("iceberg0");
+                result = icebergResource;
             }
         };
 

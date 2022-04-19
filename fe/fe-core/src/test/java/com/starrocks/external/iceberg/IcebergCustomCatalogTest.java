@@ -51,8 +51,7 @@ public class IcebergCustomCatalogTest {
 
         String impl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", impl),
-                        new Configuration(), icebergProperties, impl).loadCatalog();
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(impl, icebergProperties);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
@@ -78,28 +77,12 @@ public class IcebergCustomCatalogTest {
 
         String impl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", impl),
-                        new Configuration(), icebergProperties, impl).loadCatalog();
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(impl, icebergProperties);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
 
-//    @Test
-//    public void testLoadCatalogCustom() {
-//        String catalogName = "barCatalog";
-//        conf.set(InputFormatConfig.catalogPropertyConfigKey(catalogName, CatalogProperties.CATALOG_IMPL),
-//                IcebergCustomTestingCatalog.class.getName());
-//        conf.set(InputFormatConfig.catalogPropertyConfigKey(catalogName, CatalogProperties.WAREHOUSE_LOCATION),
-//                "/tmp/mylocation");
-//        Optional<Catalog> customHadoopCatalog = Catalogs.loadCatalog(conf, catalogName);
-//        Assert.assertTrue(customHadoopCatalog.isPresent());
-//        Assertions.assertThat(customHadoopCatalog.get()).isInstanceOf(IcebergCustomTestingCatalog.class);
-//        Properties properties = new Properties();
-//        properties.put(InputFormatConfig.CATALOG_NAME, catalogName);
-//        Assert.assertFalse(Catalogs.hiveCatalog(conf, properties));
-//    }
-
-    private static class IcebergCustomTestingCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
+    public static class IcebergCustomTestingCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
 
         private String name;
         private Configuration conf;
