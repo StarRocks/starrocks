@@ -43,10 +43,10 @@ public class AddColumnsClauseTest {
     @Test
     public void testNormal() throws AnalysisException {
         List<ColumnDef> columns = Lists.newArrayList();
-        ColumnDef definition = new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)),
+        ColumnDef definition = new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)), null,
                 true, null, false, new DefaultValueDef(true, new StringLiteral("0")), "");
         columns.add(definition);
-        definition = new ColumnDef("col2", new TypeDef(ScalarType.createType(PrimitiveType.INT)), true, null, false,
+        definition = new ColumnDef("col2", new TypeDef(ScalarType.createType(PrimitiveType.INT)), null, true, null, false,
                 new DefaultValueDef(true, new StringLiteral("0")), "");
         columns.add(definition);
         AddColumnsClause clause = new AddColumnsClause(columns, null, null);

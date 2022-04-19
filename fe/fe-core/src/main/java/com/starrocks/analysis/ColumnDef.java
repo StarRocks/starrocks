@@ -29,6 +29,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
+import org.apache.spark.annotation.Private;
 
 import java.util.ArrayList;
 
@@ -84,6 +85,7 @@ public class ColumnDef {
     // parameter initialized in constructor
     private final String name;
     private final TypeDef typeDef;
+    private final String characterName;
     private AggregateType aggregateType;
     private boolean isKey;
     // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
@@ -95,13 +97,18 @@ public class ColumnDef {
     private final String comment;
 
     public ColumnDef(String name, TypeDef typeDef) {
-        this(name, typeDef, false, null, false, DefaultValueDef.NOT_SET, "");
+        this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET, "");
     }
 
-    public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
+    public ColumnDef(String name, TypeDef typeDef, String characterName, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this.name = name;
         this.typeDef = typeDef;
+        if (characterName == null) {
+            this.characterName = "utf8";
+        }else{
+            this.characterName = characterName;
+        }
         this.isKey = isKey;
         this.aggregateType = aggregateType;
         if (isAllowNull == null) {
@@ -148,6 +155,11 @@ public class ColumnDef {
     public void setAggregateType(AggregateType aggregateType) {
         this.aggregateType = aggregateType;
     }
+
+    public String getCharacterName() {
+        return characterName;
+    }
+
 
     public boolean isKey() {
         return isKey;

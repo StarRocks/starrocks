@@ -317,7 +317,7 @@ public class CreateTableStmtTest {
     @Test
     public void testPrimaryKeyNullable() throws Exception {
         cols = Lists.newArrayList();
-        cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)), true, null, true,
+        cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT)), null, true, null, true,
                 DefaultValueDef.NOT_SET, ""));
         colsName = Lists.newArrayList();
         colsName.add("col1");
@@ -331,7 +331,7 @@ public class CreateTableStmtTest {
     @Test
     public void testPrimaryKeyChar() throws Exception {
         cols = Lists.newArrayList();
-        cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createCharType(10)), true, null, false,
+        cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createCharType(10)), null, true, null, false,
                 DefaultValueDef.NOT_SET, ""));
         colsName = Lists.newArrayList();
         colsName.add("col1");

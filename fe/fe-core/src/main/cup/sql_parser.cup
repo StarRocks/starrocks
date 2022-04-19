@@ -234,7 +234,7 @@ parser code {:
 // Total keywords of starrocks
 terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ANALYZE, KW_ANTI, KW_ARRAY, KW_AS, KW_ASC, KW_AUTHORS,
     KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BITMAP, KW_BITMAP_UNION, KW_BOOLEAN, KW_BOTH, KW_BROKER, KW_BACKENDS, KW_BY, KW_BUILTIN,
-    KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
+    KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHARACTER, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COSTS, KW_COUNT, KW_CREATE, KW_CROSS, KW_CUBE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC, KW_DESCRIBE,
@@ -313,7 +313,7 @@ nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_o
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String user, opt_user, opt_charset_name;
+nonterminal String user, opt_user, opt_charset_name, opt_character_name;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
@@ -2196,9 +2196,9 @@ opt_is_key ::=
 	;
 
 column_definition ::=
-    ident:columnName type_def:typeDef opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
+    ident:columnName type_def:typeDef opt_character_name:characterName opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
     {:
-        ColumnDef columnDef = new ColumnDef(columnName, typeDef, isKey, aggType, isAllowNull, defaultValue, comment);
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, characterName, isKey, aggType, isAllowNull, defaultValue, comment);
         RESULT = columnDef;
     :}
     ;
@@ -2693,11 +2693,23 @@ old_or_new_charset_name_or_default ::=
     ;
 
 opt_charset_name ::=
-    {: RESULT = null; :}
+    /* Empty */
+    | KW_CHAR KW_SET old_or_new_charset_name_or_default
     | KW_DEFAULT KW_CHARSET EQUAL ident:charsetName
     {: RESULT = charsetName; :}
     | KW_DEFAULT KW_CHARSET ident:charsetName
     {: RESULT = charsetName; :}
+    ;
+
+opt_character_name ::=
+    /* empty */
+    {:
+        RESULT = null;
+    :}
+    | KW_CHARACTER KW_SET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
     ;
 
 opt_collate ::=
