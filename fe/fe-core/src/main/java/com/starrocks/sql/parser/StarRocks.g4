@@ -37,7 +37,7 @@ statement
         AS queryStatement                                                               #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
-    | ADMIN SET FRONTEND CONFIG '(' property (',' property)* ')'                        #adminSet
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                        #adminSetConfig
     ;
 
 explainDesc
