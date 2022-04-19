@@ -15,6 +15,7 @@ namespace starrocks::vectorized {
 
 void ArrayColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _elements->size());
+    DCHECK(_elements->is_nullable());
     _offsets->check_or_die();
     _elements->check_or_die();
 }
