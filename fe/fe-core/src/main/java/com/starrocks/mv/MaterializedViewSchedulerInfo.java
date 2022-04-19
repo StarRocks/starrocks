@@ -57,22 +57,6 @@ public class MaterializedViewSchedulerInfo implements Writable {
         this.startTime = startTime;
     }
 
-    public Long getPeriod() {
-        return period;
-    }
-
-    public void setPeriod(Long period) {
-        this.period = period;
-    }
-
-    public TimeUnit getTimeUnit() {
-        return timeUnit;
-    }
-
-    public void setTimeUnit(TimeUnit timeUnit) {
-        this.timeUnit = timeUnit;
-    }
-
     public ScheduledFuture<?> getFuture() {
         return future;
     }

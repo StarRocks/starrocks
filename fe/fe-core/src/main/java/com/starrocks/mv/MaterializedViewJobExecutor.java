@@ -2,6 +2,7 @@
 
 package com.starrocks.mv;
 
+
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,10 +40,9 @@ public class MaterializedViewJobExecutor {
             try {
                 job.setStartTime(LocalDateTime.now());
                 job.runTasks();
+                job.setEndTime(LocalDateTime.now());
             } catch (Exception ex) {
                 LOG.warn("failed to run materialized view refresh task.", ex);
-            } finally {
-                job.setEndTime(LocalDateTime.now());
             }
         });
         job.setFuture(future);

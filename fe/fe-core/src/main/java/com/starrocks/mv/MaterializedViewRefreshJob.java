@@ -183,6 +183,9 @@ public class MaterializedViewRefreshJob implements Writable {
             if (tasks == null) {
                 status = Constants.MaterializedViewJobStatus.FAILED;
                 return status;
+            } else if (tasks.size() == 0) {
+                status = Constants.MaterializedViewJobStatus.SUCCESS;
+                return status;
             }
             Map<Constants.MaterializedViewTaskStatus, Long> result = tasks.stream().collect(
                     Collectors.groupingBy(IMaterializedViewRefreshTask::getStatus, Collectors.counting())
