@@ -2,14 +2,10 @@
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
-#include <execinfo.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/pipeline/sort/sort_context.h"
+#include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"

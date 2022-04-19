@@ -329,6 +329,10 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
     return merger.consume_all(consumer);
 }
 
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<SortedRun>& chunks, ChunkPtr* output) {
+    return Status::NotSupported("TODO");
+}
+
 // Merge multiple chunks in two-way merge
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {

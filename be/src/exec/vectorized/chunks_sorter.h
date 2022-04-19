@@ -22,9 +22,6 @@ struct DataSegment {
     uint32_t _next_output_row = 0;
     uint64_t _partitions_rows = 0;
 
-    // used for full sort.
-    Permutation* _sorted_permutation = nullptr;
-
     bool has_next() { return _next_output_row < _partitions_rows; }
 
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
