@@ -120,6 +120,7 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
     parquet/column_chunk_reader.cpp
+    parquet/column_converter.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
     parquet/level_codec.cpp
