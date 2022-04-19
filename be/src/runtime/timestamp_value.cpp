@@ -21,8 +21,7 @@
 
 #include "runtime/timestamp_value.h"
 
-#include "runtime/date_value.hpp"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {

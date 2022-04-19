@@ -19,7 +19,7 @@
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf_internal.h"
 #include "util/bitmap_value.h"

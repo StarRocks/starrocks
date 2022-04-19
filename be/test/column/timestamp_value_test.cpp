@@ -27,7 +27,7 @@
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "runtime/timestamp_value.h"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 
 namespace starrocks {
 namespace vectorized {
