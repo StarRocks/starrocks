@@ -779,7 +779,15 @@ public class AggregateTest extends PlanTestBase {
     public void testAggWithSubquery() throws Exception {
         String sql = "select sum(case when v4 = (select v1 from t0) then v4 end) from t1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  7:AGGREGATE (update finalize)\n" +
+        System.out.println(plan);
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:9: sum\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  7:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(8: case)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
