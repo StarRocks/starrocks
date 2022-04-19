@@ -104,14 +104,6 @@ public:
 
     bool opened() { return _opened; }
 
-    /// If 'expr' is constant, evaluates it with no input row argument and returns the
-    /// result in 'const_val'. Sets 'const_val' to NULL if the argument is not constant.
-    /// The returned AnyVal and associated varlen data is owned by this evaluator. This
-    /// should only be called after Open() has been called on this expr. Returns an error
-    /// if there was an error evaluating the expression or if memory could not be allocated
-    /// for the expression result.
-    Status get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val);
-
     /// Returns an error status if there was any error in evaluating the expression
     /// or its sub-expressions. 'start_idx' and 'end_idx' correspond to the range
     /// within the vector of FunctionContext for the sub-expressions of interest.
