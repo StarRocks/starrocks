@@ -11,6 +11,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -253,6 +254,35 @@ public class JoinPredicateUtils {
             } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
                 leftOnPredicateColumns.add(rightUsedColumns.getColumnIds()[0]);
                 rightOnPredicateColumns.add(leftUsedColumns.getColumnIds()[0]);
+            } else {
+                Preconditions.checkState(false, "shouldn't reach here");
+            }
+        }
+    }
+
+
+    public static void getJoinOnPredicatesOrders(List<BinaryPredicateOperator> equalOnPredicates,
+                                                           ColumnRefSet leftChildColumns,
+                                                           ColumnRefSet rightChildColumns,
+                                                           List<Ordering> leftOrderings,
+                                                           List<Ordering> rightOrderings) {
+        for (BinaryPredicateOperator binaryPredicate : equalOnPredicates) {
+            ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
+            ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
+            Ordering leftOrdering = new Ordering((ColumnRefOperator) binaryPredicate.getChild(0), true, true);
+            Ordering rightOrdering = new Ordering((ColumnRefOperator) binaryPredicate.getChild(1), true, true);
+            // Join on expression had pushed down to project node, so there must be one column
+            if (leftUsedColumns.cardinality() > 1 || rightUsedColumns.cardinality() > 1) {
+                throw new StarRocksPlannerException(
+                        "we do not support equal on predicate have multi columns in left or right",
+                        ErrorType.UNSUPPORTED);
+            }
+            if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
+                leftOrderings.add(leftOrdering);
+                rightOrderings.add(rightOrdering);
+            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
+                leftOrderings.add(rightOrdering);
+                rightOrderings.add(leftOrdering);
             } else {
                 Preconditions.checkState(false, "shouldn't reach here");
             }

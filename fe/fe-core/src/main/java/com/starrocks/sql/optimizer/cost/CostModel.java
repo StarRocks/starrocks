@@ -372,40 +372,11 @@ public class CostModel {
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
                                 * Constants.CrossJoinCostPenalty * 2, 0);
             } else {
-                boolean hasSort = checkSort(join, context);
-                if (hasSort) {
-                    return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
-                            0, 0);
-                } else {
-                    return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1))) * 1.5,
-                            leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                    + rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
-                }
-            }
-        }
+                return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
+                        0, 0);
 
-        private boolean checkSort(PhysicalMergeJoinOperator join, ExpressionContext context) {
-            GroupExpression leftChildGroupExpression = context.getChildGroupExpression(0);
-            GroupExpression rightChildGroupExpression = context.getChildGroupExpression(1);
-            Operator leftOperator = leftChildGroupExpression.getOp();
-            Operator rightOperator = rightChildGroupExpression.getOp();
-            if (!(leftOperator instanceof LogicalOlapScanOperator && rightOperator instanceof LogicalOlapScanOperator)) {
-                return false;
             }
-            LogicalOlapScanOperator leftLogicalOlapScanOperator = (LogicalOlapScanOperator) leftOperator;
-            LogicalOlapScanOperator rightLogicalOlapScanOperator = (LogicalOlapScanOperator) rightOperator;
-            Table leftTable = leftLogicalOlapScanOperator.getTable();
-            Table rightTable = rightLogicalOlapScanOperator.getTable();
-            List<Column> leftFullSchema = leftTable.getFullSchema();
-            List<Column> rightFullSchema = rightTable.getFullSchema();
-            List<ScalarOperator> children = join.getOnPredicate().getChildren();
-            ColumnRefOperator leftColumnRefOperator = (ColumnRefOperator) children.get(0);
-            ColumnRefOperator rightColumnRefOperator = (ColumnRefOperator) children.get(1);
-            boolean leftEquals = leftColumnRefOperator.getName().equals(leftFullSchema.get(0).getName());
-            boolean rightEquals = rightColumnRefOperator.getName().equals(rightFullSchema.get(0).getName());
-            return leftEquals && rightEquals;
         }
 
         @Override
