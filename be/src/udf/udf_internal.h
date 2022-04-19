@@ -73,8 +73,6 @@ public:
     /// it.
     starrocks_udf::FunctionContext* clone(MemPool* pool);
 
-    void set_constant_args(const std::vector<starrocks_udf::AnyVal*>& constant_args);
-
     void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     uint8_t* varargs_buffer() { return _varargs_buffer; }
@@ -178,11 +176,6 @@ private:
 
     // Type descriptors for each argument of the function.
     std::vector<starrocks_udf::FunctionContext::TypeDesc> _arg_types;
-
-    // Contains an AnyVal* for each argument of the function. If the AnyVal* is NULL,
-    // indicates that the corresponding argument is non-constant. Otherwise contains the
-    // value of the argument.
-    std::vector<starrocks_udf::AnyVal*> _constant_args;
 
     std::vector<vectorized::ColumnPtr> _constant_columns;
 
