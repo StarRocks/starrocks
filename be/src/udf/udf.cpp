@@ -113,10 +113,6 @@ uint8_t* FunctionContextImpl::allocate_local(int64_t byte_size) {
     return buffer;
 }
 
-void FunctionContextImpl::set_constant_args(const std::vector<starrocks_udf::AnyVal*>& constant_args) {
-    _constant_args = constant_args;
-}
-
 bool FunctionContextImpl::check_allocations_empty() {
     if (_allocations.empty() && _external_bytes_tracked == 0) {
         return true;
@@ -202,7 +198,6 @@ FunctionContext* FunctionContextImpl::clone(MemPool* pool) {
             create_context(_state, pool, _intermediate_type, _return_type, _arg_types, _varargs_buffer_size, _debug);
 
     new_context->_impl->_constant_columns = _constant_columns;
-    new_context->_impl->_constant_args = _constant_args;
     new_context->_impl->_fragment_local_fn_state = _fragment_local_fn_state;
     return new_context;
 }
