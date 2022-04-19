@@ -542,11 +542,8 @@ set(STARROCKS_DEPENDENCIES
     librdkafka_cpp
     librdkafka
     velocypack
-    #opentelemetry_trace
-    #opentelemetry_common
-    #opentelemetry_exporter_ostream_span
-    #opentelemetry_resources
-    #opentelemetry_exporter_jaeger_trace
+    opentelemetry_trace
+    opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
 )
 
