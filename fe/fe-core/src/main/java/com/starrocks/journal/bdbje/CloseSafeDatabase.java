@@ -62,4 +62,12 @@ public class CloseSafeDatabase {
     public Database getDb() {
         return db;
     }
+
+    public String getDatabaseName() {
+        try {
+            return db.getDatabaseName();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
 }
