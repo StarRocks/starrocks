@@ -28,7 +28,7 @@ statement
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHO DATWABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                                                      #createView
