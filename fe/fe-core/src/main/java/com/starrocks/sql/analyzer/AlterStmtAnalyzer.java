@@ -3,13 +3,16 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -42,8 +45,18 @@ public class AlterStmtAnalyzer {
             if (alterClauseList == null || alterClauseList.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
             }
+            com.starrocks.analysis.Analyzer analyzer = new Analyzer(context.getCatalog(), context);
             for (AlterClause alterClause : alterClauseList) {
-                AlterTableClauseAnalyzer.analyze(alterClause, context);
+                if (StatementPlanner.isNewAlterTableClause(alterClause)) {
+                    AlterTableClauseAnalyzer.analyze(alterClause, context);
+                } else {
+                    try {
+                        alterClause.analyze(analyzer);
+                    } catch (UserException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+
             }
             return null;
         }

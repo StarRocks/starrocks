@@ -157,7 +157,7 @@ public class AlterTest {
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             Catalog.getCurrentCatalog().alterTable(alterTableStmt);
             if (expectedException) {

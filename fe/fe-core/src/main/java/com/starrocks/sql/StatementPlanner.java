@@ -2,7 +2,6 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
@@ -176,7 +175,7 @@ public class StatementPlanner {
         boolean isAlterTable = false;
         if (statement instanceof AlterTableStmt) {
             List<AlterClause> alterClauses = ((AlterTableStmt) statement).getOps();
-            if (alterClauses.stream().allMatch(alterClause -> isNewAlterTableClause((AlterTableClause) alterClause))) {
+            if (alterClauses.stream().allMatch(alterClause -> isNewAlterTableClause(alterClause))) {
                 isAlterTable = true;
             }
         }
@@ -202,7 +201,7 @@ public class StatementPlanner {
                 || statement instanceof ShowWorkGroupStmt;
     }
 
-    public static boolean isNewAlterTableClause(AlterTableClause clause) {
+    public static boolean isNewAlterTableClause(AlterClause clause) {
         return clause instanceof TableRenameClause;
     }
 }

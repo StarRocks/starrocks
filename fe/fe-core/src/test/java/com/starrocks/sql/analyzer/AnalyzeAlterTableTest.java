@@ -7,7 +7,7 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class AnalyzerAlterTableTest {
+public class AnalyzeAlterTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
