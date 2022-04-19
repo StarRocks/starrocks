@@ -8,13 +8,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
-import org.apache.commons.lang.NotImplementedException;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-public class PartitionProperties extends PartitionDesc {
+public class PartitionProperties extends PartitionDesc{
 
     private DataProperty partitionDataProperty;
     private Short replicationNum;
@@ -22,28 +21,24 @@ public class PartitionProperties extends PartitionDesc {
     private TTabletType tabletType;
     private Long versionInfo;
 
-    public String getPartitionName(){
-        throw new NotImplementedException();
-    }
-
-    public Map<String, String> getPartitionProperties() {
-        throw new NotImplementedException();
-    }
-
-    public DataProperty getPartitionDataProperty(){
-        return this.partitionDataProperty;
-    }
-
     public short getReplicationNum() {
         return this.replicationNum;
     }
 
-    public boolean isInMemory() {
-        return this.isInMemory;
+    public DataProperty getPartitionDataProperty() {
+       return this.partitionDataProperty;
+    }
+
+    public Long getVersionInfo() {
+        return this.versionInfo;
     }
 
     public TTabletType getTabletType() {
         return this.tabletType;
+    }
+
+    public boolean isInMemory() {
+        return this.isInMemory;
     }
 
     public void analyzeProperties(Map<String, String> otherProperties) throws AnalysisException {
@@ -53,7 +48,7 @@ public class PartitionProperties extends PartitionDesc {
         Map<String, String> copiedTableProperties = Optional.ofNullable(otherProperties)
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
-        Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.getPartitionProperties())
+        Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.getProperties())
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
 

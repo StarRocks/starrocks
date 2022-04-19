@@ -48,12 +48,17 @@ public class SingleListPartitionDesc extends PartitionProperties {
     }
 
     @Override
-    public String getPartitionName(){
+    public String getPartitionName() {
         return this.partitionName;
     }
 
     @Override
-    public Map<String, String> getPartitionProperties() {
+    public boolean isSetIfNotExists() {
+        return this.ifNotExists;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
         return this.partitionProperties;
     }
 
@@ -65,7 +70,7 @@ public class SingleListPartitionDesc extends PartitionProperties {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("PARTITION ").append(super.getPartitionName()).append(" VALUES IN (");
+        sb.append("PARTITION ").append(this.partitionName).append(" VALUES IN (");
         sb.append(this.values.stream().map(value -> "\"" + value + "\"")
                 .collect(Collectors.joining(",")));
         sb.append(")");

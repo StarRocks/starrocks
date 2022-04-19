@@ -1017,10 +1017,6 @@ alter_table_clause ::=
     {:
         RESULT = new ModifyTablePropertiesClause(properties);
     :}
-    | KW_ADD opt_tmp:isTempPartition list_partition_desc:desc opt_distribution:distribution opt_properties:properties
-    {:
-        RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
-    :}
     | KW_ADD opt_tmp:isTempPartition single_range_partition_desc:desc opt_distribution:distribution opt_properties:properties
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);

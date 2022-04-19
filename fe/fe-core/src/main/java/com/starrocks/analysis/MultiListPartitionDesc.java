@@ -5,6 +5,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PartitionProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -29,12 +30,17 @@ public class MultiListPartitionDesc extends PartitionProperties {
     }
 
     @Override
-    public String getPartitionName(){
+    public String getPartitionName() {
         return this.partitionName;
     }
 
     @Override
-    public Map<String, String> getPartitionProperties() {
+    public boolean isSetIfNotExists() {
+        return this.ifNotExists;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
         return this.partitionProperties;
     }
 

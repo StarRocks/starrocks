@@ -58,14 +58,26 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
+    /**
+     * get the partition name
+     * @return
+     */
     public String getPartitionName() {
         throw new NotImplementedException();
     }
 
+    /**
+     * get if user set [if not exists] in partition clause
+     * @return
+     */
     public boolean isSetIfNotExists() {
         throw new NotImplementedException();
     }
 
+    /**
+     * get partition properties
+     * @return
+     */
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }
