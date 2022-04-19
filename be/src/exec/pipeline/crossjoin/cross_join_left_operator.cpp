@@ -295,7 +295,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
         // When the chunk is full or the current probe chunk is finished
         // crossing join with build chunks, we can output this chunk.
         if (chunk->num_rows() >= state->chunk_size() || _is_curr_probe_chunk_finished()) {
-            eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
+            RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get()));
             break;
         }
     }
