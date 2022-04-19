@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -50,6 +51,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -74,6 +76,14 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause statement, C context) {
+        return visitNode(statement, context);
     }
 
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
