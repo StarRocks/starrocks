@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
