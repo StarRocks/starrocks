@@ -214,8 +214,9 @@ public class MetastoreEventsProcessor extends MasterDaemon {
             if (response.getEvents().size() == 0) {
                 return Collections.emptyList();
             }
-            LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d",
-                    response.getEvents().size(), response.getEvents().get(0).getEventId(), lastSyncedEventId));
+            LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d on resource : %s",
+                    response.getEvents().size(), response.getEvents().get(0).getEventId(),
+                    lastSyncedEventId, resourceName));
 
             if (filter == null) {
                 return response.getEvents();
@@ -322,6 +323,8 @@ public class MetastoreEventsProcessor extends MasterDaemon {
             lastSyncedEventIds.put(resourceName, events.get(events.size() - 1).getEventId());
             return;
         }
+
+        LOG.debug("Notification events {} to be processed", events);
 
         if (Config.enable_hms_parallel_process_evens) {
             doExecuteWithPartialProgress(filteredEvents);
