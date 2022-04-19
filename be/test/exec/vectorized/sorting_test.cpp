@@ -10,7 +10,7 @@
 #include "column/column_helper.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/vectorized/column_ref.h"
-#include "runtime/vectorized/chunk_cursor.h"
+#include "runtime/chunk_cursor.h"
 
 namespace starrocks::vectorized {
 
