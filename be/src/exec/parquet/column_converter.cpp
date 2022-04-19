@@ -28,7 +28,6 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     PrimitiveType col_type = typeDescriptor.type;
     bool need_convert = false;
     tparquet::Type::type parquet_type = field.physical_type;
-    const auto& schema_element = field.schema_element;
 
     // the reason why there is down conversion of integer type is
     // assume we create a hive column called `col0` whose type is `tinyint`
@@ -115,13 +114,6 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             *converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL128>>(field.scale,
                                                                                                  typeDescriptor.scale);
             break;
-
-        case PrimitiveType::TYPE_DATETIME: {
-            auto _converter = std::make_unique<Int64ToDateTimeConverter>();
-            RETURN_IF_ERROR(_converter->init(timezone, schema_element));
-            *converter = std::move(_converter);
-            break;
-        }
         default:
             break;
         }
@@ -287,99 +279,6 @@ Status Int96ToDateTimeConverter::convert(const vectorized::ColumnPtr& src, vecto
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
             vectorized::Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << 40u) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
-        }
-    }
-    dst_nullable_column->set_has_null(src_nullable_column->has_null());
-    return Status::OK();
-}
-
-Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparquet::SchemaElement& schema_element) {
-    DCHECK_EQ(schema_element.type, tparquet::Type::INT64);
-
-    if (schema_element.__isset.logicalType) {
-        if (!schema_element.logicalType.__isset.TIMESTAMP) {
-            std::stringstream ss;
-            schema_element.logicalType.printTo(ss);
-            return Status::InternalError(
-                    strings::Substitute("expect parquet logical type is TIMESTAMP, actual is $0", ss.str()));
-        }
-
-        _is_adjusted_to_utc = schema_element.logicalType.TIMESTAMP.isAdjustedToUTC;
-
-        const auto& time_unit = schema_element.logicalType.TIMESTAMP.unit;
-        if (time_unit.__isset.MILLIS) {
-            _second_mask = 1000;
-            _scale_to_nano_factor = 1000000;
-        } else if (time_unit.__isset.MICROS) {
-            _second_mask = 1000000;
-            _scale_to_nano_factor = 1000;
-        } else if (time_unit.__isset.NANOS) {
-            _second_mask = 1000000000;
-            _scale_to_nano_factor = 1;
-        } else {
-            std::stringstream ss;
-            time_unit.printTo(ss);
-            return Status::InternalError(strings::Substitute("unexpected time unit $0", ss.str()));
-        }
-    } else if (schema_element.__isset.converted_type) {
-        _is_adjusted_to_utc = true;
-
-        const auto& converted_type = schema_element.converted_type;
-        if (converted_type == tparquet::ConvertedType::TIMESTAMP_MILLIS) {
-            _second_mask = 1000;
-            _scale_to_nano_factor = 1000000;
-        } else if (converted_type == tparquet::ConvertedType::TIMESTAMP_MICROS) {
-            _second_mask = 1000000;
-            _scale_to_nano_factor = 1000;
-        } else {
-            return Status::InternalError(
-                    strings::Substitute("unexpected converted type $0", tparquet::to_string(converted_type)));
-        }
-    } else {
-        return Status::InternalError(strings::Substitute("can not convert parquet type $0 to date time",
-                                                         tparquet::to_string(schema_element.type)));
-    }
-
-    if (_is_adjusted_to_utc) {
-        cctz::time_zone ctz;
-        if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
-            return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
-        }
-
-        const auto tp = std::chrono::system_clock::now();
-        const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-        _offset = al.offset;
-    }
-
-    return Status::OK();
-}
-
-Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::ColumnPtr& src,
-                                                              vectorized::Column* dst) {
-    auto* src_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(src);
-    // hive only support null column
-    // TODO: support not null
-    auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
-
-    auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int64_t>>(
-            src_nullable_column->data_column());
-    auto* dst_column =
-            vectorized::ColumnHelper::as_raw_column<vectorized::TimestampColumn>(dst_nullable_column->data_column());
-
-    auto& src_data = src_column->get_data();
-    auto& dst_data = dst_column->get_data();
-    auto& src_null_data = src_nullable_column->null_column()->get_data();
-    auto& dst_null_data = dst_nullable_column->null_column()->get_data();
-
-    size_t size = src_column->size();
-    for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            vectorized::Timestamp timestamp = vectorized::timestamp::of_epoch_second(
-                    static_cast<int>(src_data[i] / _second_mask),
-                    static_cast<int>((src_data[i] % _second_mask) * _scale_to_nano_factor));
             dst_data[i].set_timestamp(_utc_to_local(timestamp));
         }
     }
