@@ -19,8 +19,9 @@ Status StreamPipeSequentialFile::read(Slice* result) {
     return _file->read(reinterpret_cast<uint8_t*>(result->data), &(result->size), &eof);
 }
 
-Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
-    return _file->read_one_message(buf, length, padding);
+Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz,
+                                                  size_t padding) {
+    return _file->read_one_message(buf, buf_cap, buf_sz, padding);
 }
 
 Status StreamPipeSequentialFile::skip(uint64_t n) {
