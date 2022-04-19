@@ -30,9 +30,6 @@ public class AlterStmtAnalyzer {
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             TableName tbl = statement.getTbl();
-            if (tbl == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
-            }
             MetaUtils.normalizationTableName(context, tbl);
 
             try {

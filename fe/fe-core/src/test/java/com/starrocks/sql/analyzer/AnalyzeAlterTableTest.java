@@ -17,7 +17,12 @@ public class AnalyzeAlterTableTest {
 
     @Test
     public void testTableRename() {
-        analyzeSuccess("alter table test rename test1 ");
+        analyzeSuccess("alter table test rename test1");
         analyzeFail("alter table test rename ");
+    }
+
+    @Test
+    public void testOldAnalyzer() {
+        analyzeSuccess("alter table test add column col1 int");
     }
 }

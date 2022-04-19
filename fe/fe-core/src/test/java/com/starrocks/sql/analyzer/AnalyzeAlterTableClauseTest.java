@@ -26,4 +26,16 @@ public class AnalyzeAlterTableClauseTest {
                 clause.toSql());
 
     }
+
+    @Test(expected = SemanticException.class)
+    public void testEmptyNewTableName() {
+        TableRenameClause clause = new TableRenameClause("");
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testIllegalName() {
+        TableRenameClause clause = new TableRenameClause("_newName");
+        AlterTableClauseAnalyzer.analyze(clause, connectContext);
+    }
 }
