@@ -100,26 +100,6 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
     }
 }
 
-void TimestampedVersionTracker::recover_versioned_tracker(
-        const std::map<int64_t, PathVersionListSharedPtr>& stale_version_path_map) {
-    auto _path_map_iter = stale_version_path_map.begin();
-    // recover stale_version_path_map
-    while (_path_map_iter != stale_version_path_map.end()) {
-        // add PathVersionListSharedPtr to map
-        _stale_version_path_map[_path_map_iter->first] = _path_map_iter->second;
-
-        std::vector<TimestampedVersionSharedPtr>& timestamped_versions = _path_map_iter->second->timestamped_versions();
-        std::vector<TimestampedVersionSharedPtr>::iterator version_path_iter = timestamped_versions.begin();
-        while (version_path_iter != timestamped_versions.end()) {
-            // add version to _version_graph
-            _version_graph.add_version_to_graph((*version_path_iter)->version());
-            version_path_iter++;
-        }
-        _path_map_iter++;
-    }
-    LOG(INFO) << "recover_versioned_tracker current map info " << _get_current_path_map_str();
-}
-
 void TimestampedVersionTracker::add_version(const Version& version) {
     _version_graph.add_version_to_graph(version);
 }
@@ -183,7 +163,6 @@ PathVersionListSharedPtr TimestampedVersionTracker::fetch_and_delete_path_by_id(
         return nullptr;
     }
 
-    LOG(INFO) << _get_current_path_map_str();
     PathVersionListSharedPtr ptr = fetch_path_version_by_id(path_id);
 
     _stale_version_path_map.erase(path_id);
