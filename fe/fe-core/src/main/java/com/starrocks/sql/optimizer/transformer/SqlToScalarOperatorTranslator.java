@@ -66,7 +66,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -165,19 +164,16 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Void context) {
-            Optional<ResolvedField> resolvedField = expressionMapping.getScope().tryResolveFeild(node);
-            if (resolvedField.isPresent()) {
-                ColumnRefOperator correlatedColumnRef =
-                        expressionMapping.getColumnRefWithIndex(resolvedField.get().getRelationFieldIndex());
+            ResolvedField resolvedField =
+                    expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
 
-                if (resolvedField.get().getScope().getRelationId()
-                        .equals(expressionMapping.getOuterScopeRelationId())) {
-                    correlation.add(correlatedColumnRef);
-                }
-                return correlatedColumnRef;
-            } else {
-                throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
+            ColumnRefOperator columnRefOperator =
+                    expressionMapping.getColumnRefWithIndex(resolvedField.getRelationFieldIndex());
+
+            if (resolvedField.getScope().getRelationId().equals(expressionMapping.getOuterScopeRelationId())) {
+                correlation.add(columnRefOperator);
             }
+            return columnRefOperator;
         }
 
         @Override
