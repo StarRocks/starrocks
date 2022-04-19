@@ -82,34 +82,6 @@ private:
     int _offset = 0;
 };
 
-class Int64ToDateTimeConverter : public ColumnConverter {
-public:
-    Int64ToDateTimeConverter() = default;
-    ~Int64ToDateTimeConverter() override = default;
-
-    Status init(const std::string& timezone, const tparquet::SchemaElement& schema_element);
-    Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) override {
-        return _convert_to_timestamp_column(src, dst);
-    }
-
-private:
-    // convert column from int64 to timestamp
-    Status _convert_to_timestamp_column(const vectorized::ColumnPtr& src, vectorized::Column* dst);
-    // When Hive stores a timestamp value into Parquet format, it converts local time
-    // into UTC time, and when it reads data out, it should be converted to the time
-    // according to session variable "time_zone".
-    [[nodiscard]] vectorized::Timestamp _utc_to_local(vectorized::Timestamp timestamp) const {
-        return vectorized::timestamp::add<vectorized::TimeUnit::SECOND>(timestamp, _offset);
-    }
-
-private:
-    bool _is_adjusted_to_utc = false;
-    int _offset = 0;
-
-    int64_t _second_mask = 0;
-    int64_t _scale_to_nano_factor = 0;
-};
-
 template <typename SourceType, typename DestType>
 class IntToIntConverter : public ColumnConverter {
 public:
