@@ -28,7 +28,17 @@ public class DefaultPredicateSelectivityEstimator {
     //"Database Systems, the complete book". Suggest this:
     private static final double SELECTIVITY_EQUALS = 1.0 / 3.0;
 
-
+    /**
+     * Returns a percentage of predicate selectivity
+     * If it's a single predicate, we estimate the percentage directly.
+     * If it's a compound predicate, it is decomposed into multiple single predicate linked with
+     * AND, OR, NOT.
+     *
+     * @param predicate  the predicate which need to estimate
+     * @param statistics the statistics which in OptExpression
+     * @return an optional double value to get the percentage of predicate selectivity
+     * It returns 1.0 if the condition is not supported.
+     */
     public double estimate(ScalarOperator predicate, Statistics statistics) {
         // if Optional is null, return SELECTIVITY_MAX by default.
         return predicate.accept(new PredicateSelectivityEstimatorVisitor(statistics), null).orElse(SELECTIVITY_MAX);
@@ -44,7 +54,7 @@ public class DefaultPredicateSelectivityEstimator {
 
         @Override
         public Optional<Double> visit(ScalarOperator scalarOperator, Void context) {
-            //follow StatisticsCalculator logic default
+            //follow StatisticsCalculator line 1242 logic default
             Statistics estimatedStatistics = PredicateStatisticsCalculator.statisticsCalculate(scalarOperator, statistics);
             return Optional.of(estimatedStatistics.getOutputRowCount() / statistics.getOutputRowCount());
         }
@@ -107,6 +117,16 @@ public class DefaultPredicateSelectivityEstimator {
             return Optional.empty();
         }
 
+        /**
+         * Returns a percentage of  predicate which in EQ, EQ_FOR_NULL
+         *
+         * @param binaryType          binaryType which is EQ or EQ_FOR_NULL
+         * @param leftChild           left ScalarOperator
+         * @param rightChild          right ScalarOperator
+         * @param leftChildStatistic  column statistic for left ScalarOperator
+         * @param rightChildStatistic column statistic for right ScalarOperator
+         * @return an optional double value to get the percentage of predicate selectivity
+         */
         private Optional<Double> computeEquals(BinaryPredicateOperator.BinaryType binaryType,
                                                ScalarOperator leftChild, ScalarOperator rightChild,
                                                ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
@@ -140,6 +160,16 @@ public class DefaultPredicateSelectivityEstimator {
             }
         }
 
+        /**
+         * Returns a percentage of predicate which in LT,LE,GT,GE
+         *
+         * @param binaryType          binaryType which in LT,LE,GT,GE
+         * @param leftChild           left ScalarOperator
+         * @param rightChild          right ScalarOperator
+         * @param leftChildStatistic  column statistic for left ScalarOperator
+         * @param rightChildStatistic column statistic for right ScalarOperator
+         * @return an optional double value to get the percentage of predicate selectivity
+         */
         private Optional<Double> computeLessOrGreat(BinaryPredicateOperator.BinaryType binaryType,
                                                     ScalarOperator leftChild, ScalarOperator rightChild,
                                                     ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
@@ -163,7 +193,14 @@ public class DefaultPredicateSelectivityEstimator {
             }
         }
 
-
+        /**
+         * Check right child value is no overlap left child value
+         *
+         * @param doubleValue     right ScalarOperator value
+         * @param columnStatistic column statistic for left ScalarOperator
+         * @param binaryType      binaryType which in LT,LE,GT,GE
+         * @return if no overlap return true, else return false
+         */
         private boolean isLessOrGreatValueNoOverlap(double doubleValue, ColumnStatistic columnStatistic,
                                                     BinaryPredicateOperator.BinaryType binaryType) {
             if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) && doubleValue <= columnStatistic.getMinValue()) {
@@ -179,6 +216,14 @@ public class DefaultPredicateSelectivityEstimator {
             }
         }
 
+        /**
+         * Check right child value is overlap left child value
+         *
+         * @param doubleValue     right ScalarOperator value
+         * @param columnStatistic column statistic for left ScalarOperator
+         * @param binaryType      binaryType which in LT,LE,GT,GE
+         * @return if overlap return true, else return false.
+         */
         private boolean isLessOrGreatValueCompleteOverlap(double doubleValue,
                                                           ColumnStatistic columnStatistic,
                                                           BinaryPredicateOperator.BinaryType binaryType) {
@@ -195,10 +240,18 @@ public class DefaultPredicateSelectivityEstimator {
             }
         }
 
+        /**
+         * Returns a percentage of predicate which the left and right child values
+         * outside the no overlap and overlap states
+         *
+         * @param binaryType         binaryType which in LT,LE,GT,GE
+         * @param doubleValue        right ScalarOperator value
+         * @param leftChildStatistic column statistic for left ScalarOperator
+         * @return an optional double value to get the percentage of predicate selectivity
+         */
         private Optional<Double> evaluateLessOrGreatInRange(BinaryPredicateOperator.BinaryType binaryType,
                                                             double doubleValue, ColumnStatistic leftChildStatistic) {
             //can optimize if we have histogram
-            // todo getDistinctValuesCount is null?
             if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
                 if (doubleValue == leftChildStatistic.getMaxValue()) {
                     return Optional.of(1.0 / leftChildStatistic.getDistinctValuesCount());
@@ -236,6 +289,14 @@ public class DefaultPredicateSelectivityEstimator {
             }
         }
 
+        /**
+         * Returns a percentage of  predicate which right child is not constant
+         *
+         * @param binaryType          binaryType
+         * @param leftChildStatistic  column statistic for left ScalarOperator
+         * @param rightChildStatistic column statistic for right ScalarOperator
+         * @return an optional double value to get the percentage of predicate selectivity. if
+         */
         private Optional<Double> evaluateBinaryForExpression(
                 BinaryPredicateOperator.BinaryType binaryType,
                 ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
@@ -246,7 +307,10 @@ public class DefaultPredicateSelectivityEstimator {
             double distinctCountLeft = leftChildStatistic.getDistinctValuesCount();
             double distinctCountRight = rightChildStatistic.getDistinctValuesCount();
             boolean allNotNull = (leftChildStatistic.getNullsFraction() == 0) && (rightChildStatistic.getNullsFraction() == 0);
-
+            // check overlap
+            // if no overlap return SELECTIVITY_MIN
+            // else if overlap return SELECTIVITY_MAX
+            // else return SELECTIVITY_EQUALS.
             if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
                 if ((maxLeft < minRight) || (maxRight < minLeft)) {
                     return Optional.of(SELECTIVITY_MIN);
