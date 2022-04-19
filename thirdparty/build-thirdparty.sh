@@ -371,12 +371,11 @@ build_gperftools() {
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
-    LD_LIBRARY_PATH="${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
     
-    CFLAGS=$CFLAGS
+    CFLAGS=$OLD_FLAGS
 }
 
 # zlib
