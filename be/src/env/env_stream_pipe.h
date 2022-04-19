@@ -17,7 +17,7 @@ public:
 
     StatusOr<int64_t> read(void* data, int64_t size) override;
 
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding = 0);
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding = 0);
 
     Status skip(uint64_t n) override;
     const std::string& filename() const override { return _filename; }

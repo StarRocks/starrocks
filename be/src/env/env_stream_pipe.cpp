@@ -21,8 +21,9 @@ StatusOr<int64_t> StreamPipeSequentialFile::read(void* data, int64_t size) {
     return nread;
 }
 
-Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
-    return _file->read_one_message(buf, length, padding);
+Status StreamPipeSequentialFile::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz,
+                                                  size_t padding) {
+    return _file->read_one_message(buf, buf_cap, buf_sz, padding);
 }
 
 Status StreamPipeSequentialFile::skip(uint64_t n) {
