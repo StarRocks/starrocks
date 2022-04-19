@@ -31,13 +31,11 @@ public class AlterStmtAnalyzer {
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             TableName tbl = statement.getTbl();
             MetaUtils.normalizationTableName(context, tbl);
-
             try {
                 CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
-
             List<AlterClause> alterClauseList = statement.getOps();
             if (alterClauseList == null || alterClauseList.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
