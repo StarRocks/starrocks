@@ -14,6 +14,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -127,6 +128,28 @@ public class DecimalV3FunctionAnalyzerTest {
             AggregateFunction aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
             Type returnType = aggFunc.getReturnType();
             Assert.assertTrue(returnType.isDecimalV3());
+        }
+    }
+
+    @Test
+    public void testDecimalV3Disabled() {
+        boolean enabled = Config.enable_decimal_v3;
+        try {
+            Config.enable_decimal_v3 = false;
+
+            List<Type> paramTypes = Arrays.asList(ScalarType.DECIMALV2);
+            List<String> stdFunctions =
+                    Arrays.asList("std", "stddev", "variance", "variance_pop", "var_pop", "variance_samp", "var_samp",
+                            "stddev_pop",
+                            "stddev_samp");
+            for (String funcName : stdFunctions) {
+                AggregateFunction function = (AggregateFunction) Expr.getBuiltinFunction(funcName,
+                        paramTypes.toArray(new Type[0]), Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                Assert.assertNotNull(function);
+                Assert.assertEquals(Type.DOUBLE, function.getReturnType());
+            }
+        } finally {
+            Config.enable_decimal_v3 = enabled;
         }
     }
 }

@@ -424,11 +424,11 @@ public class ScalarType extends Type implements Cloneable {
             return createVarcharType(Math.max(t1.len, t2.len));
         }
 
-        if (t1.isDecimalV3()) {
+        if (t1.isDecimalV3() && isDecimalV3Enabled()) {
             return getAssigmentCompatibleTypeOfDecimalV3(t1, t2);
         }
 
-        if (t2.isDecimalV3()) {
+        if (t2.isDecimalV3() && isDecimalV3Enabled()) {
             return getAssigmentCompatibleTypeOfDecimalV3(t2, t1);
         }
 
