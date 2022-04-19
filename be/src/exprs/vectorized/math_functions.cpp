@@ -496,6 +496,7 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
         bool is_over_flow;
         MathFunctions::decimal_round<rule, false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
         if (is_over_flow) {
+            DCHECK(!has_null);
             res = ColumnHelper::create_const_null_column(size);
         } else {
             res = ConstColumn::create(res, size);
