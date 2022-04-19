@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "sorted_chunks_merger.h"
+#include "runtime/sorted_chunks_merger.h"
 
 #include "exec/sort_exec_exprs.h"
 
