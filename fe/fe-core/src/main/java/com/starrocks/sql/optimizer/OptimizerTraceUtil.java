@@ -173,7 +173,7 @@ public class OptimizerTraceUtil {
         @Override
         public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
             StringBuilder sb = new StringBuilder("LogicalHiveScanOperator");
-            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getHiveTable())
+            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getTableName())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                     .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append(", limit=").append(node.getLimit())
@@ -399,7 +399,7 @@ public class OptimizerTraceUtil {
         @Override
         public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
             StringBuilder sb = new StringBuilder("PhysicalHiveScanOperator");
-            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getHiveTable())
+            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getTableName())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                     .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append(", limit=").append(node.getLimit())
