@@ -42,6 +42,5 @@ public class AnalyzeAlterTableTest {
         List<AlterClause> ops = Lists.newArrayList();
         AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
         AlterStmtAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
-        Assert.fail("No exception throws.");
     }
 }
