@@ -143,10 +143,6 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-Status ExprContext::get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val) {
-    return Status::OK();
-}
-
 Status ExprContext::get_error(int start_idx, int end_idx) const {
     DCHECK(_opened);
     end_idx = end_idx == -1 ? _fn_contexts.size() : end_idx;

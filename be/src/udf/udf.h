@@ -44,11 +44,6 @@ class Column;
 
 namespace starrocks_udf {
 
-// All input and output values will be one of the structs below. The struct is a simple
-// object containing a boolean to store if the value is NULL and the value itself. The
-// value is unspecified if the NULL boolean is set.
-struct AnyVal;
-
 // The FunctionContext is passed to every UDF/UDA and is the interface for the UDF to the
 // rest of the system. It contains APIs to examine the system state, report errors
 // and manage memory.
@@ -185,25 +180,12 @@ public:
     // argument).
     int get_num_args() const;
 
-    // Returns _constant_args size
-    int get_num_constant_args() const;
-
     // Returns _constant_columns size
     int get_num_constant_columns() const;
 
     // Returns the type information for the arg_idx-th argument (0-indexed, not including
     // the FunctionContext* argument). Returns NULL if arg_idx is invalid.
     const TypeDesc* get_arg_type(int arg_idx) const;
-
-    // Returns true if the arg_idx-th input argument (0 indexed, not including the
-    // FunctionContext* argument) is a constant (e.g. 5, "string", 1 + 1).
-    bool is_arg_constant(int arg_idx) const;
-
-    // Returns a pointer to the value of the arg_idx-th input argument (0 indexed, not
-    // including the FunctionContext* argument). Returns NULL if the argument is not
-    // constant. This function can be used to obtain user-specified constants in a UDF's
-    // Init() or Close() functions.
-    AnyVal* get_constant_arg(int arg_idx) const;
 
     bool is_constant_column(int arg_idx) const;
 
@@ -300,73 +282,6 @@ typedef void (*UdfPrepare)(FunctionContext* context, FunctionContext::FunctionSt
 /// will be called once per fragment with 'scope' set to FRAGMENT_LOCAL, and once per
 /// execution thread with 'scope' set to THREAD_LOCAL.
 typedef void (*UdfClose)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
-//----------------------------------------------------------------------------
-//------------------------------- UDAs ---------------------------------------
-//----------------------------------------------------------------------------
-// The UDA execution is broken up into a few steps. The general calling pattern
-// is one of these:
-//  1) Init(), Evaluate() (repeatedly), Serialize()
-//  2) Init(), Merge() (repeatedly), Serialize()
-//  3) Init(), Finalize()
-// The UDA is registered with three types: the result type, the input type and
-// the intermediate type.
-//
-// If the UDA needs a fixed byte width intermediate buffer, the type should be
-// TYPE_FIXED_BUFFER and StarRocks will allocate the buffer. If the UDA needs an unknown
-// sized buffer, it should use TYPE_STRING and allocate it from the FunctionContext
-// manually.
-// For UDAs that need a complex data structure as the intermediate state, the
-// intermediate type should be string and the UDA can cast the ptr to the structure
-// it is using.
-//
-// Memory Management: For allocations that are not returned to StarRocks, the UDA
-// should use the FunctionContext::Allocate()/Free() methods. For StringVal allocations
-// returned to StarRocks (e.g. UdaSerialize()), the UDA should allocate the result
-// via StringVal(FunctionContext*, int) ctor and StarRocks will automatically handle
-// freeing it.
-//
-// For clarity in documenting the UDA interface, the various types will be typedefed
-// here. The actual execution resolves all the types at runtime and none of these types
-// should actually be used.
-typedef AnyVal InputType;
-typedef AnyVal InputType2;
-typedef AnyVal ResultType;
-typedef AnyVal IntermediateType;
-
-// UdaInit is called once for each aggregate group before calls to any of the
-// other functions below.
-typedef void (*UdaInit)(FunctionContext* context, IntermediateType* result);
-
-// This is called for each input value. The UDA should update result based on the
-// input value. The update function can take any number of input arguments. Here
-// are some examples:
-typedef void (*UdaUpdate)(FunctionContext* context, const InputType& input, IntermediateType* result);
-typedef void (*UdaUpdate2)(FunctionContext* context, const InputType& input, const InputType2& input2,
-                           IntermediateType* result);
-
-// Merge an intermediate result 'src' into 'dst'.
-typedef void (*UdaMerge)(FunctionContext* context, const IntermediateType& src, IntermediateType* dst);
-
-// Serialize the intermediate type. The serialized data is then sent across the
-// wire. This is not called unless the intermediate type is String.
-// No additional functions will be called with this FunctionContext object and the
-// UDA should do final clean (e.g. Free()) here.
-typedef const IntermediateType (*UdaSerialize)(FunctionContext* context, const IntermediateType& type);
-
-// Called once at the end to return the final value for this UDA.
-// No additional functions will be called with this FunctionContext object and the
-// UDA should do final clean (e.g. Free()) here.
-typedef ResultType (*UdaFinalize)(FunctionContext* context, const IntermediateType& v);
-
-//----------------------------------------------------------------------------
-//-------------Implementation of the *Val structs ----------------------------
-//----------------------------------------------------------------------------
-struct AnyVal {
-    bool is_null{false};
-    AnyVal() {}
-    AnyVal(bool is_null) : is_null(is_null) {}
-};
 
 typedef uint8_t* BufferVal;
 } // namespace starrocks_udf
