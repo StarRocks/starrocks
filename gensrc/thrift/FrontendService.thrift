@@ -74,6 +74,7 @@ struct TDescribeTableParams {
   3: optional string user   // deprecated
   4: optional string user_ip    // deprecated
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+  6: optional i64 limit
 }
 
 // Results of a call to describeTable()
@@ -310,6 +311,7 @@ struct TGetTablesParams {
   4: optional string user_ip    // deprecated
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   20: optional Types.TTableType type // getting a certain type of tables
+  21: optional i64 limit
 }
 
 struct TTableStatus {
