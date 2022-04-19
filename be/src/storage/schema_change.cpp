@@ -462,15 +462,14 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
         return false;
     }
 
-    size_t base_index = 0;
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
+        int base_index = _schema_mapping[i].ref_base_reader_column_index;
         if (ref_column >= 0) {
             const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
             const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
             ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            base_index++;
 
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const auto& materialized_function = _schema_mapping[i].materialized_function;
@@ -915,15 +914,8 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 Status SchemaChangeDirectly::processV2(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                        RowsetSharedPtr rowset) {
-    std::vector<ColumnId> column_index;
-    for (int i = 0; i < new_tablet->tablet_schema().num_columns(); ++i) {
-        ColumnMapping* column_mapping = _chunk_changer->get_mutable_column_mapping(i);
-        if (column_mapping->ref_column != -1) {
-            column_index.emplace_back(static_cast<ColumnId>(column_mapping->ref_column));
-        }
-    }
-    vectorized::Schema base_schema =
-            std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema(), column_index));
+    vectorized::Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     vectorized::Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(vectorized::ChunkHelper::get_char_field_indexes(new_schema));
@@ -1116,15 +1108,8 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
 Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
-    std::vector<ColumnId> column_index;
-    for (int i = 0; i < new_tablet->tablet_schema().num_columns(); ++i) {
-        ColumnMapping* column_mapping = _chunk_changer->get_mutable_column_mapping(i);
-        if (column_mapping->ref_column != -1) {
-            column_index.emplace_back(static_cast<ColumnId>(column_mapping->ref_column));
-        }
-    }
-    vectorized::Schema base_schema =
-            std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema(), column_index));
+    vectorized::Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
     vectorized::Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(vectorized::ChunkHelper::get_char_field_indexes(new_schema));
 
@@ -1392,15 +1377,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         Schema base_schema;
         if (config::enable_schema_change_v2) {
-            std::vector<ColumnId> column_index;
-            for (int i = 0; i < new_tablet->tablet_schema().num_columns(); ++i) {
-                ColumnMapping* column_mapping = sc_params.chunk_changer->get_mutable_column_mapping(i);
-                if (column_mapping->ref_column != -1) {
-                    column_index.emplace_back(static_cast<ColumnId>(column_mapping->ref_column));
-                }
-            }
-            base_schema =
-                    std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema(), column_index));
+            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+                    base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
         } else {
             base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema()));
         }
@@ -1636,6 +1614,7 @@ Status SchemaChangeHandler::_parse_request(
         const std::shared_ptr<Tablet>& base_tablet, const std::shared_ptr<Tablet>& new_tablet,
         ChunkChanger* chunk_changer, bool* sc_sorting, bool* sc_directly,
         const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map) {
+    std::map<ColumnId, ColumnId> base_to_new;
     for (int i = 0; i < new_tablet->tablet_schema().num_columns(); ++i) {
         const TabletColumn& new_column = new_tablet->tablet_schema().column(i);
         std::string column_name(new_column.name());
@@ -1647,6 +1626,7 @@ Status SchemaChangeHandler::_parse_request(
             int32_t column_index = base_tablet->field_index(mvParam.origin_column_name);
             if (column_index >= 0) {
                 column_mapping->ref_column = column_index;
+                base_to_new[column_index] = i;
                 continue;
             } else {
                 LOG(WARNING) << "referenced column was missing. "
@@ -1658,6 +1638,7 @@ Status SchemaChangeHandler::_parse_request(
         int32_t column_index = base_tablet->field_index(column_name);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
+            base_to_new[column_index] = i;
             continue;
         }
 
@@ -1677,6 +1658,22 @@ Status SchemaChangeHandler::_parse_request(
                     << "column=" << column_name << ", default_value=" << new_column.default_value();
             continue;
         }
+    }
+
+    // base tablet schema: k1 k2 k3 v1 v2
+    // new tablet schema: k3 k1 v2
+    // base reader schema: k1 k3 v2
+    // selected_column_index: 0 2 4
+    // ref_column: 2 0 4
+    // ref_base_reader_column_index: 1 0 2
+    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexs();
+    int32_t index = 0;
+    for (const auto& iter : base_to_new) {
+        ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(iter.second);
+        // new tablet column index -> base reader column index
+        column_mapping->ref_base_reader_column_index = index++;
+        // selected column index from base tablet for base reader
+        selected_column_indexs->emplace_back(iter.first);
     }
 
     // Check if re-aggregation is needed.
