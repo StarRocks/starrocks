@@ -304,7 +304,7 @@ public class BackupJobInfo implements Writable {
          *                               "10008": ["__10029_seg1.dat", "__10029_seg2.dat"],
          *                               "10007": ["__10029_seg1.dat", "__10029_seg2.dat"]
          *                           },
-         *                           "tablets_order": ["10029", "10030"]
+         *                           "tablets_order": [10007, 10008]
          *                       },
          *                       "table1": {
          *                           "id": 10008,
@@ -313,7 +313,7 @@ public class BackupJobInfo implements Writable {
          *                               "10004": ["__10027_seg1.dat", "__10027_seg2.dat"],
          *                               "10005": ["__10028_seg1.dat", "__10028_seg2.dat"]
          *                           },
-         *                           "tablets_order": ["10027, "10028"]
+         *                           "tablets_order": [10004, 10005]
          *                       }
          *                   },
          *                   "id": 10007
@@ -409,7 +409,8 @@ public class BackupJobInfo implements Writable {
             tmpList.sort((o1, o2) -> Long.valueOf(o1).compareTo(Long.valueOf(o2)));
             return tmpList.toArray(new String[0]);
         } else {
-            return (String[]) tabletsOrder.toList().toArray(new String[0]);
+            // the element of tabletsOrder is Long.
+            return tabletsOrder.toList().stream().map(Object::toString).toArray(String[]::new);
         }
     }
 
@@ -462,16 +463,18 @@ public class BackupJobInfo implements Writable {
                         idx.put("id", idxInfo.id);
                         idx.put("schema_hash", idxInfo.schemaHash);
                         JSONObject tablets = new JSONObject();
-                        JSONArray tabletsOrder = new JSONArray();
                         idx.put("tablets", tablets);
+                        JSONArray tabletsOrder = new JSONArray();
+                        idx.put("tablets_order", tabletsOrder);
                         for (BackupTabletInfo tabletInfo : idxInfo.tablets) {
                             JSONArray files = new JSONArray();
                             tablets.put(String.valueOf(tabletInfo.id), files);
                             for (String fileName : tabletInfo.files) {
                                 files.put(fileName);
                             }
-                            // to save the order of tablets
-                            tabletsOrder.put(String.valueOf(tabletInfo.id));
+                            // to save the order of tablets.
+                            // use Long for compatibility with apache doris.
+                            tabletsOrder.put(tabletInfo.id);
                         }
                         indexes.put(idxInfo.name, idx);
                     }
