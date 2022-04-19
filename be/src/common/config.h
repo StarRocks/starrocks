@@ -657,6 +657,8 @@ CONF_mInt32(max_hdfs_file_handle, "1000");
 CONF_mInt32(buffer_stream_reserve_size, "8192000");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
+
+CONF_Bool(manual_compact_before_data_dir_load, "false");
 } // namespace config
 
 } // namespace starrocks
