@@ -41,17 +41,22 @@ struct SortedRun {
         orderby.clear();
         range = {};
     }
-    ChunkUniquePtr clone_chunk() {
-        if (range.first == 0) {
+
+    // Clone this SortedRun, could be the entire chunk or slice of chunk
+    ChunkUniquePtr clone_slice() {
+        if (range.first == 0 && range.second == chunk->num_rows()) {
             return chunk->clone_unique();
         } else {
-            ChunkUniquePtr cloned = chunk->clone_empty(num_rows() - range.first);
-            cloned->append(*chunk, range.first, num_rows());
+            size_t slice_rows = num_rows();
+            ChunkUniquePtr cloned = chunk->clone_empty(slice_rows - range.first);
+            cloned->append(*chunk, range.first, slice_rows);
             return cloned;
         }
     }
 
     int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
+        DCHECK_LT(lhs_row, range.second);
+        DCHECK_LT(rhs_row, rhs.range.second);
         for (int i = 0; i < orderby.size(); i++) {
             int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
             if (x != 0) {

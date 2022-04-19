@@ -143,10 +143,10 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
 
     if (_left_run.empty()) {
         // TODO: avoid copy
-        result = _right_run.clone_chunk();
+        result = _right_run.clone_slice();
         _right_run.reset();
     } else if (_right_run.empty()) {
-        result = _left_run.clone_chunk();
+        result = _left_run.clone_slice();
         _left_run.reset();
     } else {
         int tail_cmp = CursorAlgo::compare_tail(sort_desc, _left_run, _right_run);
