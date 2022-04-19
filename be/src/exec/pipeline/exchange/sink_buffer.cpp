@@ -30,8 +30,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
         } else {
             _num_sinkers[instance_id.lo] = num_sinkers;
 
-            _request_seqs[instance_id.lo] = 0;
-            // request_seq starts from 0, so the max_continuous_acked_seq should be -1
+            _request_seqs[instance_id.lo] = -1;
             _max_continuous_acked_seqs[instance_id.lo] = -1;
             _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
@@ -265,7 +264,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
-        request.params->set_sequence(_request_seqs[instance_id.lo]++);
+        request.params->set_sequence(++_request_seqs[instance_id.lo]);
 
         if (!request.attachment.empty()) {
             _bytes_sent += request.attachment.size();
