@@ -156,7 +156,7 @@ public:
 
         auto& offsets = dst->get_offset();
         auto& bytes = dst->get_bytes();
-        size_t old_rows = offsets.size();
+        size_t old_rows = offsets.size() - 1;
         size_t total_rows = offsets.size();
         size_t total_bytes = bytes.size();
         offsets.resize(total_rows + _perm.size());

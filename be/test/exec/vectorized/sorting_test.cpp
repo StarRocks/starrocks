@@ -144,6 +144,34 @@ static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, i
     return column;
 }
 
+TEST(SortingTest, append_by_permutation_binary) {
+    BinaryColumn::Ptr input1 = BinaryColumn::create();
+    BinaryColumn::Ptr input2 = BinaryColumn::create();
+    input1->append_string("star");
+    input2->append_string("rock");
+
+    ColumnPtr merged = BinaryColumn::create();
+    Permutation perm{{0, 0}, {1, 0}};
+    append_by_permutation(merged.get(), {input1, input2}, perm);
+    ASSERT_EQ(2, merged->size());
+    ASSERT_EQ("star", merged->get(0).get_slice());
+    ASSERT_EQ("rock", merged->get(1).get_slice());
+}
+
+TEST(SortingTest, append_by_permutation_int) {
+    Int32Column::Ptr input1 = Int32Column::create();
+    Int32Column::Ptr input2 = Int32Column::create();
+    input1->append(1024);
+    input2->append(2048);
+
+    ColumnPtr merged = Int32Column::create();
+    Permutation perm{{0, 0}, {1, 0}};
+    append_by_permutation(merged.get(), {input1, input2}, perm);
+    ASSERT_EQ(2, merged->size());
+    ASSERT_EQ(1024, merged->get(0).get_int32());
+    ASSERT_EQ(2048, merged->get(1).get_int32());
+}
+
 } // namespace starrocks::vectorized
 
 int main(int argc, char** argv) {
