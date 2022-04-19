@@ -220,6 +220,8 @@ public:
     // is_summary is true, means we are going to write the summary line
     void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
 
+    bool has_reached_max_error_msg_num(bool is_summary = false);
+
     int64_t num_bytes_load_total() const noexcept { return _num_bytes_load_total.load(); }
 
     int64_t num_rows_load_total() const noexcept { return _num_rows_load_total.load(); }
