@@ -27,8 +27,6 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
-#include <boost/thread.hpp>
-
 #include "gen_cpp/Types_types.h"
 #include "util/hash_util.hpp"
 #include "util/monotime.h"
