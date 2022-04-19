@@ -100,7 +100,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAdminSetStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
             AdminSetStmtAnalyzer.analyze(adminSetConfigStmt, session);
             return null;
         }

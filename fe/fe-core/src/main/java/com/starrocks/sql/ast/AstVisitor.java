@@ -85,7 +85,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAdminSetStatement(AdminSetConfigStmt statement, C context) {
+    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

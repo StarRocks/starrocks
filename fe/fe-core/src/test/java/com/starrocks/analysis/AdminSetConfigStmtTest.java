@@ -64,5 +64,14 @@ public class AdminSetConfigStmtTest {
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
         Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
     }
+
+    @Test
+    public void testMultiParametersConfig() throws Exception {
+        String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\",\"agent_task_resend_wait_time_ms\" = \"1000\");";
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("config parameter size is not equal to 1");
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+    }
 }
 

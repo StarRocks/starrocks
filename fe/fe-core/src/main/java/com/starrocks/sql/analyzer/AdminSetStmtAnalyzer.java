@@ -19,7 +19,7 @@ public class AdminSetStmtAnalyzer {
         }
 
         @Override
-        public Void visitAdminSetStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext context) {
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext context) {
             Map<String, String> configs = adminSetConfigStmt.getConfigs();
             if (configs.size() != 1) {
                 throw new SemanticException("config parameter size is not equal to 1");
