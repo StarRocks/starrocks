@@ -63,6 +63,10 @@ Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.schema_scan_node.__isset.thread_id) {
         _scanner_param.thread_id = tnode.schema_scan_node.thread_id;
     }
+
+    if (tnode.limit > 0) {
+        _scanner_param.limit = tnode.limit;
+    }
     return Status::OK();
 }
 
