@@ -11,6 +11,7 @@ public class RangeExtractTest extends PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
         FeConstants.OPEN_PREDICATE_REORDER = false;
     }
 
