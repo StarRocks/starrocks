@@ -6,8 +6,10 @@
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -15,6 +17,7 @@
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
@@ -291,25 +294,59 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
 
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
-    ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<ToType> builder(viewer.size());
     StringParser::ParseResult result;
 
-    for (int row = 0; row < viewer.size(); ++row) {
-        if (viewer.is_null(row)) {
-            builder.append_null();
-            continue;
-        }
+    int sz = column.get()->size();
 
-        auto value = viewer.value(row);
-        RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(value.data, value.size, &result);
-
-        bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
-
-        builder.append(r, is_null);
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(sz);
     }
 
-    return builder.build(column->is_constant());
+    if (column->is_constant()) {
+        auto* input = ColumnHelper::get_binary_column(column.get());
+        auto slice = input->get_slice(0);
+        RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        if (result != StringParser::PARSE_SUCCESS) {
+            return ColumnHelper::create_const_null_column(sz);
+        }
+        return ColumnHelper::create_const_column<ToType>(r, sz);
+    }
+
+    auto res_data_column = RunTimeColumnType<ToType>::create();
+    res_data_column->resize(sz);
+    auto& res_data = res_data_column->get_data();
+
+    if (column->is_nullable()) {
+        NullableColumn* input_column = down_cast<NullableColumn*>(column.get());
+        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
+        BinaryColumn* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+
+        for (int i = 0; i < sz; ++i) {
+            if (!null_data[i]) {
+                auto slice = data_column->get_slice(i);
+                res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+                null_data[i] = (result != StringParser::PARSE_SUCCESS);
+            }
+        }
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+    } else {
+        NullColumnPtr null_column = NullColumn::create(sz);
+        auto& null_data = null_column->get_data();
+        BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
+
+        bool has_null = false;
+        for (int i = 0; i < sz; ++i) {
+            auto slice = data_column->get_slice(i);
+            res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+            null_data[i] = (result != StringParser::PARSE_SUCCESS);
+            has_null |= (result != StringParser::PARSE_SUCCESS);
+        }
+        if (!has_null) {
+            return res_data_column;
+        }
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+    }
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType>
