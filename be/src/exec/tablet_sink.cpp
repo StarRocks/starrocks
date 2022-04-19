@@ -785,9 +785,11 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         _validate_select_idx.resize(selected_size);
 
         if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-            std::string debug_row = chunk->debug_row(invalid_row_index);
-            state->append_error_msg_to_file(debug_row,
-                                            "The row is out of partition ranges. Please add a new partition.");
+            if (!state->has_reached_max_error_msg_num()) {
+                std::string debug_row = chunk->debug_row(invalid_row_index);
+                state->append_error_msg_to_file(debug_row,
+                                                "The row is out of partition ranges. Please add a new partition.");
+            }
         }
 
         _number_filtered_rows += (num_rows - _validate_select_idx.size());
@@ -946,6 +948,9 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 }
 
 void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
+    if (state->has_reached_max_error_msg_num()) {
+        return;
+    }
     std::string error_str = str.to_string();
     if (error_str.length() > 100) {
         error_str = error_str.substr(0, 100);
@@ -961,6 +966,9 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
 }
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
+    if (state->has_reached_max_error_msg_num()) {
+        return;
+    }
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
                                                 decimal.to_string(), desc->col_name(), desc->type().debug_string());
 #if BE_TEST
@@ -972,6 +980,9 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 
 template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
+    if (state->has_reached_max_error_msg_num()) {
+        return;
+    }
     std::stringstream ss;
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
@@ -1041,7 +1052,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
 #if BE_TEST
                         LOG(INFO) << ss.str();
 #else
-                        state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        if (!state->has_reached_max_error_msg_num()) {
+                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        }
 #endif
                     }
                 }
