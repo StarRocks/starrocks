@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
 #include <memory>

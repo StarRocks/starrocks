@@ -22,6 +22,7 @@
 #include "runtime/thread_resource_mgr.h"
 
 #include <boost/algorithm/string.hpp>
+#include <cmath>
 #include <vector>
 
 #include "common/config.h"
@@ -113,7 +114,7 @@ void ThreadResourceMgr::update_pool_quotas(ResourcePool* new_pool) {
         return;
     }
 
-    _per_pool_quota = ceil(static_cast<double>(_system_threads_quota) / _pools.size());
+    _per_pool_quota = std::ceil(static_cast<double>(_system_threads_quota) / _pools.size());
 
     for (auto pool : _pools) {
         if (pool == new_pool) {

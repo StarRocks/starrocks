@@ -24,8 +24,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include <boost/thread/thread.hpp>
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif

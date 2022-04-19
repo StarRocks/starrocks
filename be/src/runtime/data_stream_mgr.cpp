@@ -21,7 +21,6 @@
 
 #include "runtime/data_stream_mgr.h"
 
-#include <boost/thread/thread.hpp>
 #include <iostream>
 #include <utility>
 
