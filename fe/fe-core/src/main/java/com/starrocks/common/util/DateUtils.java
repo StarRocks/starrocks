@@ -106,7 +106,8 @@ public class DateUtils {
                         builder.appendValue(ChronoField.YEAR, 4);
                         break;
                     case 'y': // %y Year, numeric (two digits)
-                        builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 1970);
+                        builder.appendValueReduced(ChronoField.YEAR_OF_ERA, 2, 2, 1970)
+                                .parseDefaulting(ChronoField.ERA, 1);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
                         builder.padNext(6, '0').appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
