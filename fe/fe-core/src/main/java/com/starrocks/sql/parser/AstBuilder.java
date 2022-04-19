@@ -153,10 +153,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = label[0];
         String labelName = label[1];
         String repository = context.repository.getText();
-        String[] tableList = context.tables.getText().split(",");
+        String tables = context.tables.getText();
+        String[] tableList = tables.substring(1, tables.length() - 1).split(",");   // delete parentheses
         List<TableRef> tableRefs = Lists.newArrayList();
         for (String table : tableList) {
-            tableRefs.add(new TableRef(new TableName(table, ""), ""));
+            tableRefs.add(new TableRef(new TableName(dbName, table), ""));
         }
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -177,10 +178,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = label[0];
         String labelName = label[1];
         String repository = context.repository.getText();
-        String[] tableList = context.tables.getText().split(",");
+        String tables = context.tables.getText();
+        String[] tableList = tables.substring(1, tables.length() - 1).split(",");
         List<TableRef> tableRefs = Lists.newArrayList();
         for (String table : tableList) {
-            tableRefs.add(new TableRef(new TableName(table, ""), ""));
+            tableRefs.add(new TableRef(new TableName(dbName, table), ""));
         }
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
