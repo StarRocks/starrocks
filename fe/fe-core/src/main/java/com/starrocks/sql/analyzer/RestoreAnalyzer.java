@@ -7,6 +7,7 @@ import com.starrocks.sql.common.MetaUtils;
 
 public class RestoreAnalyzer {
     // I don't think permission checks are needed
-    public static void analyze(RestoreStmt restoreStmt, ConnectContext session) {}
+    public static void analyze(RestoreStmt restoreStmt, ConnectContext session) {
+    }
 }
 

@@ -146,17 +146,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // -------------------------------- Statement ------------------------------
     @Override
     public ParseNode visitBackup(StarRocksParser.BackupContext context) {
-        String[] label =null;
+        String[] label = null;
         if (context.label != null) {
             label = context.label.getText().split(".");
         }
-        String dbName=label[0];
-        String labelName=label[1];
-        String repository=context.repository.getText();
-        String[] tableList=context.tables.getText().split(",");
+        String dbName = label[0];
+        String labelName = label[1];
+        String repository = context.repository.getText();
+        String[] tableList = context.tables.getText().split(",");
         List<TableRef> tableRefs = Lists.newArrayList();
-        for(String table:tableList){
-            tableRefs.add(new TableRef(new TableName(table,""),""));
+        for (String table : tableList) {
+            tableRefs.add(new TableRef(new TableName(table, ""), ""));
         }
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -165,22 +165,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new BackupStmt(new LabelName(dbName,labelName),repository,tableRefs,properties);
+        return new BackupStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
     }
 
     @Override
     public ParseNode visitRestore(StarRocksParser.RestoreContext context) {
-        String[] label =null;
+        String[] label = null;
         if (context.label != null) {
             label = context.label.getText().split(".");
         }
-        String dbName=label[0];
-        String labelName=label[1];
-        String repository=context.repository.getText();
-        String[] tableList=context.tables.getText().split(",");
+        String dbName = label[0];
+        String labelName = label[1];
+        String repository = context.repository.getText();
+        String[] tableList = context.tables.getText().split(",");
         List<TableRef> tableRefs = Lists.newArrayList();
-        for(String table:tableList){
-            tableRefs.add(new TableRef(new TableName(table,""),""));
+        for (String table : tableList) {
+            tableRefs.add(new TableRef(new TableName(table, ""), ""));
         }
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -189,7 +189,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new BackupStmt(new LabelName(dbName,labelName),repository,tableRefs,properties);
+        return new BackupStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
     }
 
     @Override

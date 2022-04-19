@@ -59,8 +59,8 @@ public class PrivilegeChecker {
         @Override
         public Void visitBackupStatement(BackupStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
-            List<TableRef> tblRefs=statement.getTblRefs();
-            for(TableRef tableRef:tblRefs) {
+            List<TableRef> tblRefs = statement.getTblRefs();
+            for (TableRef tableRef : tblRefs) {
                 String tableName = tableRef.getName().getTbl();
                 if (!Catalog.getCurrentCatalog().getAuth()
                         .checkTblPriv(session, dbName, tableName, PrivPredicate.ADMIN)) {
@@ -85,10 +85,12 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
+                ErrorReport
+                        .reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
             }
             return null;
         }
+
         @Override
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
@@ -98,6 +100,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {

@@ -59,14 +59,14 @@ public class BackupStmt extends AbstractBackupStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-//        super.analyze(analyzer);
-//
-//        // tbl refs can not set alias in backup
-//        for (TableRef tblRef : tblRefs) {
-//            if (tblRef.hasExplicitAlias()) {
-//                throw new AnalysisException("Can not set alias for table in Backup Stmt: " + tblRef);
-//            }
-//        }
+        super.analyze(analyzer);
+
+        // tbl refs can not set alias in backup
+        for (TableRef tblRef : tblRefs) {
+            if (tblRef.hasExplicitAlias()) {
+                throw new AnalysisException("Can not set alias for table in Backup Stmt: " + tblRef);
+            }
+        }
     }
 
     @Override

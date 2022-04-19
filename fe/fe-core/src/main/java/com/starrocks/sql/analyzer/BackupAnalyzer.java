@@ -12,14 +12,13 @@ import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
 
-
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class BackupAnalyzer {
     public static void analyze(BackupStmt backupStmt, ConnectContext session) {
-        List<TableRef> tblRefs=backupStmt.getTblRefs();
-        for(TableRef tableRef:tblRefs){
-            TableName tableName=tableRef.getName();
+        List<TableRef> tblRefs = backupStmt.getTblRefs();
+        for (TableRef tableRef : tblRefs) {
+            TableName tableName = tableRef.getName();
             MetaUtils.normalizationTableName(session, tableName);
             MetaUtils.getStarRocks(session, tableName);
             Table table = MetaUtils.getStarRocksTable(session, tableName);
