@@ -263,6 +263,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // database privs should be checked in analysis phrase
 
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -305,6 +306,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         status.setDdl_sql(ddlSql);
                     }
                     tablesResult.add(status);
+                    // if user set limit, then only return limit size result
+                    if (limit > 0 && tablesResult.size() >= limit) {
+                        break;
+                    }
                 }
             } finally {
                 db.readUnlock();
@@ -471,6 +476,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (db != null) {
             db.readLock();
             try {
@@ -508,6 +514,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             colDef.setComment(comment);
                         }
                         columns.add(colDef);
+                        // if user set limit, then only return limit size result
+                        if (limit > 0 && columns.size() >= limit) {
+                            break;
+                        }
                     }
                 }
             } finally {

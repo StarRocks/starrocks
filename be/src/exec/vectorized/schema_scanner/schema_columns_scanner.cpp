@@ -460,6 +460,10 @@ Status SchemaColumnsScanner::get_new_desc() {
         }
     }
 
+    if (_param->limit > 0) {
+        desc_params.__set_limit(_param->limit);
+    }
+
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::describe_table(*(_param->ip), _param->port, desc_params, &_desc_result));
     } else {
