@@ -713,5 +713,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  assert number of rows: LE 1\n" +
                 "  |  \n" +
                 "  1:EXCHANGE"));
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t1"));
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
     }
 }
