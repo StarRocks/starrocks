@@ -124,11 +124,6 @@ Status BrokerReader::open() {
     return Status::OK();
 }
 
-//not support
-Status BrokerReader::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
-    return Status::NotSupported("Not support");
-}
-
 Status BrokerReader::read(uint8_t* buf, size_t* buf_len, bool* eof) {
     DCHECK_NE(*buf_len, 0);
     RETURN_IF_ERROR(readat(_cur_offset, (int64_t)*buf_len, (int64_t*)buf_len, buf));

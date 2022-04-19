@@ -49,11 +49,6 @@ Status BufferedReader::open() {
     return Status::OK();
 }
 
-//not support
-Status BufferedReader::read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length, size_t padding) {
-    return Status::NotSupported("Not support");
-}
-
 Status BufferedReader::read(uint8_t* buf, size_t* buf_len, bool* eof) {
     DCHECK_NE(*buf_len, 0);
     int64_t bytes_read;
