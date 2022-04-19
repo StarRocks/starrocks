@@ -172,8 +172,10 @@ public:
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
         if (v1->has_null() || v2->has_null()) {
+            // two NOT-nullable column can generate a {nullable, not-nullable, const, const-null} column
+            // because when decimal overflow checking is enabled, overflow results will yield NULL.
             NullColumnPtr null_flags = FunctionHelper::union_nullable_column(v1, v2);
-            return NullableColumn::create(std::move(data_result), std::move(null_flags));
+            return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_flags));
         } else {
             return data_result;
         }
