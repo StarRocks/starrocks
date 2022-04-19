@@ -33,26 +33,33 @@ public class Scope {
     }
 
     public Optional<ResolvedField> tryResolveFeild(SlotRef expression) {
-        return resolveField(expression, 0);
+        return resolveField(expression, 0, RelationId.anonymous());
     }
 
     public ResolvedField resolveField(SlotRef expression) {
-        Optional<ResolvedField> resolvedField = resolveField(expression, 0);
+        return resolveField(expression, RelationId.anonymous());
+    }
+
+    public ResolvedField resolveField(SlotRef expression, RelationId outerRelationId) {
+        Optional<ResolvedField> resolvedField = resolveField(expression, 0, outerRelationId);
         if (!resolvedField.isPresent()) {
             throw new SemanticException("Column '%s' cannot be resolved", expression.toSql());
         }
         return resolvedField.get();
     }
 
-    private Optional<ResolvedField> resolveField(SlotRef expression, int fieldIndexOffset) {
+    private Optional<ResolvedField> resolveField(SlotRef expression, int fieldIndexOffset, RelationId outerRelationId) {
         List<Field> matchFields = relationFields.resolveFields(expression);
         if (matchFields.size() > 1) {
             throw new SemanticException("Column '%s' is ambiguous", expression.getColumnName());
         } else if (matchFields.size() == 1) {
             return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
         } else {
-            if (parent != null) {
-                return parent.resolveField(expression, fieldIndexOffset + relationFields.getAllFields().size());
+            if (parent != null
+                    //Correlated subqueries currently only support accessing properties in the first level outer layer
+                    && !relationId.equals(outerRelationId)) {
+                return parent.resolveField(expression, fieldIndexOffset + relationFields.getAllFields().size(),
+                        outerRelationId);
             }
             return Optional.empty();
         }
