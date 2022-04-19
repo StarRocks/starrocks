@@ -23,26 +23,9 @@
 #include "udf/udf_internal.h"
 
 namespace starrocks_udf {
-bool FunctionContext::is_arg_constant(int i) const {
-    if (i < 0 || i >= _impl->_constant_args.size()) {
-        return false;
-    }
-    return _impl->_constant_args[i] != nullptr;
-}
-
-AnyVal* FunctionContext::get_constant_arg(int i) const {
-    if (i < 0 || i >= _impl->_constant_args.size()) {
-        return nullptr;
-    }
-    return _impl->_constant_args[i];
-}
 
 int FunctionContext::get_num_args() const {
     return _impl->_arg_types.size();
-}
-
-int FunctionContext::get_num_constant_args() const {
-    return _impl->_constant_args.size();
 }
 
 int FunctionContext::get_num_constant_columns() const {
