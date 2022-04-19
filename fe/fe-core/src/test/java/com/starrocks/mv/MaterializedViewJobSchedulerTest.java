@@ -191,6 +191,54 @@ public class MaterializedViewJobSchedulerTest {
     }
 
     @Test
+    public void TriggerScenariosFailedJobTest() {
+        List<IMaterializedViewRefreshTask> tasks = Lists.newArrayList();
+        tasks.add(new MaterializedViewMockRefreshTask(1000L, "mv1"));
+        MaterializedViewMockRefreshTask failedTask = new MaterializedViewMockRefreshTask(1000L, "mv1");
+        failedTask.setMockFailed(true);
+        tasks.add(failedTask);
+        tasks.add(new MaterializedViewMockRefreshTask(1000L, "mv1"));
+
+        MaterializedViewRefreshJob job = MaterializedViewRefreshJobBuilder
+                .newBuilder(1, 2)
+                .mode(Constants.MaterializedViewRefreshMode.ASYNC)
+                .triggerType(Constants.MaterializedViewTriggerType.AUTO)
+                .setTasksAhead(tasks)
+                .build();
+
+        new MockUp<MaterializedViewRefreshJob>(MaterializedViewRefreshJob.class) {
+            @Mock
+            public void generateTasks() {
+            }
+        };
+        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        boolean isRegister = scheduler.addPendingJob(job);
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(5000L);
+        List<MaterializedViewRefreshJob> jobList = scheduler.listJob();
+        for (MaterializedViewRefreshJob materializedViewRefreshJob : jobList) {
+            LOG.info(materializedViewRefreshJob);
+        }
+
+        Assert.assertEquals(true, isRegister);
+        Assert.assertEquals(Constants.MaterializedViewJobStatus.PARTIAL_SUCCESS, job.getStatus());
+        Assert.assertEquals(Constants.MaterializedViewTaskStatus.SUCCESS, job.getTasks().get(0).getStatus());
+        Assert.assertEquals(Constants.MaterializedViewTaskStatus.FAILED, job.getTasks().get(1).getStatus());
+        Assert.assertEquals(Constants.MaterializedViewTaskStatus.SUCCESS, job.getTasks().get(2).getStatus());
+
+        MaterializedViewMockRefreshTask filedMockTask = (MaterializedViewMockRefreshTask)job.getTasks().get(1);
+        filedMockTask.setMockFailed(false);
+
+        scheduler.retryJob(job.getId());
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        for (MaterializedViewRefreshJob materializedViewRefreshJob : jobList) {
+            LOG.info(materializedViewRefreshJob);
+        }
+        Assert.assertEquals(Constants.MaterializedViewTaskStatus.SUCCESS, job.getTasks().get(1).getStatus());
+        Assert.assertEquals(Constants.MaterializedViewJobStatus.SUCCESS, job.getStatus());
+        Assert.assertEquals(1, job.getRetryTime());
+    }
+
+    @Test
     public void TriggerScenariosCancelPendingJobTest() {
         List<IMaterializedViewRefreshTask> tasks = Lists.newArrayList();
         tasks.add(new MaterializedViewMockRefreshTask(4000L, "mv1"));
@@ -392,5 +440,7 @@ public class MaterializedViewJobSchedulerTest {
         Assert.assertEquals(Constants.MaterializedViewJobStatus.SUCCESS, job2.getStatus());
 
     }
+
+
 
 }

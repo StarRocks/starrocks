@@ -41,15 +41,19 @@ public class MaterializedViewJobManager {
             return;
         }
 
-        job.generateTasks();
+        if (job.getRetryTime() == 0) {
+            job.generateTasks();
+            job.setStatus(Constants.MaterializedViewJobStatus.RUNNING);
+        } else {
+            job.setStatus(Constants.MaterializedViewJobStatus.RETRYING);
+        }
         Future<?> future = refreshTaskPool.submit(() -> {
             try {
-                job.setStatus(Constants.MaterializedViewJobStatus.RUNNING);
                 job.setStartTime(LocalDateTime.now());
                 job.runTasks();
                 job.setEndTime(LocalDateTime.now());
             } catch (Exception ex) {
-                LOG.warn("failed to run task.", ex);
+                LOG.warn("failed to run materialized view refresh task.", ex);
             }
         });
         job.setFuture(future);

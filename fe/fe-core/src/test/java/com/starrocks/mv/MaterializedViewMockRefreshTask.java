@@ -5,14 +5,18 @@ package com.starrocks.mv;
 import com.starrocks.statistic.Constants;
 import org.apache.commons.lang3.ThreadUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 
-public class MaterializedViewMockRefreshTask implements IMaterializedViewRefreshTask {
+public class MaterializedViewMockRefreshTask extends MaterializedViewRefreshTask {
 
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewMockRefreshTask.class);
     Constants.MaterializedViewTaskStatus status = Constants.MaterializedViewTaskStatus.PENDING;
     private long executeMillis;
     private String mvTable;
+    private boolean mockFailed = false;
 
     public MaterializedViewMockRefreshTask(Long executeMillis, String mvTable) {
         this.executeMillis = executeMillis;
@@ -25,16 +29,30 @@ public class MaterializedViewMockRefreshTask implements IMaterializedViewRefresh
     }
 
     @Override
+    public void setStatus(Constants.MaterializedViewTaskStatus status) {
+        this.status = status;
+    }
+
+    public void setMockFailed(boolean mockFailed) {
+        this.mockFailed = mockFailed;
+    }
+
+    @Override
     public void runTask() {
         status = Constants.MaterializedViewTaskStatus.RUNNING;
         ThreadUtil.sleepAtLeastIgnoreInterrupts(executeMillis);
-        System.out.println("running a " + mvTable + " task:" + LocalDateTime.now());
+        if (mockFailed) {
+            throw new MaterializedViewTaskException("mock task execute failed.");
+        }
+        LOG.info("running a " + mvTable + " task:" + LocalDateTime.now());
         status = Constants.MaterializedViewTaskStatus.SUCCESS;
     }
 
     @Override
     public IMaterializedViewRefreshTask cloneTask() {
-        return new MaterializedViewMockRefreshTask(executeMillis, mvTable);
+        MaterializedViewMockRefreshTask task = new MaterializedViewMockRefreshTask(executeMillis, mvTable);
+        task.setMockFailed(mockFailed);
+        return task;
     }
 
     @Override

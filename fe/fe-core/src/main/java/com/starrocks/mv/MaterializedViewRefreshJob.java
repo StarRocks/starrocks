@@ -57,6 +57,8 @@ public class MaterializedViewRefreshJob implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    @SerializedName("retryTime")
+    protected int retryTime = 0;
     @SerializedName("mergeCount")
     private Integer mergeCount = 0;
 
@@ -172,14 +174,28 @@ public class MaterializedViewRefreshJob implements Writable {
             return;
         }
         for (IMaterializedViewRefreshTask task : tasks) {
+            if (task.getStatus() == Constants.MaterializedViewTaskStatus.FAILED) {
+                task.setStatus(Constants.MaterializedViewTaskStatus.PENDING);
+            }
             if (task.getStatus() == Constants.MaterializedViewTaskStatus.PENDING) {
-                task.runTask();
+                task.beginTask();
+                task.setStatus(Constants.MaterializedViewTaskStatus.RUNNING);
+                try {
+                    task.runTask();
+                    task.setStatus(Constants.MaterializedViewTaskStatus.SUCCESS);
+                } catch (Exception ex) {
+                    task.setStatus(Constants.MaterializedViewTaskStatus.FAILED);
+                    LOG.warn(ex.getMessage(), ex);
+                    task.setErrMsg(ex.getMessage());
+                }
+                task.finishTask();
             }
         }
     }
 
     public Constants.MaterializedViewJobStatus updateStatusAfterDone() {
-        if (status == Constants.MaterializedViewJobStatus.RUNNING) {
+        if (status == Constants.MaterializedViewJobStatus.RUNNING ||
+                status == Constants.MaterializedViewJobStatus.RETRYING) {
             if (tasks == null) {
                 status = Constants.MaterializedViewJobStatus.FAILED;
                 return status;
@@ -207,6 +223,14 @@ public class MaterializedViewRefreshJob implements Writable {
         this.mergeCount = mergeCount + 1;
     }
 
+    public int getRetryTime() {
+        return retryTime;
+    }
+
+    public void incrementRetryTime() {
+        this.retryTime = retryTime + 1;
+    }
+
     @Override
     public String toString() {
         return "MaterializedViewRefreshJob{" +
@@ -221,6 +245,7 @@ public class MaterializedViewRefreshJob implements Writable {
                 ", endTime=" + endTime +
                 ", tasks=" + tasks +
                 ", properties=" + properties +
+                ", retryTime=" + retryTime +
                 ", mergeCount=" + mergeCount +
                 '}';
     }

@@ -6,6 +6,10 @@ import com.starrocks.statistic.Constants;
 
 public interface IMaterializedViewRefreshTask {
     Constants.MaterializedViewTaskStatus getStatus();
-    void runTask();
+    void setStatus(Constants.MaterializedViewTaskStatus status);
+    void beginTask();
+    void runTask() throws Exception;
+    void finishTask();
+    void setErrMsg(String errMsg);
     IMaterializedViewRefreshTask cloneTask();
 }

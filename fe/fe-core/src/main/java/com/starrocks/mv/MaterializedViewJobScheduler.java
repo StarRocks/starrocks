@@ -173,6 +173,33 @@ public class MaterializedViewJobScheduler {
         }
     }
 
+    public boolean retryJob(Long jobId) {
+        // Generally the retried tasks are the most recent tasks
+        Iterator<MaterializedViewRefreshJob> jobIter = jobHistory.iterator();
+        while (jobIter.hasNext()) {
+            MaterializedViewRefreshJob job = jobIter.next();
+            if (job.getId() == jobId) {
+                if (!(job.getStatus() == Constants.MaterializedViewJobStatus.FAILED ||
+                        job.getStatus() == Constants.MaterializedViewJobStatus.PARTIAL_SUCCESS)) {
+                    return false;
+                }
+                job.setStatus(Constants.MaterializedViewJobStatus.PENDING);
+                long mvTableId = job.getMvTableId();
+                job.incrementRetryTime();
+                Queue<MaterializedViewRefreshJob> jobQueue = pendingJobMap.get(mvTableId);
+                if (jobQueue == null) {
+                    jobQueue = Queues.newConcurrentLinkedQueue();
+                    jobQueue.offer(job);
+                    pendingJobMap.put(mvTableId, jobQueue);
+                } else {
+                    jobQueue.offer(job);
+                }
+                jobIter.remove();
+                return true;
+            }
+        }
+        return false;
+    }
 
     public boolean cancelJob(Long mvTableId, Long jobId) {
         if (!lock.tryLock()) {

@@ -43,10 +43,11 @@ public class Constants {
     public enum MaterializedViewJobStatus {
         PENDING,
         RUNNING,
+        RETRYING,
+        CANCELED,
         FAILED,
         // all tasks are executed, but some task failed
         PARTIAL_SUCCESS,
-        CANCELED,
         SUCCESS,
     }
 
