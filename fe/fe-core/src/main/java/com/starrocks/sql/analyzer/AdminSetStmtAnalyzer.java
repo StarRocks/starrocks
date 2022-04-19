@@ -5,8 +5,6 @@ import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
-import java.util.Map;
-
 public class AdminSetStmtAnalyzer {
 
     public static void analyze(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
