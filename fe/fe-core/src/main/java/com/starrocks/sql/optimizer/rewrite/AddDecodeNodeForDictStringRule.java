@@ -879,18 +879,38 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (!predicate.getChild(1).isConstant()) {
                 return false;
             }
+
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef();
         }
 
         @Override
         public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef() &&
                     predicate.allValuesMatch(ScalarOperator::isConstantRef);
         }
 
         @Override
         public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef();
+        }
+
+        // These type predicates couldn't be pushed down to storage engine,
+        // which are consistent with BE implementations.
+        private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
+            Type leftType = scalarOperator.getChild(0).getType();
+            return !leftType.isFloatingPointType() && !leftType.isJsonType() && !leftType.isTime();
         }
     }
 }
