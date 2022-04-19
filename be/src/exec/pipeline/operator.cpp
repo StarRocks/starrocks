@@ -94,7 +94,7 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
     return _factory->get_filter_null_value_columns();
 }
 
-void Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
+Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -104,18 +104,20 @@ void Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& co
         _conjuncts_and_in_filters_is_cached = true;
     }
     if (chunk == nullptr || chunk->is_empty()) {
-        return;
+        return Status::OK();
     }
     _init_conjuct_counters();
     {
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         _conjuncts_input_counter->update(before);
-        starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk));
         auto after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
         _conjuncts_eval_counter->update(before - after);
     }
+
+    return Status::OK();
 }
 
 void Operator::eval_runtime_bloom_filters(vectorized::Chunk* chunk) {
