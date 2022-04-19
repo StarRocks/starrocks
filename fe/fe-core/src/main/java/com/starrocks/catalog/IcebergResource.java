@@ -73,6 +73,11 @@ public class IcebergResource extends Resource {
                 if (StringUtils.isBlank(impl)) {
                     throw new DdlException(ICEBERG_IMPL + " must be set in properties");
                 }
+                try {
+                    Thread.currentThread().getContextClassLoader().loadClass(impl);
+                } catch (ClassNotFoundException e) {
+                    throw new DdlException("Unknown class: " + impl);
+                }
                 break;
             default:
                 throw new DdlException("Unexpected catalog type: " + catalogType);
