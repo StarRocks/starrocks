@@ -285,7 +285,7 @@ set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/
 
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
-dd_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
+add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
 
 add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
