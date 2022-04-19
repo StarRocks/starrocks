@@ -4,10 +4,15 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class SubqueryTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testCountConstantWithSubquery() throws Exception {
@@ -128,4 +133,11 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
     }
 
+    @Test
+    public void testCorrelatedSubQuery() throws Exception {
+        String sql = "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
+        getFragmentPlan(sql);
+    }
 }
