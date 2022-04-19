@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
+
 public class ListPartitionInfo extends PartitionInfo {
 
     @SerializedName("partitionColumns")
@@ -97,7 +99,7 @@ public class ListPartitionInfo extends PartitionInfo {
     @Override
     public String toSql(OlapTable table, List<Long> partitionId) {
         String replicationNumStr = table.getTableProperty()
-                .getProperties().get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                .getProperties().get(PROPERTIES_REPLICATION_NUM);
         short tableReplicationNum = replicationNumStr == null ?
                 FeConstants.default_replication_num : Short.parseShort(replicationNumStr);
 
@@ -132,7 +134,8 @@ public class ListPartitionInfo extends PartitionInfo {
                 sb.append(")");
 
                 if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"replication_num\" = \"").append(partitionReplicaNum).append("\")");
+                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                            .append("\")");
                 }
                 sb.append(",\n");
             });
@@ -155,7 +158,8 @@ public class ListPartitionInfo extends PartitionInfo {
                 sb.append(")");
 
                 if (partitionReplicaNum != null && partitionReplicaNum != tableReplicationNum) {
-                    sb.append(" (").append("\"replication_num\" = \"").append(partitionReplicaNum).append("\")");
+                    sb.append(" (").append("\"" + PROPERTIES_REPLICATION_NUM + "\" = \"").append(partitionReplicaNum)
+                            .append("\")");
                 }
 
                 sb.append(",\n");
