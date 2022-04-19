@@ -377,7 +377,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::unordered_set<std::string> known_column_names;
     OrcScannerAdapter::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
     _file_read_param.set_columns_from_file(known_column_names);
-    if (_file_read_param.should_skip_by_evaluating_not_existed_slots()) {
+    ASSIGN_OR_RETURN(auto skip, _file_read_param.should_skip_by_evaluating_not_existed_slots());
+    if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
         _should_skip_file = true;
         // no need to intialize following context.

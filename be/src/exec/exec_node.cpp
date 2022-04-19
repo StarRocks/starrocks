@@ -576,6 +576,7 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
     // but here for simplicity, we just check columns numbers absolute value.
     // TO BE NOTED, that there is no storng evidence that this has better performance.
     // It's just by intuition.
+    TRY_CATCH_ALLOC_SCOPE_START()
     const int eager_prune_max_column_number = 5;
     if (filter_ptr == nullptr && chunk->num_columns() <= eager_prune_max_column_number) {
         return eager_prune_eval_conjuncts(ctxs, chunk);
@@ -613,6 +614,7 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         return Status::OK();
     }
     chunk->filter(*raw_filter);
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

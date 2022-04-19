@@ -439,7 +439,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         }
         if (!_not_push_down_conjuncts.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()

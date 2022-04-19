@@ -229,7 +229,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
 
         // eval conjuncts
         size_t before = temp_chunk->num_rows();
-        eval_conjuncts(conjunct_ctxs, temp_chunk.get());
+        RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
         counter->num_rows_unselected += (before - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
