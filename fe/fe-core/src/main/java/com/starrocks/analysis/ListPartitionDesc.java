@@ -45,9 +45,9 @@ public class ListPartitionDesc extends PartitionDesc {
         // analyze partition columns
         this.analyzePartitionColumns(columnDefs);
         // analyze single property
-        this.analyzeSingleListPartition(columnDefs, tableProperties);
+        this.analyzeSingleListPartition(tableProperties);
         // analyze multi list partition
-        this.analyzeMultiListPartition(columnDefs ,tableProperties);
+        this.analyzeMultiListPartition(tableProperties);
     }
 
     private void analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException{
@@ -79,19 +79,19 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    private void analyzeMultiListPartition(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException{
+    private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException{
         Set<String> multiListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (this.multiListPartitionDescs.size() != 0) {
             for (MultiListPartitionDesc desc : this.multiListPartitionDescs) {
                 if (!multiListParttionName.add(desc.getPartitionName())) {
                     throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
                 }
-                desc.analyze(columnDefs, tableProperties, partitionColNames);
+                desc.analyze(partitionColNames.size(), tableProperties);
             }
         }
     }
 
-    private void analyzeSingleListPartition(List<ColumnDef> columnDefs, Map<String, String> copiedProperties) throws AnalysisException{
+    private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException{
         Set<String> singListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleListPartitionDesc desc : this.singleListPartitionDescs) {
             if (!singListParttionName.add(desc.getPartitionName())) {
@@ -100,7 +100,7 @@ public class ListPartitionDesc extends PartitionDesc {
             if (this.partitionColNames.size() != 1) {
                 throw new AnalysisException("Partition column size should be one when use single list partition ");
             }
-            desc.analyze(columnDefs, copiedProperties);
+            desc.analyze(this.partitionColNames.size(), copiedProperties);
         }
     }
 

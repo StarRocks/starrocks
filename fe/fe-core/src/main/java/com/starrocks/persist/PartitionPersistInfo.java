@@ -22,17 +22,21 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Range;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public class PartitionPersistInfo implements Writable {
     private Long dbId;
@@ -40,6 +44,8 @@ public class PartitionPersistInfo implements Writable {
     private Partition partition;
 
     private Range<PartitionKey> range;
+    private List<String> values ;
+    private List<List<String>> multiValues;
     private DataProperty dataProperty;
     private short replicationNum;
     private boolean isInMemory = false;
@@ -61,6 +67,60 @@ public class PartitionPersistInfo implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
+    }
+
+    public PartitionPersistInfo(long dbId, long tableId, Partition partition,
+                                List<String> values,List<List<String>> multiValues,
+                                DataProperty dataProperty, short replicationNum,
+                                boolean isInMemory, boolean isTempPartition) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.partition = partition;
+
+        this.values = values;
+        this.multiValues = multiValues;
+        this.dataProperty = dataProperty;
+
+        this.replicationNum = replicationNum;
+        this.isInMemory = isInMemory;
+        this.isTempPartition = isTempPartition;
+    }
+
+    /**
+     * for serialize and deserialize list partition values
+     */
+    private class SerialEntity implements Writable{
+        @SerializedName("values")
+        private List<String> values ;
+        @SerializedName("multiValues")
+        private List<List<String>> multiValues;
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            String json = GsonUtils.GSON.toJson(this);
+            Text.writeString(out, json);
+        }
+
+        public SerialEntity readIn(DataInput in) throws IOException {
+            String json = Text.readString(in);
+            return GsonUtils.GSON.fromJson(json,SerialEntity.class);
+        }
+
+        public List<String> getValues() {
+            return values;
+        }
+
+        public void setValues(List<String> values) {
+            this.values = values;
+        }
+
+        public List<List<String>> getMultiValues() {
+            return multiValues;
+        }
+
+        public void setMultiValues(List<List<String>> multiValues) {
+            this.multiValues = multiValues;
+        }
     }
 
     public Long getDbId() {
@@ -105,6 +165,11 @@ public class PartitionPersistInfo implements Writable {
         out.writeShort(replicationNum);
         out.writeBoolean(isInMemory);
         out.writeBoolean(isTempPartition);
+
+        SerialEntity entity = new SerialEntity();
+        entity.setMultiValues(multiValues);
+        entity.setValues(values);
+        entity.write(out);
     }
 
     public static PartitionPersistInfo read(DataInput in) throws IOException {
@@ -128,6 +193,10 @@ public class PartitionPersistInfo implements Writable {
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
             isTempPartition = in.readBoolean();
         }
+
+        SerialEntity entity = new SerialEntity().readIn(in);
+        this.values = entity.getValues();
+        this.multiValues = entity.getMultiValues();
     }
 
     public boolean equals(Object obj) {

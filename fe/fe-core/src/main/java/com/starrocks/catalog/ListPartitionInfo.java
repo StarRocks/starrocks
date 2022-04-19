@@ -1,6 +1,8 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.ListPartitionDesc;
+import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -143,4 +145,30 @@ public class ListPartitionInfo extends PartitionInfo{
         return sb.toString();
     }
 
+    public List<Column> getPartitionColumns() {
+        return this.partitionColumns;
+    }
+
+    public void handleNewListPartitionDescsV2(List<PartitionDesc> listDesc,
+                                              List<Partition> partitionList, Set<String> existPartitionNameSet,
+                                              boolean isTemp) {
+        int len = listDesc.size();
+        for (int i = 0; i < len; i++) {
+            if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
+                long partitionId = partitionList.get(i).getId();
+                ListPartitionDesc desc = (ListPartitionDesc)listDesc.get(i);
+                idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
+                idToReplicationNum.put(partitionId, desc.getReplicationNum());
+                idToInMemory.put(partitionId, desc.isInMemory());
+            }
+        }
+    }
+
+    public Map<Long, List<String>> getIdToValues() {
+        return idToValues;
+    }
+
+    public Map<Long, List<List<String>>> getIdToMultiValues() {
+        return idToMultiValues;
+    }
 }

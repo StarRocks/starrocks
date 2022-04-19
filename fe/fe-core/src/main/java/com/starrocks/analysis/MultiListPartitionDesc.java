@@ -2,14 +2,14 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.ListPartitionItemDesc;
+import com.starrocks.catalog.PartitionProperties;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class MultiListPartitionDesc extends ListPartitionItemDesc {
+public class MultiListPartitionDesc extends PartitionProperties {
 
     private final boolean ifNotExists;
     private final String partitionName ;
@@ -38,14 +38,14 @@ public class MultiListPartitionDesc extends ListPartitionItemDesc {
         return this.partitionProperties;
     }
 
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties,
-                        List<String> partitionColNames) throws AnalysisException {
+    @Override
+    public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
         for (List<String> values : this.multiValues){
-            if (values.size() != partitionColNames.size()){
+            if (values.size() != partitionColSize){
                 throw new AnalysisException("(" + String.join(",",values) + ") size should be equal to partition column size ");
             }
         }
-        super.analyze(columnDefs,tableProperties);
+        super.analyzeProperties(tableProperties);
     }
 
     @Override

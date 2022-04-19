@@ -21,13 +21,14 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.ListPartitionItemDesc;
+import com.starrocks.catalog.PartitionProperties;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class SingleListPartitionDesc extends ListPartitionItemDesc {
+public class SingleListPartitionDesc extends PartitionProperties {
 
     private final boolean ifNotExists;
     private final String partitionName;
@@ -54,6 +55,11 @@ public class SingleListPartitionDesc extends ListPartitionItemDesc {
     @Override
     public Map<String, String> getPartitionProperties() {
         return this.partitionProperties;
+    }
+
+    @Override
+    public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
+        super.analyzeProperties(tableProperties);
     }
 
     @Override

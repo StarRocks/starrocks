@@ -2,7 +2,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -12,15 +11,14 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public class ListPartitionItemDesc extends PartitionDesc {
+public class PartitionProperties extends PartitionDesc {
 
     private DataProperty partitionDataProperty;
     private Short replicationNum;
-    private boolean isInMemory;
+    private Boolean isInMemory;
     private TTabletType tabletType;
     private Long versionInfo;
 
@@ -36,7 +34,7 @@ public class ListPartitionItemDesc extends PartitionDesc {
         return this.partitionDataProperty;
     }
 
-    public Short getReplicationNum() {
+    public short getReplicationNum() {
         return this.replicationNum;
     }
 
@@ -48,12 +46,11 @@ public class ListPartitionItemDesc extends PartitionDesc {
         return this.tabletType;
     }
 
-    @Override
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
+    public void analyzeProperties(Map<String, String> otherProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
 
         // copy one. because ProperAnalyzer will remove entry after analyze
-        Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
+        Map<String, String> copiedTableProperties = Optional.ofNullable(otherProperties)
                 .map(properties -> Maps.newHashMap(properties))
                 .orElseGet(() -> new HashMap<>());
         Map<String, String> copiedPartitionProperties = Optional.ofNullable(this.getPartitionProperties())

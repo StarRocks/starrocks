@@ -22,10 +22,12 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.List;
@@ -35,12 +37,16 @@ public class PartitionDesc implements ParseNode {
 
     protected PartitionType type;
 
+    public PartitionType getType() {
+        return type;
+    }
+
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         throw new NotImplementedException();
     }
 
-    public PartitionType getType() {
-        return type;
+    public void analyze(int partitionColSize, Map<String, String> otherProperties) throws AnalysisException{
+        throw new NotImplementedException();
     }
 
     public String toSql() {
@@ -49,6 +55,38 @@ public class PartitionDesc implements ParseNode {
 
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
+        throw new NotImplementedException();
+    }
+
+    public String getPartitionName() {
+        throw new NotImplementedException();
+    }
+
+    public boolean isSetIfNotExists() {
+        throw new NotImplementedException();
+    }
+
+    public Map<String, String> getProperties() {
+        throw new NotImplementedException();
+    }
+
+    public short getReplicationNum() {
+        throw new NotImplementedException();
+    }
+
+    public DataProperty getPartitionDataProperty() {
+        throw new NotImplementedException();
+    }
+
+    public Long getVersionInfo() {
+        throw new NotImplementedException();
+    }
+
+    public TTabletType getTabletType() {
+        throw new NotImplementedException();
+    }
+
+    public boolean isInMemory() {
         throw new NotImplementedException();
     }
 }
