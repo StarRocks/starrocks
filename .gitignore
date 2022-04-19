@@ -50,6 +50,7 @@ compile_commands.json
 .project
 .settings/
 .idea/
+cmake-build-debug/
 /Default/
 be/cmake-build*
 be/.vscode

@@ -64,22 +64,25 @@ Status FileScanNode::prepare(RuntimeState* state) {
 }
 
 Status FileScanNode::open(RuntimeState* state) {
+    VLOG_QUERY << "FileScanNode Open. skip headline:" << state->get_skip_headline();
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     RETURN_IF_CANCELLED(state);
 
-    RETURN_IF_ERROR(_start_scanners());
+    RETURN_IF_ERROR(_start_scanners(state->get_skip_headline()));
 
     return Status::OK();
 }
 
-Status FileScanNode::_start_scanners() {
+Status FileScanNode::_start_scanners(bool skip_headline) {
+    VLOG_QUERY << "start_scanner: skip headline:" << skip_headline;
     {
         std::unique_lock<std::mutex> l(_chunk_queue_lock);
 
         _num_running_scanners = 1;
-        _scanner_threads.emplace_back(&FileScanNode::_scanner_worker, this, 0, _scan_ranges.size());
+
+        _scanner_threads.emplace_back(&FileScanNode::_scanner_worker, this, 0, _scan_ranges.size(), skip_headline);
         Thread::set_thread_name(_scanner_threads.back(), "file_scanner");
     }
     return Status::OK();
@@ -198,6 +201,7 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else {
+        VLOG_QUERY << "CSV scanner init" << std::endl;
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
 }
@@ -267,7 +271,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     return Status::OK();
 }
 
-void FileScanNode::_scanner_worker(int start_idx, int length) {
+void FileScanNode::_scanner_worker(int start_idx, int length, bool skip_headline){
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state()->instance_mem_tracker());
 
     // Clone expr context
@@ -285,14 +289,22 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
             // remove range desc with empty file
             TBrokerScanRange new_scan_range(scan_range);
             new_scan_range.ranges.clear();
-            for (const TBrokerRangeDesc& range_desc : scan_range.ranges) {
+            for (TBrokerRangeDesc range_desc : scan_range.ranges) {
                 // file_size is optional, and is not set in stream load and routine load,
                 // so we should check file size is set firstly.
                 if (range_desc.__isset.file_size && range_desc.file_size == 0) {
                     continue;
                 }
+                if(skip_headline) {
+                    VLOG_QUERY << "skip is true";
+                    int num_fields_in_csv = range_desc.num_of_columns_from_file;
+                    range_desc.__set_start_offset(num_fields_in_csv);
+                } else {
+                    VLOG_QUERY << "skip is false";
+                }
                 new_scan_range.ranges.emplace_back(range_desc);
             }
+
             status = _scanner_scan(new_scan_range, scanner_expr_ctxs, &counter);
 
             // todo: break if failed ?

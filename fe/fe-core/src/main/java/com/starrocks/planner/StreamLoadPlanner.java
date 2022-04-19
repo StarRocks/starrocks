@@ -178,6 +178,8 @@ public class StreamLoadPlanner {
 
         params.setDesc_tbl(analyzer.getDescTbl().toThrift());
 
+        params.setSkip_headline(streamLoadTask.getSkipHeadline());
+
         TPlanFragmentExecParams execParams = new TPlanFragmentExecParams();
         // user load id (streamLoadTask.id) as query id
         execParams.setQuery_id(loadId);

@@ -3,6 +3,7 @@
 #include "exec/vectorized/csv_scanner.h"
 
 #include <gtest/gtest.h>
+#include <glog/logging.h>
 
 #include <iostream>
 
@@ -80,7 +81,63 @@ private:
     ObjectPool _obj_pool;
 };
 
+TEST_F(CSVScannerTest, skip_headline_test) {
+    LOG(INFO) << "test: " << "skip_headline_test" << std::endl;
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_FLOAT);
+    types.emplace_back(TYPE_FLOAT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_one;
+    range_one.__set_path("./be/test/exec/test_data/csv_scanner/csv_file15");
+    range_one.__set_start_offset(types.size());
+    range_one.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range_one);
+
+    string multi_row_delimiter = "\n", multi_column_separator = ",";
+    auto scanner = create_csv_scanner(types, ranges, multi_row_delimiter, multi_column_separator);
+    EXPECT_NE(scanner, nullptr);
+
+    auto st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto chunk = res.value();
+    EXPECT_EQ(3, chunk->num_rows());
+    EXPECT_EQ(5, chunk->num_columns());
+
+    // 1 column
+    EXPECT_EQ(10581, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(10581, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(10581, chunk->get(2)[0].get_int32());
+
+    // 2 column
+    EXPECT_EQ(1537436416686, chunk->get(0)[1].get_int64());
+    EXPECT_EQ(1537436447655, chunk->get(1)[1].get_int64());
+    EXPECT_EQ(1537436475628, chunk->get(2)[1].get_int64());
+
+    // 3 column
+    EXPECT_EQ(0, chunk->get(0)[2].get_int32());
+    EXPECT_EQ(0, chunk->get(1)[2].get_int32());
+    EXPECT_EQ(0, chunk->get(2)[2].get_int32());
+
+    // 4 column
+    EXPECT_FLOAT_EQ(13.0, chunk->get(0)[3].get_float());
+    EXPECT_FLOAT_EQ(25.0, chunk->get(1)[3].get_float());
+    EXPECT_TRUE(chunk->get(2)[3].is_null());
+
+    // 5 column
+    EXPECT_FLOAT_EQ(475.0, chunk->get(0)[4].get_float());
+    EXPECT_FLOAT_EQ(495.0, chunk->get(1)[4].get_float());
+    EXPECT_FLOAT_EQ(465.0, chunk->get(2)[4].get_float());
+}
+
 TEST_F(CSVScannerTest, test_scalar_types) {
+    LOG(INFO) << "test: " << "test_scalar_types" << std::endl;
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
     types.emplace_back(TYPE_DOUBLE);
@@ -159,6 +216,7 @@ TEST_F(CSVScannerTest, test_scalar_types) {
 }
 
 TEST_F(CSVScannerTest, test_multi_seprator) {
+    LOG(INFO) << "test: " << "test_multi_seprator" << std::endl;
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
     types.emplace_back(TYPE_DOUBLE);
@@ -207,6 +265,7 @@ TEST_F(CSVScannerTest, test_multi_seprator) {
 }
 
 TEST_F(CSVScannerTest, test_array_of_int) {
+    LOG(INFO) << "test: " << "test_array_of_int" << std::endl;
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.emplace_back(TYPE_INT);
@@ -250,6 +309,7 @@ TEST_F(CSVScannerTest, test_array_of_int) {
 }
 
 TEST_F(CSVScannerTest, test_array_of_string) {
+    LOG(INFO) << "test: " << "test_array_of_string" << std::endl;
     std::vector<TypeDescriptor> types;
     // ARRAY<VARCHAR(10)>
     TypeDescriptor t;
@@ -305,6 +365,7 @@ TEST_F(CSVScannerTest, test_array_of_string) {
 }
 
 TEST_F(CSVScannerTest, test_array_of_date) {
+    LOG(INFO) << "test: " << "test_array_of_date" << std::endl;
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.emplace_back(TYPE_DATE);
@@ -351,6 +412,7 @@ TEST_F(CSVScannerTest, test_array_of_date) {
 }
 
 TEST_F(CSVScannerTest, test_nested_array_of_int) {
+    LOG(INFO) << "test: " << "test_nested_array_of_int" << std::endl;
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_ARRAY);
     t.children.back().children.emplace_back(TYPE_INT);
@@ -422,6 +484,7 @@ TEST_F(CSVScannerTest, test_nested_array_of_int) {
 }
 
 TEST_F(CSVScannerTest, test_invalid_field_as_null) {
+    LOG(INFO) << "test: " << "test_invalid_field_as_null" << std::endl;
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -449,6 +512,7 @@ TEST_F(CSVScannerTest, test_invalid_field_as_null) {
 }
 
 TEST_F(CSVScannerTest, test_invalid_field_of_array_as_null) {
+    LOG(INFO) << "test: " << "test_invalid_field_of_array_as_null" << std::endl;
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_ARRAY)};
     types[0].children.emplace_back(TYPE_INT);
 
@@ -476,6 +540,7 @@ TEST_F(CSVScannerTest, test_invalid_field_of_array_as_null) {
 }
 
 TEST_F(CSVScannerTest, test_start_offset) {
+    LOG(INFO) << "test: " << "test_start_offset" << std::endl;
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -502,6 +567,7 @@ TEST_F(CSVScannerTest, test_start_offset) {
 }
 
 TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
+    LOG(INFO) << "test: " << "test_file_not_ended_with_record_delimiter" << std::endl;
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -532,6 +598,7 @@ TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
 }
 
 TEST_F(CSVScannerTest, test_large_record_size) {
+    LOG(INFO) << "test: " << "test_large_record_size" << std::endl;
     constexpr size_t record_length = 65533 * 5;
     constexpr size_t field_length = 65533;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
@@ -587,6 +654,7 @@ TEST_F(CSVScannerTest, test_large_record_size) {
 }
 
 TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
+    LOG(INFO) << "test: " << "test_record_length_exceed_limit" << std::endl;
     constexpr size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
@@ -625,6 +693,7 @@ TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
 }
 
 TEST_F(CSVScannerTest, test_empty) {
+    LOG(INFO) << "test: " << "test_empty" << std::endl;
     auto run_test = [this](PrimitiveType pt) {
         std::vector<TypeDescriptor> types{TypeDescriptor(pt)};
         if (pt == TYPE_VARCHAR || pt == TYPE_CHAR) {

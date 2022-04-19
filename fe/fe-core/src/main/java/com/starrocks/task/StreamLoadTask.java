@@ -79,6 +79,7 @@ public class StreamLoadTask {
     private boolean partialUpdate = false;
     private TCompressionType compressionType;
     private int loadParallelRequestNum = 0;
+    private boolean skipHeadline = false;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -255,6 +256,9 @@ public class StreamLoadTask {
         if (request.isSetLoad_dop()) {
             loadParallelRequestNum = request.getLoad_dop();
         }
+        if (request.isSetSkip_headline()) {
+            skipHeadline = request.isSkip_headline();
+        }
     }
 
     public static StreamLoadTask fromRoutineLoadJob(RoutineLoadJob routineLoadJob) {
@@ -367,5 +371,13 @@ public class StreamLoadTask {
 
     public long getExecMemLimit() {
         return execMemLimit;
+    }
+
+    public boolean getSkipHeadline() {
+        return skipHeadline;
+    }
+
+    public boolean setSkipHeadline(boolean skipHeadline) {
+        return this.skipHeadline = skipHeadline;
     }
 }

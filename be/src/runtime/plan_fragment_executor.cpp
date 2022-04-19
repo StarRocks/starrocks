@@ -124,7 +124,13 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
+    if (request.__isset.skip_headline) {
+        _runtime_state->set_skip_headline(request.skip_headline);
+    }
+
+    LOG(INFO) << "before prepare fileScanNode";
     RETURN_IF_ERROR(_plan->prepare(_runtime_state));
+    LOG(INFO) << "after prepare fileScanNode";
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -136,8 +142,14 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
+        // modify here
         scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
+        if (request.__isset.skip_headline) {
+            VLOG(1) << "skip headline is true";
+        } else {
+            VLOG(1) << "skip headline is false";
+        }
     }
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
@@ -167,7 +179,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     profile()->add_child(_plan->runtime_profile(), true, nullptr);
     _rows_produced_counter = ADD_COUNTER(profile(), "RowsProduced", TUnit::UNIT);
 
-    VLOG(3) << "plan_root=\n" << _plan->debug_string();
+    VLOG(1) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
 

@@ -422,6 +422,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     }
     exec_state.reset(new FragmentExecState(params.params.query_id, fragment_instance_id, params.backend_num, _exec_env,
                                            params.coord));
+    VLOG_QUERY << "FragmentMgr::exec_plan_fragment skip headline:" << params.skip_headline;
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
     {

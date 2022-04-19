@@ -264,6 +264,10 @@ public:
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
 
+    void set_skip_headline(bool sh) { skip_headline = sh;}
+
+    bool get_skip_headline() { return skip_headline; }
+
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -384,6 +388,8 @@ private:
     vectorized::GlobalDictMaps _load_global_dicts;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+
+    bool skip_headline = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

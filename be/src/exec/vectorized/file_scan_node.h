@@ -59,10 +59,10 @@ private:
     }
 
     // Create scanners to do scan job
-    Status _start_scanners();
+    Status _start_scanners(bool skip_headline);
 
     // One scanner worker, This scanner will handle 'length' ranges start from start_idx
-    void _scanner_worker(int start_idx, int length);
+    void _scanner_worker(int start_idx, int length, bool skip_headline);
 
     // Scan one range
     Status _scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,

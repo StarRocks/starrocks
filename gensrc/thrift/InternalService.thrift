@@ -296,6 +296,7 @@ struct TExecPlanFragmentParams {
   12: optional string db_name
   13: optional i64 load_job_id
   14: optional TLoadErrorHubInfo load_error_hub_info
+  15: optional bool skip_headline
 
   50: optional bool is_pipeline
   51: optional i32 pipeline_dop

@@ -120,6 +120,7 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
 StreamLoadAction::~StreamLoadAction() = default;
 
 void StreamLoadAction::handle(HttpRequest* req) {
+    LOG(INFO) << "new income streaming load request. StreamLoadAction::handle";
     StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
         return;
@@ -348,6 +349,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     if (ctx->use_streaming) {
+        LOG(INFO) << "use streaming. format:" << ctx->format << std::endl;
         auto pipe =
                 std::make_shared<StreamLoadPipe>(1024 * 1024 /* max_buffered_bytes */, 64 * 1024 /* min_chunk_size */,
                                                  ctx->body_bytes /* total_length */);
@@ -355,6 +357,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.fileType = TFileType::FILE_STREAM;
         ctx->body_sink = pipe;
     } else {
+        LOG(INFO) << "without streaming. format:" << ctx->format << std::endl;
         RETURN_IF_ERROR(_data_saved_path(http_req, &request.path));
         auto file_sink = std::make_shared<MessageBodyFileSink>(request.path);
         RETURN_IF_ERROR(file_sink->open());
@@ -447,6 +450,13 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid load_dop format");
         }
     }
+    if (http_req->header(HTTP_SKIP_HEADLINE) == "true"){
+        LOG(INFO) << "set key:" << HTTP_SKIP_HEADLINE << ", value:" << http_req->header(HTTP_SKIP_HEADLINE) << std::endl;
+        request.__set_skip_headline(true);
+    } else {
+        LOG(INFO) << "set key:" << HTTP_SKIP_HEADLINE << ", value:" << http_req->header(HTTP_SKIP_HEADLINE) << std::endl;
+        request.__set_skip_headline(false);
+    }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
     }
@@ -471,7 +481,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << ctx->brief();
         return plan_status;
     }
-    VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
+    // LOG(INFO) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
     // if we not use streaming, we must download total content before we begin
     // to process this load
     if (!ctx->use_streaming) {

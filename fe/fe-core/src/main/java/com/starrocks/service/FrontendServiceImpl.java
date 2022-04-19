@@ -839,9 +839,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TStreamLoadPutResult streamLoadPut(TStreamLoadPutRequest request) {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive stream load put request. db:{}, tbl: {}, txn id: {}, load id: {}, backend: {}",
+        LOG.info("receive stream load put request. db:{}, tbl: {}, txn id: {}, load id: {}, backend: {}, skip header: {}",
                 request.getDb(), request.getTbl(), request.getTxnId(), DebugUtil.printId(request.getLoadId()),
-                clientAddr);
+                clientAddr, request.isSkip_headline());
         LOG.debug("stream load put request: {}", request);
 
         TStreamLoadPutResult result = new TStreamLoadPutResult();
@@ -859,6 +859,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
             return result;
         }
+        LOG.info("skip result is:" + result.getParams().skip_headline);
         return result;
     }
 
