@@ -6,7 +6,7 @@
 #include "column/datum.h"
 #include "common/status.h"
 #include "exec/vectorized/sorting/sort_permute.h"
-#include "runtime/vectorized/chunk_cursor.h"
+#include "runtime/chunk_cursor.h"
 
 namespace starrocks::vectorized {
 
