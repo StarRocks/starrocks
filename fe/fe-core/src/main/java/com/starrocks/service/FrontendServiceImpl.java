@@ -476,7 +476,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
-        long limit = params.limit;
+        long limit = param.isSetLimit() ? params.getLimit() : -1;
         if (db != null) {
             db.readLock();
             try {
