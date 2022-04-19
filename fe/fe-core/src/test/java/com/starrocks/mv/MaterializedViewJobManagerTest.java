@@ -20,26 +20,21 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class MaterializedViewJobSchedulerTest {
+public class MaterializedViewJobManagerTest {
 
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewJobSchedulerTest.class);
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewJobManagerTest.class);
 
     @Mocked
     private Catalog catalog;
 
     @Before
     public void setUp() {
-        MaterializedViewJobManager materializedViewJobManager = new MaterializedViewJobManager();
 
         new Expectations() {
             {
                 Catalog.getCurrentCatalog();
                 minTimes = 0;
                 result = catalog;
-
-                catalog.getMaterializedViewJobManager();
-                minTimes = 0;
-                result = materializedViewJobManager;
 
                 catalog.getNextId();
                 minTimes = 0;
@@ -72,7 +67,7 @@ public class MaterializedViewJobSchedulerTest {
             }
         };
 
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         Long scheduledId = scheduler.registerScheduledJob(builder, now.plusSeconds(3), 7L, TimeUnit.SECONDS);
         LOG.info("register scheduled job: " + scheduledId + ", " + LocalDateTime.now());
         ThreadUtil.sleepAtLeastIgnoreInterrupts(15000L);
@@ -116,7 +111,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         scheduler.addPendingJob(job);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(5000L);
         List<MaterializedViewRefreshJob> jobList = scheduler.listJob();
@@ -147,7 +142,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         scheduler.addPendingJob(job);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(5000L);
         List<MaterializedViewRefreshJob> jobList = scheduler.listJob();
@@ -177,7 +172,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         boolean isRegister = scheduler.addPendingJob(job);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
         boolean isCancel = scheduler.cancelJob(job.getMvTableId(), job.getId());
@@ -211,7 +206,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         boolean isRegister = scheduler.addPendingJob(job);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(5000L);
         List<MaterializedViewRefreshJob> jobList = scheduler.listJob();
@@ -261,7 +256,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         boolean isRegister1 = scheduler.addPendingJob(job1);
         boolean isRegister2 = scheduler.addPendingJob(job2);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(5000L);
@@ -314,7 +309,7 @@ public class MaterializedViewJobSchedulerTest {
             }
         };
 
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         boolean isRegister1 = scheduler.addPendingJob(job1);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
         boolean isRegister2 = scheduler.addPendingJob(job2);
@@ -374,7 +369,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         boolean isRegister1 = scheduler.addPendingJob(job1);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
         boolean isRegister2 = scheduler.addPendingJob(job2);
@@ -427,7 +422,7 @@ public class MaterializedViewJobSchedulerTest {
             public void generateTasks() {
             }
         };
-        MaterializedViewJobScheduler scheduler = new MaterializedViewJobScheduler();
+        MaterializedViewJobManager scheduler = new MaterializedViewJobManager();
         scheduler.addPendingJob(job1);
         scheduler.addPendingJob(job2);
         ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
