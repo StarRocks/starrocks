@@ -277,7 +277,7 @@ void MemTable::_sort(bool is_final) {
     for (uint32_t i = 0; i < _chunk->num_rows(); ++i) {
         _permutations[i] = {i, i};
     }
-    if (_tablet_schema->num_key_columns() <= 3) {
+    if (_vectorized_schema.num_key_fields() <= 3 && _use_slot_desc) {
         _sort_chunk_by_columns();
     } else {
         _sort_chunk_by_rows();
@@ -512,7 +512,7 @@ private:
     }
 
 void MemTable::_sort_chunk_by_columns() {
-    for (int i = _tablet_schema->num_key_columns() - 1; i >= 0; --i) {
+    for (int i = _vectorized_schema.num_key_fields() - 1; i >= 0; --i) {
         Column* column = _chunk->get_column_by_index(i).get();
         if (column->is_nullable()) {
             switch ((*_slot_descs)[i]->type().type) {
@@ -574,7 +574,7 @@ void MemTable::_sort_chunk_by_columns() {
 void MemTable::_sort_chunk_by_rows() {
     pdqsort(false, _permutations.begin(), _permutations.end(),
             [this](const MemTable::PermutationItem& l, const MemTable::PermutationItem& r) {
-                size_t col_number = _tablet_schema->num_key_columns();
+                size_t col_number = _vectorized_schema.num_key_fields();
                 int compare_result = 0;
                 for (size_t col_index = 0; col_index < col_number; ++col_index) {
                     const auto& left_col = _chunk->get_column_by_index(col_index);
