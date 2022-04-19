@@ -29,8 +29,7 @@ class FragmentContext {
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
-        auto runtime_state_ptr = _runtime_state;
-        _runtime_filter_hub.close_all_in_filters(runtime_state_ptr.get());
+        _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
         close_all_pipelines();
         if (_plan != nullptr) {

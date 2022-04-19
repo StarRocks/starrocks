@@ -4,11 +4,17 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceInfo;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -26,6 +32,7 @@ import java.util.List;
  */
 
 public class ApplyRuleTask extends OptimizerTask {
+    private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private final GroupExpression groupExpression;
     private final Rule rule;
 
@@ -47,7 +54,7 @@ public class ApplyRuleTask extends OptimizerTask {
                 groupExpression.isUnused()) {
             return;
         }
-
+        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         // Apply rule and get all new OptExpressions
         Pattern pattern = rule.getPattern();
         Binder binder = new Binder(pattern, groupExpression);
@@ -58,8 +65,12 @@ public class ApplyRuleTask extends OptimizerTask {
                 extractExpr = binder.next();
                 continue;
             }
+            List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            newExpressions.addAll(targetExpressions);
 
-            newExpressions.addAll(rule.transform(extractExpr, context.getOptimizerContext()));
+            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
+            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
+
             extractExpr = binder.next();
         }
 

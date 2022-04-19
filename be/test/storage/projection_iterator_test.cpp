@@ -2,11 +2,12 @@
 
 #include "storage/projection_iterator.h"
 
+#include <gtest/gtest.h>
+
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_pool.h"
 #include "column/datum.h"
-#include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {

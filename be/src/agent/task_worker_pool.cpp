@@ -52,6 +52,7 @@
 #include "storage/task/engine_clone_task.h"
 #include "storage/task/engine_publish_version_task.h"
 #include "storage/task/engine_storage_migration_task.h"
+#include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/file_utils.h"
 #include "util/monotime.h"
@@ -184,7 +185,6 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
 
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
-    LOG(INFO) << "submitting task. type=" << type_str << ", signature=" << signature;
 
     if (_register_task_info(task_type, signature)) {
         // Set the receiving time of task so that we can determine whether it is timed out later
@@ -196,10 +196,10 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
             task_count_in_queue = _tasks.size();
             _worker_thread_condition_variable->notify_one();
         }
-        LOG(INFO) << "success to submit task. type=" << type_str << ", signature=" << signature
+        LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
                   << ", task_count_in_queue=" << task_count_in_queue;
     } else {
-        LOG(INFO) << "fail to register task. type=" << type_str << ", signature=" << signature;
+        LOG(INFO) << "Submit task failed, already exists type=" << type_str << ", signature=" << signature;
     }
 }
 
@@ -730,7 +730,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         std::vector<TabletInfo> tablet_infos;
         tablet_infos.reserve(tablet_related_rs.size());
 
-        // vector for tablet publishing version status, which collects the execution results of the correspoding tablet.
+        // vector for tablet publishing version status, which collects the execution results of the corresponding tablet.
         std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
 
         size_t idx = 0;
@@ -1023,6 +1023,16 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
                     break;
                 case TTabletMetaType::INMEMORY:
                     // This property is no longer supported.
+                    break;
+                case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
+                    LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                              << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
+                    tablet->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+                    // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
+                    // because the primary index is available in cache
+                    // But it will be remove from index cache after apply is finished
+                    auto manager = StorageEngine::instance()->update_manager();
+                    manager->index_cache().remove_by_key(tablet->tablet_id());
                     break;
                 }
             }

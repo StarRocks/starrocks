@@ -236,9 +236,7 @@ private:
 // todo(kks): remove this when dpp_sink class was removed
 class HllSetResolver {
 public:
-    HllSetResolver()
-
-    {}
+    HllSetResolver() {}
 
     ~HllSetResolver() = default;
 

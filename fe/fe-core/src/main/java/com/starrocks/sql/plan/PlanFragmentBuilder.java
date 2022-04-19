@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -111,7 +112,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
 import org.apache.logging.log4j.LogManager;
@@ -197,7 +197,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -280,12 +280,12 @@ public class PlanFragmentBuilder {
                 // so the columns in complex pred, it useful for the stage after scan
                 Set<Integer> singlePredColumnIds = new HashSet<Integer>();
                 Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggTableValueColumnNames = new HashSet<String>();
-                if (referenceTable.getKeysType().isAggregationFamily()) {
+                Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+                if (referenceTable.getKeysType().isAggregationFamily() || referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     List<Column> fullColumn = referenceTable.getFullSchema();
                     for (Column col : fullColumn) {
                         if (!col.isKey()) {
-                            aggTableValueColumnNames.add(col.getName());
+                            aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
                         }
                     }
                 }
@@ -315,7 +315,7 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggTableValueColumnNames);
+                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
             }
         }
 
@@ -1356,7 +1356,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1625,7 +1625,7 @@ public class PlanFragmentBuilder {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
                 } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
                         !(rightFragmentPlanRoot instanceof ExchangeNode)) {
-                    if (isColocateJoin(optExpr, context, leftFragmentPlanRoot, rightFragmentPlanRoot)) {
+                    if (isColocateJoin(optExpr)) {
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragmentPlanRoot.canDoReplicatedJoin()) {
@@ -1651,7 +1651,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1663,13 +1663,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1835,66 +1835,18 @@ public class PlanFragmentBuilder {
             }
         }
 
-        private void collectOlapScanInFragment(OptExpression optExpression,
-                                               List<PhysicalOlapScanOperator> scanNodeList) {
-            Operator operator = optExpression.getOp();
-            if (operator instanceof PhysicalOlapScanOperator) {
-                scanNodeList.add((PhysicalOlapScanOperator) operator);
-                return;
-            }
-            if (operator instanceof PhysicalDistributionOperator) {
-                return;
-            }
-            for (OptExpression child : optExpression.getInputs()) {
-                collectOlapScanInFragment(child, scanNodeList);
-            }
-        }
-
-        private boolean isColocateJoin(OptExpression optExpression, ExecPlan context, PlanNode left, PlanNode right) {
-            List<PhysicalOlapScanOperator> rightScanNodes = Lists.newArrayList();
-            collectOlapScanInFragment(optExpression.inputAt(1), rightScanNodes);
-
-            PhysicalHashJoinOperator joinNode = (PhysicalHashJoinOperator) optExpression.getOp();
-            List<PhysicalOlapScanOperator> leftScanNodes = Lists.newArrayList();
-            collectOlapScanInFragment(optExpression.inputAt(0), leftScanNodes);
-
-            ColumnRefSet leftChildColumns = optExpression.getInputs().get(0).getOutputColumns();
-            ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
-            List<BinaryPredicateOperator> equalOnPredicate =
-                    JoinPredicateUtils.getEqConj(leftChildColumns, rightChildColumns,
-                            Utils.extractConjuncts(joinNode.getOnPredicate()));
-
-            List<Integer> leftOnPredicateColumns = new ArrayList<>();
-            List<Integer> rightOnPredicateColumns = new ArrayList<>();
-            JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
-                    leftOnPredicateColumns, rightOnPredicateColumns);
-
-            boolean leftChildSatisfied = leftScanNodes.stream().anyMatch(olapScanNode -> leftOnPredicateColumns
-                    .containsAll(olapScanNode.getDistributionSpec().getHashDistributionDesc().getColumns()));
-
-            boolean rightChildSatisfied = rightScanNodes.stream().anyMatch(olapScanNode -> rightOnPredicateColumns
-                    .containsAll(olapScanNode.getDistributionSpec().getHashDistributionDesc().getColumns()));
-            if (!leftChildSatisfied || !rightChildSatisfied) {
-                return false;
-            }
-
-            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-            for (PhysicalOlapScanOperator node : leftScanNodes) {
-                List<Integer> outputColumns =
-                        node.getOutputColumns().stream().map(ColumnRefOperator::getId).collect(Collectors.toList());
-                if (outputColumns.containsAll(leftOnPredicateColumns)) {
-                    boolean isColocateGroup = colocateIndex
-                            .isSameGroup(node.getTable().getId(), rightScanNodes.get(0).getTable().getId());
-                    if (node.getTable().getId() == rightScanNodes.get(0).getTable().getId() &&
-                            !isColocateGroup) {
-                        return true;
-                    } else {
-                        return isColocateGroup &&
-                                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getTable().getId()));
-                    }
-                }
-            }
-            return false;
+        private boolean isColocateJoin(OptExpression optExpression) {
+            // through the required properties type check if it is colocate join
+            return optExpression.getRequiredProperties().stream().allMatch(
+                    physicalPropertySet -> {
+                        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+                            return false;
+                        }
+                        HashDistributionDesc.SourceType hashSourceType =
+                                ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
+                                        .getHashDistributionDesc().getSourceType();
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
+                    });
         }
 
         public boolean isShuffleJoin(OptExpression optExpression) {
@@ -1907,11 +1859,8 @@ public class PlanFragmentBuilder {
                         HashDistributionDesc.SourceType hashSourceType =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
-                        if (hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE)) {
-                            return true;
-                        }
-                        return false;
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE);
                     });
         }
 
@@ -2001,7 +1950,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(
@@ -2262,8 +2211,24 @@ public class PlanFragmentBuilder {
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
 
-            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+            // create new tuple, don't use CTE-Produce tuple
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            for (ColumnRefOperator cteProduceColumnRef : consume.getCteOutputColumnRefMap().values()) {
+                SlotId slotId = new SlotId(cteProduceColumnRef.getId());
+                SlotDescriptor cteProduceDesc = context.getDescTbl().getSlotDesc(slotId);
+
+                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(tupleDescriptor, slotId);
+                slotDescriptor.setIsNullable(cteProduceDesc.getIsNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(cteProduceDesc.getType());
+                context.getColRefToExpr()
+                        .put(cteProduceColumnRef, new SlotRef(cteProduceColumnRef.toString(), slotDescriptor));
+            }
+
+            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), cteFragment.getPlanRoot(), false,
+                    DistributionSpec.DistributionType.SHUFFLE, tupleDescriptor);
+
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,

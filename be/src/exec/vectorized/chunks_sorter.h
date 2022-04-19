@@ -13,6 +13,9 @@
 namespace starrocks::vectorized {
 
 struct DataSegment {
+    static const uint8_t BEFORE_LAST_RESULT = 2;
+    static const uint8_t IN_LAST_RESULT = 1;
+
     ChunkPtr chunk;
     Columns order_by_columns;
 
@@ -37,9 +40,6 @@ struct DataSegment {
             order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
         }
     }
-
-    static const uint8_t BEFORE_LAST_RESULT = 2;
-    static const uint8_t IN_LAST_RESULT = 1;
 
     // there is two compares in the method,
     // the first is:

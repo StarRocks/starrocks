@@ -15,14 +15,11 @@
 #include "jni.h"
 #include "runtime/types.h"
 #include "runtime/user_function_cache.h"
+#include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
 
 namespace starrocks::vectorized {
-template <bool handle_null>
-jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
-void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
-void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 
 const TableFunction* getJavaUDTFFunction() {
     static JavaUDTFFunction java_table_function;
@@ -141,14 +138,15 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
     rets.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
         for (int j = 0; j < num_cols; ++j) {
-            jvalue val = cast_to_jvalue<true>(stateUDTF->method_process()->method_desc[j + 1], cols[j].get(), i);
+            auto method_type = stateUDTF->method_process()->method_desc[j + 1];
+            jvalue val = cast_to_jvalue<true>(method_type.type, method_type.is_box, cols[j].get(), i);
             call_stack.push_back(val);
         }
 
         rets[i] = env->CallObjectMethodA(stateUDTF->handle(), methodID, call_stack.data());
 
         for (int j = 0; j < num_cols; ++j) {
-            release_jvalue(stateUDTF->method_process()->method_desc[j + 1], call_stack[j]);
+            release_jvalue(stateUDTF->method_process()->method_desc[j + 1].is_box, call_stack[j]);
         }
 
         call_stack.clear();
@@ -172,7 +170,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
         for (int j = 0; j < len; ++j) {
             jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
             append_jvalue(method_desc, col.get(), {.l = vi});
-            release_jvalue(method_desc, {.l = vi});
+            release_jvalue(method_desc.is_box, {.l = vi});
         }
     }
 

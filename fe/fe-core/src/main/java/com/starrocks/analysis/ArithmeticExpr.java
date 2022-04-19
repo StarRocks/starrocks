@@ -425,6 +425,62 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
+    public static Type getCommonType(Type t1, Type t2) {
+        PrimitiveType pt1 = t1.getNumResultType().getPrimitiveType();
+        PrimitiveType pt2 = t2.getNumResultType().getPrimitiveType();
+
+        if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
+            return Type.DOUBLE;
+        } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
+            return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
+        } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
+            return Type.DECIMALV2;
+        } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
+            return Type.LARGEINT;
+        } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
+            return Type.BIGINT;
+        } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
+                (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                        pt2.ordinal() <= PrimitiveType.INT.ordinal())) {
+            return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t2 is INVALID TYPE:
+            return t1;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t1 is INVALID TYPE:
+            return t2;
+        } else {
+            return Type.INVALID;
+        }
+    }
+
+    public static Type getBiggerType(Type t) {
+        switch (t.getNumResultType().getPrimitiveType()) {
+            case TINYINT:
+                return Type.SMALLINT;
+            case SMALLINT:
+                return Type.INT;
+            case INT:
+            case BIGINT:
+                return Type.BIGINT;
+            case LARGEINT:
+                return Type.LARGEINT;
+            case DOUBLE:
+                return Type.DOUBLE;
+            case DECIMALV2:
+                return Type.DECIMALV2;
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return t;
+            default:
+                return Type.INVALID;
+        }
+    }
+
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         // bitnot is the only unary op, deal with it here

@@ -289,7 +289,7 @@ public class CreateTableTest {
                 "JSON must be used in duplicate key",
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Primary key table do not support modify column",
+                "JSON must be used in duplicate key",
                 () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
     }
 

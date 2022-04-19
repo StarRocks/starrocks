@@ -83,7 +83,8 @@ public class DecimalTypeTest extends PlanTestBase {
         sql = "SELECT k5 FROM baseall WHERE (CAST(k5 AS DECIMAL32 ) ) IN (0.006) " +
                 "GROUP BY k5 HAVING (k5) IN (0.005, 0.006)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
+        Assert.assertTrue(plan,
+                plan.contains("PREDICATES: 5: k5 IN (0.005, 0.006), CAST(5: k5 AS DECIMAL32(9,9)) = 0.006"));
     }
 
     @Test
@@ -146,12 +147,12 @@ public class DecimalTypeTest extends PlanTestBase {
     @Test
     public void testJoinDecimalAndBool() throws Exception {
         String sql =
-                "select t3.v1 from t3 inner join test_all_type on t3.v2 = test_all_type.id_decimal and t3.v2 > true";
+                "select t3.v10 from t3 inner join test_all_type on t3.v11 = test_all_type.id_decimal and t3.v11 > true";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
                 + "     TABLE: t3\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: 2: v2 > 1"));
+                + "     PREDICATES: 2: v11 > 1"));
 
         Assert.assertTrue(plan.contains("  2:OlapScanNode\n"
                 + "     TABLE: test_all_type\n"

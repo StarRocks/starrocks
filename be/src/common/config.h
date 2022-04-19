@@ -631,6 +631,9 @@ CONF_mInt32(sys_minidump_interval, "600");
 // requests will fail.
 CONF_Int16(tablet_max_versions, "1000");
 
+// The maximum number of pending versions allowed for a primary key tablet
+CONF_mInt32(tablet_max_pending_versions, "1000");
+
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
@@ -696,6 +699,10 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 // in passthrough style, the number of inflight RPCs of parallel deliveries are issued is not exceeds this limit.
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
+
+// enable optimized implementation of schema change
+CONF_Bool(enable_schema_change_v2, "true");
+
 } // namespace config
 
 } // namespace starrocks
