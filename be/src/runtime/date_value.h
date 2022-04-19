@@ -24,7 +24,7 @@
 #include <cstdint>
 #include <string>
 
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 #include "storage/uint24.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"

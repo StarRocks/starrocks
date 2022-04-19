@@ -4,7 +4,7 @@
 
 #include <queue>
 
-#include "runtime/vectorized/chunk_cursor.h"
+#include "runtime/chunk_cursor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
