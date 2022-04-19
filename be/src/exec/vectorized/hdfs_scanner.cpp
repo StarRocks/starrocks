@@ -225,7 +225,7 @@ void HdfsFileReaderParam::append_not_exised_columns_to_chunk(vectorized::ChunkPt
     }
 }
 
-bool HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
+StatusOr<bool> HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
     // build chunk for evaluation.
@@ -234,7 +234,7 @@ bool HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
-        ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
     }
     return !(chunk->has_rows());
 }

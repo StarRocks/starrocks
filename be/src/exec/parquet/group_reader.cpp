@@ -64,7 +64,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     // other filter that not dict
     if (has_more_filter) {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        ExecNode::eval_conjuncts(_left_conjunct_ctxs, _read_chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_left_conjunct_ctxs, _read_chunk.get()));
         _read_chunk->check_or_die();
     }
 
@@ -221,7 +221,7 @@ Status GroupReader::_rewrite_dict_column_predicates() {
         dict_value_chunk->append_column(dict_value_column, slot_id);
 
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));
-        ExecNode::eval_conjuncts(_dict_filter_conjunct_ctxs[slot_id], dict_value_chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_dict_filter_conjunct_ctxs[slot_id], dict_value_chunk.get()));
         dict_value_chunk->check_or_die();
 
         // dict column is empty after conjunct eval, file group can be skipped

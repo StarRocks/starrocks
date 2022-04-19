@@ -51,7 +51,7 @@ private:
     void _pre_process_conjunct_ctxs();
 
     // filter file using not exist column conjuncts
-    void _filter_file();
+    Status _filter_file();
 
     // create and inti group reader
     Status _create_and_init_group_reader(int row_group_number);
