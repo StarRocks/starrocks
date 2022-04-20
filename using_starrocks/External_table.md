@@ -293,19 +293,26 @@ select count(*) from profile_wos_p7;
 * fe配置文件路径为$FE_HOME/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
 * be配置文件路径为$BE_HOME/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
 * be所在的机器也需要配置JAVA_HOME，一定要配置成jdk环境，不能配置成jre环境
-* kerberos 支持：
+* kerberos 支持
   1. 在所有的fe/be机器上用`kinit -kt keytab_path principal`登陆，该用户需要有访问hive和hdfs的权限。kinit命令登陆是有实效性的，需要将其放入crontab中定期执行。
   2. 把hadoop集群中的hive-site.xml/core-site.xml/hdfs-site.xml放到$FE_HOME/conf下，把core-site.xml/hdfs-site.xml放到$BE_HOME/conf下。
   3. 在$FE_HOME/conf/fe.conf文件中的JAVA_OPTS/JAVA_OPTS_FOR_JDK_9选项加上 -Djava.security.krb5.conf:/etc/krb5.conf，/etc/krb5.conf是krb5.conf文件的路径，可以根据自己的系统调整。
   4. resource中的uri地址一定要使用域名，并且相应的hive和hdfs的域名与ip的映射都需要配置到/etc/hosts中。
-* S3 支持:
-  2.0.1及之后的版本默认不开启此功能，可以按照以下步骤配置后使用。
 
-  1. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到fe/lib/和be/lib/hadoop/hdfs/路径下。
-  2. 在fe/conf/core-site.xml和be/conf/core-site.xml中加入如下配置，并重启fe和be。
+#### S3 支持
+
+一. 在$FE_HOME/conf/core-site.xml中加入如下配置。
 
 ~~~xml
 <configuration>
+   <property>
+      <name>fs.s3a.impl</name>
+      <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+   </property>
+   <property>
+      <name>fs.AbstractFileSystem.s3a.impl</name>
+      <value>org.apache.hadoop.fs.s3a.S3A</value>
+   </property>
    <property>
       <name>fs.s3a.access.key</name>
       <value>******</value>
@@ -325,10 +332,64 @@ select count(*) from profile_wos_p7;
 </configuration>
 ~~~
 
-  1. `fs.s3a.access.key` 指定aws的access key id
-  2. `fs.s3a.secret.key` 指定aws的secret access key
-  3. `fs.s3a.endpoint` 指定aws的区域
-  4. `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错`Timeout waiting for connection from poll`，可以适当调高该参数
+* `fs.s3a.access.key` 指定aws的access key id
+* `fs.s3a.secret.key` 指定aws的secret access key
+* `fs.s3a.endpoint` 指定aws的区域
+* `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错`Timeout waiting for connection from poll`，可以适当调高该参数
+
+二. 在$BE_HOME/conf/be.conf中加入如下配置。
+
+* `object_storage_access_key_id` 与FE端core-site.xml配置`fs.s3a.access.key`相同
+* `object_storage_secret_access_key` 与FE端core-site.xml配置`fs.s3a.secret.key`相同
+* `object_storage_endpoint` 与FE端core-site.xml配置`fs.s3a.endpoint`相同
+
+三. 重启FE，BE。
+
+#### Aliyun OSS 支持
+
+一. 在$FE_HOME/conf/core-site.xml中加入如下配置。
+
+~~~xml
+<configuration>
+   <property>
+      <name>fs.oss.impl</name>
+      <value>org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem</value>
+   </property>
+   <property>
+      <name>fs.AbstractFileSystem.oss.impl</name>
+      <value>com.aliyun.emr.fs.oss.OSS</value>
+   </property>
+   <property>
+        <name>fs.oss.accessKeyId</name>
+        <value>xxx</value>
+    </property>
+    <property>
+        <name>fs.oss.accessKeySecret</name>
+        <value>xxx</value>
+    </property>
+    <property>
+        <name>fs.oss.endpoint</name>
+        <!-- 以下以北京地域为例，其他地域请根据实际情况替换。 -->
+        <value>oss-cn-beijing.aliyuncs.com</value>
+    </property>
+</configuration>
+~~~
+
+* `fs.oss.accessKeyId` 指定阿里云账号或RAM用户的AccessKey ID，获取方式，请参见[获取AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+* `fs.oss.accessKeySecret` 指定阿里云账号或RAM用户的AccessKey Secret，获取方式，请参见[获取AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+* `fs.oss.endpoint` 指定相关OSS Bucket所在地域对应的Endpoint。
+    您可以通过以下方式查询Endpoint：
+
+  * 根据Endpoint与地域的对应关系进行查找，请参见[访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
+  * 您可以登录[阿里云OSS管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入Bucket 概览页，Bucket域名examplebucket.oss-cn-hangzhou.aliyuncs.com的后缀部分oss-cn-hangzhou.aliyuncs.com，即为该Bucket的外网Endpoint。
+
+二. 在$BE_HOME/conf/be.conf中加入如下配置。
+
+* `object_storage_access_key_id` 与FE端core-site.xml配置`fs.oss.accessKeyId`相同
+* `object_storage_secret_access_key` 与FE端core-site.xml配置`fs.oss.accessKeySecret`相同
+* `object_storage_endpoint` 与FE端core-site.xml配置`fs.oss.endpoint`相同
+
+三. 重启FE，BE。
 
 ### 缓存更新
 
