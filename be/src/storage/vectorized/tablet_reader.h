@@ -62,6 +62,7 @@ private:
     Version _delete_predicates_version;
 
     MemPool _mempool;
+    ObjectPool _obj_pool;
 
     PredicateMap _pushdown_predicates;
     DeletePredicates _delete_predicates;
