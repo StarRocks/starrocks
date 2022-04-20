@@ -40,7 +40,7 @@ public class IcebergHiveCatalogTest {
 
         new MockUp<CatalogUtil>() {
           @Mock
-          public Catalog loadCatalog(String impl, String catalogName,
+          public Catalog loadCatalog(String catalogImpl, String catalogName,
                                      Map<String, String> properties,
                                      Configuration hadoopConf) {
               return hiveCatalog;

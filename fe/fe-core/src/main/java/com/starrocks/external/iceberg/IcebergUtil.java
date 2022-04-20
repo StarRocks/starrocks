@@ -65,10 +65,10 @@ public class IcebergUtil {
     /**
      * Returns the corresponding custom catalog implementation.
      */
-    public static IcebergCatalog getIcebergCustomCatalog(String customImpl, Map<String, String> icebergProperties)
+    public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
             throws StarRocksIcebergException {
-        return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", customImpl),
-                new Configuration(), icebergProperties, customImpl).loadCatalog();
+        return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", catalogImpl),
+                new Configuration(), icebergProperties, catalogImpl).loadCatalog();
     }
 
     /**

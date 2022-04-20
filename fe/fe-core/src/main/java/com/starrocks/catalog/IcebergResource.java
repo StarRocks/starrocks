@@ -41,8 +41,8 @@ public class IcebergResource extends Resource {
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
 
-    @SerializedName(value = "customImpl")
-    private String customImpl;
+    @SerializedName(value = "catalogImpl")
+    private String catalogImpl;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -69,14 +69,14 @@ public class IcebergResource extends Resource {
                 }
                 break;
             case CUSTOM_CATALOG:
-                customImpl = properties.get(ICEBERG_IMPL);
-                if (StringUtils.isBlank(customImpl)) {
+                catalogImpl = properties.get(ICEBERG_IMPL);
+                if (StringUtils.isBlank(catalogImpl)) {
                     throw new DdlException(ICEBERG_IMPL + " must be set in properties");
                 }
                 try {
-                    Thread.currentThread().getContextClassLoader().loadClass(customImpl);
+                    Thread.currentThread().getContextClassLoader().loadClass(catalogImpl);
                 } catch (ClassNotFoundException e) {
-                    throw new DdlException("Unknown class: " + customImpl);
+                    throw new DdlException("Unknown class: " + catalogImpl);
                 }
                 break;
             default:
@@ -92,7 +92,7 @@ public class IcebergResource extends Resource {
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_METASTORE_URIS, metastoreURIs));
                 break;
             case CUSTOM_CATALOG:
-                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, customImpl));
+                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, catalogImpl));
                 break;
             default:
                 LOG.warn("Unexpected catalog type: " + catalogType);
@@ -105,7 +105,7 @@ public class IcebergResource extends Resource {
     }
 
     public String getIcebergImpl() {
-        return customImpl;
+        return catalogImpl;
     }
 
     public IcebergCatalogType getCatalogType() {

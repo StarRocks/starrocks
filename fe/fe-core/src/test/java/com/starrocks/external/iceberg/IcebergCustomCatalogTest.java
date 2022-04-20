@@ -42,16 +42,16 @@ public class IcebergCustomCatalogTest {
     public void testCatalogType(@Tested IcebergCustomTestingCatalog customTestingCatalog) {
         new MockUp<CatalogUtil>() {
             @Mock
-            public Catalog loadCatalog(String impl, String catalogName,
+            public Catalog loadCatalog(String catalogImpl, String catalogName,
                                        Map<String, String> properties,
                                        Configuration hadoopConf) {
                 return customTestingCatalog;
             }
         };
 
-        String customImpl = IcebergCustomTestingCatalog.class.getName();
+        String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(customImpl, icebergProperties);
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
@@ -68,16 +68,16 @@ public class IcebergCustomCatalogTest {
 
         new MockUp<CatalogUtil>() {
             @Mock
-            public Catalog loadCatalog(String impl, String catalogName,
+            public Catalog loadCatalog(String catalogImpl, String catalogName,
                                        Map<String, String> properties,
                                        Configuration hadoopConf) {
                 return customTestingCatalog;
             }
         };
 
-        String customImpl = IcebergCustomTestingCatalog.class.getName();
+        String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(customImpl, icebergProperties);
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }

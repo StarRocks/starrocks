@@ -31,8 +31,8 @@ public interface CatalogLoader {
         return new HiveCatalogLoader(name, hadoopConf, properties);
     }
 
-    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String customImpl) {
-        return new CustomCatalogLoader(name, hadoopConf, properties, customImpl);
+    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String catalogImpl) {
+        return new CustomCatalogLoader(name, hadoopConf, properties, catalogImpl);
     }
 
     class HiveCatalogLoader implements CatalogLoader {
@@ -72,29 +72,29 @@ public interface CatalogLoader {
         private final SerializableConfiguration hadoopConf;
         private final Map<String, String> properties;
         private final String name;
-        private final String customImpl;
+        private final String catalogImpl;
 
         private CustomCatalogLoader(
                 String name,
                 Configuration conf,
                 Map<String, String> properties,
-                String customImpl) {
+                String catalogImpl) {
             this.hadoopConf = new SerializableConfiguration(conf);
             this.properties = Maps.newHashMap(properties); // wrap into a hashmap for serialization
             this.name = name;
-            this.customImpl = Preconditions.checkNotNull(customImpl, "Cannot initialize custom Catalog, impl class name is null");
+            this.catalogImpl = Preconditions.checkNotNull(catalogImpl, "Cannot initialize custom Catalog, impl class name is null");
         }
 
         @Override
         public Catalog loadCatalog() {
-            return CatalogUtil.loadCatalog(customImpl, name, properties, hadoopConf.get());
+            return CatalogUtil.loadCatalog(catalogImpl, name, properties, hadoopConf.get());
         }
 
         @Override
         public String toString() {
             return MoreObjects.toStringHelper(this)
                     .add("name", name)
-                    .add("customImpl", customImpl)
+                    .add("catalogImpl", catalogImpl)
                     .toString();
         }
     }

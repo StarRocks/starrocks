@@ -96,7 +96,7 @@ public class IcebergTableTest {
     }
 
     @Test
-    public void testCustomWithResourceName(@Mocked com.starrocks.catalog.Catalog catalog,
+    public void testCustomWithResourceName(@Mocked Catalog catalog,
                                            @Mocked ResourceMgr resourceMgr,
                                            @Mocked IcebergCatalog icebergCatalog,
                                            @Mocked Table iTable) throws DdlException {
@@ -112,7 +112,7 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergCustomCatalog(String impl, Map<String, String> icebergProperties) {
+            public IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties) {
                 return icebergCatalog;
             }
         };
