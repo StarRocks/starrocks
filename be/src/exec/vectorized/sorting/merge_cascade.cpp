@@ -154,8 +154,8 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             // Cutoff right by left tail
             size_t right_cut =
                     CursorAlgo::cutoff_run(sort_desc, _right_run, std::make_pair(_left_run, _left_run.num_rows() - 1));
-            SortedRun right_1(_right_run.chunk, 0, right_cut);
-            SortedRun right_2(_right_run.chunk, right_cut, _right_run.num_rows());
+            SortedRun right_1(_right_run, 0, right_cut);
+            SortedRun right_2(_right_run, right_cut, _right_run.num_rows());
 
             // Merge partial chunk
             Permutation perm;
@@ -172,8 +172,8 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             // Cutoff left by right tail
             size_t left_cut =
                     CursorAlgo::cutoff_run(sort_desc, _left_run, std::make_pair(_right_run, _right_run.num_rows() - 1));
-            SortedRun left_1(_left_run.chunk, 0, left_cut);
-            SortedRun left_2(_left_run.chunk, left_cut, _left_run.num_rows());
+            SortedRun left_1(_left_run, 0, left_cut);
+            SortedRun left_2(_left_run, left_cut, _left_run.num_rows());
 
             // Merge partial chunk
             Permutation perm;

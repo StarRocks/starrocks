@@ -12,27 +12,25 @@ using vectorized::Columns;
 
 ChunkPtr SortContext::pull_chunk() {
     if (!_is_merge_finish) {
-        int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
-        _require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
         _merge_inputs();
         _is_merge_finish = true;
+        return _merged_chunk;
+    } else {
+        return {};
     }
-
-    return _merged_chunk;
-}
-
-bool SortContext::is_partition_sort_finished() const {
-    return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
 }
 
 void SortContext::_merge_inputs() {
+    int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
+    int64_t require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
+
     std::vector<ChunkPtr> partial_sorted_chunks;
     for (int i = 0; i < _num_partition_sinkers; ++i) {
-        auto data_segment = _chunks_sorter_partions[i]->get_result_data_segment();
+        auto& partition_sorter = _chunks_sorter_partions[i];
+        auto data_segment = partition_sorter->get_result_data_segment();
         if (data_segment != nullptr) {
-            size_t partition_rows = _chunks_sorter_partions[i]->get_partition_rows();
-            // TODO: remove it
-            Permutation* sorted_permutation = _chunks_sorter_partions[i]->get_permutation();
+            size_t partition_rows = partition_sorter->get_partition_rows();
+            Permutation* sorted_permutation = partition_sorter->get_permutation();
 
             if (partition_rows > 0) {
                 ChunkPtr sorted_chunk = data_segment->chunk;
@@ -41,17 +39,16 @@ void SortContext::_merge_inputs() {
                     append_by_permutation(assemble.get(), {sorted_chunk}, *sorted_permutation);
                     partial_sorted_chunks.emplace_back(assemble);
                 } else {
-                    partial_sorted_chunks.emplace_back(data_segment->chunk);
+                    partial_sorted_chunks.emplace_back(sorted_chunk);
                 }
             }
         }
     }
 
-    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, _require_rows);
+    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, require_rows);
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
-
                                        const std::vector<ExprContext*>& sort_exprs,
                                        const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
@@ -59,6 +56,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int
           _sort_contexts(is_merging ? 1 : num_right_sinkers),
           _limit(limit),
           _num_right_sinkers(num_right_sinkers),
+          _sort_exprs(sort_exprs),
           _is_asc_order(is_asc_order),
           _is_null_first(is_null_first) {}
 

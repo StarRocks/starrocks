@@ -43,9 +43,11 @@ public:
         _num_partition_finished.fetch_add(1, std::memory_order_release);
     }
 
-    bool is_partition_sort_finished() const;
+    bool is_partition_sort_finished() const {
+        return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
+    }
 
-    bool is_output_finished() const { return _next_output_row >= _require_rows; }
+    bool is_output_finished() const { return _is_merge_finish; }
 
     ChunkPtr pull_chunk();
 
@@ -58,16 +60,12 @@ private:
     const std::vector<ExprContext*> _sort_exprs;
     const vectorized::SortDescs _sort_desc;
 
-    mutable int64_t _require_rows = 0;
-    mutable bool _is_merge_finish = false;
-
     std::atomic<int64_t> _total_rows = 0; // size of all chunks from all partitions.
     std::atomic<int32_t> _num_partition_finished = 0;
 
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
+    bool _is_merge_finish = false;
     ChunkPtr _merged_chunk;
-
-    size_t _next_output_row = 0;
 };
 
 class SortContextFactory {
@@ -88,9 +86,9 @@ private:
     std::vector<SortContextPtr> _sort_contexts;
     const int64_t _limit;
     const int32_t _num_right_sinkers;
-    std::vector<ExprContext*> _sort_exprs;
-    std::vector<bool> _is_asc_order;
-    std::vector<bool> _is_null_first;
+    const std::vector<ExprContext*> _sort_exprs;
+    const std::vector<bool> _is_asc_order;
+    const std::vector<bool> _is_null_first;
 };
 
 } // namespace starrocks::pipeline
