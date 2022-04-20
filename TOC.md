@@ -330,11 +330,12 @@
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
     + 资源管理
+      + [资源隔离](/administration/resource_group.md)
       + [查询管理](/administration/Query_management.md)
-      + [黑名单管理](/administration/Blacklist.md)
       + [内存管理](/administration/Memory_management.md)
       + [负载均衡](/administration/Load_balance.md)
       + [副本管理](/administration/Replica.md)
+      + [黑名单管理](/administration/Blacklist.md)
   + 数据恢复
     + [数据删除恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
