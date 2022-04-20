@@ -90,7 +90,10 @@ private:
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
     // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
-    void _try_to_send_rpc(const TUniqueId& instance_id);
+
+    // Try to send rpc if buffer is not empty and channel is not busy
+    // And we need to put this function and other extra works(pre_works) together as an atomic operation
+    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
