@@ -7,22 +7,24 @@ import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 
+import java.time.LocalDateTime;
+
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
-    private long startTime;
+    private LocalDateTime startTime;
 
     private long step;
 
     private String timeUnit;
 
-    public AsyncRefreshSchemeDesc(long startTime, long step, String timeUnit) {
+    public AsyncRefreshSchemeDesc(LocalDateTime startTime, long step, String timeUnit) {
         this.type = RefreshType.ASYNC;
         this.startTime = startTime;
         this.step = step;
         this.timeUnit = timeUnit;
     }
 
-    public long getStartTime() {
+    public LocalDateTime getStartTime() {
         return startTime;
     }
 

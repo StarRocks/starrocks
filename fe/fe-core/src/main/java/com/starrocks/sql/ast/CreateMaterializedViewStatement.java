@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 
@@ -36,7 +35,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private RefreshSchemeDesc refreshSchemeDesc;
 
-    private PartitionDesc partitionDesc;
+    private PartitionExpDesc partitionExpDesc;
 
     private Map<String, String> properties;
 
@@ -45,6 +44,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
 
     private KeysType myKeyType = KeysType.DUP_KEYS;
+
+    private String dbName;
 
     public String getMvName() {
         return mvName;
@@ -78,12 +79,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public PartitionDesc getPartitionDesc() {
-        return partitionDesc;
+    public PartitionExpDesc getPartitionExpDesc() {
+        return partitionExpDesc;
     }
 
-    public void setPartitionDesc(PartitionDesc partitionDesc) {
-        this.partitionDesc = partitionDesc;
+    public void setPartitionExpDesc(PartitionExpDesc partitionExpDesc) {
+        this.partitionExpDesc = partitionExpDesc;
     }
 
     public DistributionDesc getDistributionDesc() {
@@ -122,15 +123,23 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
+    public String getDbName() {
+        return dbName;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
     public CreateMaterializedViewStatement(String mvName, boolean ifNotExists, String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc, PartitionDesc partitionDesc,
+                                           RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
         this.mvName = mvName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.partitionDesc = partitionDesc;
+        this.partitionExpDesc = partitionExpDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.queryStatement = queryStatement;
