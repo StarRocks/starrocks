@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionProperties;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 
@@ -21,6 +22,7 @@ public class MultiListPartitionDesc extends PartitionProperties {
 
     public MultiListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                   Map<String, String> partitionProperties) {
+        super.type = PartitionType.LIST;
         this.partitionName = partitionName;
         this.ifNotExists = ifNotExists;
         this.multiValues = multiValues;

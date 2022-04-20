@@ -10,6 +10,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.lang.NotImplementedException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,6 +42,10 @@ public class PartitionProperties extends PartitionDesc {
     @Override
     public TTabletType getTabletType() {
         return this.tabletType;
+    }
+
+    public Map<String, String> getProperties() {
+        throw new NotImplementedException();
     }
 
     @Override

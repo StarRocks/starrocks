@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.PartitionProperties;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 
@@ -21,6 +22,7 @@ public class SingleListPartitionDesc extends PartitionProperties {
 
     public SingleListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                    Map<String, String> partitionProperties) {
+        super.type = PartitionType.LIST;
         this.ifNotExists = ifNotExists;
         this.partitionName = partitionName;
         this.values = values;

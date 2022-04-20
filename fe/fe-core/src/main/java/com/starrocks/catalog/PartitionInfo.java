@@ -212,7 +212,6 @@ public class PartitionInfo implements Writable {
                 buff.append(true);
             } else {
                 buff.append(false);
-
             }
             buff.append("data_property: ").append(entry.getValue().toString());
             buff.append("replica number: ").append(idToReplicationNum.get(entry.getKey()));
