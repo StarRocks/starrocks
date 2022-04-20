@@ -68,9 +68,9 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 }
 
 void WorkGroup::init() {
-    int64_t limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+    _mem_limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
     _mem_tracker =
-            std::make_shared<starrocks::MemTracker>(limit, _name, ExecEnv::GetInstance()->query_pool_mem_tracker());
+            std::make_shared<starrocks::MemTracker>(_mem_limit, _name, ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_queue = std::make_unique<pipeline::QuerySharedDriverQueueWithoutLock>();
     _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
 }
@@ -83,8 +83,8 @@ double WorkGroup::get_cpu_actual_use_ratio() const {
     return _cpu_actual_use_ratio;
 }
 
-double WorkGroup::mem_limit() const {
-    return _memory_limit;
+int64_t WorkGroup::mem_limit() const {
+    return _mem_limit;
 }
 
 WorkGroupManager::WorkGroupManager()
@@ -124,23 +124,23 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
     }
     if(_wg_metrics.count(wg->name())==0) {
         //cpu limit
-        DoubleGauge* cpu_resource_group_limit = new DoubleGauge(MetricUnit::PERCENT);
+        DoubleGauge* resource_group_cpu_limit_ratio = new DoubleGauge(MetricUnit::PERCENT);
         //cpu concurrent
-        DoubleGauge* cpu_resource_group = new DoubleGauge(MetricUnit::PERCENT);
+        DoubleGauge* resource_group_cpu_use_ratio = new DoubleGauge(MetricUnit::PERCENT);
         //mem limit
-        DoubleGauge* memory_resource_group_limit_bytes= new DoubleGauge(MetricUnit::PERCENT);
+        IntGauge* resource_group_mem_limit_bytes= new IntGauge(MetricUnit::BYTES);
         //mem concurrent
-        IntGauge* memory_resource_group_allocated_bytes = new IntGauge(MetricUnit::BYTES);
+        IntGauge* resource_group_mem_allocated_bytes = new IntGauge(MetricUnit::BYTES);
 
-        _wg_cpu_limit_metrics.emplace(wg->name(), cpu_resource_group_limit);
-        _wg_cpu_metrics.emplace(wg->name(), cpu_resource_group);
-        _wg_mem_limit_metrics.emplace(wg->name(), memory_resource_group_limit_bytes);
-        _wg_mem_metrics.emplace(wg->name(), memory_resource_group_allocated_bytes);
+        _wg_cpu_limit_metrics.emplace(wg->name(), resource_group_cpu_limit_ratio);
+        _wg_cpu_metrics.emplace(wg->name(), resource_group_cpu_use_ratio);
+        _wg_mem_limit_metrics.emplace(wg->name(), resource_group_mem_limit_bytes);
+        _wg_mem_metrics.emplace(wg->name(), resource_group_mem_allocated_bytes);
 
-        StarRocksMetrics::instance()->metrics()->register_metric("cpu_resource_group_limit", MetricLabels().add("name", wg->name()), cpu_resource_group_limit);
-        StarRocksMetrics::instance()->metrics()->register_metric("cpu_resource_group", MetricLabels().add("name", wg->name()), cpu_resource_group);
-        StarRocksMetrics::instance()->metrics()->register_metric("memory_resource_group_limit_bytes", MetricLabels().add("name", wg->name()), memory_resource_group_limit_bytes);
-        StarRocksMetrics::instance()->metrics()->register_metric("memory_resource_group_allocated_bytes", MetricLabels().add("name", wg->name()), memory_resource_group_allocated_bytes);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()), resource_group_cpu_limit_ratio);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()), resource_group_cpu_use_ratio);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_limit_bytes", MetricLabels().add("name", wg->name()), resource_group_mem_limit_bytes);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes", MetricLabels().add("name", wg->name()), resource_group_mem_allocated_bytes);
     }
     _wg_metrics.emplace(wg->name(), wg->unique_id());
 }

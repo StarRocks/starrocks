@@ -139,6 +139,7 @@ private:
 
     size_t _cpu_limit;
     double _memory_limit;
+    int64_t _mem_limit;
     size_t _concurrency;
     WorkGroupType _type;
 
@@ -257,7 +258,7 @@ private:
 
     std::unordered_map<std::string, starrocks::DoubleGauge*> _wg_cpu_limit_metrics;
     std::unordered_map<std::string, starrocks::DoubleGauge*> _wg_cpu_metrics;
-    std::unordered_map<std::string, starrocks::DoubleGauge*> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, starrocks::IntGauge*> _wg_mem_limit_metrics;
     std::unordered_map<std::string, starrocks::IntGauge*> _wg_mem_metrics;
 };
 
