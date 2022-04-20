@@ -2576,4 +2576,14 @@ public class JoinTest extends PlanTestBase {
         }
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testValueNodeJoin() throws Exception {
+        String sql = "select count(*) from (select test_all_type.t1c as left_int, " +
+                "test_all_type1.t1c as right_int from (select * from test_all_type limit 0) " +
+                "test_all_type cross join (select * from test_all_type limit 0) test_all_type1 cross join (select * from test_all_type limit 0) test_all_type6) t;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:EMPTYSET");
+        assertContains(plan, "2:EMPTYSET");
+    }
 }
