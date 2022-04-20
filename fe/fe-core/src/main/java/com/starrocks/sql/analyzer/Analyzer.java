@@ -51,7 +51,7 @@ public class Analyzer {
 
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
-            AlterStmtAnalyzer.analyze(statement, context);
+            AlterTableStatementAnalyzer.analyze(statement, context);
             return null;
         }
 
