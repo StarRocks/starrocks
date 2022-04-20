@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -52,6 +53,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.qe.ConnectContext;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -85,6 +87,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

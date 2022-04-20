@@ -37,6 +37,7 @@ statement
         AS queryStatement                                                               #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
+    | ADMIN SET REPLICA STATUS properties                                               #adminSetReplicaStatus
     ;
 
 explainDesc
@@ -528,7 +529,7 @@ number
     ;
 
 nonReserved
-    : AVG
+    : AVG | ADMIN
     | BUCKETS
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
@@ -542,8 +543,8 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | ROLLUP | ROLLBACK | REPLICA
+    | SECOND | SESSION | SETS | START | SUM | STATUS
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE
