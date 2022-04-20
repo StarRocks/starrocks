@@ -30,7 +30,7 @@ public:
 
     virtual Status convert(void* dest, const void* src, MemPool* memPool) const = 0;
 
-    virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
+    virtual Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum dst,
                                  MemPool* mem_pool) const = 0;
 };
 
@@ -41,8 +41,7 @@ public:
     MaterializeTypeConverter() = default;
     ~MaterializeTypeConverter() = default;
 
-    virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                        const TabletColumn& ref_column) const = 0;
+    virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const = 0;
 };
 
 const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type);
