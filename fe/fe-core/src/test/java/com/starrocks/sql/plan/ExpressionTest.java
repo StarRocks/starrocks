@@ -971,5 +971,10 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "common expressions:\n" +
                 "  |  <slot 13> : CAST(10: id_decimal AS DECIMAL64(18,2))");
+
+        sql = "select concat(cast(t1c as varchar(10)), 'a'), concat(cast(t1c as varchar(10)), 'b') from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "common expressions:\n" +
+                "  |  <slot 13> : CAST(3: t1c AS VARCHAR(10))");
     }
 }
