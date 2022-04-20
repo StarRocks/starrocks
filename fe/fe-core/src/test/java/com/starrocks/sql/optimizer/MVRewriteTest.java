@@ -32,8 +32,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.UUID;
-
 public class MVRewriteTest {
     private static final String EMPS_TABLE_NAME = "emps";
     private static final String EMPS_MV_NAME = "emps_mv";
@@ -1201,6 +1199,14 @@ public class MVRewriteTest {
         String query =
                 "select * from ods_order where bank_transaction_id not in (select sum(cast(salary as smallint)) as ssalary from " +
                         EMPS_TABLE_NAME + " group by deptno)";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testPredicateIsCallOperator() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno "
+                + "from " + EMPS_TABLE_NAME + ";";
+        String query = "select count(*) from " + EMPS_TABLE_NAME + " where bitmap_contains(to_bitmap(1),2)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
 }
