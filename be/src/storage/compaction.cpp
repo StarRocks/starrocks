@@ -358,6 +358,7 @@ Status Compaction::modify_rowsets() {
     std::unique_lock wrlock(_tablet->get_header_lock());
     _tablet->modify_rowsets(output_rowsets, _input_rowsets);
     _tablet->save_meta();
+    Rowset::close_rowsets(_input_rowsets);
 
     return Status::OK();
 }

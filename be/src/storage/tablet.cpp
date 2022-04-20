@@ -276,7 +276,6 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 
     // add rs_metas_to_delete to tracker
     _timestamped_version_tracker.add_stale_path_version(rs_metas_to_delete);
-    Rowset::close_rowsets(to_delete);
 }
 
 // snapshot manager may call this api to check if version exists, so that
