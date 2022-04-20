@@ -41,6 +41,7 @@
   + [外部表](/using_starrocks/External_table.md)
   + [数组](/using_starrocks/Array.md)
   + [窗口函数](/using_starrocks/Window_function.md)
+  + [JAVA UDF](/using_starrocks/JAVA_UDF.md)
   + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [时区](/using_starrocks/timezone.md)
