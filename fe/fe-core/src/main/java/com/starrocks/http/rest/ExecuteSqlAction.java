@@ -84,10 +84,8 @@ public class ExecuteSqlAction extends RestBaseAction {
                 return;
             }
 
-            if (requestBody.context != null) {
-                context.setSessionVariable(requestBody.context);
-            }
             checkSessionVariable(context, requestBody.context);
+
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(requestBody.query, context.getSessionVariable().getSqlMode());
             if (stmts.size() > 1) {
                 response.appendContent(new RestBaseResult("/api/sql not support execute multiple query").toJson());
