@@ -774,4 +774,57 @@ public class AggregateTest extends PlanTestBase {
         }
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testAggWithSubquery() throws Exception {
+        String sql = "select sum(case when v4 = (select v1 from t0) then v4 end) from t1";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:9: sum\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  7:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(8: case)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
+                "  |  \n" +
+                "  5:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE"));
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t1"));
+
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
 }
