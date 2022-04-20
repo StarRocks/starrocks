@@ -43,7 +43,7 @@ struct SortedRun {
     }
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
-    ChunkUniquePtr clone_slice() {
+    ChunkUniquePtr clone_slice() const {
         if (range.first == 0 && range.second == chunk->num_rows()) {
             return chunk->clone_unique();
         } else {
@@ -81,9 +81,10 @@ struct SortedRuns {
     size_t num_chunks() const { return chunks.size(); }
 
     ChunkPtr assemble() const {
-        ChunkPtr result = chunks.front().chunk;
+        ChunkPtr result(chunks.front().clone_slice().release());
         for (int i = 1; i < chunks.size(); i++) {
-            result->merge(std::move(*chunks[i].chunk));
+            auto& run = chunks[i];
+            result->append(*run.chunk, run.range.first, run.num_rows());
         }
         return result;
     }
