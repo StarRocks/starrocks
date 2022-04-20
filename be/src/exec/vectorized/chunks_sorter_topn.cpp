@@ -362,19 +362,27 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
     }
     ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
     append_by_permutation(right_chunk.get(), right_chunks, permutation_second);
+    Columns right_columns;
+    for (auto expr : *_sort_exprs) {
+        auto maybe_column = expr->evaluate(right_chunk.get());
+        CHECK(maybe_column.ok());
+        right_columns.push_back(maybe_column.value());
+    }
 
     ChunkPtr left_chunk = _merged_segment.chunk;
+    Columns left_columns = _merged_segment.order_by_columns;
 
     Permutation merged_perm;
     merged_perm.reserve(sort_row_number);
     SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
     if (_compare_strategy == RowWise) {
-        Status st =
-                merge_sorted_chunks_two_way_rowwise(sort_desc, left_chunk, right_chunk, &merged_perm, sort_row_number);
+        Status st = merge_sorted_chunks_two_way_rowwise(sort_desc, left_columns, right_columns, &merged_perm,
+                                                        sort_row_number);
         CHECK(st.ok());
     } else {
-        Status st = merge_sorted_chunks_two_way(sort_desc, left_chunk, right_chunk, &merged_perm);
+        Status st = merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
+                                                &merged_perm);
         CHECK(st.ok());
         CHECK_GE(merged_perm.size(), sort_row_number);
         merged_perm.resize(sort_row_number);
