@@ -1027,8 +1027,7 @@ public:
     BitMapTypeConverter() = default;
     ~BitMapTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1059,8 +1058,7 @@ public:
     HLLTypeConverter() = default;
     ~HLLTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1087,8 +1085,7 @@ public:
     PercentileTypeConverter() = default;
     ~PercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1112,8 +1109,7 @@ public:
     Decimal32ToPercentileTypeConverter() = default;
     ~Decimal32ToPercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1124,7 +1120,7 @@ public:
             }
             double origin_value;
             auto v = src_datum.get_int32();
-            auto scale_factor = get_scale_factor<int32_t>(ref_column.scale());
+            auto scale_factor = get_scale_factor<int32_t>(src_type->scale());
             DecimalV3Cast::to_float<int32_t, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
             percentile.add(origin_value);
@@ -1140,8 +1136,7 @@ public:
     Decimal64ToPercentileTypeConverter() = default;
     ~Decimal64ToPercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1152,7 +1147,7 @@ public:
             }
             double origin_value;
             auto v = src_datum.get_int64();
-            auto scale_factor = get_scale_factor<int64_t>(ref_column.scale());
+            auto scale_factor = get_scale_factor<int64_t>(src_type->scale());
             DecimalV3Cast::to_float<int64_t, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
             percentile.add(origin_value);
@@ -1168,8 +1163,7 @@ public:
     Decimal128ToPercentileTypeConverter() = default;
     ~Decimal128ToPercentileTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;
@@ -1180,7 +1174,7 @@ public:
             }
             double origin_value;
             auto v = src_datum.get_int128();
-            auto scale_factor = get_scale_factor<int128_t>(ref_column.scale());
+            auto scale_factor = get_scale_factor<int128_t>(src_type->scale());
             DecimalV3Cast::to_float<int128_t, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
             percentile.add(origin_value);
@@ -1196,8 +1190,7 @@ public:
     CountTypeConverter() = default;
     ~CountTypeConverter() = default;
 
-    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type,
-                                const TabletColumn& ref_column) const override {
+    Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
             Datum src_datum = src_col->get(row_index);
             Datum dst_datum;

@@ -673,6 +673,10 @@ CONF_Int64(max_segment_file_size, "1073741824");
 CONF_Bool(use_hdfs_pread, "true");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
+
+// enable optimized implementation of schema change
+CONF_Bool(enable_schema_change_v2, "true");
+
 } // namespace config
 
 } // namespace starrocks
