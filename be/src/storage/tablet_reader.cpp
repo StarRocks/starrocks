@@ -48,6 +48,7 @@ void TabletReader::close() {
     }
     STLDeleteElements(&_predicate_free_list);
     Rowset::release_readers(_rowsets);
+    _rowsets.clear();
     _obj_pool.clear();
 }
 
