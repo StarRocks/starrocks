@@ -392,7 +392,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
                 inputs.push_back(chunk2);
             }
         }
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
         ASSERT_EQ(input_rows, merged->num_rows());
 
         num_rows += merged->num_rows();

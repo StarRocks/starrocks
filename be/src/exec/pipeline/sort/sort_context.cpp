@@ -47,7 +47,7 @@ void SortContext::_merge_inputs() {
         }
     }
 
-    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk);
+    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, _require_rows);
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,

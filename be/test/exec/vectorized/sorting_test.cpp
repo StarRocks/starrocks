@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -12,6 +13,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "runtime/types.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
@@ -173,6 +175,30 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ(1024, merged->get(0).get_int32());
     ASSERT_EQ(2048, merged->get(1).get_int32());
+}
+
+TEST(SortingTest, sorted_runs) {
+    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
+    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+
+    SortedRuns runs;
+    runs.chunks.push_back(SortedRun(chunk));
+    runs.chunks.push_back(SortedRun(chunk));
+
+    ASSERT_EQ(2, runs.num_chunks());
+    ASSERT_EQ(200, runs.num_rows());
+
+    runs.resize(199);
+    ASSERT_EQ(199, runs.num_rows());
+
+    runs.resize(99);
+    ASSERT_EQ(99, runs.num_rows());
+    ASSERT_EQ(1, runs.num_chunks());
+
+    ChunkPtr slice = runs.assemble();
+    ASSERT_EQ(99, slice->num_rows());
 }
 
 void clear_sort_exprs(std::vector<ExprContext*>& exprs) {

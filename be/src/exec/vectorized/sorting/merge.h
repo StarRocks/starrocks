@@ -36,11 +36,8 @@ struct SortedRun {
     size_t num_rows() const { return range.second - range.first; }
     const Column* get_column(int index) const { return orderby[index].get(); }
     bool empty() const { return range.second == range.first; }
-    void reset() {
-        chunk->reset();
-        orderby.clear();
-        range = {};
-    }
+    void reset();
+    void resize(size_t size);
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
     ChunkUniquePtr clone_slice() const {
@@ -79,6 +76,8 @@ struct SortedRuns {
     SortedRun& get_run(int i) { return chunks[i]; }
     ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }
     size_t num_chunks() const { return chunks.size(); }
+    size_t num_rows() const;
+    void resize(size_t size);
 
     ChunkPtr assemble() const {
         ChunkPtr result(chunks.front().clone_slice().release());
@@ -105,7 +104,6 @@ public:
 
     Status consume_all(ChunkConsumer output);
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
-
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
@@ -146,9 +144,9 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
                                    SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
+                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output);
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
