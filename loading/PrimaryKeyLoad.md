@@ -1,6 +1,6 @@
 # 主键模型导入
 
-StarRocks 支持通过导入任务，对主键模型的表进行数据变更（插入、更新和删除数据）。
+StarRocks 支持通过导入任务，对主键模型的表进行数据变更（插入、更新和删除数据），并且支持部分更新。
 
 ## 内部实现
 
@@ -127,13 +127,13 @@ load label demo_db.label4 (
 
 其中，指定了 `__op` 为第三列。
 
-更多关于 Stream Load 和 Broker Load 使用方法，请参考 [STREAM LOAD](../loading/StreamLoad.md) 和 [BROKER LOAD](../loading/BrokerLoad.md)
+更多关于 Stream Load 和 Broker Load 使用方法，请参考 [STREAM LOAD](../loading/StreamLoad.md) 和 [BROKER LOAD](../loading/BrokerLoad.md)。
 
 ## 通过 Routine Load 变更数据
 
 可以在创建 Routine Load 的语句中，在 columns 最后增加一列，指定为 `__op`。在真实导入中，`__op` 为 0 则表示 UPSERT 操作，为 1 则表示 DELETE 操作。例如导入如下内容：
 
-**示例 1** 导入 CSV 数据
+**示例 1** 导入 CSV 数据。
 
 ~~~bash
 2020-06-23  2020-06-23 00: 00: 00 beijing haidian 1   -128    -32768  -2147483648    0
@@ -160,7 +160,7 @@ PROPERTIES (
 );
 ~~~
 
-**示例 2** 导入 JSON 数据，源数据中有字段表示 UPSERT 或者 DELETE 操作，比如下面常见的 Canal 同步到 Kafka 的数据样例，`type` 可以表示本次操作的类型（当前还不支持同步 DDL 语句）。
+**示例 2** 导入 JSON 数据，源数据中有字段表示 UPSERT 或者 DELETE 操作，比如下面常见的 Canal 同步到 Kafka 的数据样例（暂不支持同步 DDL 语句），`type` 可以表示本次操作的类型（支持取值为INSERT、UPDATE、DELETE）。
 
 数据样例：
 
@@ -282,3 +282,75 @@ mysql > select * from demo_db.demo_tbl2;
 ~~~
 
 Routine Load 更多使用方法请参考 [ROUTINE LOAD](../loading/RoutineLoad.md)。
+
+## 部分更新
+
+> 自 StarRocks 2.2 起，主键模型的表支持部分更新，即只需要更新部分列。
+
+本文以表demo为例进行说明，表demo包含id，name，age三列。
+
+建表语句如下：
+
+~~~SQL
+create table demo(
+    id int not null,
+    name string null default '',
+    age int not null default '0'
+) primary key(id)
+~~~
+
+更新表 demo 中部分列时，比如只更新 id，name 两列（而保留 age 列不更新），则只需要给出如下表的两列的数据即可。
+
+不过需要注意：
+
+* 所更新的列必须包含主键列，这里是指 id 列。
+* 所有行的列数必须相同（同普通 CSV 格式文件的要求），如下表中每行都是用逗号分割的2列数据。
+
+~~~Plain Text
+0,aaaa
+1,bbbb
+2,\N
+4,dddd
+~~~
+
+根据导入方式，执行相关命令。
+
+* 如果通过Stream Load的方式导入，请执行如下命令。注意，需要设置`-H "partial_update:true"`，以指定为部分列更新，并且指定所需更新的列名`"columns:id,name"`。Stream Load的具体设置方式，请参见[STREAM LOAD](../loading/StreamLoad.md)。
+
+~~~Bash
+curl --location-trusted -u root: \
+    -H "label:lineorder" -H "column_separator:," \
+    -H "partial_update:true" -H "columns:id,name" \
+    -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
+~~~
+
+* 如果通过Broker Load的方式导入，请执行如下命令。注意，在 properties 中设置`"partial_update" = "true"`，指定为部分列更新，并且指定所需更新的列名`set (id=c1, name=c2)`。Broker Load的具体设置方式，请参见[BROKER LOAD](../loading/BrokerLoad.md)。
+
+~~~SQL
+load label demo.demo (
+    data infile("hdfs://localhost:9000/demo.csv")
+    into table t
+    format as "csv"
+    (c1, c2)
+    set (id=c1, name=c2)
+) with broker "broker1"
+properties (
+    "partial_update" = "true"
+);
+~~~
+
+* 如果通过Routine Load的方式导入，请执行如下命令。注意，在 properties 中设置`"partial_update" = "true"`，指定为部分列更新，并且指定所需更新的列名`COLUMNS (id, name)`。Routine Load的具体设置方式，请参见 [ROUTINE LOAD](../loading/RoutineLoad.md)。
+
+~~~SQL
+CREATE ROUTINE LOAD routine_load_demo on demo 
+COLUMNS (id, name),
+COLUMNS TERMINATED BY ','
+PROPERTIES (
+    "partial_update" = "true"
+) FROM KAFKA (
+    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+    "kafka_topic" = "my_topic",
+    "kafka_partitions" = "0,1,2,3",
+    "kafka_offsets" = "101,0,0,200"
+);
+~~~
