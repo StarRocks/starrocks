@@ -16,7 +16,7 @@ JSON 构造函数可以构造 JSON 类型的数据。例如 JSON 类型的对象
 
 JSON 查询和处理函数可以查询和处理 JSON 类型的数据。例如查询 JSON 对象中指定路径下的值。
 
-| 函数名称                                                     | 功能                                 | 示例                                                      | name<img width=400/>                               |
+| 函数名称                                                     | 功能                                 | 示例                                                      | 返回结果                              |
 | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
 | [箭头函数](../../sql-functions/json-functions/json-processing-functions/arrow-function.md) | 查询 JSON 对象中指定路径下的值。                       | SELECT {"a": {"b": 1}} -> '$.a.b'                         | 1                                                            |
 | [JSON_QUERY](../../sql-functions/json-functions/json-processing-functions/json_query.md) | 查询 JSON 对象中指定路径下的值。                             | SELECT JSON_QUERY({"a": 1}, '$.a')                        | 1                                                            |
