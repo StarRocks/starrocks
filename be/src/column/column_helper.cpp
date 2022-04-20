@@ -210,12 +210,11 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     if (VLOG_ROW_IS_ON) {
         VLOG_ROW << "PrimitiveType " << type << " nullable " << nullable << " is_const " << is_const;
     }
-    if (nullable || type == TYPE_NULL) {
-        if (is_const) {
-            return ColumnHelper::create_const_null_column(size);
-        } else {
-            return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
-        }
+
+    if (is_const && (nullable || type == TYPE_NULL)) {
+        return ColumnHelper::create_const_null_column(size);
+    } else if (type == TYPE_NULL) {
+        return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
     }
 
     ColumnPtr p;
