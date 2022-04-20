@@ -12,6 +12,7 @@
 #include "storage/vectorized/aggregate_iterator.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/conjunctive_predicates.h"
 #include "storage/vectorized/delete_predicates.h"
 #include "storage/vectorized/empty_iterator.h"
@@ -47,6 +48,7 @@ void TabletReader::close() {
         _collect_iter.reset();
     }
     STLDeleteElements(&_predicate_free_list);
+    _obj_pool.clear();
 }
 
 Status TabletReader::prepare() {
@@ -85,6 +87,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(_parse_seek_range(params, &rs_opts.ranges));
     rs_opts.predicates = _pushdown_predicates;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
+                                                                     &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
