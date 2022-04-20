@@ -663,10 +663,13 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 CONF_Int16(bitmap_serialize_version, "1");
 // max hdfs file handle
 CONF_mInt32(max_hdfs_file_handle, "1000");
+<<<<<<< HEAD
 // buffer stream reserve size
 // each column will reserve buffer_stream_reserve_size bytes for read
 // default: 8M
 CONF_mInt32(buffer_stream_reserve_size, "8192000");
+=======
+>>>>>>> 392dd439c (By default reserve 1MB bytes for parquet column reader (#5294))
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
@@ -675,6 +678,37 @@ CONF_Int64(max_segment_file_size, "1073741824");
 // hdfsPreadFully() are always enabled for object storage.
 CONF_Bool(use_hdfs_pread, "true");
 
+<<<<<<< HEAD
+=======
+// Rewrite partial semgent or not.
+// if true, partial segment will be rewrite into new segment file first and append other column data
+// if false, the data of other column will be append into partial segment file and rebuild segment footer
+// we may need the both implementations for perf test for now, so use it to decide which implementations to use
+// default: true
+CONF_Bool(rewrite_partial_segment, "true");
+
+// Properties to access object storage
+CONF_String(object_storage_access_key_id, "");
+CONF_String(object_storage_secret_access_key, "");
+CONF_String(object_storage_endpoint, "");
+// Tencent cos needs to add region information
+CONF_String(object_storage_region, "");
+CONF_Int64(object_storage_max_connection, "102400");
+
+CONF_Bool(enable_orc_late_materialization, "true");
+// orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
+CONF_Int32(orc_file_cache_max_size, "2097152");
+// parquet reader, each column will reserve X bytes for read
+CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
+
+// default: 16MB
+CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
+// default: 16MB
+CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
+
+CONF_Int64(max_load_dop, "16");
+
+>>>>>>> 392dd439c (By default reserve 1MB bytes for parquet column reader (#5294))
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 
 // enable optimized implementation of schema change

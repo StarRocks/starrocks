@@ -34,6 +34,7 @@ public:
         return st;
     }
 
+<<<<<<< HEAD
     Status read_at(uint64_t offset, const Slice& result) const override {
         Status st;
         {
@@ -64,6 +65,16 @@ public:
     // Return name of this file
     const std::string& file_name() const override { return _file->file_name(); }
 
+=======
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+>>>>>>> 392dd439c (By default reserve 1MB bytes for parquet column reader (#5294))
 private:
     RandomAccessFile* _file;
     vectorized::HdfsScanStats* _stats;
