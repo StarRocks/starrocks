@@ -83,37 +83,35 @@ public:
         return _append(buf);
     }
 
-    // If _total_length == -1, this should be a Kafka routine load task,
-    // just get the next buffer directly from the buffer queue, because one buffer contains a complete piece of data.
-    // Otherwise, this should be a stream load task that needs to read the specified amount of data.
-    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) override {
-        if (_total_length < -1) {
-            std::stringstream ss;
-            ss << "invalid, _total_length is: " << _total_length;
-            return Status::InternalError(ss.str());
-        } else if (_total_length == 0) {
-            // no data
+            Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) {
+        std::unique_lock<std::mutex> l(_lock);
+        while (!_cancelled && !_finished && _buf_queue.empty()) {
+            _get_cond.wait(l);
+        }
+
+        // cancelled
+        if (_cancelled) {
+            return Status::InternalError("cancelled");
+        }
+
+        // finished
+        if (_buf_queue.empty()) {
+            DCHECK(_finished);
             *buf_sz = 0;
             return Status::OK();
         }
 
-        if (_total_length == -1) {
-            return _read_next_buffer(buf, buf_cap, buf_sz, padding);
+        auto raw = _buf_queue.front();
+        auto raw_sz = raw->remaining();
+        if (*buf_cap < raw_sz + padding) {
+            buf->reset(new uint8_t[raw_sz + padding]);
+            *buf_cap = raw_sz + padding;
         }
 
-        // _total_length > 0, read the entire data
+        raw->get_bytes(reinterpret_cast<char*>(buf->get()), raw_sz);
+        *buf_sz = raw_sz;
 
-        if (*buf_cap < _total_length + padding) {
-            buf->reset(new uint8_t[_total_length + padding]);
-            *buf_cap = _total_length + padding;
-        }
-        *buf_sz = _total_length;
-        bool eof = false;
-        Status st = read(buf->get(), buf_sz, &eof);
-        if (eof) {
-            *buf_sz = 0;
-        }
-        return st;
+        return Status::OK();
     }
 
     Status read(uint8_t* data, size_t* data_size, bool* eof) override {
