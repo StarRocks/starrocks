@@ -80,14 +80,13 @@ abstract public class StarRocksHttpTestCase {
             .build();
 
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    public static final MediaType TEXT = MediaType.parse("text/plain; charset=utf-8");
 
     private static HttpServer httpServer;
 
     public static final String CLUSTER_NAME = "default_cluster";
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
-    public static final String EXPECTED_DESC = "[{\"Field\":\"k1\",\"Type\":\"BIGINT\",\"Null\":\"No\",\"Key\":\"false\",\"Default\":\"\\\\N\",\"Extra\":\"\"},{\"Field\":\"k2\",\"Type\":\"DOUBLE\",\"Null\":\"No\",\"Key\":\"false\",\"Default\":\"\\\\N\",\"Extra\":\"\"}]";
+    public static final String EXPECTED_DESC = "[{\"Field\":\"k1\",\"Type\":\"BIGINT\",\"Null\":\"No\",\"Extra\":\"\",\"Default\":\"\\\\N\",\"Key\":\"false\"},{\"Field\":\"k2\",\"Type\":\"DOUBLE\",\"Null\":\"No\",\"Extra\":\"\",\"Default\":\"\\\\N\",\"Key\":\"false\"}]";
 
     private static long testBackendId1 = 1000;
     private static long testBackendId2 = 1001;

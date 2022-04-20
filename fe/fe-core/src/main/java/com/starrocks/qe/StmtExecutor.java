@@ -704,14 +704,17 @@ public class StmtExecutor {
             JsonSerializer jsonSerializer = JsonSerializer.newInstance();
             ChannelHandlerContext nettyChannel = context.getNettyChannel();
             sendHeader(nettyChannel);
+            jsonSerializer.writeMetaData(colNames, outputExprs);
             while (true) {
                 if (batch.getBatch() != null) {
                     jsonSerializer.writeResultBatch(batch.getBatch(), colNames, outputExprs);
                     nettyChannel.write(jsonSerializer.getChunkedBytes());
                     jsonSerializer.reset();
+                    context.updateReturnRows(batch.getBatch().getRows().size());
                 }
                 if (batch.isEos()) {
-                    nettyChannel.writeAndFlush(jsonSerializer.endArray());
+                    jsonSerializer.writeStatistic(batch.getQueryStatistics());
+                    nettyChannel.writeAndFlush(jsonSerializer.end());
                     nettyChannel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
                     break;
                 }
