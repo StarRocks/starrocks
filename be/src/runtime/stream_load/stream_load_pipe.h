@@ -37,9 +37,8 @@ namespace starrocks {
 // Data in pip is stored in chunks.
 class StreamLoadPipe : public MessageBodySink, public FileReader {
 public:
-    StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024,
-                   int64_t total_length = -1)
-            : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size), _total_length(total_length) {}
+    StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
+            : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
     ~StreamLoadPipe() override = default;
 
     Status open() override { return Status::OK(); }
@@ -83,15 +82,20 @@ public:
         return _append(buf);
     }
 
-            Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) {
+    /* read_one_messages returns data appended in one time.
+    * buf: the buffer to return data, and would be expaneded if the capacity is not enough.
+    * buf_cap: the capacity of buffer, and would be reset if the capacity is not enough.
+    * buf_sz: the actual size of data to return.
+    * padding: the extra space reserved in the buffer capacity.
+    */
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) {
         std::unique_lock<std::mutex> l(_lock);
         while (!_cancelled && !_finished && _buf_queue.empty()) {
             _get_cond.wait(l);
         }
-
         // cancelled
         if (_cancelled) {
-            return Status::InternalError("cancelled");
+            return _err_st;
         }
 
         // finished
@@ -100,17 +104,19 @@ public:
             *buf_sz = 0;
             return Status::OK();
         }
-
         auto raw = _buf_queue.front();
         auto raw_sz = raw->remaining();
+
         if (*buf_cap < raw_sz + padding) {
             buf->reset(new uint8_t[raw_sz + padding]);
             *buf_cap = raw_sz + padding;
         }
-
-        raw->get_bytes(reinterpret_cast<char*>(buf->get()), raw_sz);
+        raw->get_bytes((char*)(buf->get()), raw_sz);
         *buf_sz = raw_sz;
 
+        _buf_queue.pop_front();
+        _buffered_bytes -= raw->limit;
+        _put_cond.notify_one();
         return Status::OK();
     }
 
@@ -249,14 +255,6 @@ private:
     size_t _buffered_bytes{0};
     size_t _max_buffered_bytes;
     size_t _min_chunk_size;
-    // The total amount of data expected to be read.
-    // In some scenarios, such as loading json format data through stream load,
-    // the data needs to be completely read before it can be parsed,
-    // so the total size of the data needs to be known.
-    // The default is -1, which means that the data arrives in a stream
-    // and the length is unknown.
-    // size_t is unsigned, so use int64_t
-    int64_t _total_length = -1;
     std::deque<ByteBufferPtr> _buf_queue;
     std::condition_variable _put_cond;
     std::condition_variable _get_cond;
