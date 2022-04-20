@@ -672,7 +672,8 @@ public class DatabaseTransactionMgr {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
                                     // 2. publish version task in this replica has finished
-                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(), partition.getVisibleVersionHash(), true)
+                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(),
+                                            partition.getVisibleVersionHash(), true)
                                             && replica.getLastFailedVersion() < 0
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
