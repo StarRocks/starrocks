@@ -71,8 +71,8 @@ public class ListPartitionDescTest {
         listPartitionDesc.analyze(this.findColumnDefList(), null);
         String sql = listPartitionDesc.toSql();
         String target = "PARTITION BY LIST(`province`)(\n" +
-                "    PARTITION p1 VALUES IN (\"guangdong\",\"tianjin\"),\n" +
-                "    PARTITION p2 VALUES IN (\"shanghai\",\"beijing\")\n" +
+                "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
+                "  PARTITION p2 VALUES IN (\'shanghai\',\'beijing\')\n" +
                 ")";
         Assert.assertEquals(sql, target);
     }
@@ -84,8 +84,8 @@ public class ListPartitionDescTest {
         listPartitionDesc.analyze(this.findColumnDefList(), null);
         String sql = listPartitionDesc.toSql();
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
-                "    PARTITION p1 VALUES IN ((\"2022-04-15\",\"guangdong\"),(\"2022-04-15\",\"tianjin\")),\n" +
-                "    PARTITION p2 VALUES IN ((\"2022-04-16\",\"shanghai\"),(\"2022-04-16\",\"beijing\"))\n" +
+                "  PARTITION p1 VALUES IN ((\'2022-04-15\',\'guangdong\'),(\'2022-04-15\',\'tianjin\')),\n" +
+                "  PARTITION p2 VALUES IN ((\'2022-04-16\',\'shanghai\'),(\'2022-04-16\',\'beijing\'))\n" +
                 ")";
         Assert.assertEquals(sql, target);
     }
@@ -105,12 +105,6 @@ public class ListPartitionDescTest {
         List<ColumnDef> columnDefList = Lists.newArrayList(province,dt);
         ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province","p1","p2",null);
         listSinglePartitionDesc.analyze(columnDefList,null);
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testInvalidDataType() throws AnalysisException{
-        ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("recharge_money","p1","p2",null);
-        listSinglePartitionDesc.analyze(this.findColumnDefList(),null);
     }
 
     @Test(expected = AnalysisException.class)
