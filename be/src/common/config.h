@@ -650,10 +650,9 @@ CONF_Int16(bitmap_serialize_version, "1");
 CONF_Bool(enable_schema_change_vectorized, "true");
 // max hdfs file handle
 CONF_mInt32(max_hdfs_file_handle, "1000");
-// buffer stream reserve size
-// each column will reserve buffer_stream_reserve_size bytes for read
-// default: 8M
-CONF_mInt32(buffer_stream_reserve_size, "8192000");
+
+// parquet reader, each column will reserve X bytes for read
+CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 } // namespace config
