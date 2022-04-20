@@ -14,26 +14,22 @@ Tracer::Tracer(const std::string& service_name, const TracerOptions& tracer_opts
 }
 
 void Tracer::init(const std::string& service_name) {
-    if (_tracer == nullptr) {
-        opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
-        opts.endpoint = _tracer_options.jaeger_endpoint;
-        opts.server_port = _tracer_options.jaeger_server_port;
-        auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
-                new opentelemetry::exporter::jaeger::JaegerExporter(opts));
-        auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
-                new opentelemetry::sdk::trace::SimpleSpanProcessor(std::move(jaeger_exporter)));
-        const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(
-                std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
-        const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(
-                new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
-        _tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
-    }
+    opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
+    opts.endpoint = _tracer_options.jaeger_endpoint;
+    opts.server_port = _tracer_options.jaeger_server_port;
+    auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
+            new opentelemetry::exporter::jaeger::JaegerExporter(opts));
+    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(
+            new opentelemetry::sdk::trace::SimpleSpanProcessor(std::move(jaeger_exporter)));
+    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(
+            std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(
+            new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+    _tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
 }
 
 void Tracer::shutdown() {
-    if (_tracer != nullptr) {
-        _tracer->CloseWithMicroseconds(1);
-    }
+    _tracer->CloseWithMicroseconds(1);
 }
 
 Span Tracer::start_trace(const std::string& trace_name) {

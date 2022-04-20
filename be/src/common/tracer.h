@@ -42,11 +42,7 @@ struct TracerOptions {
  */
 class Tracer {
 public:
-    Tracer() = default;
     Tracer(const std::string& service_name, const TracerOptions& tracer_opts = {"localhost", 6381});
-
-    // Init the tracer.
-    void init(const std::string& service_name);
 
     // Shutdown the tracer.
     void shutdown();
@@ -64,6 +60,9 @@ public:
     Span add_span(const std::string& span_name, const SpanContext& parent_ctx);
 
 private:
+    // Init the tracer.
+    void init(const std::string& service_name);
+
     opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> _tracer;
     TracerOptions _tracer_options;
 };
