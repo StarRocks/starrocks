@@ -652,10 +652,6 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
-// Buffer stream reserve size
-// each column will reserve buffer_stream_reserve_size bytes for read
-// default: 8M
-CONF_mInt32(buffer_stream_reserve_size, "8192000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
@@ -680,7 +676,10 @@ CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
 
 CONF_Bool(enable_orc_late_materialization, "true");
+// orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "2097152");
+// parquet reader, each column will reserve X bytes for read
+CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
