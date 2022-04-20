@@ -273,7 +273,7 @@ PROPERTIES (
 
   * Hive表Schema变更**不会自动同步**，需要在StarRocks中重建Hive外表。
   * 支持Hive的存储格式为Parquet，ORC和CSV格式。
-    > 如果为CSV格式，则暂不支持引号为转义字符。
+  > 如果为CSV格式，则暂不支持引号为转义字符。
   * 压缩格式支持snappy，lz4。
 
 <br/>
@@ -289,16 +289,17 @@ select count(*) from profile_wos_p7;
 
 ### 配置
 
-* fe配置文件路径为fe/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
-* be配置文件路径为be/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
+* fe配置文件路径为$FE_HOME/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
+* be配置文件路径为$BE_HOME/conf，如果需要自定义hadoop集群的配置可以在该目录下添加配置文件，例如：hdfs集群采用了高可用的nameservice，需要将hadoop集群中的hdfs-site.xml放到该目录下，如果hdfs配置了viewfs，需要将core-site.xml放到该目录下。
 * be所在的机器也需要配置JAVA_HOME，一定要配置成jdk环境，不能配置成jre环境
 * kerberos 支持：
   1. 在所有的fe/be机器上用`kinit -kt keytab_path principal`登陆，该用户需要有访问hive和hdfs的权限。kinit命令登陆是有实效性的，需要将其放入crontab中定期执行。
-  2. 把hadoop集群中的hive-site.xml/core-site.xml/hdfs-site.xml放到fe/conf下，把core-site.xml/hdfs-site.xml放到be/conf下。
-  3. 在fe/conf/fe.conf文件中的JAVA_OPTS/JAVA_OPTS_FOR_JDK_9选项加上 -Djava.security.krb5.conf:/etc/krb5.conf，/etc/krb5.conf是krb5.conf文件的路径，可以根据自己的系统调整。
+  2. 把hadoop集群中的hive-site.xml/core-site.xml/hdfs-site.xml放到$FE_HOME/conf下，把core-site.xml/hdfs-site.xml放到$BE_HOME/conf下。
+  3. 在$FE_HOME/conf/fe.conf文件中的JAVA_OPTS/JAVA_OPTS_FOR_JDK_9选项加上 -Djava.security.krb5.conf:/etc/krb5.conf，/etc/krb5.conf是krb5.conf文件的路径，可以根据自己的系统调整。
   4. resource中的uri地址一定要使用域名，并且相应的hive和hdfs的域名与ip的映射都需要配置到/etc/hosts中。
 * S3 支持:
   2.0.1及之后的版本默认不开启此功能，可以按照以下步骤配置后使用。
+
   1. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到fe/lib/和be/lib/hadoop/hdfs/路径下。
   2. 在fe/conf/core-site.xml和be/conf/core-site.xml中加入如下配置，并重启fe和be。
 
@@ -330,11 +331,72 @@ select count(*) from profile_wos_p7;
 
 ### 缓存更新
 
-* hive的partition信息以及partition对应的文件信息都会缓存在starrocks中，缓存的刷新时间为hive_meta_cache_refresh_interval_s，默认7200，缓存的失效时间为hive_meta_cache_ttl_s，默认86400。
+Hive Table的Partition统计信息以及Partition下面的文件信息可以缓存到StarRocks FE中，缓存的内存结构为Guava LoadingCache, 该缓存的自动刷新时间配置为`hive_meta_cache_refresh_interval_s`，默认7200，缓存的失效时间配置为`hive_meta_cache_ttl_s`，默认86400。
 
-* 也可以手动刷新元数据信息：
+#### 手动更新元数据缓存
+
+* 手动刷新元数据信息：
   1. hive中新增或者删除分区时，需要刷新**表**的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中hive_t是starrocks中的外表名称。
   2. hive中向某些partition中新增数据时，需要**指定partition**进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中hive_t是starrocks中的外表名称，'k1=01/k2=02'、 'k1=03/k2=04'是hive中的partition名称。
+
+#### 自动增量更新元数据缓存
+
+自动增量更新元数据缓存主要是通过定期消费Hive Metastore的event来实现，新增分区以及分区新增数据无需通过手动执行refresh来更新。用户需要在Hive Metastore端开启元数据Event机制。相比Loading Cache的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache的自动刷新机制将不再生效。
+
+* Hive Metastore开启event机制
+
+   用户需要在$HiveMetastore/conf/hive-site.xml中添加如下配置，并重启Hive Metastore. 以下配置为Hive Metastore 3.1.2版本的配置，用户可以将以下配置先拷贝到hive-site.xml中进行验证，因为在Hive Metastore中配置不存在的参数只会提示WARN信息，不会抛出任何异常。
+
+~~~xml
+<property>
+    <name>hive.metastore.event.db.notification.api.auth</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.notifications.add.thrift.objects</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.metastore.alter.notifications.basic</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hive.metastore.dml.events</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hive.metastore.transactional.event.listeners</name>
+    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
+  </property>
+  <property>
+    <name>hive.metastore.event.db.listener.timetolive</name>
+    <value>172800s</value>
+  </property>
+  <property>
+    <name>hive.metastore.server.max.message.size</name>
+    <value>858993459</value>
+  </property>
+~~~
+
+* StarRocks开启自动增量元数据同步
+
+    用户需要在$FE_HOME/conf/fe.conf中添加如下配置并重启FE.
+    `enable_hms_events_incremental_sync=true`
+    自动增量元数据同步相关配置如下，如无特殊需求，无需修改。
+
+   | 参数值                             | 说明                                      | 默认值 |
+   | --- | --- | ---|
+   | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能            | false |
+   | hms_events_polling_interval_ms     | StarRocks拉取Hive Metastore Event事件间隔 | 5秒 |
+   | hms_events_batch_size_per_rpc      | StarRocks每次拉取Event事件的最大数量      | 500 |
+   | enable_hms_parallel_process_evens  | 对接收的Events是否并行处理                | true |
+   | hms_process_events_parallel_num    | 处理Events事件的并发数                    | 4 |
+
+* 注意事项
+  * 不同版本Hive Metastore的Events事件可能不同，且上述开启HiveMetastore Event机制的配置在不同版本也存在不同。使用时相关配置可根据实际版进行适当调整。当前已经验证可以开启Hive Metastore Event机制的版本有2.X和3.X。用户可以在FE日志中搜索"event id"来验证event是否开启成功，如果没有开启成功，event id始终保持为0。如果无法判断是否成功开启Event机制，请在StarRocks用户交流群中联系值班同学进行排查。
+  * 当前Hive元数据缓存模式为懒加载，即：如果HIVE新增了分区，StarRocks只会将新增分区的partition key进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行refresh分区操作时，该分区的文件信息才会被加载。StarRocks首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到StarRocks中。
+  * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
+  * 当前自动更新不支持add/drop column等schema change操作，Hive表结构如有更改，需要重新创建Hive外表。Hive外表支持Schema change将会在近期推出，敬请期待。
 
 ## StarRocks外部表
 
