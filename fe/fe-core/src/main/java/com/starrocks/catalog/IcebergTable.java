@@ -152,21 +152,26 @@ public class IcebergTable extends Table {
         switch (type) {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
+                validateColumn(IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs()));
                 break;
             case CUSTOM_CATALOG:
                 icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());
                 for (String key : copiedProps.keySet()) {
                     icebergProperties.put(key, copiedProps.remove(key));
                 }
-                // todo: validate custom catalog
-                // cannot validate columns for custom catalog at present, return directly.
-                return;
+                validateColumn(IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties));
+                break;
             default:
                 throw new DdlException("unsupported catalog type " + type.name());
         }
         this.resourceName = resourceName;
 
-        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs());
+        if (!copiedProps.isEmpty()) {
+            throw new DdlException("Unknown table properties: " + copiedProps.toString());
+        }
+    }
+
+    private void validateColumn(IcebergCatalog catalog) throws DdlException {
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
         // TODO: use TypeUtil#indexByName to handle nested field
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
@@ -185,10 +190,7 @@ public class IcebergTable extends Table {
                         "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
             }
         }
-
-        if (!copiedProps.isEmpty()) {
-            throw new DdlException("Unknown table properties: " + copiedProps.toString());
-        }
+        LOG.debug("successfully validating columns for " + catalog);
     }
 
     private boolean validateColumnType(Type icebergType, com.starrocks.catalog.Type type) {

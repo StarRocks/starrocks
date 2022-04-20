@@ -41,8 +41,8 @@ public class IcebergResource extends Resource {
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
 
-    @SerializedName(value = "impl")
-    private String impl;
+    @SerializedName(value = "customImpl")
+    private String customImpl;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -69,14 +69,14 @@ public class IcebergResource extends Resource {
                 }
                 break;
             case CUSTOM_CATALOG:
-                impl = properties.get(ICEBERG_IMPL);
-                if (StringUtils.isBlank(impl)) {
+                customImpl = properties.get(ICEBERG_IMPL);
+                if (StringUtils.isBlank(customImpl)) {
                     throw new DdlException(ICEBERG_IMPL + " must be set in properties");
                 }
                 try {
-                    Thread.currentThread().getContextClassLoader().loadClass(impl);
+                    Thread.currentThread().getContextClassLoader().loadClass(customImpl);
                 } catch (ClassNotFoundException e) {
-                    throw new DdlException("Unknown class: " + impl);
+                    throw new DdlException("Unknown class: " + customImpl);
                 }
                 break;
             default:
@@ -92,7 +92,7 @@ public class IcebergResource extends Resource {
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_METASTORE_URIS, metastoreURIs));
                 break;
             case CUSTOM_CATALOG:
-                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, impl));
+                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, customImpl));
                 break;
             default:
                 LOG.warn("Unexpected catalog type: " + catalogType);
@@ -105,7 +105,7 @@ public class IcebergResource extends Resource {
     }
 
     public String getIcebergImpl() {
-        return impl;
+        return customImpl;
     }
 
     public IcebergCatalogType getCatalogType() {

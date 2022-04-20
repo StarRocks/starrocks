@@ -49,9 +49,9 @@ public class IcebergCustomCatalogTest {
             }
         };
 
-        String impl = IcebergCustomTestingCatalog.class.getName();
+        String customImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(impl, icebergProperties);
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(customImpl, icebergProperties);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
@@ -75,9 +75,9 @@ public class IcebergCustomCatalogTest {
             }
         };
 
-        String impl = IcebergCustomTestingCatalog.class.getName();
+        String customImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(impl, icebergProperties);
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(customImpl, icebergProperties);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }

@@ -31,8 +31,8 @@ public interface CatalogLoader {
         return new HiveCatalogLoader(name, hadoopConf, properties);
     }
 
-    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String impl) {
-        return new CustomCatalogLoader(name, hadoopConf, properties, impl);
+    static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties, String customImpl) {
+        return new CustomCatalogLoader(name, hadoopConf, properties, customImpl);
     }
 
     class HiveCatalogLoader implements CatalogLoader {
@@ -72,29 +72,29 @@ public interface CatalogLoader {
         private final SerializableConfiguration hadoopConf;
         private final Map<String, String> properties;
         private final String name;
-        private final String impl;
+        private final String customImpl;
 
         private CustomCatalogLoader(
                 String name,
                 Configuration conf,
                 Map<String, String> properties,
-                String impl) {
+                String customImpl) {
             this.hadoopConf = new SerializableConfiguration(conf);
             this.properties = Maps.newHashMap(properties); // wrap into a hashmap for serialization
             this.name = name;
-            this.impl = Preconditions.checkNotNull(impl, "Cannot initialize custom Catalog, impl class name is null");
+            this.customImpl = Preconditions.checkNotNull(customImpl, "Cannot initialize custom Catalog, impl class name is null");
         }
 
         @Override
         public Catalog loadCatalog() {
-            return CatalogUtil.loadCatalog(impl, name, properties, hadoopConf.get());
+            return CatalogUtil.loadCatalog(customImpl, name, properties, hadoopConf.get());
         }
 
         @Override
         public String toString() {
             return MoreObjects.toStringHelper(this)
                     .add("name", name)
-                    .add("impl", impl)
+                    .add("customImpl", customImpl)
                     .toString();
         }
     }

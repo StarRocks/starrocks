@@ -71,18 +71,18 @@ public class IcebergResourceTest {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
-        String impl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
+        String customImpl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
         properties.put("starrocks.catalog-type", catalogType);
-        properties.put("iceberg.catalog-impl", impl);
+        properties.put("iceberg.catalog-impl", customImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg1", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
         Assert.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
-        Assert.assertEquals(impl, resource.getIcebergImpl());
+        Assert.assertEquals(customImpl, resource.getIcebergImpl());
     }
 
     @Test

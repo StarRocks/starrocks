@@ -97,13 +97,18 @@ public class IcebergTableTest {
 
     @Test
     public void testCustomWithResourceName(@Mocked com.starrocks.catalog.Catalog catalog,
-                                     @Mocked ResourceMgr resourceMgr,
-                                     @Mocked IcebergCatalog icebergCatalog) throws DdlException {
+                                           @Mocked ResourceMgr resourceMgr,
+                                           @Mocked IcebergCatalog icebergCatalog,
+                                           @Mocked Table iTable) throws DdlException {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
         resourceProperties.put("starrocks.catalog-type", "custom");
         resourceProperties.put("iceberg.catalog-impl", IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
         icebergResource.setProperties(resourceProperties);
+
+        List<Types.NestedField> fields = new ArrayList<>();
+        fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
+        Schema schema = new Schema(fields);
 
         new MockUp<IcebergUtil>() {
             @Mock
@@ -123,6 +128,12 @@ public class IcebergTableTest {
 
                 resourceMgr.getResource("iceberg0");
                 result = icebergResource;
+
+                icebergCatalog.loadTable((TableIdentifier) any);
+                result = iTable;
+
+                iTable.schema();
+                result = schema;
             }
         };
 
