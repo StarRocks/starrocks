@@ -840,7 +840,11 @@ build_opentelemetry() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF -DWITH_STL=ON -DWITH_JAEGER=ON ..
+    $CMAKE_CMD .. \
+        -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF \
+        -DWITH_STL=ON -DWITH_JAEGER=ON
     make -j$PARALLEL
     make install
 }
