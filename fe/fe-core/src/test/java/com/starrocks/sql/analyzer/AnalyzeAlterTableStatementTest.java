@@ -5,7 +5,6 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -58,7 +57,7 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testNoClause() throws UserException {
+    public void testNoClause() {
         List<AlterClause> ops = Lists.newArrayList();
         AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
         AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
