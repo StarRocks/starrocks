@@ -69,7 +69,7 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)), _reverted_index_size(0) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)), _reverted_index_size(0), _size_changed(false) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -83,19 +83,16 @@ public:
 
     void add_value(const CppType& value) {
         auto it = _mem_index.find(value);
-        uint64_t old_size = 0;
         if (it != _mem_index.end()) {
             // exiting value, update bitmap
-            old_size = it->second.getSizeInBytes(false);
             it->second.add(_rid);
         } else {
             // new value, copy value and insert new key->bitmap pair
             CppType new_value;
             _typeinfo->deep_copy(&new_value, &value, &_pool);
             _mem_index.insert({new_value, Roaring::bitmapOf(1, _rid)});
-            it = _mem_index.find(new_value);
         }
-        _reverted_index_size += it->second.getSizeInBytes(false) - old_size;
+        _size_changed = true;
         _rid++;
     }
 
@@ -173,7 +170,15 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        size += _reverted_index_size;
+        if (!_size_changed) {
+            size += _reverted_index_size;
+        } else {
+            _reverted_index_size = 0;
+            for (const auto& it : _mem_index) {
+                _reverted_index_size += it.second.getSizeInBytes(false);
+            }
+            _size_changed = false;
+        }
         size += _mem_index.size() * sizeof(CppType);
         size += _pool.total_allocated_bytes();
         return size;
@@ -181,13 +186,14 @@ public:
 
 private:
     TypeInfoPtr _typeinfo;
-    uint64_t _reverted_index_size;
+    mutable uint64_t _reverted_index_size;
     rowid_t _rid = 0;
     // row id list for null value
     Roaring _null_bitmap;
     // unique value to its row id list
     MemoryIndexType _mem_index;
     MemPool _pool;
+    mutable bool _size_changed;
 };
 
 } // namespace
