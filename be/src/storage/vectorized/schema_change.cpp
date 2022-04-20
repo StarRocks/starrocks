@@ -1349,6 +1349,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     std::vector<RowsetSharedPtr> rowsets_to_change;
     int32_t end_version = -1;
     Status status;
+    Schema base_schema;
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
@@ -1363,7 +1364,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
         VLOG(3) << "versions to be changed size:" << versions_to_be_changed.size();
 
-        Schema base_schema;
         if (config::enable_schema_change_v2) {
             base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
                     base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
@@ -1412,7 +1412,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
     }
 
-    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     Version delete_predicates_version(0, max_rowset->version().second);
     TabletReaderParams read_params;
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
