@@ -67,11 +67,6 @@ public class CreateTableTest {
     }
 
     @Test
-    public void kkk() throws DdlException{
-
-    }
-
-    @Test
     public void testNormal() throws DdlException {
 
         ExceptionChecker.expectThrowsNoException(
