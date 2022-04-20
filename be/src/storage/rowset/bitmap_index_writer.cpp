@@ -171,15 +171,14 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        if (!_size_changed) {
-            size += _reverted_index_size;
-        } else {
+        if (_size_changed) {
             _reverted_index_size = 0;
             for (const auto& it : _mem_index) {
                 _reverted_index_size += it.second.getSizeInBytes(false);
             }
             _size_changed = false;
         }
+        size += _reverted_index_size;
         size += _mem_index.size() * sizeof(CppType);
         size += _pool.total_allocated_bytes();
         return size;
