@@ -1463,7 +1463,7 @@ public class OlapTable extends Table {
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                                        Boolean.valueOf(enablePersistentIndex).toString());
-        Boolean.valueOf(enablePersistentIndex).toString();
+        tableProperty.buildEnablePersistentIndex();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
