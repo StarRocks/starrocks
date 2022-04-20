@@ -69,7 +69,8 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)), _reverted_index_size(0), _size_changed(false) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info)
+            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _size_changed(false) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
