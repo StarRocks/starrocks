@@ -176,6 +176,7 @@
       + 其他类型
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
+        + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
     + 辅助命令
       + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
@@ -256,6 +257,19 @@
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
+    + JSON 函数
+      + [JSON 函数和运算符](/sql-reference/sql-functions/json-functions/json-functions-and-operators.md)
+      + JSON 构造函数
+        + [json_array](/sql-reference/sql-functions/json-functions/json-creation-functions/json_array.md)
+        + [json_object](/sql-reference/sql-functions/json-functions/json-creation-functions/json_object.md)
+        + [parse_json](/sql-reference/sql-functions/json-functions/json-creation-functions/parse_json.md)
+      + JSON 查询和处理函数
+        + [箭头函数](/sql-reference/sql-functions/json-functions/json-processing-functions/arrow-function.md)
+        + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
+        + [json_exist](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
+        + [json_each](/sql-reference/sql-functions/json-functions/json-processing-functions/json_each.md)
+        + [JSON 类型转换](/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)
+      + [JSON 运算符](/sql-reference/sql-functions/json-functions/json-operators.md)
     + 聚合函数
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
