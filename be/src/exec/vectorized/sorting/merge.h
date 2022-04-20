@@ -48,7 +48,7 @@ struct SortedRun {
             return chunk->clone_unique();
         } else {
             size_t slice_rows = num_rows();
-            ChunkUniquePtr cloned = chunk->clone_empty(slice_rows - range.first);
+            ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
             cloned->append(*chunk, range.first, slice_rows);
             return cloned;
         }
