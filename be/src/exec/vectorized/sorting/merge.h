@@ -147,6 +147,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns&
                                    SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,

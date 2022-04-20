@@ -10,6 +10,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/sorting.h"
 
 namespace starrocks::pipeline {
 
@@ -21,13 +22,21 @@ using vectorized::ChunksSorter;
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers,
-                        const std::vector<ExprContext*> sort_exprs,
-                         const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
-            : _state(state), _limit(limit), _num_partition_sinkers(num_right_sinkers), _sort_exprs(sort_exprs) {
+                         const std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                         const std::vector<bool>& is_null_first)
+            : _state(state),
+              _limit(limit),
+              _num_partition_sinkers(num_right_sinkers),
+              _sort_exprs(sort_exprs),
+              _sort_desc(is_asc_order, is_null_first) {
         _chunks_sorter_partions.reserve(num_right_sinkers);
     }
 
     void close(RuntimeState* state) override {}
+
+    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
+        _chunks_sorter_partions.push_back(chunks_sorter);
+    }
 
     void finish_partition(uint64_t partition_rows) {
         _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
@@ -40,18 +49,14 @@ public:
 
     ChunkPtr pull_chunk();
 
-    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
-        _chunks_sorter_partions.push_back(chunks_sorter);
-    }
-
 private:
-    // Merge input sorted chunks
     void _merge_inputs();
 
     RuntimeState* _state;
     const int64_t _limit;
     const int32_t _num_partition_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
+    const vectorized::SortDescs _sort_desc;
 
     mutable int64_t _require_rows = 0;
     mutable bool _is_merge_finish = false;
@@ -68,8 +73,8 @@ private:
 class SortContextFactory {
 public:
     SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
-                        const std::vector<ExprContext*>& sort_exprs,
-                       const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
+                       const std::vector<ExprContext*>& sort_exprs, const std::vector<bool>& _is_asc_order,
+                       const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);
 
@@ -88,4 +93,4 @@ private:
     std::vector<bool> _is_null_first;
 };
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

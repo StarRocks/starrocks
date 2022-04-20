@@ -19,11 +19,6 @@ struct DataSegment {
     ChunkPtr chunk;
     Columns order_by_columns;
 
-    uint32_t _next_output_row = 0;
-    uint64_t _partitions_rows = 0;
-
-    bool has_next() { return _next_output_row < _partitions_rows; }
-
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }

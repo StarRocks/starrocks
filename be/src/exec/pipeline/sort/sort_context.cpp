@@ -2,13 +2,11 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
-#include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
 
 namespace starrocks::pipeline {
 
-using vectorized::SortedRun;
-using vectorized::SortDescs;
 using vectorized::Permutation;
 using vectorized::Columns;
 
@@ -28,38 +26,28 @@ bool SortContext::is_partition_sort_finished() const {
 }
 
 void SortContext::_merge_inputs() {
-    // TODO
-    std::vector<SortedRun> partial_sorted_chunks;
+    std::vector<ChunkPtr> partial_sorted_chunks;
     for (int i = 0; i < _num_partition_sinkers; ++i) {
         auto data_segment = _chunks_sorter_partions[i]->get_result_data_segment();
         if (data_segment != nullptr) {
-            // get size from ChunksSorter into DataSegment.
-            data_segment->_partitions_rows = _chunks_sorter_partions[i]->get_partition_rows();
-            // _sorted_permutation is just used for full sort to index data,
-            // and topn is needn't it.
+            size_t partition_rows = _chunks_sorter_partions[i]->get_partition_rows();
+            // TODO: remove it
             Permutation* sorted_permutation = _chunks_sorter_partions[i]->get_permutation();
-            if (data_segment->_partitions_rows > 0) {
+
+            if (partition_rows > 0) {
                 ChunkPtr sorted_chunk = data_segment->chunk;
                 if (sorted_permutation) {
                     ChunkPtr assemble = sorted_chunk->clone_empty(sorted_permutation->size());
                     append_by_permutation(assemble.get(), {sorted_chunk}, *sorted_permutation);
-                    Columns orderby;
-                    for (auto expr : _sort_exprs) {
-                        auto maybe_col = expr->evaluate(assemble.get());
-                        CHECK(maybe_col.ok());
-                        orderby.push_back(maybe_col.value());
-                    }
-                    // TODO: evaluate sort expression
-                    partial_sorted_chunks.emplace_back(assemble, orderby);
+                    partial_sorted_chunks.emplace_back(assemble);
                 } else {
-                    partial_sorted_chunks.emplace_back(data_segment->chunk, data_segment->order_by_columns);
+                    partial_sorted_chunks.emplace_back(data_segment->chunk);
                 }
             }
         }
     }
 
-    SortDescs sort_desc;
-    merge_sorted_chunks(SortDescs(), partial_sorted_chunks, &_merged_chunk);
+    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk);
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,

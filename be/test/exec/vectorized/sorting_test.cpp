@@ -192,7 +192,7 @@ TEST(MergeTest, merge_sorted_stream) {
     std::vector<bool> null_first;
     Chunk::SlotHashMap map;
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+    SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
 
     for (int i = 0; i < num_columns; i++) {
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
