@@ -64,6 +64,10 @@ Status TabletReader::prepare() {
     }
     _stats.rowsets_read_count += _rowsets.size();
     Rowset::acquire_readers(_rowsets);
+    // ensure all input rowsets are loaded into memory
+    for (const auto& rowset : _rowsets) {
+        rowset->load();
+    }
     return st;
 }
 

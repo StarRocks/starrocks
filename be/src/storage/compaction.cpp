@@ -228,10 +228,6 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->tablet_id(), _tablet->data_dir()->path());
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
-    // ensure all input rowsets are loaded into memory
-    for (auto& rowset : _input_rowsets) {
-        RETURN_IF_ERROR(rowset->load());
-    }
     for (size_t i = 0; i < _column_groups.size(); ++i) {
         bool is_key = (i == 0);
         if (!is_key) {

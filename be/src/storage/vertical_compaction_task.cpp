@@ -59,11 +59,6 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
           "size:$1",
           max_rows_per_segment, column_groups.size());
 
-    // ensure all input rowsets are loaded into memory
-    for (auto& rowset : _input_rowsets) {
-        RETURN_IF_ERROR(rowset->load());
-    }
-
     for (size_t i = 0; i < column_groups.size(); ++i) {
         if (should_stop()) {
             LOG(INFO) << "vertical compaction task_id:" << _task_info.task_id << " is stopped.";
