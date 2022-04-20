@@ -266,8 +266,9 @@ PROPERTIES (
     |  VARCHAR  | VARCHAR   |
     |  CHAR  | CHAR   |
     |  DOUBLE | DOUBLE |
-    | FLOATE | FLOAT|
+    | FLOAT | FLOAT|
     | DECIMAL | DECIMAL |
+    | ARRAY | ARRAY |
 
     说明：
 
