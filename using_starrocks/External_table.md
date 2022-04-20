@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、ElasticSearch、Hive、StarRocks以及Apache Iceberg。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、ElasticSearch、Hive、StarRocks、Apache Iceberg和Apache Hudi。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -462,7 +462,6 @@ DROP RESOURCE "iceberg0";
 
 ~~~sql
 CREATE DATABASE iceberg_test; 
-
 USE iceberg_test; 
 ~~~
 
@@ -474,13 +473,13 @@ USE iceberg_test;
 
 ~~~sql
 CREATE EXTERNAL TABLE `iceberg_tbl` ( 
-`id` bigint NULL, 
-`data` varchar(200) NULL 
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
 ) ENGINE=ICEBERG 
 PROPERTIES ( 
-"resource" = "iceberg0", 
-"database" = "iceberg", 
-"table" = "iceberg_table" 
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table" 
 ); 
 ~~~
 
@@ -521,4 +520,117 @@ PROPERTIES (
 
 ~~~sql
 select count(*) from iceberg_tbl;
+~~~
+
+## Apache Hudi外表
+
+StarRocks支持通过外表的方式查询Apache Hudi数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在StarRock创建外表，查询Apache Hudi中的数据。
+
+### 前提条件
+
+请确认StarRocks有权限访问Apache Hudi对应的Hive Metastore、HDFS集群或者对象存储的Bucket。
+
+### 注意事项
+
+* Hudi外表是只读的，只能用于查询操作。
+* 当前支持Hudi的表类型为Copy on write(下文简称COW)，暂不支持Merge on read(下文简称MOR)表类型。COW和MOR之间的更多区别，请参见[Apache Hudi官网](https://hudi.apache.org/docs/table_types)。
+* 支持Hudi文件的压缩格式为GZIP（默认值），ZSTD，LZ4和SNAPPY。
+* StarRocks暂不⽀持同步Hudi中的[schema evolution](https://hudi.apache.org/docs/schema_evolution)，如果Hudi表schema evolution发生变更，您需要在StarRocks中删除对应Hudi外表并重新建立。
+
+### 操作步骤
+
+#### 步骤一：创建和管理Hudi资源
+
+您需要提前在StarRocks中创建Hudi资源，用于管理在StarRocks中创建的Hudi数据库和外表。
+
+执行如下命令，创建一个名为`hudi0`的Hudi资源。
+
+~~~sql
+CREATE EXTERNAL RESOURCE "hudi0" 
+PROPERTIES ( 
+    "type" = "hudi", 
+    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+);
+~~~
+
+|  参数   | 说明  |
+|  ----  | ----  |
+| type  | 资源类型，固定取值为**hudi**。 |
+| hive.metastore.uris | Hive Metastore的thrift URI。<br>Hudi通过连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**thrift://<Hive Metadata的IP地址>:<端口号>**，端口号默认为9083。 |
+
+执行如下命令，查看StarRocks中的所有Hudi资源。
+
+~~~sql
+SHOW RESOURCES;
+~~~~
+
+执行如下命令，删除名为`hudi0`的Hudi资源。
+
+~~~sql
+DROP RESOURCE "hudi0";
+~~~~
+
+> 删除Hudi资源会导致其包含的所有Hudi外表不可用，但Apache Hudi中的数据并不会丢失。如果您仍需要通过StarRocks查询Hudi的数据，请重新创建Hudi资源，Hudi数据库和外表。
+
+#### 步骤二：创建Hudi数据库
+
+执行如下命令，在StarRocks中创建并进入名为`hudi_test`的Hudi数据库。
+
+~~~sql
+CREATE DATABASE hudi_test; 
+USE hudi_test; 
+~~~
+
+> 库名无需与Hudi的实际库名保持一致。
+
+#### 步骤三：创建Hudi外表
+
+执行如下命令，在Hudi数据库`hudi_test`中，创建一张名为`hudi_tbl`的Hudi外表。
+
+~~~sql
+CREATE EXTERNAL TABLE `hudi_tbl` ( 
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=HUDI 
+PROPERTIES ( 
+    "resource" = "hudi0", 
+    "database" = "hudi", 
+    "table" = "hudi_table" 
+); 
+~~~
+
+* 相关参数说明，请参见下表：
+
+| **参数**     | **说明**                       |
+| ------------ | ------------------------------ |
+| **ENGINE**   | 固定为**HUDI**，无需更改。  |
+| **resource** | StarRocks的Hudi资源的名称。 |
+| **database** | Hudi表所在的数据库名称。        |
+| **table**    | Hudi表所在的数据表名称。        |
+
+* 表名无需与Hudi实际表名保持一致。
+* 列名需要与Hudi实际列名保持一致，列的顺序无需保持一致。
+* 您可以按照业务需求选择Hudi表中的全部或部分列。支持的数据类型以及与StarRocks对应关系，请参见下表。
+
+| Apache Hudi中列的数据类型 | StarRocks中列的数据类型 |
+| ---------------------------- | ----------------------- |
+| BOOLEAN                      | BOOLEAN                 |
+| INT                          | TINYINT/SMALLINT/INT    |
+| DATE                         | DATE                    |
+| TimeMillis/TimeMicros        | TIME                    |
+| LONG                         | BIGINT                  |
+| FLOAT                        | FLOAT                   |
+| DOUBLE                       | DOUBLE                  |
+| STRING                       | CHAR/VARCHAR            |
+| ARRAY                        | ARRAY                   |
+| DECIMAL                      | DECIMAL                 |
+
+> 如果Apache Hudi部分列的数据类型为FIXED, ENUM, UNION, MAP, BYTES，则StarRocks暂不支持通过Hudi关联外表的方式访问此数据类型。
+
+#### 步骤四：查询Hudi外表
+
+创建Hudi外表后，无需导入数据，执行如下命令，即可查询Hudi的数据。
+
+~~~sql
+SELECT COUNT(*) FROM hudi_tbl;
 ~~~
