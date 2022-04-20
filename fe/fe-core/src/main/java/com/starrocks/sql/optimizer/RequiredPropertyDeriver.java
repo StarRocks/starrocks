@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
@@ -112,8 +111,8 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
                 getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
         List<Ordering> leftOrderings = new ArrayList<>();
         List<Ordering> rightOrderings = new ArrayList<>();
-        JoinPredicateUtils.getJoinOnPredicatesOrders(equalOnPredicate, leftChildColumns, rightChildColumns, leftOrderings, rightOrderings);
-
+        JoinPredicateUtils.getJoinOnPredicatesOrders(equalOnPredicate,
+                leftChildColumns, rightChildColumns, leftOrderings, rightOrderings);
         SortProperty leftSortProperty = new SortProperty(new OrderSpec(leftOrderings));
         SortProperty rightSortProperty = new SortProperty(new OrderSpec(rightOrderings));
 
@@ -121,7 +120,8 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         PhysicalPropertySet leftBroadcastProperty =
                 new PhysicalPropertySet(leftSortProperty);
         PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()), rightSortProperty);
+                new PhysicalPropertySet(new DistributionProperty(
+                        DistributionSpec.createReplicatedDistributionSpec()), rightSortProperty);
         requiredProperties.add(Lists.newArrayList(leftBroadcastProperty, rightBroadcastProperty));
 
 
@@ -140,8 +140,8 @@ public class RequiredPropertyDeriver extends OperatorVisitor<Void, ExpressionCon
         JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
                 leftOnPredicateColumns, rightOnPredicateColumns);
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
-        List<PhysicalPropertySet> physicalPropertySets = Utils.computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
-                rightOnPredicateColumns);
+        List<PhysicalPropertySet> physicalPropertySets = Utils.computeShuffleJoinRequiredProperties(
+                requirementsFromParent, leftOnPredicateColumns, rightOnPredicateColumns);
         physicalPropertySets.get(0).setSortProperty(leftSortProperty);
         physicalPropertySets.get(1).setSortProperty(rightSortProperty);
         requiredProperties.add(physicalPropertySets);

@@ -500,7 +500,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableHiveColumnStats = true;
 
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
-    private String joinImplementationMode = "auto"; // auto, merge, hash
+    private String joinImplementationMode = "hash"; // auto, merge, hash
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
