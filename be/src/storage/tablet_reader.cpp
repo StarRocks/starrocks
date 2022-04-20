@@ -47,6 +47,7 @@ void TabletReader::close() {
         _collect_iter.reset();
     }
     STLDeleteElements(&_predicate_free_list);
+    _obj_pool.clear();
 }
 
 Status TabletReader::prepare() {
