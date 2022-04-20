@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -79,7 +80,7 @@ public class BackupStmt extends AbstractBackupStmt {
             try {
                 type = BackupType.valueOf(copiedProperties.get(PROP_TYPE).toUpperCase());
             } catch (Exception e) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
+                ErrorReport.reportAnalysisEresiotxception(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid backup job type: "
                                 + copiedProperties.get(PROP_TYPE));
             }
@@ -109,5 +110,10 @@ public class BackupStmt extends AbstractBackupStmt {
         sb.append(new PrintableMap<String, String>(properties, " = ", true, true));
         sb.append("\n)");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBackupStatement(this, context);
     }
 }

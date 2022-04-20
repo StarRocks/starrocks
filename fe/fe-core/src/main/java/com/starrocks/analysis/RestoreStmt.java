@@ -179,6 +179,6 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStmt(this, context);
+        return visitor.visitRestoreStatement(this, context);
     }
 }
