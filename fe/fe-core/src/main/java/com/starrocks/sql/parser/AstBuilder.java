@@ -81,7 +81,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
@@ -119,6 +119,8 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -159,7 +161,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean ifNotExist = context.IF() != null;
         String mvName = context.mvName.getText();
         String comment = context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        PartitionDesc partitionDesc = (PartitionDesc) visit(context.partitionExpDesc());
+        PartitionExpDesc partitionExpDesc = (PartitionExpDesc) visit(context.partitionExpDesc());
 
         RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         // get query statement
@@ -175,41 +177,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         DistributionDesc distributionDesc =
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc());
         return new CreateMaterializedViewStatement(mvName, ifNotExist, comment,
-                refreshSchemeDesc, partitionDesc, distributionDesc, properties, queryStatement);
+                refreshSchemeDesc, partitionExpDesc, distributionDesc, properties, queryStatement);
     }
 
     public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {
-        List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
-        String functionName = null;
-        String functionArgs = null;
-        if (identifierList.size() == 3) {
-            functionName = identifierList.get(0).getValue().toLowerCase();
-            if (context.string() != null) {
-                functionArgs = context.string().getText();
-            }
-            identifierList.remove(0);
+        ParseNode parseNode = visit(context.primaryExpression());
+        if (!(parseNode instanceof Expr)) {
+            throw new IllegalArgumentException("Partition exp must be expression");
         }
-        return new PartitionExpDesc(
-                identifierList.stream().map(Identifier::getValue).collect(toList()),
-                functionName, functionArgs);
+        return new PartitionExpDesc((Expr) parseNode);
     }
 
     @Override
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
-        long startTime = TimeUtils.getStartTime();
+        LocalDateTime startTime = LocalDateTime.now();
         long step = 1;
         String timeUnit = "HOUR";
         if (context.ASYNC() != null) {
             if (context.string() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
-                startTime = TimeUtils.timeStringToLong(stringLiteral.getStringValue());
-                if (startTime == -1) {
+                DateTimeFormatter dateTimeFormatter = null;
+                try {
+                    dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
+                    startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                } catch (AnalysisException e) {
                     throw new IllegalArgumentException("Refresh type: " + context.SYNC().getText() + " start is incorrect");
                 }
             }
             if (context.interval() != null) {
                 IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
-                step = Long.parseLong(intervalLiteral.getValue().toString());
+                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                    throw new IllegalArgumentException("Refresh interval step must be int ");
+                }
+                step = ((IntLiteral) intervalLiteral.getValue()).getValue();
                 timeUnit = intervalLiteral.getUnitIdentifier().getDescription();
             }
             return new AsyncRefreshSchemeDesc(startTime, step, timeUnit);

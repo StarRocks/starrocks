@@ -243,6 +243,7 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.mortbay.log.Log;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -5702,12 +5703,33 @@ public class Catalog {
 
     public void createMaterializedView(CreateMaterializedViewStatement statement)
             throws DdlException {
-        // todo check Mv exists,name must different with view/mv/table which exists in metadata
-        // can't do now
-        // todo check properties, need table info which in meta,
-        // check PROPERTIES_REPLICATION_NUM, Storage
-        // todo generate some partition desc partitionExpDesc -> rangePartitionExpDesc or other
-        // null partition
+        // check Mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = statement.getMvName();
+        String dbName = statement.getDbName();
+        Log.debug("begin create materialized view: {}", mvName);
+        // check if db exists
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(mvName) != null) {
+                if (statement.isIfNotExists()) {
+                    LOG.info("create materialized view [{}] which already exists", mvName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
+        // todo need mv entity, can't do now
+        // generate some partition desc partitionExpDesc -> rangePartitionExpDesc or other
+        // check properties, need table info which in meta
+        // convert query Statement to sql
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {

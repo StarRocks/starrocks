@@ -117,7 +117,10 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
-            //todo need to design
+            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
+                    statement.getMvName(), PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+            }
             return null;
         }
     }

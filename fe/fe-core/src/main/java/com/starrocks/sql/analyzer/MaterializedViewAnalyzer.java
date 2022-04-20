@@ -8,6 +8,8 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.MVColumnDateFormatPattern;
+import com.starrocks.analysis.MVColumnPattern;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -31,17 +33,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-// todo PrivilegeChecker add permission
 public class MaterializedViewAnalyzer {
 
-    public static final Set<String> ALLOW_FN_NAMES;
+    public static final Map<String, MVColumnPattern> FN_NAME_TO_PATTERN;
 
     static {
-        ALLOW_FN_NAMES = new TreeSet<>();
-        ALLOW_FN_NAMES.add("date_format");
+        FN_NAME_TO_PATTERN = Maps.newHashMap();
+        // can add some other functions
+        FN_NAME_TO_PATTERN.put("date_format", new MVColumnDateFormatPattern());
     }
 
 
@@ -57,28 +58,19 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
-            // get table name and column name first
-            PartitionExpDesc partitionExpDesc = (PartitionExpDesc) statement.getPartitionDesc();
-            String functionName = partitionExpDesc.getFunctionName();
-            if (functionName != null && !ALLOW_FN_NAMES.contains(functionName)) {
-                throw new SemanticException("Materialized view partition function name " +
-                        functionName + " is not support");
-            }
-            // check partition key in query select statement, check partition key in used by partition in base tables
             QueryStatement queryStatement = statement.getQueryStatement();
             // analyze query statement, can check table and column is exists in meta
             Analyzer.analyze(queryStatement, context);
-            //check query relation
+            //check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
             // set column
             setColumn(statement, selectRelation);
-            // check table is in this database
+            // check table is in this database and is OlapTable
             Map<String, TableRelation> tableRelationHashMap = new HashMap<>();
             extractTableRelation(selectRelation.getRelation(), tableRelationHashMap);
-
             tableRelationHashMap.forEach((tableName, tableRelation) -> {
                 if (!tableRelation.getName().getDb().equals(context.getDatabase())) {
                     throw new SemanticException("Materialized view not support table which in other database");
@@ -88,8 +80,6 @@ public class MaterializedViewAnalyzer {
                 }
             });
             // check alias except * and SlotRef
-            // check partition by expression in selectItem
-            boolean partitionExpIsInSelectItem = false;
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
                 if (!selectListItem.isStar()
@@ -98,16 +88,83 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view query statement select item" +
                             " must has alias except base select item");
                 }
-                if (!partitionExpIsInSelectItem) {
-                    // todo if table has alias
-                    partitionExpIsInSelectItem = checkPartitionExpIsInSelectItem(selectListItem, partitionExpDesc);
+            }
+            // check partitionExpDesc
+            PartitionExpDesc partitionExpDesc = statement.getPartitionExpDesc();
+            checkPartitionExpDesc(partitionExpDesc, selectListItems);
+            //check partition key must be base table partition key
+            // checkPartitionKey(partitionExpDesc, tableRelationHashMap);
+            // check distribution
+            checkDistribution(statement);
+            statement.setDbName(context.getDatabase());
+            return null;
+        }
+
+        private void checkPartitionKey(PartitionExpDesc partitionExpDesc, Map<String, TableRelation> tableRelationHashMap) {
+            SlotRef slotRef = null;
+            Expr expr = partitionExpDesc.getExpr();
+            if (expr instanceof FunctionCallExpr) {
+                slotRef = (SlotRef) expr.getChild(0);
+            } else {
+                slotRef = ((SlotRef) expr);
+            }
+            //must have table relation
+            TableRelation tableRelation = tableRelationHashMap.get(slotRef.getTblNameWithoutAnalyzed());
+            Set<String> partitionNames = ((OlapTable) tableRelation.getTable()).getPartitionNames();
+            if (!partitionNames.contains(slotRef.getColumnName())) {
+                throw new SemanticException("Materialized view partition key in partition exp " +
+                        " must be base table partition key");
+            }
+        }
+
+        private void checkPartitionExpDesc(PartitionExpDesc partitionExpDesc, List<SelectListItem> selectListItems) {
+            Expr expr = partitionExpDesc.getExpr();
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                String functionName = functionCallExpr.getFnName().getFunction();
+                Expr leftChild = functionCallExpr.getChild(0);
+                if (!(leftChild instanceof SlotRef)) {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionName + " first params must be column");
+                }
+                checkSlotRefInSelectList(true, (SlotRef) leftChild, selectListItems, partitionExpDesc);
+                functionCallExpr = ((FunctionCallExpr) partitionExpDesc.getExpr());
+                MVColumnPattern mvColumnPattern = FN_NAME_TO_PATTERN.get(functionName);
+                if (mvColumnPattern == null) {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionName + " is not support");
+                }
+                if (!mvColumnPattern.match(functionCallExpr)) {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionName + " must match pattern:" + mvColumnPattern);
+                }
+            } else if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                checkSlotRefInSelectList(false, slotRef, selectListItems, partitionExpDesc);
+            } else {
+                throw new SemanticException("Materialized view partition exp only support function and column");
+            }
+        }
+
+        private void checkSlotRefInSelectList(boolean isFunction, SlotRef slotRef,
+                                              List<SelectListItem> selectListItems, PartitionExpDesc partitionExpDesc) {
+            boolean isInSelectList = false;
+            for (SelectListItem selectListItem : selectListItems) {
+                if (slotRef.equals(selectListItem.getExpr())) {
+                    //replace with analyzed SlotRef
+                    if (isFunction) {
+                        partitionExpDesc.getExpr().setChild(0, selectListItem.getExpr().clone());
+                    } else {
+                        partitionExpDesc.setExpr(selectListItem.getExpr().clone());
+                    }
+                    if (!isInSelectList) {
+                        isInSelectList = true;
+                    }
                 }
             }
-            if (!partitionExpIsInSelectItem) {
-                throw new SemanticException("Materialized view Partition by expression must in query statement select item");
+            if (!isInSelectList) {
+                throw new SemanticException("Materialized view partition exp column can't find in query statement");
             }
-            checkDistribution(statement);
-            return null;
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {
@@ -136,7 +193,9 @@ public class MaterializedViewAnalyzer {
 
 
         private void setColumn(CreateMaterializedViewStatement statement, QueryRelation queryRelation) {
-            //todo column define
+            //todo column define column reference with bast table
+            // set SlotRef in column
+            // or base tableId and columnName in column?
             List<Column> mvColumns = Lists.newArrayList();
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
@@ -146,7 +205,6 @@ public class MaterializedViewAnalyzer {
             statement.setMvColumnItems(mvColumns);
         }
 
-        // todo can rewrite with visitor
         private void extractTableRelation(Relation relation, Map<String, TableRelation> tableRelationHashMap) {
             if (relation instanceof TableRelation) {
                 tableRelationHashMap.put(((TableRelation) relation).getName().getTbl(), (TableRelation) relation);
@@ -155,38 +213,6 @@ public class MaterializedViewAnalyzer {
                 extractTableRelation(((JoinRelation) relation).getRight(), tableRelationHashMap);
             }
         }
-
-        // todo can rewrite with visitor
-        private boolean checkPartitionExpIsInSelectItem(SelectListItem selectListItem, PartitionExpDesc partitionExpDesc) {
-            Expr expr = selectListItem.getExpr();
-            if (partitionExpDesc.getFunctionName() != null) {
-                if (!(expr instanceof FunctionCallExpr)) {
-                    return false;
-                }
-                // todo function args compare?
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (!functionCallExpr.getFnName().getFunction().equals(partitionExpDesc.getFunctionName())) {
-                    return false;
-                }
-                return checkPartitionExpIsInSlotRef((SlotRef) functionCallExpr.getChild(0), partitionExpDesc);
-            } else {
-                if (!(expr instanceof SlotRef)) {
-                    return false;
-                }
-                return checkPartitionExpIsInSlotRef((SlotRef) expr, partitionExpDesc);
-            }
-        }
-
-        private boolean checkPartitionExpIsInSlotRef(SlotRef slotRef, PartitionExpDesc partitionExpDesc) {
-            if (!slotRef.getTblNameWithoutAnalyzed().getTbl().equals(partitionExpDesc.getTableName())) {
-                return false;
-            }
-            if (!slotRef.getColumnName().equals(partitionExpDesc.getColumnName())) {
-                return false;
-            }
-            return true;
-        }
-
 
     }
 

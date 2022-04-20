@@ -45,8 +45,7 @@ statement
     ;
 
 partitionExpDesc
-    : PARTITION BY (identifier '(' identifier '.' identifier (',' string)? ')'
-    | identifier '.' identifier )
+    : PARTITION BY primaryExpression
     ;
 
 refreshSchemeDesc
