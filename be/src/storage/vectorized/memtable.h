@@ -22,6 +22,9 @@ public:
     MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
              RowsetWriter* rowset_writer, MemTracker* mem_tracker);
 
+    MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+             MemTracker* mem_tracker);
+
     ~MemTable();
 
     int64_t tablet_id() const { return _tablet_id; }
@@ -70,9 +73,9 @@ private:
     // for sort by columns
     Permutation _permutations;
     std::vector<uint32_t> _selective_values;
-    Schema _vectorized_schema;
 
     int64_t _tablet_id;
+    Schema _vectorized_schema;
     const TabletSchema* _tablet_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
@@ -87,6 +90,9 @@ private:
 
     bool _has_op_slot = false;
     std::unique_ptr<Column> _deletes;
+
+    bool _use_slot_desc = true;
+    int64_t _max_buffer_size = config::write_buffer_size;
 
     // memory statistic
     MemTracker* _mem_tracker = nullptr;
