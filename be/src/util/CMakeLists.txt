@@ -75,7 +75,6 @@ set(UTIL_FILES
   broker_load_error_hub.cpp
   null_load_error_hub.cpp
   time.cpp
-  os_info.cpp
 # coding_util.cpp
   cidr.cpp
   core_local.cpp
