@@ -307,6 +307,7 @@
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)
       + [array_contains](/sql-reference/sql-functions/array-functions/array_contains.md)
+      + [array_distinct](/sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_length](/sql-reference/sql-functions/array-functions/array_length.md)
       + [array_max](/sql-reference/sql-functions/array-functions/array_max.md)
       + [array_min](/sql-reference/sql-functions/array-functions/array_min.md)
