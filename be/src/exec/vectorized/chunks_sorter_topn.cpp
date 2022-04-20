@@ -352,9 +352,9 @@ Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
 
 // take sort_row_number rows from permutation_second merge-sort with _merged_segment.
 // And take result datas into big_chunk.
-void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number,
-                                          size_t sorted_size, size_t permutation_size,
-                                          Permutation& permutation_second) {
+Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number,
+                                            size_t sorted_size, size_t permutation_size,
+                                            Permutation& permutation_second) {
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
@@ -365,7 +365,7 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
     Columns right_columns;
     for (auto expr : *_sort_exprs) {
         auto maybe_column = expr->evaluate(right_chunk.get());
-        CHECK(maybe_column.ok());
+        RETURN_IF_ERROR(maybe_column);
         right_columns.push_back(maybe_column.value());
     }
 
@@ -377,19 +377,18 @@ void ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& seg
     SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
     if (_compare_strategy == RowWise) {
-        Status st = merge_sorted_chunks_two_way_rowwise(sort_desc, left_columns, right_columns, &merged_perm,
-                                                        sort_row_number);
-        CHECK(st.ok());
+        RETURN_IF_ERROR(merge_sorted_chunks_two_way_rowwise(sort_desc, left_columns, right_columns, &merged_perm,
+                                                            sort_row_number));
     } else {
-        Status st = merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
-                                                &merged_perm);
-        CHECK(st.ok());
+        RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
+                                                    &merged_perm));
         CHECK_GE(merged_perm.size(), sort_row_number);
         merged_perm.resize(sort_row_number);
     }
 
     std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
     append_by_permutation(big_chunk.get(), chunks, merged_perm);
+    return Status::OK();
 }
 
 Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
@@ -421,7 +420,8 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         size_t sorted_size = _merged_segment.chunk->num_rows();
         sort_row_number = std::min(sort_row_number, sorted_size + second_size);
 
-        _merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, second_size, new_permutation.second);
+        RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, sort_row_number, sorted_size, second_size,
+                                           new_permutation.second));
     }
     if (big_chunk->reach_capacity_limit()) {
         LOG(WARNING) << "TopN sort encounter big chunk overflow";
