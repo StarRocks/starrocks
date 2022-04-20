@@ -311,6 +311,7 @@
       + [array_max](/sql-reference/sql-functions/array-functions/array_max.md)
       + [array_min](/sql-reference/sql-functions/array-functions/array_min.md)
       + [array_position](/sql-reference/sql-functions/array-functions/array_position.md)
+      + [array_sort](/sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
       + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
     + [cast函数](/sql-reference/sql-functions/cast.md)
