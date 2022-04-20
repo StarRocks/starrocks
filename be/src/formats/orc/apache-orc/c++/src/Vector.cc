@@ -332,8 +332,27 @@ uint64_t ListVectorBatch::getMemoryUsage() {
 bool ListVectorBatch::hasVariableLength() {
     return true;
 }
+
+uint32_t build_filter_on_offsets(uint8_t* f_data, uint32_t f_size, DataBuffer<int64_t>& offsets,
+                                 std::vector<uint8_t>* p) {
+    int64_t total_size = offsets[f_size];
+    // by default it's zero.
+    p->assign(total_size, 0);
+    uint8_t* filter = p->data();
+    int64_t true_size = 0;
+    for (uint32_t i = 0; i < f_size; i++) {
+        if (f_data[i] == 0) continue;
+        memset(filter + offsets[i], 0x1, offsets[i + 1] - offsets[i]);
+        true_size += offsets[i + 1] - offsets[i];
+    }
+    return static_cast<uint32_t>(true_size);
+}
+
 void ListVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
-    throw std::logic_error("ListVectorBatch::filter not supported");
+    std::vector<uint8_t> p;
+    uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
+    uint32_t size = static_cast<uint32_t>(p.size());
+    elements->filter(p.data(), size, true_count);
 }
 
 MapVectorBatch::MapVectorBatch(uint64_t cap, MemoryPool& pool) : ColumnVectorBatch(cap, pool), offsets(pool, cap + 1) {
@@ -375,7 +394,11 @@ bool MapVectorBatch::hasVariableLength() {
 }
 
 void MapVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
-    throw std::logic_error("MapVectorBatch::filter not supported");
+    std::vector<uint8_t> p;
+    uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
+    uint32_t size = static_cast<uint32_t>(p.size());
+    keys->filter(p.data(), size, true_count);
+    elements->filter(p.data(), size, true_count);
 }
 
 UnionVectorBatch::UnionVectorBatch(uint64_t cap, MemoryPool& pool)
