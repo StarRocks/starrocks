@@ -82,7 +82,7 @@ public:
         return _append(buf);
     }
 
-    /* read_one_messages returns data appended in one time.
+    /* read_one_messages returns data that is written by append in one time.
     * buf: the buffer to return data, and would be expaneded if the capacity is not enough.
     * buf_cap: the capacity of buffer, and would be reset if the capacity is not enough.
     * buf_sz: the actual size of data to return.
