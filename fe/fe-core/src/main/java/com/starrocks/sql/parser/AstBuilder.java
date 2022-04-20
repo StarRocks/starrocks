@@ -76,7 +76,6 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
