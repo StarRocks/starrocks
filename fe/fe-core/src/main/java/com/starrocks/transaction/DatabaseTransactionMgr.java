@@ -646,6 +646,7 @@ public class DatabaseTransactionMgr {
                 long tableId = tableCommitInfo.getTableId();
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 // table maybe dropped between commit and publish, ignore it
+                // it will be processed in finishTransaction
                 if (table == null) {
                     continue;
                 }
@@ -666,20 +667,33 @@ public class DatabaseTransactionMgr {
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
-                            int healthReplicaNum = 0;
+                            int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica  
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                if (!errReplicas.contains(replica.getId()) && replica.getLastFailedVersion() < 0) {
-                                    if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
-                                        ++healthReplicaNum;
+                                if (!errReplicas.contains(replica.getId())) {
+                                    // success healthy replica condition:
+                                    // 1. version is equal to partition's visible version
+                                    // 2. publish version task in this replica has finished
+                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)
+                                            && replica.getLastFailedVersion() < 0
+                                            && (unfinishedBackends == null
+                                            || !unfinishedBackends.contains(replica.getBackendId()))) {
+                                        ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
                                             && unfinishedBackends.contains(replica.getBackendId())) {
                                         errReplicas.add(replica.getId());
                                     }
+                                } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                    // the replica's version is larger than or equal to current transaction partition's version
+                                    // the replica is normal, then remove it from error replica ids
+                                    // this branch will be true if BE's replica reports it's version to FE
+                                    // after publish version succeed in BE
+                                    errReplicas.remove(replica.getId());
+                                    ++successHealthyReplicaNum;
                                 }
                             }
-                            if (healthReplicaNum < quorumNum) {
+                            if (successHealthyReplicaNum < quorumNum) {
                                 return false;
                             }
                         }
