@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -11,6 +12,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +20,8 @@ public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
     // tableId-><dbName, table>
     private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    // viewId->view
+    private final Map<Long, View> viewMap = new LinkedHashMap<>();
     // tableName->partitionName->partitionRowCount
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
@@ -25,6 +29,8 @@ public class QueryDumpInfo implements DumpInfo {
     private SessionVariable sessionVariable;
     // tableName->createTableStmt
     private final Map<String, String> createTableStmtMap = new HashMap<>();
+    // viewName->createViewStmt
+    private final Map<String, String> createViewStmtMap = new LinkedHashMap<>();
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
 
@@ -62,6 +68,10 @@ public class QueryDumpInfo implements DumpInfo {
     public void addPartitionRowCount(Table table, String partition, long rowCount) {
         String tableName = getTableName(table.getId());
         addPartitionRowCount(tableName, partition, rowCount);
+    }
+
+    public void addView(View view) {
+        viewMap.put(view.getId(), view);
     }
 
     @Override
@@ -105,8 +115,16 @@ public class QueryDumpInfo implements DumpInfo {
         return tableMap;
     }
 
+    public Map<Long, View> getViewMap() {
+        return viewMap;
+    }
+
     public Map<String, String> getCreateTableStmtMap() {
         return createTableStmtMap;
+    }
+
+    public Map<String, String> getCreateViewStmtMap() {
+        return createViewStmtMap;
     }
 
     // return table full name
@@ -118,6 +136,10 @@ public class QueryDumpInfo implements DumpInfo {
 
     public void addTableCreateStmt(String tableName, String createTableStmt) {
         createTableStmtMap.put(tableName, createTableStmt);
+    }
+
+    public void addViewCreateStmt(String viewName, String createViewStmt) {
+        createViewStmtMap.put(viewName, createViewStmt);
     }
 
     @Override
