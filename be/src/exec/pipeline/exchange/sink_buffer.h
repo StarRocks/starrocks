@@ -90,6 +90,10 @@ private:
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
     // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
+
+    // This method must invoked under the protection of _mutexes[instance_id.lo]
+    // But we cannot add lock in the body of this function, because we need to put this function
+    // and other extra works before calling this function together as an atomic operation
     void _try_to_send_rpc(const TUniqueId& instance_id);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
