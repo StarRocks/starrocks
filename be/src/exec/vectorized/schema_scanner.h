@@ -31,7 +31,12 @@ struct SchemaScannerParam {
     const std::string* ip{nullptr};                   // frontend ip
     int32_t port{0};                                  // frontend thrift port
     int64_t thread_id = 0;
-    int64_t limit{0};
+    int64_t limit{0};                                 // set limit only when there is no predicate
+
+    // true only when there is no predicate and limit parameter is set,
+    // if true, then for SchemaColumnsScanner, call describeTable() once,
+    // and no longer call get_db_names() and get_table_names().
+    bool without_db_table{false};
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
