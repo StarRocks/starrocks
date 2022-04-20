@@ -251,7 +251,7 @@ public class SplitAggregateRule extends TransformationRule {
 
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteProjectMap);
         List<ScalarOperator> groupingKeys =
-                operator.getGroupingKeys().stream().map(key -> key.clone().accept(rewriter, null)).
+                operator.getGroupingKeys().stream().map(rewriter::rewrite).
                         collect(Collectors.toList());
         return groupingKeys.stream().allMatch(ScalarOperator::isConstant);
     }

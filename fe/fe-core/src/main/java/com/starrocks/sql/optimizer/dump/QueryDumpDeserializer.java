@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.Map;
 
 public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
     private static final Logger LOG = LogManager.getLogger(QueryDumpDeserializer.class);
@@ -28,8 +29,8 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         dumpInfo.setOriginStmt(statement);
         // 2. table meta data
         JsonObject tableMeta = dumpJsonObject.getAsJsonObject("table_meta");
-        for (String key : tableMeta.keySet()) {
-            dumpInfo.addTableCreateStmt(key, tableMeta.get(key).getAsString());
+        for (Map.Entry<String, JsonElement> entry : tableMeta.entrySet()) {
+            dumpInfo.addTableCreateStmt(entry.getKey(), entry.getValue().getAsString());
         }
         // 3. table row count
         JsonObject tableRowCount = dumpJsonObject.getAsJsonObject("table_row_count");
@@ -40,7 +41,14 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addPartitionRowCount(tableKey, partitionKey, partitionRowCountNum);
             }
         }
-        // 4. session variables
+        // 4. view meta
+        if (dumpJsonObject.has("view_meta")) {
+            JsonObject viewMeta = dumpJsonObject.getAsJsonObject("view_meta");
+            for (Map.Entry<String, JsonElement> entry : viewMeta.entrySet()) {
+                dumpInfo.addViewCreateStmt(entry.getKey(), entry.getValue().getAsString());
+            }
+        }
+        // 5. session variables
         if (dumpJsonObject.has("session_variables")) {
             try {
                 dumpInfo.getSessionVariable().replayFromJson(dumpJsonObject.get("session_variables").getAsString());
@@ -48,7 +56,7 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 LOG.warn("deserialize from json failed. " + e);
             }
         }
-        // 5. column statistics
+        // 6. column statistics
         JsonObject tableColumnStatistics = dumpJsonObject.getAsJsonObject("column_statistics");
         for (String tableKey : tableColumnStatistics.keySet()) {
             JsonObject columnStatistics = tableColumnStatistics.get(tableKey).getAsJsonObject();
@@ -57,7 +65,7 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addTableStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
             }
         }
-        // 6. BE number
+        // 7. BE number
         int beNum = dumpJsonObject.get("be_number").getAsInt();
         dumpInfo.setBeNum(beNum);
 

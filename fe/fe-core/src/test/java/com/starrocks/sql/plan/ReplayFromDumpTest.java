@@ -416,11 +416,12 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testMultiViewCrossJoin() throws Exception {
+    public void testInsertWithView() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
-        // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
-                "  |  <slot 1> : 1: c_0_0"));
+                getPlanFragment(getDumpInfoFromFile("query_dump/insert_view"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 2:Project\n" +
+                "  |  <slot 2> : 2: t2_c2\n" +
+                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
+        Assert.assertTrue(replayPair.second.contains("OLAP TABLE SINK"));
     }
 }
