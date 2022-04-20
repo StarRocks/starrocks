@@ -9,9 +9,7 @@
 namespace starrocks {
 
 BufferedInputStream::BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length)
-        : _file(file), _offset(offset), _end_offset(offset + length) {
-    _reserve(config::buffer_stream_reserve_size);
-}
+        : _file(file), _offset(offset), _end_offset(offset + length) {}
 
 Status BufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek) {
     if (*nbytes <= num_remaining()) {
@@ -22,7 +20,7 @@ Status BufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bo
         return Status::OK();
     }
 
-    _reserve(*nbytes);
+    reserve(*nbytes);
     RETURN_IF_ERROR(_read_data());
 
     size_t max_get = std::min(*nbytes, num_remaining());
@@ -34,7 +32,7 @@ Status BufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bo
     return Status::OK();
 }
 
-void BufferedInputStream::_reserve(size_t nbytes) {
+void BufferedInputStream::reserve(size_t nbytes) {
     if (nbytes <= _buf_capacity - _buf_position) {
         return;
     }
