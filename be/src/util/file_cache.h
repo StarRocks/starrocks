@@ -24,7 +24,8 @@
 #include <memory>
 #include <string>
 
-#include "storage/lru_cache.h"
+#include "common/logging.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

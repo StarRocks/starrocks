@@ -19,13 +19,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/lru_cache.h"
+#include "util/lru_cache.h"
 
 #include <gtest/gtest.h>
 
 #include <vector>
-
-#include "util/logging.h"
 
 using namespace starrocks;
 using namespace std;
