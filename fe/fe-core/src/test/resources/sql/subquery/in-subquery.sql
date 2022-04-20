@@ -1,127 +1,127 @@
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3)
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3)
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2] predicate[null])
+        SCAN (columns[5: v11] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 = t3.v3)
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 > t3.v3)
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 > t3.v12)
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 > 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3)
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3)
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2] predicate[null])
+        SCAN (columns[5: v11] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 = t3.v3)
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 < t3.v3)
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 < t3.v12)
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 < 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 < 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 = t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 = t3.v12) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 > t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 > t3.v12) and t0.v2 = 3
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 > 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[5: v2 = 3])
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 3])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 > t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 > t3.v12) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 > 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 > t3.v3) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 > t3.v12) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 > 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v2, 6: v3] predicate[null])
+        SCAN (columns[5: v11, 6: v12] predicate[null])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 = t3.v3 and t3.v1 > 2) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where t0.v3 = t3.v12 and t3.v10 > 2) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[4: v1 > 2])
+        SCAN (columns[4: v10, 5: v11, 6: v12] predicate[4: v10 > 2])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 = t3.v3 and t3.v1 > 2) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 = t3.v12 and t3.v10 > 2) and t0.v2 = 3
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[4: v1 > 2 AND 5: v2 = 3])
+        SCAN (columns[4: v10, 5: v11, 6: v12] predicate[4: v10 > 2 AND 5: v11 = 3])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where  t3.v1 > 2) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 not in (select t3.v11 from t3 where  t3.v10 > 2) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2] predicate[4: v1 > 2])
+        SCAN (columns[4: v10, 5: v11] predicate[4: v10 > 2])
 [end]
 
 [sql]
-select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t3.v1 > 2) and t0.v2 = 3
+select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t3.v10 > 2) and t0.v2 = 3
 [result]
-LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2] predicate[5: v2 = 3 AND 4: v1 > 2])
+        SCAN (columns[4: v10, 5: v11] predicate[5: v11 = 3 AND 4: v10 > 2])
 [end]
 
 [sql]

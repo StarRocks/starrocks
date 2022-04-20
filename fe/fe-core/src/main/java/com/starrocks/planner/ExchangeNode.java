@@ -28,17 +28,20 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SortInfo;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 /**
  * Receiver side of a 1:n data stream. Logically, an ExchangeNode consumes the data
@@ -68,6 +71,8 @@ public class ExchangeNode extends PlanNode {
 
     private TPartitionType partitionType;
     private DistributionSpec.DistributionType distributionType;
+    // Specify the columns which need to send, work on CTE, and keep empty in other sense
+    private List<Integer> receiveColumns;
 
     /**
      * Create ExchangeNode that consumes output of inputNode.
@@ -99,6 +104,15 @@ public class ExchangeNode extends PlanNode {
         distributionType = type;
     }
 
+    public ExchangeNode(PlanNodeId id, PlanNode inputNode, boolean copyConjuncts,
+                        DistributionSpec.DistributionType type, TupleDescriptor tuple) {
+        this(id, inputNode, copyConjuncts, type);
+        tupleIds.add(tuple.getId());
+        nullableTupleIds.add(tuple.getId());
+        receiveColumns = Lists.newArrayList();
+        tuple.getSlots().forEach(s -> receiveColumns.add(s.getId().asInt()));
+    }
+
     // For Test
     public ExchangeNode(PlanNodeId id, PlanNode inputNode) {
         super(id, inputNode, "EXCHANGE");
@@ -114,6 +128,10 @@ public class ExchangeNode extends PlanNode {
 
     public boolean isMerge() {
         return mergeInfo != null;
+    }
+
+    public List<Integer> getReceiveColumns() {
+        return receiveColumns;
     }
 
     @Override

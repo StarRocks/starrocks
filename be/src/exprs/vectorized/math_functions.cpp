@@ -498,6 +498,7 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
         if (is_over_flow) {
             res = ColumnHelper::create_const_null_column(size);
         } else {
+            res->resize(1);
             res = ConstColumn::create(res, size);
         }
     } else if (c0_is_const) {

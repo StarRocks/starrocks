@@ -88,23 +88,24 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     }
     auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
-        LOG(WARNING) << "Fail to get tablet. tablet=" << request.tablet_id << " schema_hash=" << request.schema_hash;
+        LOG(WARNING) << "make_snapshot fail to get tablet. tablet:" << request.tablet_id;
         return Status::RuntimeError("tablet not found");
     }
     int64_t timeout_s = request.__isset.timeout ? request.timeout : config::snapshot_expire_time_sec;
 
     StatusOr<std::string> res;
+    int64_t cur_tablet_version = tablet->max_version().second;
     if (request.__isset.missing_version) {
-        LOG(INFO) << "make incremental snapshot tablet_id:" << request.tablet_id
-                  << " version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;
+        LOG(INFO) << "make incremental snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
+                  << " req_version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;
         res = snapshot_incremental(tablet, request.missing_version, timeout_s);
     } else if (request.__isset.version) {
-        LOG(INFO) << "make full snapshot tablet_id:" << request.tablet_id << " version:" << request.version
-                  << " timeout:" << timeout_s;
+        LOG(INFO) << "make full snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
+                  << " req_version:" << request.version << " timeout:" << timeout_s;
         res = snapshot_full(tablet, request.version, timeout_s);
     } else {
-        LOG(INFO) << "make full snapshot tablet_id:" << request.tablet_id << " version:" << 0
-                  << " timeout:" << timeout_s;
+        LOG(INFO) << "make full snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
+                  << " req_version:" << 0 << " timeout:" << timeout_s;
         res = snapshot_full(tablet, 0, timeout_s);
     }
     if (!res.ok()) {

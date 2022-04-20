@@ -110,6 +110,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -197,7 +198,7 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -268,55 +269,60 @@ public class PlanFragmentBuilder {
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
-                List<ColumnRefOperator> outputColumns = node.getOutputColumns();
-                Set<Integer> outputColumnIds = new HashSet<Integer>();
-                for (ColumnRefOperator colref : outputColumns) {
-                    outputColumnIds.add(colref.getId());
-                }
-
-                // we only support single pred like: a = xx, single pre can push down to scan node
-                // complex pred like: a + b = xx, can not push down to scan node yet
-                // so the columns in complex pred, it useful for the stage after scan
-                Set<Integer> singlePredColumnIds = new HashSet<Integer>();
-                Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-                Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
-                if (referenceTable.getKeysType().isAggregationFamily() || referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    List<Column> fullColumn = referenceTable.getFullSchema();
-                    for (Column col : fullColumn) {
-                        if (!col.isKey()) {
-                            aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
-                        }
-                    }
-                }
-
-                for (ScalarOperator predicate : predicates) {
-                    ColumnRefSet usedColumns = predicate.getUsedColumns();
-                    if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
-                        for (int cid : usedColumns.getColumnIds()) {
-                            singlePredColumnIds.add(cid);
-                        }
-                    } else {
-                        for (int cid : usedColumns.getColumnIds()) {
-                            complexPredColumnIds.add(cid);
-                        }
-                    }
-                }
-
-                Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
-                Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
-                for (Integer cid : singlePredColumnIds) {
-                    Integer newCid = cid;
-                    if (dictStringIdToIntIds.containsKey(cid)) {
-                        newCid = dictStringIdToIntIds.get(cid);
-                    }
-                    if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
-                        unUsedOutputColumnIds.add(newCid);
-                    }
-                }
-
-                scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
+            if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+                return;
             }
+            List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+            // if outputColumns is empty, skip this optimization
+            if (outputColumns.isEmpty()) {
+                return;
+            }
+            Set<Integer> outputColumnIds = new HashSet<Integer>();
+            for (ColumnRefOperator colref : outputColumns) {
+                outputColumnIds.add(colref.getId());
+            }
+
+            // we only support single pred like: a = xx, single pre can push down to scan node
+            // complex pred like: a + b = xx, can not push down to scan node yet
+            // so the columns in complex pred, it useful for the stage after scan
+            Set<Integer> singlePredColumnIds = new HashSet<Integer>();
+            Set<Integer> complexPredColumnIds = new HashSet<Integer>();
+            Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            if (referenceTable.getKeysType().isAggregationFamily() || referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                List<Column> fullColumn = referenceTable.getFullSchema();
+                for (Column col : fullColumn) {
+                    if (!col.isKey()) {
+                        aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
+                    }
+                }
+            }
+
+            for (ScalarOperator predicate : predicates) {
+                ColumnRefSet usedColumns = predicate.getUsedColumns();
+                if (DecodeVisitor.isSimpleStrictPredicate(predicate)) {
+                    for (int cid : usedColumns.getColumnIds()) {
+                        singlePredColumnIds.add(cid);
+                    }
+                } else {
+                    for (int cid : usedColumns.getColumnIds()) {
+                        complexPredColumnIds.add(cid);
+                    }
+                }
+            }
+
+            Set<Integer> unUsedOutputColumnIds = new HashSet<Integer>();
+            Map<Integer, Integer> dictStringIdToIntIds = node.getDictStringIdToIntIds();
+            for (Integer cid : singlePredColumnIds) {
+                Integer newCid = cid;
+                if (dictStringIdToIntIds.containsKey(cid)) {
+                    newCid = dictStringIdToIntIds.get(cid);
+                }
+                if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
+                    unUsedOutputColumnIds.add(newCid);
+                }
+            }
+
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
         }
 
         @Override
@@ -889,6 +895,27 @@ public class PlanFragmentBuilder {
 
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                // if user set table_schema or table_name in where condition and is
+                // binary predicate operator, we can set table_schema and table_name
+                // into scan-node, which can reduce time from be to fe
+                if (predicate instanceof BinaryPredicateOperator) {
+                    if (((BinaryPredicateOperator) predicate).getBinaryType() == BinaryPredicateOperator.BinaryType.EQ) {
+                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator) {
+                            ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
+                            ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
+                            switch (columnRefOperator.getName()) {
+                                case "TABLE_SCHEMA":
+                                    scanNode.setSchemaDb(constantOperator.getVarchar());
+                                    break;
+                                case "TABLE_NAME":
+                                    scanNode.setSchemaTable(constantOperator.getVarchar());
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                }
             }
 
             context.getScanNodes().add(scanNode);
@@ -1356,7 +1383,7 @@ public class PlanFragmentBuilder {
                 }
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else {
@@ -1408,6 +1435,7 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
+            fragment.setQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
 
             context.getFragments().add(fragment);
             return fragment;
@@ -1651,7 +1679,7 @@ public class PlanFragmentBuilder {
 
                 List<Expr> eqJoinConjuncts =
                         eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 for (Expr expr : eqJoinConjuncts) {
@@ -1663,13 +1691,13 @@ public class PlanFragmentBuilder {
                 List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
                 otherJoin.removeAll(eqOnPredicates);
                 List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 // 3. Get conjuncts
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
                 if (joinOperator.isLeftOuterJoin()) {
@@ -1950,7 +1978,7 @@ public class PlanFragmentBuilder {
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                             .collect(Collectors.toList());
 
             List<OrderByElement> orderByElements = node.getOrderByElements().stream().map(e -> new OrderByElement(
@@ -2211,8 +2239,24 @@ public class PlanFragmentBuilder {
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
 
-            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+            // create new tuple, don't use CTE-Produce tuple
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            for (ColumnRefOperator cteProduceColumnRef : consume.getCteOutputColumnRefMap().values()) {
+                SlotId slotId = new SlotId(cteProduceColumnRef.getId());
+                SlotDescriptor cteProduceDesc = context.getDescTbl().getSlotDesc(slotId);
+
+                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(tupleDescriptor, slotId);
+                slotDescriptor.setIsNullable(cteProduceDesc.getIsNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(cteProduceDesc.getType());
+                context.getColRefToExpr()
+                        .put(cteProduceColumnRef, new SlotRef(cteProduceColumnRef.toString(), slotDescriptor));
+            }
+
+            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), cteFragment.getPlanRoot(), false,
+                    DistributionSpec.DistributionType.SHUFFLE, tupleDescriptor);
+
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,

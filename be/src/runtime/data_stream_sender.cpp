@@ -23,7 +23,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -377,7 +376,8 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
-          _enable_exchange_pass_through(enable_exchange_pass_through) {
+          _enable_exchange_pass_through(enable_exchange_pass_through),
+          _output_columns(sink.output_columns) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||

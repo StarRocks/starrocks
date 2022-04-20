@@ -86,28 +86,32 @@ public:
     // If _total_length == -1, this should be a Kafka routine load task,
     // just get the next buffer directly from the buffer queue, because one buffer contains a complete piece of data.
     // Otherwise, this should be a stream load task that needs to read the specified amount of data.
-    Status read_one_message(std::unique_ptr<uint8_t[]>* data, size_t* length, size_t padding) override {
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* buf_cap, size_t* buf_sz, size_t padding) override {
         if (_total_length < -1) {
             std::stringstream ss;
             ss << "invalid, _total_length is: " << _total_length;
             return Status::InternalError(ss.str());
         } else if (_total_length == 0) {
             // no data
-            *length = 0;
+            *buf_sz = 0;
             return Status::OK();
         }
 
         if (_total_length == -1) {
-            return _read_next_buffer(data, length);
+            return _read_next_buffer(buf, buf_cap, buf_sz, padding);
         }
 
         // _total_length > 0, read the entire data
-        data->reset(new uint8_t[_total_length + padding]);
-        *length = _total_length;
+
+        if (*buf_cap < _total_length + padding) {
+            buf->reset(new uint8_t[_total_length + padding]);
+            *buf_cap = _total_length + padding;
+        }
+        *buf_sz = _total_length;
         bool eof = false;
-        Status st = read(data->get(), length, &eof);
+        Status st = read(buf->get(), buf_sz, &eof);
         if (eof) {
-            *length = 0;
+            *buf_sz = 0;
         }
         return st;
     }
@@ -193,7 +197,7 @@ public:
 
 private:
     // read the next buffer from _buf_queue
-    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* data, size_t* length) {
+    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* out, size_t* out_cap, size_t* out_sz, size_t padding) {
         std::unique_lock<std::mutex> l(_lock);
         while (!_cancelled && !_finished && _buf_queue.empty()) {
             _get_cond.wait(l);
@@ -205,14 +209,19 @@ private:
         // finished
         if (_buf_queue.empty()) {
             DCHECK(_finished);
-            data->reset();
-            *length = 0;
+            out->reset();
+            *out_sz = 0;
+            *out_cap = 0;
             return Status::OK();
         }
         auto buf = _buf_queue.front();
-        *length = buf->remaining();
-        data->reset(new uint8_t[*length]);
-        buf->get_bytes((char*)(data->get()), *length);
+        *out_sz = buf->remaining();
+
+        if (*out_cap < *out_sz + padding) {
+            out->reset(new uint8_t[*out_sz + padding]);
+            *out_cap = *out_sz + padding;
+        }
+        buf->get_bytes((char*)(out->get()), *out_sz);
 
         _buf_queue.pop_front();
         _buffered_bytes -= buf->limit;

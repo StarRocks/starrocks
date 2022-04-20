@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 
 #include <string>
 

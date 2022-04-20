@@ -299,6 +299,14 @@ Status RuntimeState::create_error_log_file() {
     return Status::OK();
 }
 
+bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
+    if (_num_print_error_rows.load(std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {
     if (_query_options.query_type != TQueryType::LOAD) {
         return;

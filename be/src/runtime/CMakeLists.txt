@@ -83,10 +83,10 @@ set(RUNTIME_FILES
     memory/chunk_allocator.cpp
     date_value.cpp
     timestamp_value.cpp
-    vectorized/chunk_cursor.cpp
-    vectorized/sorted_chunks_merger.cpp
-    vectorized/time_types.cpp
-    vectorized/statistic_result_writer.cpp
+    chunk_cursor.cpp
+    sorted_chunks_merger.cpp
+    time_types.cpp
+    statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dicts.cpp

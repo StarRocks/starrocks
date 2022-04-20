@@ -92,6 +92,7 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
     for (auto i = front_fill_size + 1; i < num_rows; ++i) {
         rhs_data[i] = CppType(0);
     }
+    lhs_column->resize(1);
     columns.push_back(ConstColumn::create(lhs_column, num_rows));
     columns.push_back(rhs_column);
     return columns;
