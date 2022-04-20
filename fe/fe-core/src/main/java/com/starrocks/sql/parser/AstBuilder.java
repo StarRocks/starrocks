@@ -1236,10 +1236,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = (Expr) visit(context.expression(1));
             if (!(e2 instanceof IntervalLiteral)) {
-                if (functionName.toUpperCase().equals(FunctionSet.DATE_FLOOR.toUpperCase())) {
-                    throw new ParsingException(
-                            functionName + " requires second parameter must be a constant interval");
-                }
                 e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
             }
             IntervalLiteral intervalLiteral = (IntervalLiteral) e2;

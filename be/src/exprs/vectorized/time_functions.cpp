@@ -559,12 +559,6 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
         return Status::InternalError("datetime_floor just support const value");
     }
 
-    ColumnPtr column_period = context->get_constant_column(1);
-    auto period_value = ColumnHelper::get_const_value<TYPE_INT>(column_period);
-    if (period_value <= 0) {
-        return Status::InternalError("datetime_floor period must be greater than 0");
-    }
-
     ColumnPtr column_format = context->get_constant_column(2);
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
