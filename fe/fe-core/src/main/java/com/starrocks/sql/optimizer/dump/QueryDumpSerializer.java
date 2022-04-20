@@ -9,7 +9,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.View;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Version;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,13 +49,21 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableRowCount.add(entry.getKey(), partitionRowCount);
         }
         dumpJson.add("table_row_count", tableRowCount);
-        // 4. session variables
+        // 4. view meta
+        if (!dumpInfo.getViewMap().isEmpty()) {
+            JsonObject viewMetaData = new JsonObject();
+            for (View view : dumpInfo.getViewMap().values()) {
+                viewMetaData.addProperty(view.getName(), view.getInlineViewDef());
+            }
+            dumpJson.add("view_meta", viewMetaData);
+        }
+        // 5. session variables
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
             LOG.warn("serialize session variables failed. " + e);
         }
-        // 5. column statistics
+        // 6. column statistics
         JsonObject tableColumnStatistics = new JsonObject();
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
@@ -62,15 +73,20 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        // 6. BE number
+        // 7. BE number
         long beNum = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
         dumpJson.addProperty("be_number", beNum);
-        // 7. exception
+        // 8. exception
         JsonArray exceptions = new JsonArray();
         for (String ex : dumpInfo.getExceptionList()) {
             exceptions.add(ex);
         }
         dumpJson.add("exception", exceptions);
+        // 9. version
+        if (!FeConstants.runningUnitTest) {
+            dumpJson.addProperty("version", Version.STARROCKS_VERSION);
+            dumpJson.addProperty("commit_version", Version.STARROCKS_COMMIT_HASH);
+        }
         return dumpJson;
     }
 }
