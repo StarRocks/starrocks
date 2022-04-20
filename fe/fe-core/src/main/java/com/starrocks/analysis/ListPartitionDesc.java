@@ -185,7 +185,6 @@ public class ListPartitionDesc extends PartitionDesc {
             sb.append(sinleList);
         }
         sb.append("\n)");
-        System.out.println(sb);
         return sb.toString();
     }
 }
