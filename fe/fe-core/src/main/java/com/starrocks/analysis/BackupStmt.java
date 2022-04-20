@@ -80,7 +80,7 @@ public class BackupStmt extends AbstractBackupStmt {
             try {
                 type = BackupType.valueOf(copiedProperties.get(PROP_TYPE).toUpperCase());
             } catch (Exception e) {
-                ErrorReport.reportAnalysisEresiotxception(ErrorCode.ERR_COMMON_ERROR,
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid backup job type: "
                                 + copiedProperties.get(PROP_TYPE));
             }
