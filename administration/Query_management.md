@@ -13,10 +13,10 @@ SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value']
 例如
 
 ```sql
-修改用户 jack 最大连接数为1000
+-- 修改用户 jack 最大连接数为1000
 SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
 
-查看root用户的连接数限制
+-- 查看root用户的连接数限制
 SHOW PROPERTY FOR 'root'; 
 ```
 
@@ -25,23 +25,20 @@ SHOW PROPERTY FOR 'root';
 设置查询相关的 session 级别变量，以调整当前 session 中查询的并发度，内存等，例如：
 
 - 查询并发度相关变量。
-  - pipeline 执行引擎相关变量（推荐）
+  - Pipeline 执行引擎相关变量（推荐）
+  > 自 StarRocks 2.2 版本，Pipeline 执行引擎已经默认开启。
 
-    ```SQL
+    ```sql
     set enable_pipeline_engine = true;
-
     set pipeline_dop = 0;
-
-    set parallel_fragment_exec_instance_num = 1;
     ```
 
     参数说明
 
     | 参数                                  | 说明                                                         |
     | ------------------------------------- | ------------------------------------------------------------ |
-    | `enable_pipeline_engine`              | 是否启用 Pipeline 执行引擎。取值： **true**：启用。 **false**：不启用（默认）。 |
+    | `enable_pipeline_engine`              | 是否启用 Pipeline 执行引擎。取值： **true**：启用（默认）。 **false**：不启用。 |
     | `pipeline_dop`                        | 一个 Pipeline 实例的并行数量。建议设为默认值 **0**，表示自适应调整每个 pipeline 的并行度。 也可以设为大于 **0** 的数值，通常为 BE 节点 CPU 物理核数的一半。 |
-    | `parallel_fragment_exec_instance_num` | 一个 Fragment 实例的并行数量。 启用 Pipeline 时，查询并行度由 `pipeline_dop` 参数决定，因此该参数设为 1 即可。 |
 
   - parallel_fragment_exec_instance_num
 
