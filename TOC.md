@@ -296,6 +296,8 @@
       + [bitmap_hash](/sql-reference/sql-functions/bitmap-functions/bitmap_hash.md)
       + [bitmap_has_any](/sql-reference/sql-functions/bitmap-functions/bitmap_has_any.md)
       + [bitmap_intersect](/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md)
+      + [bitmap_max](/sql-reference/sql-functions/bitmap-functions/bitmap_max.md)
+      + [bitmap_min](/sql-reference/sql-functions/bitmap-functions/bitmap_min.md)
       + [bitmap_or](/sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
       + [bitmap_remove](/sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)
       + [bitmap_to_string](/sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
