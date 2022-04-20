@@ -119,10 +119,10 @@ public class CreateMaterializedViewTest {
     public void testFullDesc() throws Exception{
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by t1.k1 " +
+                "partition by tbl1.k1 " +
                 "distributed by hash(ss) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select t1.k1 ss from tbl1 as t1 " +
+                "as select tbl1.k1 ss from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
