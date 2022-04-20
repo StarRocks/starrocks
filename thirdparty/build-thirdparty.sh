@@ -385,7 +385,14 @@ build_zlib() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL 
+    make -j$PARALLEL
+    make install
+
+    # build minizip
+    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
+    autoreconf --force --install
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
+    make -j$PARALLEL
     make install
 }
 
