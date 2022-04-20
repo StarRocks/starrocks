@@ -314,16 +314,6 @@ void SortedRuns::resize(size_t size) {
     }
 }
 
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,
-                                   Permutation* output) {
-    DCHECK_LE(sort_desc.num_columns(), left->num_columns());
-    DCHECK_LE(sort_desc.num_columns(), right->num_columns());
-
-    SortedRun left_run(left, 0, left->num_rows());
-    SortedRun right_run(right, 0, right->num_rows());
-    return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
-}
-
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output) {
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
@@ -364,7 +354,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             sort_exprs);
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release())));
+        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release()), sort_exprs));
         return Status::OK();
     };
     return merger.consume_all(consumer);
@@ -372,7 +362,10 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
-    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
+    std::deque<SortedRuns> queue;
+    for (auto& chunk : chunks) {
+        queue.push_back(SortedRun(chunk, sort_exprs));
+    }
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();

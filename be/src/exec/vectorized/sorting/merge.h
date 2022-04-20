@@ -18,12 +18,22 @@ struct SortedRun {
 
     SortedRun() = default;
     ~SortedRun() = default;
-    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), orderby(ichunk->columns()), range(0, ichunk->num_rows()) {}
+
     SortedRun(ChunkPtr ichunk, const Columns& columns)
             : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
-    SortedRun(ChunkPtr ichunk, size_t start, size_t end)
-            : chunk(ichunk), orderby(ichunk->columns()), range(start, end) {}
+
+    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {}
+
     SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
+
+    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs) : chunk(ichunk), range(0, ichunk->num_rows()) {
+        for (auto& expr : *exprs) {
+            auto maybe_column = expr->evaluate(ichunk.get());
+            CHECK(maybe_column.ok());
+            orderby.push_back(maybe_column.value());
+        }
+    }
+
     SortedRun& operator=(const SortedRun& rhs) {
         if (&rhs == this) return *this;
         chunk = rhs.chunk;
@@ -70,7 +80,6 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
-    SortedRuns(ChunkPtr chunk) : chunks{SortedRun(chunk)} {}
     SortedRuns(SortedRun run) : chunks{run} {}
 
     SortedRun& get_run(int i) { return chunks[i]; }
@@ -104,12 +113,14 @@ public:
 
     Status consume_all(ChunkConsumer output);
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
+
 private:
     ChunkProvider& as_provider() { return _chunk_provider; }
     StatusOr<ChunkUniquePtr> merge_sorted_cursor_two_way();
     bool move_cursor();
 
     SortDescs _sort_desc;
+
     SortedRun _left_run;
     SortedRun _right_run;
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
@@ -137,8 +148,6 @@ private:
 class SimpleChunkSortCursor;
 
 // ColumnWise Merge algorithms
-Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
-                                   Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
