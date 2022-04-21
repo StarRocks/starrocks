@@ -18,14 +18,11 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 
 public class ListPartitionInfoTest {
 
     private ListPartitionInfo listPartitionInfo;
     private ListPartitionInfo listPartitionInfoForMulti;
-    private final static String fileName = "./test_serial.log";
 
     @Before
     public void setUp() throws DdlException, AnalysisException {
@@ -34,35 +31,9 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void mytest() {
-        List<List<String>> multiValues = Lists.newArrayList(
-                Lists.newArrayList("2022-04-15", "guangdong"),
-                Lists.newArrayList("2022-04-15", "tianjin"),
-                Lists.newArrayList("2022-04-15", "Tianjin")
-        );
-        Set[] arr = new TreeSet[2];
-        for (List<String> values : multiValues) {
-            int duplicatedSize = 0;
-            for (int i = 0; i < values.size(); i++) {
-                if (arr[i] == null) {
-                    arr[i] = new TreeSet();
-                }
-                if (!arr[i].add(values.get(i))) {
-                    duplicatedSize++;
-                }
-            }
-            if (duplicatedSize == 2) {
-                System.out.println("has duplicated");
-            } else {
-                System.out.println("no has duplicated");
-            }
-        }
-    }
-
-    @Test
-    public void testWriteOut() throws IOException {
+    public void testWriteAndReadPartitionInfoLog() throws IOException {
         // 1. Write objects to file
-        File file = new File(fileName);
+        File file = new File("./test_serial.log");
         if (file.exists()) {
             file.delete();
         }
