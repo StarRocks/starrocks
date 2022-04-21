@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
@@ -125,6 +126,12 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
+            AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

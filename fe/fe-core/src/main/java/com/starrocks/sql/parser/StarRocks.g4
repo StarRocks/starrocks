@@ -37,6 +37,12 @@ statement
         AS queryStatement                                                               #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
+    | alterSystem DROP BACKEND clusters                                                   #dropBackend
+    | alterSystem ADD FREE? BACKEND (TO clusterName)? clusters                                                   #addBackend
+    | alterSystem DROP FOLLOWER cluster                                                   #dropFollower
+    | alterSystem ADD FOLLOWER cluster                                                   #addFollower
+    | alterSystem DROP OBSERVER cluster                                                   #dropObserver
+    | alterSystem ADD OBSERVER cluster                                                   #addObserver
     ;
 
 explainDesc
@@ -549,4 +555,22 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    ;
+
+alterSystem
+    : ALTER SYSTEM
+    ;
+
+cluster
+    : SINGLE_QUOTED_TEXT
+    | DOUBLE_QUOTED_TEXT
+    ;
+
+clusters
+    : cluster (',' cluster)*
+    ;
+
+clusterName
+    : SINGLE_QUOTED_TEXT
+    | DOUBLE_QUOTED_TEXT
     ;

@@ -57,6 +57,15 @@ public class BackendClause extends AlterClause {
         Preconditions.checkState(!hostPortPairs.isEmpty());
     }
 
+    public void transferHostPorts() throws AnalysisException{
+        for (String hostPort : hostPorts) {
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+            hostPortPairs.add(pair);
+        }
+
+        Preconditions.checkState(!hostPortPairs.isEmpty());
+    }
+
     @Override
     public String toSql() {
         throw new NotImplementedException();

@@ -4,6 +4,10 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddFollowerClause;
+import com.starrocks.analysis.AddObserverClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -27,6 +31,9 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropFollowerClause;
+import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -112,6 +119,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -1659,6 +1667,63 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText());
+    }
+
+    @Override
+    public ParseNode visitDropBackend(StarRocksParser.DropBackendContext context) {
+        List<String> clusters = context.clusters().cluster()
+                .stream()
+                .map(ParseTree::getText)
+                .map(c -> StringUtils.replace(StringUtils.replace(c, "\"", ""), "'", ""))
+                .collect(toList());
+        return new AlterSystemStmt(new DropBackendClause(clusters));
+    }
+
+    @Override
+    public ParseNode visitAddBackend(StarRocksParser.AddBackendContext context) {
+        List<String> clusters = context.clusters().cluster()
+                .stream()
+                .map(ParseTree::getText)
+                .map(c -> StringUtils.replace(StringUtils.replace(c, "\"", ""), "'", ""))
+                .collect(toList());
+        if (context.TO() != null) {
+            return new AlterSystemStmt(new AddBackendClause(clusters, context.clusterName().getText()));
+        }
+
+        boolean free = context.FREE() != null;
+        if (free) {
+            return new AlterSystemStmt(new AddBackendClause(clusters, free));
+        }
+
+        return new AlterSystemStmt(new AddBackendClause(clusters, false));
+    }
+
+    @Override
+    public ParseNode visitAddObserver(StarRocksParser.AddObserverContext context) {
+        String cluster =
+                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        return new AlterSystemStmt(new AddObserverClause(cluster));
+    }
+
+    @Override
+    public ParseNode visitDropObserver(StarRocksParser.DropObserverContext context) {
+        String cluster =
+                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        return new AlterSystemStmt(new DropObserverClause(cluster));
+    }
+
+    @Override
+    public ParseNode visitAddFollower(StarRocksParser.AddFollowerContext context) {
+        String cluster =
+                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        return new AlterSystemStmt(new AddFollowerClause(cluster));
+    }
+
+    @Override
+    public ParseNode visitDropFollower(StarRocksParser.DropFollowerContext context) {
+        String cluster =
+                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        return new AlterSystemStmt(new DropFollowerClause(cluster));
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

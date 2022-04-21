@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
+import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddFollowerClause;
+import com.starrocks.analysis.AddObserverClause;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -8,6 +12,9 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropFollowerClause;
+import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -164,7 +171,16 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt;
+                || statement instanceof ShowTableStmt
+                || (statement instanceof AlterSystemStmt && statement != null && (
+                    ((AlterSystemStmt) statement).getAlterClause() instanceof AddBackendClause
+                    || ((AlterSystemStmt) statement).getAlterClause() instanceof DropBackendClause
+                    || ((AlterSystemStmt) statement).getAlterClause() instanceof AddObserverClause
+                    || ((AlterSystemStmt) statement).getAlterClause() instanceof DropObserverClause
+                    || ((AlterSystemStmt) statement).getAlterClause() instanceof AddFollowerClause
+                    || ((AlterSystemStmt) statement).getAlterClause() instanceof DropFollowerClause)
+                )
+                ;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -182,6 +198,15 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || (statement instanceof AlterSystemStmt && statement != null && (
+                ((AlterSystemStmt) statement).getAlterClause() instanceof AddBackendClause
+                        || ((AlterSystemStmt) statement).getAlterClause() instanceof DropBackendClause
+                        || ((AlterSystemStmt) statement).getAlterClause() instanceof AddObserverClause
+                        || ((AlterSystemStmt) statement).getAlterClause() instanceof DropObserverClause
+                        || ((AlterSystemStmt) statement).getAlterClause() instanceof AddFollowerClause
+                        || ((AlterSystemStmt) statement).getAlterClause() instanceof DropFollowerClause)
+                 )
+                ;
     }
 }

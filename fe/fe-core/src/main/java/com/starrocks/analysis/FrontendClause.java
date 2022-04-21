@@ -70,6 +70,13 @@ public class FrontendClause extends AlterClause {
         Preconditions.checkState(!Strings.isNullOrEmpty(host));
     }
 
+    public void transferHostPort() throws AnalysisException{
+        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+        this.host = pair.first;
+        this.port = pair.second;
+        Preconditions.checkState(!Strings.isNullOrEmpty(host));
+    }
+
     @Override
     public String toSql() {
         throw new NotImplementedException();
