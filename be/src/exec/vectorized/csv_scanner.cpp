@@ -77,7 +77,7 @@ Status CSVScanner::open() {
     _num_fields_in_csv = first_range.num_of_columns_from_file;
 
     for (int i = _num_fields_in_csv; i < _src_slot_descriptors.size(); i++) {
-        if (_src_slot_descriptors[i]->type().type != TYPE_VARCHAR) {
+        if (_src_slot_descriptors[i] != nullptr && _src_slot_descriptors[i]->type().type != TYPE_VARCHAR) {
             auto t = _src_slot_descriptors[i]->type();
             return Status::InvalidArgument("Incorrect path column type '" + t.debug_string() + "'");
         }
