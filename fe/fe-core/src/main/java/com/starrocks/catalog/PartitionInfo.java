@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStorageMedium;
@@ -154,6 +155,10 @@ public class PartitionInfo implements Writable {
 
     public String toSql(OlapTable table, List<Long> partitionId) {
         return "";
+    }
+
+    public List<Column> getPartitionColumns() throws NotImplementedException {
+        throw new NotImplementedException("method not implemented yet");
     }
 
     @Override
