@@ -132,7 +132,7 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c0_const = true;
         arg0_data_column->resize(1);
-        c0 = ConstColumn::create(arg0_data_column,arg0_values.size());
+        c0 = ConstColumn::create(arg0_data_column, arg0_values.size());
     } else {
         if (arg0_null_flags.empty()) {
             // normal Column

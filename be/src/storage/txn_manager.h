@@ -42,13 +42,13 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "storage/kv_store.h"
-#include "storage/lru_cache.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet.h"
+#include "util/lru_cache.h"
 #include "util/time.h"
 
 namespace starrocks {
