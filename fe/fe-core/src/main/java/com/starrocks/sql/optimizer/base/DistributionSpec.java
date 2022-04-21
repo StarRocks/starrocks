@@ -85,7 +85,8 @@ public class DistributionSpec {
         }
 
         public ColumnRefSet getEquivalentColumns(int column) {
-            return joinEquivalentColumns.getOrDefault(column, new ColumnRefSet());
+            // least equals self
+            return joinEquivalentColumns.getOrDefault(column, new ColumnRefSet(column));
         }
     }
 

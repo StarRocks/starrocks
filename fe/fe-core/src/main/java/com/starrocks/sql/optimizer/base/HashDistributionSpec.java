@@ -65,6 +65,7 @@ public class HashDistributionSpec extends DistributionSpec {
                     return false;
                 }
             }
+            return true;
         }
 
         return false;
