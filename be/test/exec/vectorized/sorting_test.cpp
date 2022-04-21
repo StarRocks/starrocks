@@ -184,8 +184,8 @@ TEST(SortingTest, sorted_runs) {
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
 
     SortedRuns runs;
-    runs.chunks.push_back(SortedRun(chunk));
-    runs.chunks.push_back(SortedRun(chunk));
+    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
 
     ASSERT_EQ(2, runs.num_chunks());
     ASSERT_EQ(200, runs.num_rows());

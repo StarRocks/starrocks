@@ -120,7 +120,6 @@ private:
     bool move_cursor();
 
     SortDescs _sort_desc;
-
     SortedRun _left_run;
     SortedRun _right_run;
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;

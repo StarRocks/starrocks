@@ -131,7 +131,6 @@ set(EXEC_FILES
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
-        ./storage/lru_cache_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
@@ -264,6 +263,7 @@ set(EXEC_FILES
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
+        ./util/lru_cache_test.cpp
         ./gutil/sysinfo-test.cc
         ./exec/vectorized/hdfs_scan_node_test.cpp
         )

@@ -35,7 +35,6 @@ add_library(Storage STATIC
     del_vector.cpp
     hll.cpp
     key_coder.cpp
-    lru_cache.cpp
     memtable_flush_executor.cpp
     null_predicate.cpp
     kv_store.cpp

@@ -12,34 +12,9 @@
 #include <string>
 #include <vector>
 
-#include "storage/olap_common.h"
 #include "util/slice.h"
 
 namespace starrocks {
-
-#define OLAP_CACHE_STRING_TO_BUF(cur, str, r_len)                    \
-    do {                                                             \
-        if (r_len > str.size()) {                                    \
-            memcpy(cur, str.c_str(), str.size());                    \
-            r_len -= str.size();                                     \
-            cur += str.size();                                       \
-        } else {                                                     \
-            LOG(WARNING) << ("construct cache key buf not enough."); \
-            return CacheKey(NULL, 0);                                \
-        }                                                            \
-    } while (0)
-
-#define OLAP_CACHE_NUMERIC_TO_BUF(cur, numeric, r_len)               \
-    do {                                                             \
-        if (r_len > sizeof(numeric)) {                               \
-            memcpy(cur, &numeric, sizeof(numeric));                  \
-            r_len -= sizeof(numeric);                                \
-            cur += sizeof(numeric);                                  \
-        } else {                                                     \
-            LOG(WARNING) << ("construct cache key buf not enough."); \
-            return CacheKey(NULL, 0);                                \
-        }                                                            \
-    } while (0)
 
 class Cache;
 class CacheKey;
