@@ -83,6 +83,10 @@ public class DistributionSpec {
                 return new int[0];
             }
         }
+
+        public ColumnRefSet getEquivalentColumns(int column) {
+            return joinEquivalentColumns.getOrDefault(column, new ColumnRefSet());
+        }
     }
 
     @SuppressWarnings("unchecked")

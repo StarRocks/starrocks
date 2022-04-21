@@ -131,6 +131,19 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `t5` (\n" +
+                "  `v16` bigint NULL COMMENT \"\",\n" +
+                "  `v17` bigint NULL COMMENT \"\",\n" +
+                "  `v18` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v16`, `v17`, v18)\n" +
+                "DISTRIBUTED BY HASH(`v16`, `v17`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `colocate_t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
@@ -585,14 +598,14 @@ public class PlanTestBase {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         starRocksAssert.withTable("CREATE TABLE test.bitmap_table (\n" +
-                        "  `id` int(11) NULL COMMENT \"\",\n" +
-                        "  `id2` bitmap bitmap_union NULL\n" +
-                        ") ENGINE=OLAP\n" +
-                        "AGGREGATE KEY(`id`)\n" +
-                        "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
-                        "PROPERTIES (\n" +
-                        " \"replication_num\" = \"1\"\n" +
-                        ");")
+                "  `id` int(11) NULL COMMENT \"\",\n" +
+                "  `id2` bitmap bitmap_union NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");")
                 .withTable("CREATE TABLE test.bitmap_table_2 (\n" +
                         "  `id` int(11) NULL COMMENT \"\",\n" +
                         "  `id2` bitmap bitmap_union NULL\n" +
@@ -746,14 +759,14 @@ public class PlanTestBase {
 
         FeConstants.runningUnitTest = true;
         starRocksAssert.withResource("create external resource \"jdbc_test\"\n" +
-                        "PROPERTIES (\n" +
-                        "\"type\"=\"jdbc\",\n" +
-                        "\"user\"=\"test_user\",\n" +
-                        "\"password\"=\"test_passwd\",\n" +
-                        "\"driver_url\"=\"test_driver_url\",\n" +
-                        "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
-                        ");")
+                "PROPERTIES (\n" +
+                "\"type\"=\"jdbc\",\n" +
+                "\"user\"=\"test_user\",\n" +
+                "\"password\"=\"test_passwd\",\n" +
+                "\"driver_url\"=\"test_driver_url\",\n" +
+                "\"driver_class\"=\"test.driver.class\",\n" +
+                "\"jdbc_uri\"=\"test_uri\"\n" +
+                ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
                         "ENGINE=jdbc\n" +
@@ -911,9 +924,9 @@ public class PlanTestBase {
                 ");");
 
         starRocksAssert.withTable("create table test.colocate1\n" +
-                        "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
-                        "properties(\"replication_num\" = \"1\"," +
-                        "\"colocate_with\" = \"group1\");")
+                "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
+                "properties(\"replication_num\" = \"1\"," +
+                "\"colocate_with\" = \"group1\");")
                 .withTable("create table test.colocate2\n" +
                         "(k1 int, k2 int, k3 int) distributed by hash(k1, k2) buckets 1\n" +
                         "properties(\"replication_num\" = \"1\"," +
