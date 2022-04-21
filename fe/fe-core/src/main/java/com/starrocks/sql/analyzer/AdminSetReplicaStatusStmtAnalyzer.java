@@ -10,8 +10,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
-import java.util.Map;
-
 public class AdminSetReplicaStatusStmtAnalyzer {
     public static void analyze(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
         new AdminSetStmtAnalyzerVisitor().visit(adminSetReplicaStatusStmt, session);
