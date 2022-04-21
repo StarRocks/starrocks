@@ -48,6 +48,9 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("schema columns scanner not inited.");
     }
+    if (_param->without_db_table) {
+        return Status::OK();
+    }
     // get all database
     TGetDbsParams db_params;
     if (nullptr != _param->db) {
@@ -197,7 +200,12 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // TABLE_SCHEMA
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
-                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                std::string db_name;
+                if (_param->without_db_table) {
+                    db_name = SchemaHelper::extract_db_name(_desc_result.columns[_column_index].columnDesc.dbName);
+                } else {
+                    db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                }
                 Slice value(db_name.c_str(), db_name.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
@@ -207,8 +215,13 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // TABLE_NAME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                std::string* str = &_table_result.tables[_table_index - 1];
-                Slice value(str->c_str(), str->length());
+                std::string* table_name;
+                if (_param->without_db_table) {
+                    table_name = &_desc_result.columns[_column_index].columnDesc.tableName;
+                } else {
+                    table_name = &_table_result.tables[_table_index - 1];
+                }
+                Slice value(table_name->c_str(), table_name->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
@@ -447,8 +460,10 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
 
 Status SchemaColumnsScanner::get_new_desc() {
     TDescribeTableParams desc_params;
-    desc_params.__set_db(_db_result.dbs[_db_index - 1]);
-    desc_params.__set_table_name(_table_result.tables[_table_index++]);
+    if (!_param->without_db_table) {
+        desc_params.__set_db(_db_result.dbs[_db_index - 1]);
+        desc_params.__set_table_name(_table_result.tables[_table_index++]);
+    }
     if (nullptr != _param->current_user_ident) {
         desc_params.__set_current_user_ident(*(_param->current_user_ident));
     } else {
@@ -475,6 +490,9 @@ Status SchemaColumnsScanner::get_new_desc() {
 }
 
 Status SchemaColumnsScanner::get_new_table() {
+    if (_param->without_db_table) {
+        return Status::OK();
+    }
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
     if (nullptr != _param->table) {
@@ -509,16 +527,30 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
     {
         SCOPED_TIMER(_param->_rpc_timer);
-        while (_column_index >= _desc_result.columns.size()) {
-            if (_table_index >= _table_result.tables.size()) {
-                if (_db_index < _db_result.dbs.size()) {
-                    RETURN_IF_ERROR(get_new_table());
-                } else {
-                    *eos = true;
-                    return Status::OK();
-                }
-            } else {
+        // if user query schema meta such as "select * from information_schema.columns limit 10;",
+        // in this case, there is no predicate and limit clause is set,we can call the describe_table
+        // interface only once, and no longer call get_db_names and get_table_names interface, which
+        // can reduce RPC time from BE to FE, and the amount of data
+        if (_param->without_db_table) {
+            if (_column_index == 0) {
                 RETURN_IF_ERROR(get_new_desc());
+            }
+            if (_column_index == _desc_result.columns.size()) {
+                *eos = true;
+                return Status::OK();
+            }
+        } else {
+            while (_column_index >= _desc_result.columns.size()) {
+                if (_table_index >= _table_result.tables.size()) {
+                    if (_db_index < _db_result.dbs.size()) {
+                        RETURN_IF_ERROR(get_new_table());
+                    } else {
+                        *eos = true;
+                        return Status::OK();
+                    }
+                } else {
+                    RETURN_IF_ERROR(get_new_desc());
+                }
             }
         }
     }
