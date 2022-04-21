@@ -156,7 +156,7 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    ChunkConsumer consumer);
 
 // Merge in rowwise, which is slow and used only in benchmark
-Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
+Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,
                                            Permutation* output, size_t limit);
 
 } // namespace starrocks::vectorized
