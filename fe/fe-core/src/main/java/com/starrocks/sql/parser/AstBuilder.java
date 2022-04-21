@@ -11,6 +11,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -43,6 +44,7 @@ import com.starrocks.analysis.InsertTarget;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -58,6 +60,7 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -70,6 +73,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
@@ -138,6 +142,58 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // -------------------------------- Statement ------------------------------
+    @Override
+    public ParseNode visitBackup(StarRocksParser.BackupContext context) {
+        String dbName = "";
+        String labelName = "";
+        if (context.label != null) {
+            String qualifiedName = context.label.getText();
+            dbName = qualifiedName.split("\\.")[0];
+            labelName = qualifiedName.split("\\.")[1];
+        }
+
+        String repository = context.repository.getText();
+        String tables = context.tables.getText();
+        String[] tableList = tables.substring(1, tables.length() - 1).split(",");   // delete parentheses
+        List<TableRef> tableRefs = Lists.newArrayList();
+        for (String table : tableList) {
+            tableRefs.add(new TableRef(new TableName(dbName, table), ""));
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new BackupStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
+    }
+
+    @Override
+    public ParseNode visitRestore(StarRocksParser.RestoreContext context) {
+        String dbName = "";
+        String labelName = "";
+        if (context.label != null) {
+            String qualifiedName = context.label.getText();
+            dbName = qualifiedName.split("\\.")[0];
+            labelName = qualifiedName.split("\\.")[1];
+        }
+        String repository = context.repository.getText();
+        String tables = context.tables.getText();
+        String[] tableList = tables.substring(1, tables.length() - 1).split(",");
+        List<TableRef> tableRefs = Lists.newArrayList();
+        for (String table : tableList) {
+            tableRefs.add(new TableRef(new TableName(dbName, table), ""));
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new RestoreStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
+    }
 
     @Override
     public ParseNode visitShowDatabases(StarRocksParser.ShowDatabasesContext context) {

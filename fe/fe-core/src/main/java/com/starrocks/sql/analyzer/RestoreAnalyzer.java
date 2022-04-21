@@ -1,82 +1,35 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/RestoreStmt.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+package com.starrocks.sql.analyzer;
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.analysis;
-
-import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.RestoreStmt;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class RestoreStmt extends AbstractBackupStmt {
+public class RestoreAnalyzer {
     private static final String PROP_ALLOW_LOAD = "allow_load";
     private static final String PROP_REPLICATION_NUM = "replication_num";
     private static final String PROP_BACKUP_TIMESTAMP = "backup_timestamp";
     private static final String PROP_META_VERSION = "meta_version";
     private static final String PROP_STARROCKS_META_VERSION = "starrocks_meta_version";
 
-    private boolean allowLoad = false;
-    private int replicationNum = FeConstants.default_replication_num;
-    private String backupTimestamp = null;
-    private int metaVersion = -1;
-    private int starrocksMetaVersion = -1;
+    private static boolean allowLoad = false;
+    private static int replicationNum = FeConstants.default_replication_num;
+    private static String backupTimestamp = null;
+    private static int metaVersion = -1;
+    private static int starrocksMetaVersion = -1;
 
-    public RestoreStmt(LabelName labelName, String repoName, List<TableRef> tblRefs, Map<String, String> properties) {
-        super(labelName, repoName, tblRefs, properties);
-    }
-
-    public boolean allowLoad() {
-        return allowLoad;
-    }
-
-    public int getReplicationNum() {
-        return replicationNum;
-    }
-
-    public String getBackupTimestamp() {
-        return backupTimestamp;
-    }
-
-    public int getMetaVersion() {
-        return metaVersion;
-    }
-
-    public int getStarRocksMetaVersion() {
-        return starrocksMetaVersion;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
+    public static void analyze(RestoreStmt restoreStmt, ConnectContext session) throws AnalysisException {
+        List<TableRef> tblRefs =  restoreStmt.getTableRefs();
         // check if alias is duplicated
         Set<String> aliasSet = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {
@@ -88,13 +41,8 @@ public class RestoreStmt extends AbstractBackupStmt {
                 throw new AnalysisException("Duplicated alias name: " + tblRef.getExplicitAlias());
             }
         }
-    }
 
-    @Override
-    public void analyzeProperties() throws AnalysisException {
-        super.analyzeProperties();
-
-        Map<String, String> copiedProperties = Maps.newHashMap(properties);
+        Map<String, String> copiedProperties = Maps.newHashMap(restoreStmt.getProperties());
         // allow load
         if (copiedProperties.containsKey(PROP_ALLOW_LOAD)) {
             if (copiedProperties.get(PROP_ALLOW_LOAD).equalsIgnoreCase("true")) {
@@ -157,28 +105,5 @@ public class RestoreStmt extends AbstractBackupStmt {
                     "Unknown restore job properties: " + copiedProperties.keySet());
         }
     }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("RESTORE SNAPSHOT ").append(labelName.toSql());
-        sb.append("\n").append("FROM ").append(repoName).append("\nON\n(");
-
-        sb.append(Joiner.on(",\n").join(tblRefs));
-
-        sb.append("\n)\nPROPERTIES\n(");
-        sb.append(new PrintableMap<String, String>(properties, " = ", true, true));
-        sb.append("\n)");
-        return sb.toString();
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRestoreStatement(this, context);
-    }
 }
+

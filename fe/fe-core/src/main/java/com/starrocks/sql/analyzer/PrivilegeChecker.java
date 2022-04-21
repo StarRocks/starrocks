@@ -3,14 +3,17 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -20,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
+import java.util.List;
 import java.util.Map;
 
 public class PrivilegeChecker {
@@ -53,6 +57,20 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitBackupStatement(BackupStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            List<TableRef> tblRefs = statement.getTblRefs();
+            for (TableRef tableRef : tblRefs) {
+                String tableName = tableRef.getName().getTbl();
+                if (!Catalog.getCurrentCatalog().getAuth()
+                        .checkTblPriv(session, dbName, tableName, PrivPredicate.ADMIN)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BACKUP");
+                }
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
             if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
@@ -67,10 +85,12 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
+                ErrorReport
+                        .reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE RESOURCE_GROUP");
             }
             return null;
         }
+
         @Override
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
@@ -80,6 +100,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
             if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
@@ -110,6 +131,15 @@ public class PrivilegeChecker {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                             session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
                 }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStatement(RestoreStmt statement, ConnectContext session) {
+            String db = statement.getDbName();
+            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(session, db, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;
         }

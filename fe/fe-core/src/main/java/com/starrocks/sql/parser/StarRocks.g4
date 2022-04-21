@@ -31,11 +31,13 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                               #createView
+        comment? AS queryStatement                                                      #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
-    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
+    | BACKUP SNAPSHOT label=qualifiedName TO repository=identifier ON  tables=identifierList properties?      # backup
+    | RESTORE SNAPSHOT label=qualifiedName FROM repository=identifier ON  tables=identifierList properties?   # restore
+    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                      #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
     ;
 
@@ -529,7 +531,7 @@ number
 
 nonReserved
     : AVG
-    | BUCKETS
+    | BUCKETS | BACKUP
     | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
@@ -542,8 +544,8 @@ nonReserved
     | NONE | NULLS
     | OFFSET
     | PASSWORD | PRECEDING | PROPERTIES
-    | ROLLUP | ROLLBACK
-    | SECOND | SESSION | SETS | START | SUM
+    | RESTORE | ROLLUP | ROLLBACK
+    | SECOND | SESSION | SETS | SNAPSHOT | START | SUM
     | TABLES | TABLET | TEMPORARY | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TYPE
     | UNBOUNDED | USER
     | VIEW | VERBOSE

@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -47,6 +48,10 @@ public class BackupStmt extends AbstractBackupStmt {
 
     public long getTimeoutMs() {
         return timeoutMs;
+    }
+
+    public List<TableRef> getTblRefs() {
+        return tblRefs;
     }
 
     public BackupType getType() {
@@ -105,5 +110,10 @@ public class BackupStmt extends AbstractBackupStmt {
         sb.append(new PrintableMap<String, String>(properties, " = ", true, true));
         sb.append("\n)");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBackupStatement(this, context);
     }
 }
