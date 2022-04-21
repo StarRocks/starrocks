@@ -26,6 +26,9 @@ typedef std::vector<ChunkProbeSupplier> ChunkProbeSuppliers;
 typedef std::function<bool()> ChunkHasSupplier;
 typedef std::vector<ChunkHasSupplier> ChunkHasSuppliers;
 
+typedef std::function<Status(ChunkUniquePtr)> ChunkConsumer;
+using ChunkProvider = std::function<bool(Chunk**, bool*)>;
+
 // A cursor refers to a record in a Chunk, and can compare to a cursor referring a record in another Chunk.
 class ChunkCursor {
 public:
@@ -77,6 +80,42 @@ private:
     std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
     std::vector<int> _null_first_flag; // 1 for greatest, -1 for least.
     bool _is_pipeline;
+};
+
+// SimpleChunkCursor a simple cursor over the SenderQueue, avoid copy the chunk
+//
+// Example:
+// while (!cursor.is_eos()) {
+//      ChunkUniquePtr chunk = cursor.try_get_next();
+//      if (!!chunk)) {
+//          usage(chunk);
+//      }
+// }
+class SimpleChunkSortCursor {
+public:
+    SimpleChunkSortCursor() = delete;
+    SimpleChunkSortCursor(const SimpleChunkSortCursor& rhs) = delete;
+    SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs);
+    ~SimpleChunkSortCursor() = default;
+
+    // Check has any data
+    bool is_data_ready();
+
+    // Try to get next chunk, return a Chunk a available,
+    // return a nullptr if data temporarily not avaiable or end of stream
+    std::pair<ChunkUniquePtr, Columns> try_get_next();
+
+    // Check if is the end of stream
+    bool is_eos();
+
+    const std::vector<ExprContext*>* get_sort_exprs() const { return _sort_exprs; }
+
+private:
+    bool _data_ready = false;
+    bool _eos = false;
+
+    ChunkProvider _chunk_provider;
+    const std::vector<ExprContext*>* _sort_exprs;
 };
 
 } // namespace vectorized
