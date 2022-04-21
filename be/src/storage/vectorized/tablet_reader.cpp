@@ -48,13 +48,27 @@ void TabletReader::close() {
         _collect_iter.reset();
     }
     STLDeleteElements(&_predicate_free_list);
+    Rowset::release_readers(_rowsets);
+    _rowsets.clear();
     _obj_pool.clear();
 }
 
 Status TabletReader::prepare() {
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    if (!st.ok()) {
+        _rowsets.clear();
+        std::stringstream ss;
+        ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str().c_str());
+    }
     _stats.rowsets_read_count += _rowsets.size();
+    Rowset::acquire_readers(_rowsets);
+    // ensure all input rowsets are loaded into memory
+    for (const auto& rowset : _rowsets) {
+        rowset->load();
+    }
     return st;
 }
 
@@ -64,7 +78,6 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
-    _rowsets.clear(); // unused anymore.
     return st;
 }
 
