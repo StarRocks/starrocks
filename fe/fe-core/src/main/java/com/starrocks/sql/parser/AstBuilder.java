@@ -60,6 +60,7 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -143,12 +144,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // -------------------------------- Statement ------------------------------
     @Override
     public ParseNode visitBackup(StarRocksParser.BackupContext context) {
-        String[] label = null;
+        String dbName = "";
+        String labelName = "";
         if (context.label != null) {
-            label = context.label.getText().split(".");
+            String qualifiedName = context.label.getText();
+            dbName = qualifiedName.split("\\.")[0];
+            labelName = qualifiedName.split("\\.")[1];
         }
-        String dbName = label[0];
-        String labelName = label[1];
+
         String repository = context.repository.getText();
         String tables = context.tables.getText();
         String[] tableList = tables.substring(1, tables.length() - 1).split(",");   // delete parentheses
@@ -168,12 +171,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRestore(StarRocksParser.RestoreContext context) {
-        String[] label = null;
+        String dbName = "";
+        String labelName = "";
         if (context.label != null) {
-            label = context.label.getText().split(".");
+            String qualifiedName = context.label.getText();
+            dbName = qualifiedName.split("\\.")[0];
+            labelName = qualifiedName.split("\\.")[1];
         }
-        String dbName = label[0];
-        String labelName = label[1];
         String repository = context.repository.getText();
         String tables = context.tables.getText();
         String[] tableList = tables.substring(1, tables.length() - 1).split(",");
@@ -188,7 +192,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new BackupStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
+        return new RestoreStmt(new LabelName(dbName, labelName), repository, tableRefs, properties);
     }
 
     @Override

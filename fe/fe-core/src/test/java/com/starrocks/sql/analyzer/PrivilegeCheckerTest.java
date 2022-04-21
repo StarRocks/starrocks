@@ -187,9 +187,9 @@ public class PrivilegeCheckerTest {
         String sql = "BACKUP SNAPSHOT example_db.snapshot_label1 TO example_repo ON (example_tbl)";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
-        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
@@ -205,12 +205,12 @@ public class PrivilegeCheckerTest {
         db1TablePattern.analyze("default_cluster");
 
         String sql =
-                "RESTORE SNAPSHOT example_db1.`snapshot_1` FROM `example_repo` ON ( `backup_tbl` ) PROPERTIES ( \"backup_timestamp\"=\"2020-05-04-16-45-08\", \"replication_num\" = \"1\" )";
+                "RESTORE SNAPSHOT example_db1.snapshot_1 FROM `example_repo` ON ( `backup_tbl` ) PROPERTIES ( \"backup_timestamp\"=\"2020-05-04-16-45-08\", \"replication_num\" = \"1\" )";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
-        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
