@@ -290,32 +290,6 @@ struct TEsScanNode {
     4: optional map<string, string> fields_context
 }
 
-struct TMiniLoadEtlFunction {
-  1: required string function_name
-  2: required i32 param_column_index
-}
-
-struct TCsvScanNode {
-  1: required Types.TTupleId tuple_id
-  2: required list<string> file_paths
-
-  3: optional string column_separator
-  4: optional string row_delimiter
-
-  // <column_name, ColumnType>
-  5: optional map<string, Types.TColumnType> column_type_mapping
-
-  // columns specified in load command
-  6: optional list<string> columns
-  // <column_name, default_value_in_string>
-  7: optional list<string> unspecified_columns
-  // always string type, and only contain columns which are not specified
-  8: optional list<string> default_values
-
-  9: optional double max_filter_ratio
-  10:optional map<string, TMiniLoadEtlFunction> column_function_mapping
-}
-
 struct TSchemaScanNode {
   1: required Types.TTupleId tuple_id
 
@@ -539,11 +513,6 @@ struct TRepeatNode {
   4: required list<list<i64>> grouping_list
   // A list of all slot
   5: required set<Types.TSlotId> all_slot_ids
-}
-
-struct TPreAggregationNode {
-  1: required list<Exprs.TExpr> group_exprs
-  2: required list<Exprs.TExpr> aggregate_exprs
 }
 
 struct TSortInfo {
@@ -775,10 +744,6 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
-struct TAdapterNode {
-    1: required Types.TTupleId tuple_id
-}
-
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -863,11 +828,11 @@ struct TPlanNode {
   15: optional TExchangeNode exchange_node
   17: optional TMySQLScanNode mysql_scan_node
   18: optional TOlapScanNode olap_scan_node
-  19: optional TCsvScanNode csv_scan_node
+  // 19 is reserved, please DON'T use
   20: optional TFileScanNode file_scan_node
-  21: optional TPreAggregationNode pre_agg_node
+  // 21 is reserved, please DON'T use
   22: optional TSchemaScanNode schema_scan_node
-  23: optional TMergeJoinNode merge_join_node
+  // 23 is reserved, please DON'T use
   24: optional TMetaScanNode meta_scan_node
   25: optional TAnalyticNode analytic_node
   28: optional TUnionNode union_node
@@ -879,7 +844,7 @@ struct TPlanNode {
   34: optional TExceptNode except_node
 
   // For vector query engine
-  50: optional TAdapterNode adapter_node
+  // 50 is reserved, please don't use
   51: optional bool use_vectorized
   // Scan node for hdfs
   52: optional THdfsScanNode hdfs_scan_node

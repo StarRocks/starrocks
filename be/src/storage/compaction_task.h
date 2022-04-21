@@ -255,6 +255,7 @@ protected:
         }
         _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
         _tablet->save_meta();
+        Rowset::close_rowsets(_input_rowsets);
         LOG(INFO) << "commit compaction. output version:" << _task_info.output_version
                   << ", output rowset version:" << _output_rowset->version()
                   << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();

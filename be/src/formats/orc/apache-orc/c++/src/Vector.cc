@@ -349,6 +349,7 @@ uint32_t build_filter_on_offsets(uint8_t* f_data, uint32_t f_size, DataBuffer<in
 }
 
 void ListVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
+    ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
     uint32_t size = static_cast<uint32_t>(p.size());
@@ -394,6 +395,7 @@ bool MapVectorBatch::hasVariableLength() {
 }
 
 void MapVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) {
+    ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
     uint32_t size = static_cast<uint32_t>(p.size());
