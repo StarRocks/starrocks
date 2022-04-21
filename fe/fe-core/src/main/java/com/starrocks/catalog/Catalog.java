@@ -3058,7 +3058,6 @@ public class Catalog {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
 
-
         // check if db exists
         Database db = getDb(stmt.getDbName());
         if (db == null) {

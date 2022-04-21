@@ -2693,7 +2693,7 @@ old_or_new_charset_name_or_default ::=
     ;
 
 opt_charset_name ::=
-    /* Empty */
+    {: RESULT = "utf8"; :}
     | KW_CHAR KW_SET old_or_new_charset_name_or_default
     | KW_DEFAULT KW_CHARSET EQUAL ident:charsetName
     {: RESULT = charsetName; :}

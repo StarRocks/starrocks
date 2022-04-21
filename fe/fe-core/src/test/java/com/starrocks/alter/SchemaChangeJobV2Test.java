@@ -101,7 +101,7 @@ public class SchemaChangeJobV2Test {
     private static Catalog slaveCatalog;
 
     private static Analyzer analyzer;
-    private static ColumnDef newCol = new ColumnDef("add_v", new TypeDef(ScalarType.createType(PrimitiveType.INT)), null,
+    private static ColumnDef newCol = new ColumnDef("add_v", new TypeDef(ScalarType.createType(PrimitiveType.INT)),
             false, AggregateType.MAX, false, new DefaultValueDef(true, new StringLiteral("1")), "");
     private static AddColumnClause addColumnClause = new AddColumnClause(newCol, new ColumnPosition("v"), null, null);
 

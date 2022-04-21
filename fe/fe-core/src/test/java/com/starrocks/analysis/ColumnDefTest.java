@@ -60,14 +60,14 @@ public class ColumnDefTest {
         Assert.assertNull(column.getDefaultValue());
 
         // default
-        column = new ColumnDef("col", intCol, null, true, null, false, new DefaultValueDef(true, new StringLiteral("10")), "");
+        column = new ColumnDef("col", intCol, true, null, false, new DefaultValueDef(true, new StringLiteral("10")), "");
         column.analyze(true);
         Assert.assertNull(column.getAggregateType());
         Assert.assertEquals("10", column.getDefaultValue());
         Assert.assertEquals("`col` int(11) NOT NULL DEFAULT \"10\" COMMENT \"\"", column.toSql());
 
         // agg
-        column = new ColumnDef("col", floatCol, null, false, AggregateType.SUM, false, new DefaultValueDef(true, new StringLiteral("10")), "");
+        column = new ColumnDef("col", floatCol, false, AggregateType.SUM, false, new DefaultValueDef(true, new StringLiteral("10")), "");
         column.analyze(true);
         Assert.assertEquals("10", column.getDefaultValue());
         Assert.assertEquals(AggregateType.SUM, column.getAggregateType());
@@ -80,7 +80,7 @@ public class ColumnDefTest {
             // not allow null
             // although here is default value is NOT_SET but after analyze it will be set to NULL and allowed NULL trick.
             ColumnDef column =
-                    new ColumnDef("col", intCol, null, false, AggregateType.REPLACE_IF_NOT_NULL, false, DefaultValueDef.NOT_SET,
+                    new ColumnDef("col", intCol, false, AggregateType.REPLACE_IF_NOT_NULL, false, DefaultValueDef.NOT_SET,
                             "");
             column.analyze(true);
             Assert.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
@@ -88,7 +88,7 @@ public class ColumnDefTest {
         }
         {
             // not allow null
-            ColumnDef column = new ColumnDef("col", intCol, null, false, AggregateType.REPLACE_IF_NOT_NULL, false,
+            ColumnDef column = new ColumnDef("col", intCol, false, AggregateType.REPLACE_IF_NOT_NULL, false,
                     new DefaultValueDef(true, new StringLiteral("10")), "");
             column.analyze(true);
             Assert.assertEquals(AggregateType.REPLACE_IF_NOT_NULL, column.getAggregateType());
@@ -112,27 +112,27 @@ public class ColumnDefTest {
 
     @Test(expected = AnalysisException.class)
     public void testArrayDefaultValue() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", arrayIntCol, null, false, null, true, new DefaultValueDef(true, new StringLiteral("[1]")), "");
+        ColumnDef column = new ColumnDef("col", arrayIntCol, false, null, true, new DefaultValueDef(true, new StringLiteral("[1]")), "");
         column.analyze(true);
     }
 
     @Test(expected = AnalysisException.class)
     public void testStrSum() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", stringCol, null, false, AggregateType.SUM, true, DefaultValueDef.NOT_SET, "");
+        ColumnDef column = new ColumnDef("col", stringCol, false, AggregateType.SUM, true, DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
 
     @Test
     public void testBooleanDefaultValue() throws AnalysisException {
-        ColumnDef column1 = new ColumnDef("col", booleanCol, null, true, null, true, new DefaultValueDef(true, new StringLiteral("1")), "");
+        ColumnDef column1 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("1")), "");
         column1.analyze(true);
         Assert.assertEquals("1", column1.getDefaultValue());
 
-        ColumnDef column2 = new ColumnDef("col", booleanCol, null, true, null, true, new DefaultValueDef(true, new StringLiteral("true")), "");
+        ColumnDef column2 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("true")), "");
         column2.analyze(true);
         Assert.assertEquals("true", column2.getDefaultValue());
 
-        ColumnDef column3 = new ColumnDef("col", booleanCol, null, true, null, true, new DefaultValueDef(true, new StringLiteral("10")), "");
+        ColumnDef column3 = new ColumnDef("col", booleanCol, true, null, true, new DefaultValueDef(true, new StringLiteral("10")), "");
         try {
             column3.analyze(true);
         } catch (AnalysisException e) {
@@ -143,21 +143,21 @@ public class ColumnDefTest {
     @Test(expected = AnalysisException.class)
     public void testArrayHLL() throws AnalysisException {
         ColumnDef column =
-                new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), null, false, null, true, DefaultValueDef.NOT_SET, "");
+                new ColumnDef("col", new TypeDef(new ArrayType(Type.HLL)), false, null, true, DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
 
     @Test(expected = AnalysisException.class)
     public void testArrayBitmap() throws AnalysisException {
         ColumnDef column =
-                new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), null, false, null, true, DefaultValueDef.NOT_SET,
+                new ColumnDef("col", new TypeDef(new ArrayType(Type.BITMAP)), false, null, true, DefaultValueDef.NOT_SET,
                         "");
         column.analyze(true);
     }
 
     @Test(expected = AnalysisException.class)
     public void testArrayPercentile() throws AnalysisException {
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), null, false, null, true,
+        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(Type.PERCENTILE)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
@@ -165,7 +165,7 @@ public class ColumnDefTest {
     @Test(expected = AnalysisException.class)
     public void testInvalidVarcharInsideArray() throws AnalysisException {
         Type tooLongVarchar = ScalarType.createVarchar(ScalarType.MAX_VARCHAR_LENGTH + 1);
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), null, false, null, true,
+        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
@@ -173,7 +173,7 @@ public class ColumnDefTest {
     @Test(expected = AnalysisException.class)
     public void testInvalidDecimalInsideArray() throws AnalysisException {
         Type invalidDecimal = ScalarType.createDecimalV2Type(100, -1);
-        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), null, false, null, true,
+        ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(invalidDecimal)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
     }
