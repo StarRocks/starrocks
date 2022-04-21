@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.SetVar;
@@ -148,20 +149,21 @@ public class UtFrameUtils {
     // Parse an origin stmt . Return a StatementBase instance.
     public static StatementBase parseStmtWithNewParser(String originStmt, ConnectContext ctx)
             throws Exception {
-        StatementBase statementBase;
+        StatementBase statementBase = null;
         try {
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
-        } catch (ParsingException e) {
+        } catch (ParsingException | SemanticException e) {
+            if (statementBase instanceof AlterTableStmt) {
+                return parseAndAnalyzeStmt(originStmt, ctx);
+            }
             System.err.println("parse failed: " + e.getMessage());
             if (e.getMessage() == null) {
                 throw e;
             } else {
                 throw new AnalysisException(e.getMessage(), e);
             }
-        } catch (SemanticException e) {
-            return parseAndAnalyzeStmt(originStmt, ctx);
         }
 
         return statementBase;
