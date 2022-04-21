@@ -555,10 +555,6 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
         return Status::OK();
     }
 
-    if (!context->is_notnull_constant_column(1) || !context->is_notnull_constant_column(2)) {
-        return Status::InternalError("datetime_floor just support const value");
-    }
-
     ColumnPtr column_format = context->get_constant_column(2);
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();

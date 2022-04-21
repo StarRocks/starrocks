@@ -74,9 +74,11 @@ public class AnalyzeFunctionTest {
         analyzeFail("select date_floor(ta, th) from tall",
                 "date_floor requires second parameter must be a constant interval");
 
+        analyzeFail("select date_floor(NULL, NULL) from tall",
+                "date_floor requires second parameter must be a constant interval");
+
         analyzeFail("select date_floor(ta, -1) from tall",
                 "date_floor requires second parameter must be greater than 0");
-
     }
 
     @Test
