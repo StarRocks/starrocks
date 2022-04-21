@@ -18,11 +18,12 @@ public class AdminSetReplicaStatusStmtAnalyzer {
         }
 
         @Override
-        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt,
+                                                        ConnectContext session) {
             try {
-                adminSetReplicaStatusStmt.analyze(new Analyzer(session.getCatalog(),session));
+                adminSetReplicaStatusStmt.analyze(new Analyzer(session.getCatalog(), session));
             } catch (UserException e) {
-                throw new SemanticException(e.getMessage(),e);
+                throw new SemanticException(e.getMessage(), e);
             }
             return null;
         }
