@@ -137,6 +137,9 @@ private:
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
     std::vector<FillColumnFunction> _fill_functions;
+    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
+                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
+                                    std::string* orc_column_name);
     Status _init_include_columns();
     Status _init_position_in_orc();
     Status _init_src_types();
