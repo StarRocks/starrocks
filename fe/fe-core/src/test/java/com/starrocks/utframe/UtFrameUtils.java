@@ -153,13 +153,15 @@ public class UtFrameUtils {
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
-        } catch (ParsingException | SemanticException e) {
+        } catch (ParsingException e) {
             System.err.println("parse failed: " + e.getMessage());
             if (e.getMessage() == null) {
                 throw e;
             } else {
                 throw new AnalysisException(e.getMessage(), e);
             }
+        } catch (SemanticException e) {
+            return parseAndAnalyzeStmt(originStmt, ctx);
         }
 
         return statementBase;

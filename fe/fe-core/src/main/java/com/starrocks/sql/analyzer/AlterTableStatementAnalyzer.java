@@ -21,14 +21,14 @@ import java.util.List;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(DdlStmt ddlStmt, ConnectContext session) {
-        new AlterStmtAnalyzerVisitor().analyze(ddlStmt, session);
+        new AlterTableStatementAnalyzerVisitor().analyze(ddlStmt, session);
     }
 
     public static void analyze(AlterClause alterTableClause, ConnectContext session) {
         new AlterTableClauseAnalyzerVisitor().analyze(alterTableClause, session);
     }
 
-    static class AlterStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class AlterTableStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -49,6 +49,8 @@ public class AlterTableStatementAnalyzer {
             for (AlterClause alterClause : alterClauseList) {
                 if (StatementPlanner.isNewAlterTableClause(alterClause)) {
                     AlterTableStatementAnalyzer.analyze(alterClause, context);
+                } else {
+                    throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
                 }
             }
             return null;
