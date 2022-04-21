@@ -9,10 +9,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -31,7 +29,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testWriteAndReadPartitionInfoLog() throws IOException {
+    public void testWriteOut() throws IOException {
         // 1. Write objects to file
         File file = new File("./test_serial.log");
         if (file.exists()) {
@@ -39,29 +37,9 @@ public class ListPartitionInfoTest {
         }
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        this.listPartitionInfo.serialPartitionInfo(out);
+        this.listPartitionInfo.write(out);
         out.flush();
         out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        ListPartitionInfo deserialEntity = ListPartitionInfo.deserialPartitionInfo(in);
-        in.close();
-
-        //asset
-        List<Column> columnList = deserialEntity.getPartitionColumns();
-        Assert.assertEquals(1, columnList.size());
-        Assert.assertEquals("province", columnList.get(0).getName());
-
-        Map<Long, List<String>> idToValues = deserialEntity.getIdToValues();
-        Assert.assertEquals(2, idToValues.size());
-        String p1 = String.join(",", idToValues.get(10001L));
-        String p2 = String.join(",", idToValues.get(10002L));
-        Assert.assertEquals("guangdong,tianjin", p1);
-        Assert.assertEquals("shanghai,beijing", p2);
-
-        Map<Long, List<List<String>>> idToMultiValues = deserialEntity.getIdToMultiValues();
-        Assert.assertEquals(0, idToMultiValues.size());
     }
 
     @Test

@@ -62,18 +62,6 @@ public class ListPartitionInfo extends PartitionInfo {
         super.isMultiColumnPartition = this.partitionColumns.size() > 1;
     }
 
-    public List<Column> getPartitionColumns() {
-        return partitionColumns;
-    }
-
-    public Map<Long, List<List<String>>> getIdToMultiValues() {
-        return idToMultiValues;
-    }
-
-    public Map<Long, List<String>> getIdToValues() {
-        return idToValues;
-    }
-
     /**
      * serialize data to log
      *
@@ -83,18 +71,10 @@ public class ListPartitionInfo extends PartitionInfo {
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
-        //target to serialize member partitionColumns,idToMultiValues,idToValues
-        this.serialPartitionInfo(out);
-    }
 
-    public void serialPartitionInfo(DataOutput out) throws IOException {
+        //target to serialize member partitionColumns,idToMultiValues,idToValues
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    public static ListPartitionInfo deserialPartitionInfo(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
     }
 
     /**
@@ -106,8 +86,10 @@ public class ListPartitionInfo extends PartitionInfo {
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo list = new ListPartitionInfo();
         list.readFields(in);
+
         //target to deserialize member partitionColumns,idToMultiValues,idToValues
-        ListPartitionInfo partitionInfo = deserialPartitionInfo(in);
+        String json = Text.readString(in);
+        ListPartitionInfo partitionInfo = GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
         list.idToInMemory.forEach((k, v) -> partitionInfo.setIsInMemory(k, v));
         list.idToDataProperty.forEach((k, v) -> partitionInfo.setDataProperty(k, v));
         list.idToReplicationNum.forEach((k, v) -> partitionInfo.setReplicationNum(k, v));
