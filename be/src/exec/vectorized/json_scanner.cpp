@@ -312,9 +312,7 @@ Status JsonReader::open() {
     _empty_parser = false;
 
     if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-        // Since the iterating order may be different with json field when the json path/root is set,
-        // reorder the column descriptor as json field, when the json path and json root is empty.
-        _reorder_column();
+        _build_slot_descs();
     }
 
     _closed = false;
@@ -487,7 +485,7 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
             simdjson::ondemand::value val = field.value();
 
             // construct column with value.
-            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), slot_desc->col_name()));
+            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), col_name));
 
             // delete the written column.
             slot_desc_dict.erase(key);
@@ -504,7 +502,6 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
         auto slot_desc = pair.second;
 
         auto column = chunk->get_column_by_slot_id(slot_desc->id());
-        const auto& col_name = slot_desc->col_name();
 
         if (col_name == "__op") {
             // special treatment for __op column, fill default value '0' rather than null
@@ -518,6 +515,7 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
             column->append_nulls(1);
         }
     }
+    return Status::OK();
 }
 
 Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk) {
@@ -548,6 +546,7 @@ Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row,
             continue;
         }
     }
+    return Status::OK();
 }
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
@@ -620,17 +619,17 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
     }
 }
 
-// Try to reorder the slot_descs as the key order in json document.
-// Nothing would be done if got any error.
-void JsonReader::_reorder_column() {
-    // Build slot_desc_dict.
-    std::unordered_map<std::string, SlotDescriptor*> slot_desc_dict;
+void JsonReader::_build_slot_descs() {
+    // build _slot_desc_dict.
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
             continue;
         }
-        slot_desc_dict.emplace(desc->col_name(), desc);
+        _slot_desc_dict.emplace(desc->col_name(), desc);
     }
+
+    // copy for modifying.
+    auto slot_desc_dict(_slot_desc_dict);
 
     std::vector<SlotDescriptor*> ordered_slot_descs;
     ordered_slot_descs.reserve(_slot_descs.size());

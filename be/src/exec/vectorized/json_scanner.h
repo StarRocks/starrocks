@@ -87,14 +87,14 @@ private:
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
-    Status _construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk) {}
-    Status _construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk) {}
+    Status _construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk);
+    Status _construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
 
-    // Reorder column to accelerate simdjson iteration.
-    void _reorder_column();
+    // _build_slot_descs builds _slot_descs as the order of first json object and builds _slot_desc_dict;
+    void _build_slot_descs();
 
 private:
     RuntimeState* _state = nullptr;
