@@ -14,7 +14,9 @@ import org.apache.iceberg.expressions.Expressions;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class ExpressionConverterTest {
@@ -56,6 +58,15 @@ public class ExpressionConverterTest {
 
         convertedExpression= converter.convert(new BinaryPredicate(BinaryPredicate.Operator.EQ, ref, dateLiteral));
         expectedExpression = Expressions.equal("col_name", epochDay);
+        Assert.assertEquals("Generated equal expression should be correct",
+                expectedExpression.toString(), convertedExpression.toString());
+
+        // equal
+        DateLiteral dateTimeLiteral = (DateLiteral) LiteralExpr.create("2018-10-18 00:00:00", Type.DATETIME);
+        long epochSeconds = dateTimeLiteral.toLocalDateTime().toEpochSecond(OffsetDateTime.now().getOffset());
+
+        convertedExpression= converter.convert(new BinaryPredicate(BinaryPredicate.Operator.EQ, ref, dateTimeLiteral));
+        expectedExpression = Expressions.equal("col_name", TimeUnit.MICROSECONDS.convert(epochSeconds, TimeUnit.SECONDS));
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpression.toString(), convertedExpression.toString());
 

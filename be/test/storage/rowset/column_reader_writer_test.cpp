@@ -34,19 +34,21 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/range.h"
 
 using std::string;
 
@@ -57,14 +59,39 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 
 class ColumnReaderWriterTest : public testing::Test {
 public:
-    ColumnReaderWriterTest() {}
+    ColumnReaderWriterTest() {
+        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+
+        TabletSchemaPB schema_pb;
+        auto* c0 = schema_pb.add_column();
+        c0->set_name("pk");
+        c0->set_is_key(true);
+        c0->set_type("BIGINT");
+
+        auto* c1 = schema_pb.add_column();
+        c1->set_name("v1");
+        c1->set_is_key(false);
+        c1->set_type("SMALLINT");
+
+        auto* c2 = schema_pb.add_column();
+        c2->set_name("v2");
+        c2->set_type("INT");
+
+        _dummy_segment_schema = TabletSchema::create(_tablet_meta_mem_tracker.get(), schema_pb);
+    }
 
     ~ColumnReaderWriterTest() override = default;
 
 protected:
-    void SetUp() override { _tablet_meta_mem_tracker = std::make_unique<MemTracker>(); }
+    void SetUp() override {}
 
     void TearDown() override {}
+
+    std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<fs::FileBlockManager>& block_mgr,
+                                                  const std::string& fname) {
+        return std::make_shared<Segment>(Segment::private_type(0), block_mgr, fname, 1, _dummy_segment_schema.get(),
+                                         _tablet_meta_mem_tracker.get());
+    }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
     void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
@@ -82,6 +109,7 @@ protected:
 
         const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
                                                       version, adaptive, null_encoding, null_ratio);
+        auto segment = create_dummy_segment(block_mgr, fname);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -134,7 +162,7 @@ protected:
             std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
             StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
+            auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -337,6 +365,7 @@ protected:
 
         // delete test file.
         const std::string fname = TEST_DIR + "/test_array_int.data";
+        auto segment = create_dummy_segment(block_mgr, fname);
         // write data
         {
             std::unique_ptr<fs::WritableBlock> wblock;
@@ -383,7 +412,7 @@ protected:
 
         // read and check
         {
-            auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, version, false);
+            auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -416,8 +445,7 @@ protected:
                 ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
             }
 
-            // check num
-            ASSERT_EQ(2, reader->num_rows());
+            ASSERT_EQ(2, reader->num_rows_from_meta_pb(&meta));
             ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
@@ -545,6 +573,7 @@ protected:
 
     MemPool _pool;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
 
 // NOLINTNEXTLINE
@@ -665,6 +694,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     auto block_mgr = std::make_shared<fs::FileBlockManager>(env, fs::BlockManagerOptions());
     ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_scalar_column_total_mem_footprint.data", TEST_DIR);
+    auto segment = create_dummy_segment(block_mgr, fname);
 
     // write data
     {
@@ -706,10 +736,10 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     // read and check
     {
         // read and check
-        auto res = ColumnReader::create(_tablet_meta_mem_tracker.get(), block_mgr, &meta, fname, 1, false);
+        auto res = ColumnReader::create(&meta, segment.get());
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
-        ASSERT_EQ(1024, reader->num_rows());
+        ASSERT_EQ(1024, reader->num_rows_from_meta_pb(&meta));
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
 }

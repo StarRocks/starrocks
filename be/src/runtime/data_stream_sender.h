@@ -113,6 +113,8 @@ public:
 
     const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
 
+    const std::vector<int32_t>& output_columns() { return _output_columns; }
+
 private:
     class Channel;
 
@@ -159,7 +161,7 @@ private:
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
 
     // map from range value to partition_id
-    // sorted in ascending orderi by range for binary search
+    // sorted in ascending order by range for binary search
     std::vector<PartitionInfo*> _partition_infos;
 
     // This array record the channel start point in _row_indexes
@@ -204,6 +206,9 @@ private:
     std::vector<TPlanFragmentDestination> _destinations;
 
     bool _enable_exchange_pass_through = false;
+
+    // Specify the columns which need to send
+    std::vector<int32_t> _output_columns;
 };
 
 } // namespace starrocks

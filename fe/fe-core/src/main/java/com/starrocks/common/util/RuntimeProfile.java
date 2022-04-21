@@ -52,7 +52,8 @@ import java.util.TreeSet;
 public class RuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
-    private static final Set<String> NON_MERGE_COUNTER_NAMES = Sets.newHashSet("DegreeOfParallelism");
+    private static final Set<String> NON_MERGE_COUNTER_NAMES =
+            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum");
 
     private final Counter counterTotalTime;
 

@@ -136,6 +136,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.sender_finst_id) {
         _sender_finst_id = desc.sender_finst_id;
     }
+    if (desc.__isset.broadcast_grf_senders) {
+        _broadcast_grf_senders.insert(desc.broadcast_grf_senders.begin(), desc.broadcast_grf_senders.end());
+    }
+    if (desc.__isset.broadcast_grf_destinations) {
+        _broadcast_grf_destinations = desc.broadcast_grf_destinations;
+    }
 
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
     return Status::OK();
@@ -223,7 +229,9 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(de
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept
         : _descriptors(std::move(that._descriptors)),
           _wait_timeout_ms(that._wait_timeout_ms),
-          _eval_context(that._eval_context) {}
+          _scan_wait_timeout_ms(that._scan_wait_timeout_ms),
+          _eval_context(that._eval_context),
+          _plan_node_id(that._plan_node_id) {}
 
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
                                             RuntimeProfile* profile) {
@@ -256,21 +264,30 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         return;
     }
     if (!eval_context.selectivity.empty()) {
+        const auto num_rows = chunk->num_rows();
+        auto& selection = eval_context.running_context.selection;
+        size_t true_count = 0;
+        selection.assign(num_rows, 1);
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-            if (filter == nullptr) continue;
-            ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
-            vectorized::Column::Filter& selection = filter->evaluate(column.get(), &eval_context.running_context);
+            if (filter == nullptr) {
+                continue;
+            }
+            auto* ctx = rf_desc->probe_expr_ctx();
+            ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+            filter->evaluate(column.get(), &eval_context.running_context);
+            // true_count is accummulated
+            true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
-            size_t true_count = SIMD::count_nonzero(selection);
 
             if (true_count == 0) {
                 chunk->set_num_rows(0);
                 return;
-            } else {
-                chunk->filter(selection);
             }
+        }
+        if (true_count != num_rows) {
+            chunk->filter(selection);
         }
     }
 }
@@ -312,21 +329,25 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      RuntimeBloomFilterEvalContext& eval_context) {
     eval_context.selectivity.clear();
     size_t chunk_size = chunk->num_rows();
-    vectorized::Column::Filter* selection = nullptr;
+    auto& selection = eval_context.running_context.selection;
+    selection.assign(chunk_size, 1);
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-        if (filter == nullptr) continue;
-        ColumnPtr column = rf_desc->probe_expr_ctx()->evaluate(chunk);
-        vectorized::Column::Filter& new_selection = filter->evaluate(column.get(), &eval_context.running_context);
+        if (filter == nullptr) {
+            continue;
+        }
+        auto ctx = rf_desc->probe_expr_ctx();
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        // true count is not accummulated, it is evaluated for each RF respectively
+        auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
-        size_t true_count = SIMD::count_nonzero(new_selection);
         double selectivity = true_count * 1.0 / chunk_size;
         if (selectivity <= 0.5) {     // useful filter
             if (selectivity < 0.05) { // very useful filter, could early return
                 eval_context.selectivity.clear();
                 eval_context.selectivity.emplace(selectivity, rf_desc);
-                chunk->filter(new_selection);
+                chunk->filter(selection);
                 return;
             }
 
@@ -341,21 +362,10 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                     eval_context.selectivity.emplace(selectivity, rf_desc);
                 }
             }
-
-            if (selection == nullptr) {
-                selection = &new_selection;
-            } else {
-                // Merge selection
-                uint8_t* dest = selection->data();
-                const uint8_t* src = new_selection.data();
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    dest[j] = src[j] & dest[j];
-                }
-            }
         }
     }
     if (!eval_context.selectivity.empty()) {
-        chunk->filter(*selection);
+        chunk->filter(selection);
     }
 }
 
@@ -440,8 +450,10 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* r
     }
 }
 void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf) {
-    _shared_runtime_filter = rf;
-    set_runtime_filter(_shared_runtime_filter.get());
+    std::shared_ptr<const JoinRuntimeFilter> old_value = nullptr;
+    if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
+        set_runtime_filter(_shared_runtime_filter.get());
+    }
 }
 
 } // namespace starrocks::vectorized

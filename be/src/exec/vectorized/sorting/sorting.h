@@ -2,9 +2,11 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/datum.h"
 #include "common/status.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "runtime/chunk_cursor.h"
 
 namespace starrocks::vectorized {
 
@@ -46,5 +48,41 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, con
 // Build tie by comparison of adjacent rows in column.
 // Tie(i) is set to 1 only if row(i-1) is equal to row(i), otherwise is set to 0.
 void build_tie_for_column(const ColumnPtr column, Tie* tie);
+
+// Append rows from permutation
+void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
+void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm, size_t start,
+                           size_t end);
+void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
+
+struct SortDesc {
+    int sort_order;
+    int null_first;
+
+    SortDesc() = default;
+    SortDesc(int order, int null) : sort_order(order), null_first(null) {}
+};
+
+struct SortDescs {
+    std::vector<SortDesc> descs;
+
+    SortDescs() = default;
+    ~SortDescs() = default;
+    SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls) {
+        DCHECK_EQ(orders.size(), nulls.size());
+        descs.reserve(orders.size());
+        for (int i = 0; i < orders.size(); i++) {
+            descs.push_back(SortDesc(orders[i], nulls[i]));
+        }
+    }
+
+    size_t num_columns() const { return descs.size(); }
+
+    SortDesc get_column_desc(int col) const {
+        DCHECK_LT(col, descs.size());
+        return descs[col];
+    }
+};
 
 } // namespace starrocks::vectorized

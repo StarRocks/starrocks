@@ -26,10 +26,10 @@
 #include <memory>
 
 #include "runtime/mem_pool.h"
+#include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;

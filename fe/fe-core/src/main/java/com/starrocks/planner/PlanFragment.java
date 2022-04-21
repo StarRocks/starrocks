@@ -38,6 +38,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -140,7 +142,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
+
     private Set<Integer> joinNodeIds = Sets.newHashSet();
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */

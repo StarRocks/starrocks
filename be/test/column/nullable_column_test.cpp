@@ -12,6 +12,36 @@
 namespace starrocks::vectorized {
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
+    auto c0 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
+    c0->append_datum((uint32_t)1);
+
+    auto ret = c0->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(NullableColumnTest, test_nullable_column_downgrade) {
+    auto c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    c0->append_datum(Slice("1"));
+
+    ASSERT_FALSE(c0->has_large_column());
+    auto ret = c0->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    c0 = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
+    c0->append_datum(Slice("1"));
+
+    ASSERT_TRUE(c0->has_large_column());
+    ret = c0->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_FALSE(c0->has_large_column());
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
     auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 

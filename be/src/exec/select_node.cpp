@@ -72,7 +72,7 @@ Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
     {
         SCOPED_TIMER(_conjunct_evaluate_timer);
-        ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     }
     _num_rows_returned += (*chunk)->num_rows();
 

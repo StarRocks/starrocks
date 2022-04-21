@@ -24,8 +24,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include <boost/thread/thread.hpp>
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -98,6 +96,11 @@ int main(int argc, char** argv) {
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
+        exit(-1);
+    }
+
+    if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
+        fprintf(stderr, "you need replace bin dir of be with new version.\n");
         exit(-1);
     }
 
@@ -304,7 +307,6 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-    starrocks::pipeline::QueryContextManager::instance()->clear();
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

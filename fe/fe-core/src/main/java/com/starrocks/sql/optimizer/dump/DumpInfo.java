@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 public interface DumpInfo {
@@ -11,6 +12,8 @@ public interface DumpInfo {
     void addException(String exception);
 
     void addTable(String dbName, Table table);
+
+    void addView(View view);
 
     void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic);
 

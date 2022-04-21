@@ -52,7 +52,7 @@ public:
         FileUtils::create_dir(_engine_data_path + "/meta");
 
         std::vector<StorePath> paths;
-        paths.emplace_back("_engine_data_path", -1);
+        paths.emplace_back("_engine_data_path");
         EngineOptions options;
         options.store_paths = paths;
         options.backend_uid = UniqueId::gen_uid();
@@ -81,6 +81,29 @@ public:
         }
     }
 
+    TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash) {
+        TColumnType col_type;
+        col_type.__set_type(TPrimitiveType::SMALLINT);
+        TColumn col1;
+        col1.__set_column_name("col1");
+        col1.__set_column_type(col_type);
+        col1.__set_is_key(true);
+        std::vector<TColumn> cols;
+        cols.push_back(col1);
+        TTabletSchema tablet_schema;
+        tablet_schema.__set_short_key_column_count(1);
+        tablet_schema.__set_schema_hash(schema_hash);
+        tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
+        tablet_schema.__set_storage_type(TStorageType::COLUMN);
+        tablet_schema.__set_columns(cols);
+        TCreateTabletReq create_tablet_req;
+        create_tablet_req.__set_tablet_schema(tablet_schema);
+        create_tablet_req.__set_tablet_id(tablet_id);
+        create_tablet_req.__set_version(2);
+        create_tablet_req.__set_version_hash(3333);
+        return create_tablet_req;
+    }
+
 protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     DataDir* _data_dir;
@@ -92,89 +115,46 @@ protected:
 };
 
 TEST_F(TabletMgrTest, CreateTablet) {
-    TColumnType col_type;
-    col_type.__set_type(TPrimitiveType::SMALLINT);
-    TColumn col1;
-    col1.__set_column_name("col1");
-    col1.__set_column_type(col_type);
-    col1.__set_is_key(true);
-    std::vector<TColumn> cols;
-    cols.push_back(col1);
-    TTabletSchema tablet_schema;
-    tablet_schema.__set_short_key_column_count(1);
-    tablet_schema.__set_schema_hash(3333);
-    tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
-    tablet_schema.__set_storage_type(TStorageType::COLUMN);
-    tablet_schema.__set_columns(cols);
-    TCreateTabletReq create_tablet_req;
-    create_tablet_req.__set_tablet_schema(tablet_schema);
-    create_tablet_req.__set_tablet_id(111);
-    create_tablet_req.__set_version(2);
-    create_tablet_req.__set_version_hash(3333);
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;
     data_dirs.push_back(_data_dir);
-    tatus create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
+    Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
-    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111, 3333);
+    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
     ASSERT_TRUE(tablet != nullptr);
     // check dir exist
     bool dir_exist = FileUtils::check_exist(tablet->schema_hash_path());
     ASSERT_TRUE(dir_exist);
     // check meta has this tablet
     TabletMetaSharedPtr new_tablet_meta(new TabletMeta());
-    Status check_meta_st = TabletMetaManager::get_meta(_data_dir, 111, 3333, new_tablet_meta);
+    Status check_meta_st = TabletMetaManager::get_tablet_meta(_data_dir, 111, 3333, new_tablet_meta.get());
     ASSERT_TRUE(check_meta_st.ok());
 
     // retry create should be successfully
     create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
 
-    // create tablet with different schema hash should be error
-    tablet_schema.__set_schema_hash(4444);
-    create_tablet_req.__set_tablet_schema(tablet_schema);
+    // create tablet with different schema hash should return ok
+    create_tablet_req = get_create_tablet_request(111, 4444);
     create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
-    ASSERT_TRUE(create_st.is_already_exist());
+    ASSERT_TRUE(create_st.ok());
 }
 
 TEST_F(TabletMgrTest, DropTablet) {
-    TColumnType col_type;
-    col_type.__set_type(TPrimitiveType::SMALLINT);
-    TColumn col1;
-    col1.__set_column_name("col1");
-    col1.__set_column_type(col_type);
-    col1.__set_is_key(true);
-    std::vector<TColumn> cols;
-    cols.push_back(col1);
-    TTabletSchema tablet_schema;
-    tablet_schema.__set_short_key_column_count(1);
-    tablet_schema.__set_schema_hash(3333);
-    tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
-    tablet_schema.__set_storage_type(TStorageType::COLUMN);
-    tablet_schema.__set_columns(cols);
-    TCreateTabletReq create_tablet_req;
-    create_tablet_req.__set_tablet_schema(tablet_schema);
-    create_tablet_req.__set_tablet_id(111);
-    create_tablet_req.__set_version(2);
-    create_tablet_req.__set_version_hash(3333);
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;
     data_dirs.push_back(_data_dir);
     Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
-    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111, 3333);
-    ASSERT_TRUE(tablet != nullptr);
-
-    // drop unexist tablet will be success
-    Status drop_st = _tablet_mgr->drop_tablet(111, 4444, false);
-    ASSERT_TRUE(drop_st.ok());
-    tablet = _tablet_mgr->get_tablet(111, 3333);
+    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
     ASSERT_TRUE(tablet != nullptr);
 
     // drop exist tablet will be success
-    drop_st = _tablet_mgr->drop_tablet(111, 3333, false);
+    auto drop_st = _tablet_mgr->drop_tablet(111, kMoveFilesToTrash);
     ASSERT_TRUE(drop_st.ok());
-    tablet = _tablet_mgr->get_tablet(111, 3333);
+    tablet = _tablet_mgr->get_tablet(111);
     ASSERT_TRUE(tablet == nullptr);
-    tablet = _tablet_mgr->get_tablet(111, 3333, true);
+    tablet = _tablet_mgr->get_tablet(111, true);
     ASSERT_TRUE(tablet != nullptr);
 
     // check dir exist
@@ -186,7 +166,7 @@ TEST_F(TabletMgrTest, DropTablet) {
     // because tablet ptr referenced it
     Status trash_st = _tablet_mgr->start_trash_sweep();
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
-    tablet = _tablet_mgr->get_tablet(111, 3333, true);
+    tablet = _tablet_mgr->get_tablet(111, true);
     ASSERT_TRUE(tablet != nullptr);
     dir_exist = FileUtils::check_exist(tablet_path);
     ASSERT_TRUE(dir_exist);
@@ -195,7 +175,7 @@ TEST_F(TabletMgrTest, DropTablet) {
     tablet.reset();
     trash_st = _tablet_mgr->start_trash_sweep();
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
-    tablet = _tablet_mgr->get_tablet(111, 3333, true);
+    tablet = _tablet_mgr->get_tablet(111, true);
     ASSERT_TRUE(tablet == nullptr);
     dir_exist = FileUtils::check_exist(tablet_path);
     ASSERT_TRUE(!dir_exist);
@@ -274,6 +254,38 @@ TEST_F(TabletMgrTest, GetRowsetId) {
         RowsetId id;
         ASSERT_FALSE(_tablet_mgr->get_rowset_id_from_path(path, &id));
     }
+}
+
+TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
+    std::vector<DataDir*> data_dirs;
+    data_dirs.push_back(_data_dir);
+    for (int i = 0; i < 20; i++) {
+        TCreateTabletReq create_tablet_req = get_create_tablet_request(i, 3333);
+        Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(create_tablet_req, data_dirs);
+        ASSERT_TRUE(create_st.ok());
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(i);
+        ASSERT_TRUE(tablet != nullptr);
+    }
+
+    int batch_count = 0;
+    size_t batch_size = 10;
+    size_t tablets_count = 0;
+    std::vector<TabletSharedPtr> tablets;
+    while (true) {
+        tablets.clear();
+        bool ret = StorageEngine::instance()->tablet_manager()->get_next_batch_tablets(batch_size, &tablets);
+        tablets_count += tablets.size();
+        batch_count++;
+        if (ret) {
+            break;
+        }
+    }
+    ASSERT_GE(batch_count, 2);
+    // because there maybe other tablets exists in storage engine
+    ASSERT_GE(tablets_count, 20);
+
+    size_t num = StorageEngine::instance()->compaction_check_one_round();
+    ASSERT_GE(num, 20);
 }
 
 } // namespace starrocks

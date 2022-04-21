@@ -92,8 +92,8 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select * from t0 where not exists (select 9)", "  1:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select * from t0 where v3 = (select 6)", "  4:Project\n" +
-                "  |  <slot 7> : CAST(6 AS BIGINT)", "equal join conjunct: 3: v3 = 7: cast");
+        assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +
+                "  |  <slot 7> : CAST(5: expr AS BIGINT)", "equal join conjunct: 3: v3 = 7: cast");
         assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  5:Project\n" +
                 "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
                 "  |  \n" +
@@ -120,5 +120,11 @@ public class SelectConstTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
+    }
+
+    @Test
+    public void testDoubleCastWithoutScientificNotation() throws Exception {
+        String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
+        assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
     }
 }

@@ -42,13 +42,11 @@ import java.io.File;
 import java.util.UUID;
 
 public class CreateTableTest {
-    private static String runningDir = "fe/mocked/CreateTableTest2/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -56,12 +54,6 @@ public class CreateTableTest {
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
         Catalog.getCurrentCatalog().createDb(createDbStmt);
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     private static void createTable(String sql) throws Exception {
@@ -297,7 +289,7 @@ public class CreateTableTest {
                 "JSON must be used in duplicate key",
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Primary key table do not support modify column",
+                "JSON must be used in duplicate key",
                 () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
     }
 

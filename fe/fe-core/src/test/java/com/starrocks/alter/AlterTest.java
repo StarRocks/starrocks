@@ -56,8 +56,6 @@ import java.util.UUID;
 
 public class AlterTest {
 
-    private static String runningDir = "fe/mocked/AlterTest/" + UUID.randomUUID().toString() + "/";
-
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -67,7 +65,7 @@ public class AlterTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -143,8 +141,6 @@ public class AlterTest {
         } catch (Exception ex) {
 
         }
-
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -601,7 +597,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20170107"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
 
     }
@@ -642,7 +638,7 @@ public class AlterTest {
         Assert.assertNotNull(table.getPartition("p20170113"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -712,7 +708,7 @@ public class AlterTest {
         Assert.assertNotNull(table.getPartition("p2017_15"));
 
         String dropSQL = "drop table test_partition_week";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -753,7 +749,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p201704"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -794,7 +790,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p2020"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -835,7 +831,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p4"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -882,7 +878,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
 
     }
@@ -977,7 +973,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -1022,7 +1018,7 @@ public class AlterTest {
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 
@@ -1067,7 +1063,7 @@ public class AlterTest {
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
 

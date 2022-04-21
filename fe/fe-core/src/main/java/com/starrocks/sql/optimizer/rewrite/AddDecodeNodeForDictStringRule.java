@@ -27,6 +27,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
+import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
@@ -34,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -54,6 +58,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -258,6 +263,44 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return visitProjectionAfter(optExpression, context);
         }
 
+        public OptExpression visitPhysicalTopN(OptExpression optExpression, DecodeContext context) {
+            visitProjectionBefore(optExpression, context);
+            // top N node
+            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpression.getOp();
+            context.needEncode = topN.couldApplyStringDict(context.allStringColumnIds);
+            if (context.needEncode) {
+                topN.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
+                        context.allStringColumnIds);
+            }
+
+            context.hasEncoded = false;
+            OptExpression childExpr = optExpression.inputAt(0);
+            OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
+
+            Set<Integer> stringColumns = context.stringColumnIdToDictColumnIds.keySet();
+            boolean needRewrite = !stringColumns.isEmpty() &&
+                    topN.couldApplyStringDict(stringColumns);
+
+            if (context.hasEncoded || needRewrite) {
+                if (needRewrite) {
+                    PhysicalTopNOperator newTopN = rewriteTopNOperator(topN,
+                            context);
+                    newTopN.getUsedColumns();
+                    LogicalProperty logicalProperty = optExpression.getLogicalProperty();
+                    rewriteLogicProperty(logicalProperty, context.stringColumnIdToDictColumnIds);
+                    OptExpression result = OptExpression.create(newTopN, newChildExpr);
+                    result.setStatistics(optExpression.getStatistics());
+                    result.setLogicalProperty(optExpression.getLogicalProperty());
+                    return visitProjectionAfter(result, context);
+                } else {
+                    insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), 0, context);
+                    return visitProjectionAfter(optExpression, context);
+                }
+            }
+            optExpression.setChild(0, newChildExpr);
+            return visitProjectionAfter(optExpression, context);
+        }
+
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
@@ -385,6 +428,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return visitProjectionAfter(optExpression, context);
         }
 
+        private LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
+                                                     Map<Integer, Integer> stringColumnIdToDictColumnIds) {
+            ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
+            int[] columnIds = outputColumns.getColumnIds();
+            outputColumns.clear();
+            // For string column rewrite to dictionary column, other columns remain unchanged
+            Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
+                    .forEach(outputColumns::union);
+            return logicalProperty;
+        }
+
         private Projection rewriteProjectOperator(Projection projectOperator,
                                                   DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
@@ -402,6 +456,41 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 context.hasEncoded = false;
             }
             return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
+        }
+
+        private PhysicalTopNOperator rewriteTopNOperator(PhysicalTopNOperator operator, DecodeContext context) {
+
+            List<Ordering> orderingList = Lists.newArrayList();
+            for (Ordering orderDesc : operator.getOrderSpec().getOrderDescs()) {
+                final ColumnRefOperator columnRef = orderDesc.getColumnRef();
+                if (context.stringColumnIdToDictColumnIds.containsKey(columnRef.getId())) {
+                    Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnRef.getId());
+                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
+                    orderingList.add(new Ordering(dictColumn, orderDesc.isAscending(), orderDesc.isNullsFirst()));
+                } else {
+                    orderingList.add(orderDesc);
+                }
+            }
+            OrderSpec newOrderSpec = new OrderSpec(orderingList);
+
+            ScalarOperator predicate = operator.getPredicate();
+
+            // now we have not support predicate in sort
+            if (predicate != null) {
+                ColumnRefSet columns = predicate.getUsedColumns();
+                for (Integer stringId : context.stringColumnIdToDictColumnIds.keySet()) {
+                    Preconditions.checkState(!columns.contains(stringId));
+                }
+            }
+
+            return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(),
+                    operator.getOffset(),
+                    operator.getSortPhase(),
+                    operator.isSplit(),
+                    operator.isEnforced(),
+                    predicate,
+                    operator.getProjection()
+            );
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn,
@@ -888,18 +977,38 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (!predicate.getChild(1).isConstant()) {
                 return false;
             }
+
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef();
         }
 
         @Override
         public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef() &&
                     predicate.allValuesMatch(ScalarOperator::isConstantRef);
         }
 
         @Override
         public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            if (!checkTypeCanPushDown(predicate)) {
+                return false;
+            }
+
             return predicate.getChild(0).isColumnRef();
+        }
+
+        // These type predicates couldn't be pushed down to storage engine,
+        // which are consistent with BE implementations.
+        private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
+            Type leftType = scalarOperator.getChild(0).getType();
+            return !leftType.isFloatingPointType() && !leftType.isJsonType() && !leftType.isTime();
         }
     }
 }

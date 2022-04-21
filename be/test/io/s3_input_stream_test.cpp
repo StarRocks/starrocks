@@ -152,8 +152,8 @@ TEST_F(S3InputStreamTest, test_skip) {
 TEST_F(S3InputStreamTest, test_seek) {
     auto f = new_random_access_file();
     char buf[6];
-    ASSIGN_OR_ABORT(auto p, f->seek(2, SEEK_CUR));
-    ASSERT_EQ(2, p);
+    ASSERT_OK(f->seek(2));
+    ASSERT_EQ(2, *f->position());
 
     ASSIGN_OR_ABORT(auto r, f->read(buf, sizeof(buf)));
     ASSERT_EQ("234567", std::string_view(buf, r));
@@ -163,23 +163,12 @@ TEST_F(S3InputStreamTest, test_seek) {
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ(0, r);
 
-    ASSIGN_OR_ABORT(p, f->seek(5, SEEK_SET));
-    ASSERT_EQ(5, p);
+    ASSERT_OK(f->seek(5));
+    ASSERT_EQ(5, *f->position());
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ("56789", std::string_view(buf, r));
 
-    ASSIGN_OR_ABORT(p, f->seek(-7, SEEK_END));
-    ASSERT_EQ(3, p);
-    ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
-    ASSERT_EQ("345678", std::string_view(buf, r));
-
-    ASSIGN_OR_ABORT(p, f->seek(0, SEEK_END));
-    ASSERT_EQ(10, p);
-    ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
-    ASSERT_EQ("", std::string_view(buf, r));
-
-    ASSIGN_OR_ABORT(p, f->seek(1, SEEK_END));
-    ASSERT_EQ(11, p);
+    ASSERT_OK(f->seek(100));
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
     ASSERT_EQ("", std::string_view(buf, r));
 }
@@ -189,14 +178,19 @@ TEST_F(S3InputStreamTest, test_read_at) {
     char buf[6];
     ASSIGN_OR_ABORT(auto r, f->read_at(3, buf, sizeof(buf)));
     ASSERT_EQ("345678", std::string_view(buf, r));
+    ASSERT_EQ(9, *f->position());
+
     ASSIGN_OR_ABORT(r, f->read(buf, sizeof(buf)));
-    ASSERT_EQ("012345", std::string_view(buf, r));
+    ASSERT_EQ("9", std::string_view(buf, r));
+    ASSERT_EQ(10, *f->position());
 
     ASSIGN_OR_ABORT(r, f->read_at(7, buf, sizeof(buf)));
     ASSERT_EQ("789", std::string_view(buf, r));
+    ASSERT_EQ(10, *f->position());
 
     ASSIGN_OR_ABORT(r, f->read_at(11, buf, sizeof(buf)));
     ASSERT_EQ("", std::string_view(buf, r));
+    ASSERT_EQ(11, *f->position());
 
     ASSERT_FALSE(f->read_at(-1, buf, sizeof(buf)).ok());
 }

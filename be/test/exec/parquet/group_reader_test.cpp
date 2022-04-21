@@ -12,19 +12,12 @@
 
 namespace starrocks::parquet {
 
-class MockFile : public RandomAccessFile {
+class MockInputStream : public io::SeekableInputStream {
 public:
-    MockFile() = default;
-    ~MockFile() override = default;
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override { return size; }
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override { return Status::OK(); }
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override { return Status::OK(); }
-    StatusOr<uint64_t> get_size() const override { return 0; }
-    const std::string& filename() const override { return _file; }
-
-private:
-    std::string _file;
+    StatusOr<int64_t> read(void* data, int64_t size) override { return size; }
+    StatusOr<int64_t> position() override { return 0; }
+    StatusOr<int64_t> get_size() override { return 0; }
+    Status seek(int64_t offset) override { return Status::OK(); }
 };
 
 class MockColumnReader : public ColumnReader {
@@ -227,7 +220,7 @@ void GroupReaderTest::_check_chunk(GroupReaderParam* param, const vectorized::Ch
 }
 
 RandomAccessFile* GroupReaderTest::_create_file() {
-    return _pool.add(new MockFile());
+    return _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock-random-access-file"));
 }
 
 tparquet::ColumnChunk* GroupReaderTest::_create_t_column_chunk(const std::string& file_path) {

@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/thread/thread.hpp>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -270,7 +269,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
                                            bool is_pipeline_level_shuffle, const int32_t num_shuffles,
                                            int32_t sender_id, PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
-                                           bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
+                                           bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
+                                           const std::vector<int32_t>& output_columns)
         : Operator(factory, id, "exchange_sink", plan_node_id),
           _buffer(buffer),
           _part_type(part_type),
@@ -280,7 +280,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
-          _fragment_ctx(fragment_ctx) {
+          _fragment_ctx(fragment_ctx),
+          _output_columns(output_columns) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
     PassThroughChunkBuffer* pass_through_chunk_buffer =
@@ -385,6 +386,16 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     if (num_rows == 0) {
         return Status::OK();
     }
+
+    vectorized::Chunk temp_chunk;
+    vectorized::Chunk* send_chunk = chunk.get();
+    if (!_output_columns.empty()) {
+        for (int32_t cid : _output_columns) {
+            temp_chunk.append_column(chunk->get_column_by_slot_id(cid), cid);
+        }
+        send_chunk = &temp_chunk;
+    }
+
     if (_part_type == TPartitionType::UNPARTITIONED || (_num_shuffles == 1 && _channels.size() == 1)) {
         if (_chunk_request == nullptr) {
             _chunk_request = std::make_shared<PTransmitChunkParams>();
@@ -394,7 +405,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(chunk.get(), DEFAULT_DRIVER_SEQUENCE, false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -407,7 +418,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // 1. create a new chunk PB to serialize
             ChunkPB* pchunk = _chunk_request->add_chunks();
             // 2. serialize input chunk to pchunk
-            RETURN_IF_ERROR(serialize_chunk(chunk.get(), pchunk, &_is_first_chunk, _channels.size()));
+            RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size()));
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > _request_bytes_threshold) {
@@ -429,7 +440,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 1. Get request of that channel
         auto& channel = _channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
@@ -440,7 +451,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-                _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk.get());
+                ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()));
                 DCHECK(_partitions_columns[i] != nullptr);
             }
 
@@ -497,7 +508,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     continue;
                 }
 
-                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(chunk.get(), driver_sequence,
+                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(send_chunk, driver_sequence,
                                                                           _row_indexes.data(), from, size, state));
             }
         }
@@ -522,6 +533,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& _channel : _channels) {
         _channel->close(state, _fragment_ctx);
     }
+
+    _buffer->set_finishing();
     return Status::OK();
 }
 
@@ -598,7 +611,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle, int32_t num_shuffles,
         int32_t sender_id, PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
-        bool enable_exchange_pass_through, FragmentContext* const fragment_ctx)
+        bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
+        const std::vector<int32_t>& output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
@@ -609,12 +623,14 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
           _enable_exchange_pass_through(enable_exchange_pass_through),
-          _fragment_ctx(fragment_ctx) {}
+          _fragment_ctx(fragment_ctx),
+          _output_columns(output_columns) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, _buffer, _part_type, _destinations,
                                                   _is_pipeline_level_shuffle, _num_shuffles, _sender_id, _dest_node_id,
-                                                  _partition_expr_ctxs, _enable_exchange_pass_through, _fragment_ctx);
+                                                  _partition_expr_ctxs, _enable_exchange_pass_through, _fragment_ctx,
+                                                  _output_columns);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

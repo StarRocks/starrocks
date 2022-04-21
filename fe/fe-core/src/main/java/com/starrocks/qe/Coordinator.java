@@ -90,6 +90,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -621,11 +622,52 @@ public class Coordinator {
         }
     }
 
+    // choose at most num FInstances on difference BEs
+    private List<FInstanceExecParam> pickupFInstancesOnDifferentHosts(List<FInstanceExecParam> instances, int num) {
+        if (instances.size() <= num) {
+            return instances;
+        }
+
+        Map<TNetworkAddress, List<FInstanceExecParam>> host2instances = Maps.newHashMap();
+        for (FInstanceExecParam instance : instances) {
+            host2instances.putIfAbsent(instance.host, Lists.newLinkedList());
+            host2instances.get(instance.host).add(instance);
+        }
+        List<FInstanceExecParam> picked = Lists.newArrayList();
+        while (picked.size() < num) {
+            for (List<FInstanceExecParam> instancesPerHost : host2instances.values()) {
+                if (instancesPerHost.isEmpty()) {
+                    continue;
+                }
+                picked.add(instancesPerHost.remove(0));
+            }
+        }
+        return picked;
+    }
+
+    private List<TRuntimeFilterDestination> mergeGRFProbers(List<TRuntimeFilterProberParams> probers) {
+        Map<TNetworkAddress, List<TUniqueId>> host2probers = Maps.newHashMap();
+        for (TRuntimeFilterProberParams prober : probers) {
+            host2probers.putIfAbsent(prober.fragment_instance_address, Lists.newArrayList());
+            host2probers.get(prober.fragment_instance_address).add(prober.fragment_instance_id);
+        }
+        return host2probers.entrySet().stream().map(
+                e -> new TRuntimeFilterDestination().setAddress(e.getKey()).setFinstance_ids(e.getValue())
+        ).collect(Collectors.toList());
+    }
+
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
+        boolean enablePipelineEngine = ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnablePipelineEngine();
+
+        Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
+        List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
+
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
+            boolean usePipeline = enablePipelineEngine && fragment.canUsePipeline();
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
@@ -635,18 +677,29 @@ public class Coordinator {
                     probeParam.setFragment_instance_address(toBrpcHost(instance.host));
                     probeParamList.add(probeParam);
                 }
-                topParams.runtimeFilterParams.putToId_to_prober_params(kv.getKey(), probeParamList);
+                if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
+                    broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
+                } else {
+                    topParams.runtimeFilterParams.putToId_to_prober_params(kv.getKey(), probeParamList);
+                }
             }
 
+            Set<TUniqueId> broadcastGRfSenders =
+                    pickupFInstancesOnDifferentHosts(params.instanceExecParams, 3).stream().
+                            map(instance -> instance.instanceId).collect(Collectors.toSet());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getBuildRuntimeFilters().entrySet()) {
                 int rid = kv.getKey();
                 RuntimeFilterDescription rf = kv.getValue();
                 if (rf.isHasRemoteTargets()) {
                     if (rf.isBroadcastJoin()) {
-                        // for broadcast join, we just need to send one copy.
-                        // and we need to specify one instance to send that copy.
+                        // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
                         topParams.runtimeFilterParams.putToRuntime_filter_builder_number(rid, 1);
-                        rf.setSenderFragmentInstanceId(params.instanceExecParams.get(0).instanceId);
+                        if (usePipeline) {
+                            rf.setBroadcastGRFSenders(broadcastGRfSenders);
+                            broadcastGRFList.add(rf);
+                        } else {
+                            rf.setSenderFragmentInstanceId(params.instanceExecParams.get(0).instanceId);
+                        }
                     } else {
                         topParams.runtimeFilterParams
                                 .putToRuntime_filter_builder_number(rid, params.instanceExecParams.size());
@@ -655,6 +708,9 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
+
+        broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
+                mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
 
         if (ConnectContext.get() != null) {
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();

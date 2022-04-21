@@ -8,6 +8,7 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -45,9 +47,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
+
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
+        }
         Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session);
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+        }
 
         if (stmt instanceof QueryStatement) {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
@@ -151,6 +160,7 @@ public class StatementPlanner {
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
@@ -164,6 +174,7 @@ public class StatementPlanner {
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowColumnStmt

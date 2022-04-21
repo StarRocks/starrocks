@@ -69,16 +69,19 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
-               bool strict_mode);
+               bool strict_mode, const std::vector<SlotDescriptor*>& slot_descs);
+
     ~JsonReader();
 
-    Status read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+    Status open();
+
+    Status read_chunk(Chunk* chunk, int32_t rows_to_read);
 
     Status close();
 
 private:
     template <typename ParserType>
-    Status _read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs);
+    Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
     Status _read_and_parse_json();
 
@@ -89,7 +92,7 @@ private:
                              const std::string& col_name);
 
     // Reorder column to accelerate simdjson iteration.
-    void _reorder_column(std::vector<SlotDescriptor*>* slot_descs, simdjson::ondemand::object& obj);
+    void _reorder_column();
 
 private:
     RuntimeState* _state = nullptr;
@@ -98,11 +101,15 @@ private:
     bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
-    int _next_line;
-    int _total_lines;
     bool _closed;
+    std::vector<SlotDescriptor*> _slot_descs;
 
-    std::unique_ptr<uint8_t[]> _json_binary_ptr;
+    // For performance reason, the simdjson parser should be reused over several files.
+    //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
+    simdjson::ondemand::parser _simdjson_parser;
+    std::unique_ptr<uint8_t[]> _parser_buf;
+    size_t _parser_buf_sz = 0;
+    size_t _parser_buf_cap = 0;
     bool _is_ndjson = false;
 
     std::unique_ptr<JsonParser> _parser;

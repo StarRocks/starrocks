@@ -68,7 +68,6 @@ public:
     /// reinitializing function state).
     Status open(RuntimeState* state);
 
-    //TODO chenhao
     static Status open(std::vector<ExprContext*> input_evals, RuntimeState* state);
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
@@ -103,17 +102,7 @@ public:
 
     bool closed() { return _closed; }
 
-    bool is_nullable();
-
     bool opened() { return _opened; }
-
-    /// If 'expr' is constant, evaluates it with no input row argument and returns the
-    /// result in 'const_val'. Sets 'const_val' to NULL if the argument is not constant.
-    /// The returned AnyVal and associated varlen data is owned by this evaluator. This
-    /// should only be called after Open() has been called on this expr. Returns an error
-    /// if there was an error evaluating the expression or if memory could not be allocated
-    /// for the expression result.
-    Status get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val);
 
     /// Returns an error status if there was any error in evaluating the expression
     /// or its sub-expressions. 'start_idx' and 'end_idx' correspond to the range
@@ -126,9 +115,9 @@ public:
     std::string get_error_msg() const;
 
     // vector query engine
-    ColumnPtr evaluate(vectorized::Chunk* chunk);
+    StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk);
 
-    ColumnPtr evaluate(Expr* expr, vectorized::Chunk* chunk);
+    StatusOr<ColumnPtr> evaluate(Expr* expr, vectorized::Chunk* chunk);
 
 private:
     friend class Expr;
@@ -170,5 +159,14 @@ private:
             RETURN_IF_ERROR(ctx->get_udf_error()); \
         }                                          \
     } while (false)
+
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                         \
+    [](ExprContext* c, Expr* e, vectorized::Chunk* ptr) {                                                \
+        auto st = c->evaluate(e, ptr);                                                                   \
+        if (st.ok()) {                                                                                   \
+            return st.value();                                                                           \
+        }                                                                                                \
+        return vectorized::ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+    }(ctx, expr, chunk)
 
 } // namespace starrocks

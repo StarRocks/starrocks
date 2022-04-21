@@ -25,6 +25,39 @@ public class HashDistributionSpec extends DistributionSpec {
         return this.hashDistributionDesc;
     }
 
+    private boolean isJoinEqColumnsCompatible(HashDistributionSpec requiredSpec) {
+        List<Integer> requiredShuffleColumns = requiredSpec.getShuffleColumns();
+        List<Integer> shuffleColumns = getShuffleColumns();
+
+        // Local shuffle, including bucket shuffle and colocate shuffle, only need to verify the shuffleColumns part,
+        // no need to care about the extra part in requiredShuffleColumns
+        if (!getHashDistributionDesc().isLocalShuffle() && requiredShuffleColumns.size() != shuffleColumns.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < shuffleColumns.size(); i++) {
+            int requiredShuffleColumn = requiredShuffleColumns.get(i);
+            int outputShuffleColumn = shuffleColumns.get(i);
+            /*
+             * Given the following example：
+             *      SELECT * FROM A JOIN B ON A.a = B.b
+             *      JOIN C ON B.b = C.c
+             *      JOIN D ON C.c = D.d
+             *      JOIN E ON D.d = E.e
+             * We focus on the third join `.. join D ON C.c = D.d`
+             * requiredColumn: D.d
+             * outputColumn: A.a
+             * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
+             *
+             * A.a can be mapped to D.d through joinEquivalentColumns
+             */
+            if (!propertyInfo.isEquivalentJoinOnColumns(requiredShuffleColumn, outputShuffleColumn)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public boolean isSatisfy(DistributionSpec spec) {
         if (spec.type.equals(DistributionType.ANY)) {
             return true;
@@ -64,7 +97,7 @@ public class HashDistributionSpec extends DistributionSpec {
                 return false;
             }
         }
-        return hashDistributionDesc.isSatisfy(other.hashDistributionDesc);
+        return hashDistributionDesc.isSatisfy(other.hashDistributionDesc) || isJoinEqColumnsCompatible(other);
     }
 
     public List<Integer> getShuffleColumns() {

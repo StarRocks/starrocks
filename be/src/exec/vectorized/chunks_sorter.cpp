@@ -127,12 +127,8 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           const std::string& sort_keys, const bool is_topn, size_t size_of_chunk_batch)
-        : _state(state),
-          _sort_exprs(sort_exprs),
-          _sort_keys(sort_keys),
-          _is_topn(is_topn),
-          _size_of_chunk_batch(size_of_chunk_batch) {
+                           const std::string& sort_keys, const bool is_topn)
+        : _state(state), _sort_exprs(sort_exprs), _sort_keys(sort_keys), _is_topn(is_topn) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -173,10 +169,9 @@ bool ChunksSorter::sink_complete() {
     return _is_sink_complete;
 }
 
-vectorized::ChunkPtr ChunksSorter::materialize_chunk_before_sort(vectorized::Chunk* chunk,
-                                                                 TupleDescriptor* materialized_tuple_desc,
-                                                                 const SortExecExprs& sort_exec_exprs,
-                                                                 const std::vector<OrderByType>& order_by_types) {
+StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
+        vectorized::Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
+        const std::vector<OrderByType>& order_by_types) {
     vectorized::ChunkPtr materialize_chunk = std::make_shared<vectorized::Chunk>();
 
     // materialize all sorting columns: replace old columns with evaluated columns
@@ -188,7 +183,7 @@ vectorized::ChunkPtr ChunksSorter::materialize_chunk_before_sort(vectorized::Chu
 
     for (size_t i = 0; i < slots_in_sort_exprs.size(); ++i) {
         ExprContext* expr_ctx = slots_in_sort_exprs[i];
-        ColumnPtr col = expr_ctx->evaluate(chunk);
+        ColumnPtr col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk);
         if (col->is_constant()) {
             if (col->is_nullable()) {
                 // Constant null column doesn't have original column data type information,

@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -187,7 +188,7 @@ public:
     static Expr* copy(ObjectPool* pool, Expr* old_expr);
 
     // for vector query engine
-    virtual ColumnPtr evaluate_const(ExprContext* context);
+    virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
     virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
 
@@ -274,7 +275,7 @@ protected:
     int _fn_context_index;
 
     std::once_flag _constant_column_evaluate_once;
-    ColumnPtr _constant_column;
+    StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information
     std::string debug_string(const std::string& expr_name) const {

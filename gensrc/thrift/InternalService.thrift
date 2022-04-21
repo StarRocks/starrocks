@@ -32,6 +32,7 @@ include "DataSinks.thrift"
 include "Data.thrift"
 include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
+include "RuntimeFilter.thrift"
 
 // constants for TQueryOptions.num_nodes
 const i32 NUM_NODES_ALL = 0
@@ -161,6 +162,7 @@ struct TQueryOptions {
   55: optional TPipelineProfileLevel pipeline_profile_level;
   // For load degree of parallel
   56: optional i32 load_dop;
+  57: optional i64 runtime_filter_scan_wait_time_ms;
 }
 
 
@@ -168,22 +170,6 @@ struct TQueryOptions {
 struct TScanRangeParams {
   1: required PlanNodes.TScanRange scan_range
   2: optional i32 volume_id = -1
-}
-
-struct TRuntimeFilterProberParams {
-  1: optional Types.TUniqueId fragment_instance_id
-  2: optional Types.TNetworkAddress fragment_instance_address
-}
-
-struct TRuntimeFilterParams {
-  // Runtime filter Id to the fragment instances where that runtime filter will be applied on
-  2: optional map<i32, list<TRuntimeFilterProberParams>> id_to_prober_params
-  // Runtime filter Id to (number of partitioned runtime filters)
-  // To merge a global runtime filter, merge node has to merge
-  // all partitioned runtime filters for the sake of correctness.
-  3: optional map<i32, i32> runtime_filter_builder_number
-  // if aggregated runtime filter size exceeds it, merge node can stop merging.
-  4: optional i64 runtime_filter_max_size;
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment
@@ -221,7 +207,7 @@ struct TPlanFragmentExecParams {
   12: optional bool use_vectorized // whether to use vectorized query engine
 
   // Global runtime filters
-  50: optional TRuntimeFilterParams runtime_filter_params
+  50: optional RuntimeFilter.TRuntimeFilterParams runtime_filter_params
   51: optional i32 instances_number
   // To enable pass through chunks between sink/exchange if they are in the same process.
   52: optional bool enable_exchange_pass_through
