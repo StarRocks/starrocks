@@ -6,6 +6,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -46,5 +48,18 @@ public class MetaUtils {
         if (Strings.isNullOrEmpty(tableName.getTbl())) {
             throw new SemanticException("Table name is null");
         }
+    }
+
+    public static String getFullDatabaseName(String db, ConnectContext session) {
+        if (Strings.isNullOrEmpty(db)) {
+            db = session.getDatabase();
+            db = ClusterNamespace.getFullName(session.getClusterName(), db);
+            if (Strings.isNullOrEmpty(db)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+        } else {
+            db = ClusterNamespace.getFullName(session.getClusterName(), db);
+        }
+        return db;
     }
 }

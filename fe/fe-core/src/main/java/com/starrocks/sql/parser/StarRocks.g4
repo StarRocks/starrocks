@@ -35,8 +35,8 @@ statement
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
-    | BACKUP SNAPSHOT label=qualifiedName TO repository=identifier ON  tables=identifierList properties?      # backup
-    | RESTORE SNAPSHOT label=qualifiedName FROM repository=identifier ON  tables=identifierList properties?   # restore
+    | BACKUP SNAPSHOT label=qualifiedName TO repository=identifier ON  tables=identifierList properties      # backup
+    | RESTORE SNAPSHOT label=qualifiedName FROM repository=identifier ON  tables=identifierList properties   # restore
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                      #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
     ;

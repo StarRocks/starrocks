@@ -10,6 +10,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,10 @@ public class RestoreAnalyzer {
     private static int starrocksMetaVersion = -1;
 
     public static void analyze(RestoreStmt restoreStmt, ConnectContext session) throws AnalysisException {
-        List<TableRef> tblRefs =  restoreStmt.getTableRefs();
+        String db = restoreStmt.getDbName();
+        restoreStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
+        restoreStmt.setClusterName(session.getClusterName());
+        List<TableRef> tblRefs = restoreStmt.getTableRefs();
         // check if alias is duplicated
         Set<String> aliasSet = Sets.newHashSet();
         for (TableRef tblRef : tblRefs) {

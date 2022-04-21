@@ -58,6 +58,10 @@ public class BackupStmt extends AbstractBackupStmt {
         return type;
     }
 
+    public void setDb(String db) {
+        this.labelName.setDbName(db);
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);

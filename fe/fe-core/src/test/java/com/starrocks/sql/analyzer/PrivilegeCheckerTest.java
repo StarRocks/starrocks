@@ -184,7 +184,7 @@ public class PrivilegeCheckerTest {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
 
-        String sql = "BACKUP SNAPSHOT example_db.snapshot_label1 TO example_repo ON (example_tbl)";
+        String sql = "BACKUP SNAPSHOT example_db.snapshot_label1 TO example_repo ON (example_tbl) PROPERTIES ( \"timeout\" = \"7200\" );";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);

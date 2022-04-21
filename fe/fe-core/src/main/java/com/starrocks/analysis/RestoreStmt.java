@@ -61,6 +61,10 @@ public class RestoreStmt extends AbstractBackupStmt {
         return replicationNum;
     }
 
+    public void setDb(String db) {
+        this.labelName.setDbName(db);
+    }
+
     public String getBackupTimestamp() {
         return backupTimestamp;
     }

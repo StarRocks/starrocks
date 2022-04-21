@@ -29,6 +29,9 @@ public class BackupAnalyzer {
     private static BackupStmt.BackupType type = BackupStmt.BackupType.FULL;
 
     public static void analyze(BackupStmt backupStmt, ConnectContext session) throws AnalysisException {
+        String db = backupStmt.getDbName();
+        backupStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
+        backupStmt.setClusterName(session.getClusterName());
         List<TableRef> tblRefs = backupStmt.getTblRefs();
         for (TableRef tableRef : tblRefs) {
             TableName tableName = tableRef.getName();
