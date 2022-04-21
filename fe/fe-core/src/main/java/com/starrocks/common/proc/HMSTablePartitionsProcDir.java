@@ -5,7 +5,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -18,36 +18,36 @@ import org.apache.logging.log4j.Logger;
  * SHOW PROC /dbs/dbId/tableId/partitions
  * show partitions' detail info within a table
  */
-public class HivePartitionsProcDir implements ProcDirInterface {
-    private static final Logger LOG = LogManager.getLogger(HivePartitionsProcDir.class);
+public class HMSTablePartitionsProcDir implements ProcDirInterface {
+    private static final Logger LOG = LogManager.getLogger(HMSTablePartitionsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("PartitionName")
             .build();
 
-    private final HiveTable hiveTable;
+    private final HiveMetaStoreTable hmsTable;
 
-    public HivePartitionsProcDir(HiveTable hiveTable) {
-        this.hiveTable = hiveTable;
+    public HMSTablePartitionsProcDir(HiveMetaStoreTable hmsTable) {
+        this.hmsTable = hmsTable;
     }
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        Preconditions.checkNotNull(hiveTable);
+        Preconditions.checkNotNull(hmsTable);
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         // partitionColumns is empty means table is unPartitioned
-        if (hiveTable.getPartitionColumnNames().isEmpty()) {
-            result.addRow(Lists.newArrayList(hiveTable.getHiveTable()));
+        if (hmsTable.getPartitionColumnNames().isEmpty()) {
+            result.addRow(Lists.newArrayList(hmsTable.getTableName()));
         } else {
             try {
-                for (PartitionKey partitionKey : hiveTable.getPartitionKeys().keySet()) {
-                    result.addRow(Lists.newArrayList(FileUtils.makePartName(hiveTable.getPartitionColumnNames(),
+                for (PartitionKey partitionKey : hmsTable.getPartitionKeys().keySet()) {
+                    result.addRow(Lists.newArrayList(FileUtils.makePartName(hmsTable.getPartitionColumnNames(),
                             Utils.getPartitionValues(partitionKey))));
                 }
             } catch (DdlException e) {
-                LOG.warn("get hive partitions failed", e);
-                throw new AnalysisException("get hive partitions failed: " + e.getMessage());
+                LOG.warn("Get table partitions failed", e);
+                throw new AnalysisException("get table partitions failed: " + e.getMessage());
             }
         }
 

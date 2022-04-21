@@ -145,7 +145,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public void registerTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()), tbl);
+            tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()), tbl);
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -154,7 +154,7 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public void unregisterTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()));
+            tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()));
         } finally {
             tablesLock.writeLock().unlock();
         }

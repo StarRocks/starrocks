@@ -385,7 +385,14 @@ build_zlib() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL 
+    make -j$PARALLEL
+    make install
+
+    # build minizip
+    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
+    autoreconf --force --install
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
+    make -j$PARALLEL
     make install
 }
 
@@ -840,7 +847,11 @@ build_opentelemetry() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF -DWITH_STL=ON -DWITH_JAEGER=ON ..
+    $CMAKE_CMD .. \
+        -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF \
+        -DWITH_STL=OFF -DWITH_JAEGER=ON
     make -j$PARALLEL
     make install
 }

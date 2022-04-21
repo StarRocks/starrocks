@@ -414,22 +414,6 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
     return Status::OK();
 }
 
-StatusOr<IteratorList> TabletUpdates::read(int64_t version, const vectorized::Schema& schema,
-                                           const vectorized::RowsetReadOptions& options) {
-    if (_error) {
-        return Status::InternalError(Substitute("read failed, tablet updates is in error state: tablet:$0 $1",
-                                                _tablet.tablet_id(), _error_msg));
-    }
-    std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(get_applied_rowsets(version, &rowsets));
-
-    IteratorList iterators;
-    for (auto& rowset : rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
-    }
-    return std::move(iterators);
-}
-
 Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     if (_error) {
         return Status::InternalError(Substitute("rowset_commit failed, tablet updates is in error state: tablet:$0 $1",
@@ -1423,6 +1407,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         auto meta_store = _tablet.data_dir()->get_meta();
         auto tablet_id = _tablet.tablet_id();
 
+        size_t n_delvec_range = 0;
         auto res = TabletMetaManager::list_del_vector(meta_store, tablet_id, max_expired_version + 1);
         if (res.ok()) {
             for (const auto& elem : *res) {
@@ -1432,9 +1417,15 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
                 VLOG(1) << "Removed delete vector tablet_id=" << tablet_id << " segment_id=" << segment_id
                         << " start_version=0 end_version=" << end_version;
             }
+            n_delvec_range = (*res).size();
         } else {
             LOG(WARNING) << "Fail to list delete vector: " << res.status();
         }
+        LOG(INFO) << Substitute(
+                "remove_expired_versions $0 time:$1 max_expire_version:$2 deletes: #version:$3 #rowset:$4 "
+                "#delvecrange:$5",
+                _debug_version_info(true), expire_time, max_expired_version, expired_edit_version_infos.size(),
+                unused_rid.size(), n_delvec_range);
     }
     _remove_unused_rowsets();
 }
@@ -1785,6 +1776,28 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     return ret;
 }
 
+std::string TabletUpdates::_debug_version_info(bool lock) const {
+    size_t num_version;
+    size_t apply_idx;
+    EditVersion first_version;
+    EditVersion apply_version;
+    EditVersion last_version;
+    size_t npending = 0;
+    if (lock) _lock.lock();
+    num_version = _edit_version_infos.size();
+    apply_idx = _apply_version_idx;
+    first_version = _edit_version_infos[0]->version;
+    apply_version = _edit_version_infos[_apply_version_idx]->version;
+    last_version = _edit_version_infos.back()->version;
+    npending = _pending_commits.size();
+    if (lock) _lock.unlock();
+
+    std::string ret = Substitute("tablet:$0 #version:$1 [$2 $3@$4 $5] #pending:$6", _tablet.tablet_id(), num_version,
+                                 first_version.to_string(), apply_version.to_string(), apply_idx,
+                                 last_version.to_string(), npending);
+    return ret;
+}
+
 void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const {
     std::lock_guard rl(_rowset_stats_lock);
     if (abbr) {
@@ -1887,8 +1900,10 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                 if (itr != _rowsets.end()) {
                     rowsets->emplace_back(itr->second);
                 } else {
-                    return Status::NotFound(Substitute("get_rowsets rowset not found: version:$0 rowset:$1 $2", version,
-                                                       rsid, _debug_string(false, true)));
+                    string msg = Substitute("get_rowsets rowset not found: version:$0 rowset:$1 $2", version, rsid,
+                                            _debug_string(false, true));
+                    LOG(WARNING) << msg;
+                    return Status::NotFound(msg);
                 }
             }
             if (full_edit_version != nullptr) {
@@ -1897,7 +1912,9 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
             return Status::OK();
         }
     }
-    return Status::NotFound(strings::Substitute("rowset version $0 not found", version));
+    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1", version, _debug_version_info(false));
+    LOG(WARNING) << msg;
+    return Status::NotFound(msg);
 }
 
 struct RowsetLoadInfo {
@@ -2226,11 +2243,13 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 }
 
 void TabletUpdates::_remove_unused_rowsets() {
+    size_t removed = 0;
     std::vector<RowsetSharedPtr> skipped_rowsets;
     RowsetSharedPtr rowset;
     while (_unused_rowsets.try_get(&rowset) == 1) {
         if (rowset.use_count() > 1) {
-            LOG(WARNING) << "rowset " << rowset->rowset_id() << " still been referenced";
+            LOG(WARNING) << "rowset " << rowset->rowset_id() << " still been referenced"
+                         << " tablet:" << _tablet.tablet_id();
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
         }
@@ -2241,7 +2260,8 @@ void TabletUpdates::_remove_unused_rowsets() {
                 TabletMetaManager::rowset_delete(_tablet.data_dir(), _tablet.tablet_id(),
                                                  rowset->rowset_meta()->get_rowset_seg_id(), rowset->num_segments());
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to delete rowset " << rowset->rowset_id() << ": " << st;
+            LOG(WARNING) << "Fail to delete rowset " << rowset->rowset_id() << ": " << st
+                         << " tablet:" << _tablet.tablet_id();
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
         }
@@ -2249,10 +2269,14 @@ void TabletUpdates::_remove_unused_rowsets() {
         rowset->set_need_delete_file();
         auto ost = rowset->remove();
         VLOG(1) << "remove rowset " << _tablet.tablet_id() << "@" << rowset->rowset_meta()->get_rowset_seg_id() << "@"
-                << rowset->rowset_id() << ": " << ost;
+                << rowset->rowset_id() << ": " << ost << " tablet:" << _tablet.tablet_id();
+        removed++;
     }
     for (auto& r : skipped_rowsets) {
         _unused_rowsets.blocking_put(std::move(r));
+    }
+    if (removed > 0) {
+        LOG(INFO) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
     }
 }
 

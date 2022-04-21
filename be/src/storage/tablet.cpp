@@ -391,7 +391,7 @@ void Tablet::delete_expired_inc_rowsets() {
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
-        double diff = ::difftime(now, rs_meta->creation_time());
+        int64_t diff = now - rs_meta->creation_time();
         if (diff >= config::inc_rowset_expired_sec) {
             Version version(rs_meta->version());
             expired_versions.emplace_back(version);
@@ -415,7 +415,7 @@ void Tablet::delete_expired_inc_rowsets() {
 void Tablet::delete_expired_stale_rowset() {
     int64_t now = UnixSeconds();
     // Compute the end time to delete rowsets, when a expired rowset createtime less then this time, it will be deleted.
-    double expired_stale_sweep_endtime = ::difftime(now, config::tablet_rowset_stale_sweep_time_sec);
+    int64_t expired_stale_sweep_endtime = now - config::tablet_rowset_stale_sweep_time_sec;
 
     if (_updates) {
         _updates->remove_expired_versions(expired_stale_sweep_endtime);
@@ -457,7 +457,7 @@ void Tablet::delete_expired_stale_rowset() {
                 _stale_rs_version_map.erase(it);
                 LOG(INFO) << "delete stale rowset tablet=" << full_name() << " version["
                           << timestamped_version->version().first << "," << timestamped_version->version().second
-                          << "] move to unused_rowset success " << std::fixed << expired_stale_sweep_endtime;
+                          << "] move to unused_rowset success " << expired_stale_sweep_endtime;
             } else {
                 LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
                              << timestamped_version->version().first << "," << timestamped_version->version().second
@@ -469,7 +469,7 @@ void Tablet::delete_expired_stale_rowset() {
     LOG(INFO) << "delete stale rowset _stale_rs_version_map tablet=" << full_name()
               << " current_size=" << _stale_rs_version_map.size() << " old_size=" << old_size
               << " current_meta_size=" << _tablet_meta->all_stale_rs_metas().size()
-              << " old_meta_size=" << old_meta_size << " sweep endtime " << std::fixed << expired_stale_sweep_endtime;
+              << " old_meta_size=" << old_meta_size << " sweep endtime " << expired_stale_sweep_endtime;
 
 #ifndef BE_TEST
     save_meta();
@@ -1120,31 +1120,6 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
 Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     CHECK(_updates) << "updates should exists";
     return _updates->rowset_commit(version, rowset);
-}
-
-StatusOr<Tablet::IteratorList> Tablet::capture_segment_iterators(const Version& spec_version,
-                                                                 const vectorized::Schema& schema,
-                                                                 const vectorized::RowsetReadOptions& options) const {
-    if (_updates) {
-        if (spec_version.first != 0) {
-            LOG(WARNING) << "cannot capture with version.first:" << spec_version.first;
-            return Status::InvalidArgument("cannot capture with version.first != 0");
-        }
-        return _updates->read(spec_version.second, schema, options);
-    }
-    std::shared_lock rdlock(_meta_lock);
-    std::vector<Version> version_path;
-    std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, &rowsets));
-    // Release lock before acquiring segment iterators.
-    rdlock.unlock();
-
-    IteratorList iterators;
-    for (auto& rowset : rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
-    }
-    return std::move(iterators);
 }
 
 void Tablet::on_shutdown() {
