@@ -12,8 +12,14 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 
 public class HashJoinImplementationRule extends JoinImplementationRule {
-    public HashJoinImplementationRule() {
+    private HashJoinImplementationRule() {
         super(RuleType.IMP_EQ_JOIN_TO_HASH_JOIN);
+    }
+
+    private static final HashJoinImplementationRule instance = new HashJoinImplementationRule();
+
+    public static HashJoinImplementationRule getInstance() {
+        return instance;
     }
 
     @Override

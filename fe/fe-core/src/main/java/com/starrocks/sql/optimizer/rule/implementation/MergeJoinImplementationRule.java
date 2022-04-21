@@ -12,8 +12,14 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 
 public class MergeJoinImplementationRule extends JoinImplementationRule {
-    public MergeJoinImplementationRule() {
+    private MergeJoinImplementationRule() {
         super(RuleType.IMP_EQ_JOIN_TO_MERGE_JOIN);
+    }
+
+    private static final MergeJoinImplementationRule instance = new MergeJoinImplementationRule();
+
+    public static MergeJoinImplementationRule getInstance() {
+        return instance;
     }
 
     @Override

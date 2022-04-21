@@ -17,7 +17,6 @@ import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.ImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
@@ -113,7 +112,6 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -130,8 +128,6 @@ public class RuleSet {
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
-            new MergeJoinImplementationRule(),
-            new HashJoinImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),
@@ -325,13 +321,17 @@ public class RuleSet {
         return rewriteRules.get(type);
     }
 
-    public void removeImplementationRule(Class<? extends ImplementationRule> implementationRuleClass) {
-        Iterator<Rule> iterator = implementRules.iterator();
-        while (iterator.hasNext()) {
-            Rule rule = iterator.next();
-            if (rule.getClass() == implementationRuleClass) {
-                iterator.remove();
-            }
-        }
+    public void addHashJoinImplementationRule() {
+        this.implementRules.add(HashJoinImplementationRule.getInstance());
     }
+
+    public void addMergeJoinImplementationRule() {
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
+    }
+
+    public void addAutoJoinImplementationRule() {
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
+        this.implementRules.add(HashJoinImplementationRule.getInstance());
+    }
+
 }

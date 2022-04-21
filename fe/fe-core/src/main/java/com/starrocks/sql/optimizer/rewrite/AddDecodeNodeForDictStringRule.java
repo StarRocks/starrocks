@@ -495,7 +495,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[]{ID_TYPE};
+                        Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
