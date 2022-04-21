@@ -8,9 +8,11 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -171,6 +173,81 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ(1024, merged->get(0).get_int32());
     ASSERT_EQ(2048, merged->get(1).get_int32());
+}
+
+void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
+    for (ExprContext* ctx : exprs) {
+        delete ctx;
+    }
+    exprs.clear();
+}
+
+TEST(MergeTest, merge_sorted_stream) {
+    constexpr int num_columns = 3;
+    constexpr int num_runs = 4;
+    constexpr int num_chunks_per_run = 4;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<bool> asc_arr;
+    std::vector<bool> null_first;
+    Chunk::SlotHashMap map;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+
+    for (int i = 0; i < num_columns; i++) {
+        auto expr = std::make_unique<ColumnRef>(type_desc, i);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        asc_arr.push_back(true);
+        null_first.push_back(true);
+        map[i] = i;
+    }
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+
+    std::vector<ChunkProvider> chunk_providers;
+    std::vector<int> chunk_probe_index(num_runs, 0);
+    std::vector<int> chunk_run_max(num_runs, 0);
+    for (int run = 0; run < num_runs; run++) {
+        ChunkProvider chunk_probe_supplier = [&, run](Chunk** output, bool* eos) -> bool {
+            if (chunk_probe_index[run]++ > num_chunks_per_run) {
+                *output = nullptr;
+                *eos = true;
+                return false;
+            } else if (output && eos) {
+                Columns columns;
+                for (int col_idx = 0; col_idx < num_columns; col_idx++) {
+                    auto column =
+                            build_sorted_column(type_desc, col_idx, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
+                    columns.push_back(column);
+                }
+                ChunkUniquePtr chunk = std::make_unique<Chunk>(columns, map);
+                *output = chunk.release();
+            }
+            return true;
+        };
+        chunk_providers.emplace_back(chunk_probe_supplier);
+    }
+
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> input_cursors;
+    for (int run = 0; run < num_runs; run++) {
+        input_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(chunk_providers[run], &sort_exprs));
+    }
+
+    std::vector<ChunkUniquePtr> output_chunks;
+    merge_sorted_cursor_cascade(sort_desc, std::move(input_cursors), [&](ChunkUniquePtr chunk) {
+        output_chunks.push_back(std::move(chunk));
+        return Status::OK();
+    });
+
+    for (auto& chunk : output_chunks) {
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            fmt::print("row: {}\n", chunk->debug_row(i));
+            if (i > 0) {
+                int x = compare_chunk_row(sort_desc, chunk->columns(), chunk->columns(), i - 1, i);
+                ASSERT_LE(x, 0);
+            }
+        }
+    }
 }
 
 } // namespace starrocks::vectorized
