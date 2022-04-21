@@ -24,6 +24,7 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/empty_iterator.h"
+#include "storage/vectorized/tablet_reader.h"
 #include "storage/vectorized/union_iterator.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
@@ -312,24 +313,22 @@ static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, cons
     return tablet1;
 }
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
-    static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::RowsetReadOptions rs_opts;
-    rs_opts.is_primary_keys = true;
-    rs_opts.sorted = false;
-    rs_opts.version = version;
-    rs_opts.meta = tablet->data_dir()->get_meta();
-    rs_opts.stats = &s_stats;
-    auto seg_iters = tablet->capture_segment_iterators(Version(0, version), schema, rs_opts);
-    if (!seg_iters.ok()) {
-        LOG(ERROR) << "read tablet failed: " << seg_iters.status().to_string();
+static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
+                                                           vectorized::Schema& schema) {
+    vectorized::TabletReaderParams params;
+    if (!reader.prepare().ok()) {
+        LOG(ERROR) << "reader prepare failed";
         return nullptr;
     }
-    if (seg_iters->empty()) {
+    std::vector<ChunkIteratorPtr> seg_iters;
+    if (!reader.get_segment_iterators(params, &seg_iters).ok()) {
+        LOG(ERROR) << "reader get segment iterators fail";
+        return nullptr;
+    }
+    if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(*seg_iters);
+    return vectorized::new_union_iterator(seg_iters);
 }
 
 static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
@@ -378,7 +377,9 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    auto iter = create_tablet_iterator(tablet, version);
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
     }
@@ -386,7 +387,9 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    auto iter = create_tablet_iterator(tablet, version);
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
     }
@@ -554,10 +557,15 @@ TEST_F(TabletUpdatesTest, remove_expired_versions) {
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    auto iter_v0 = create_tablet_iterator(_tablet, 1);
-    auto iter_v1 = create_tablet_iterator(_tablet, 2);
-    auto iter_v2 = create_tablet_iterator(_tablet, 3);
-    auto iter_v3 = create_tablet_iterator(_tablet, 4);
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
+    vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
+    vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
+    vectorized::TabletReader reader4(_tablet, Version(0, 4), schema);
+    auto iter_v0 = create_tablet_iterator(reader1, schema);
+    auto iter_v1 = create_tablet_iterator(reader2, schema);
+    auto iter_v2 = create_tablet_iterator(reader3, schema);
+    auto iter_v3 = create_tablet_iterator(reader4, schema);
 
     // Remove all but the last version.
     _tablet->updates()->remove_expired_versions(time(NULL));

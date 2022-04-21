@@ -151,6 +151,7 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
+    RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
@@ -171,7 +172,6 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
         chunk_size = config::vector_chunk_size;
     }
     reader_params.chunk_size = chunk_size;
-    RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
 
     int64_t output_rows = 0;
@@ -250,6 +250,7 @@ Status Compaction::modify_rowsets() {
     std::unique_lock wrlock(_tablet->get_header_lock());
     _tablet->modify_rowsets(output_rowsets, _input_rowsets);
     _tablet->save_meta();
+    Rowset::close_rowsets(_input_rowsets);
 
     return Status::OK();
 }
