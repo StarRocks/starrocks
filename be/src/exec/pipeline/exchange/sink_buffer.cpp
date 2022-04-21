@@ -30,8 +30,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
         } else {
             _num_sinkers[instance_id.lo] = num_sinkers;
 
-            _request_seqs[instance_id.lo] = 0;
-            // request_seq starts from 0, so the max_continuous_acked_seq should be -1
+            _request_seqs[instance_id.lo] = -1;
             _max_continuous_acked_seqs[instance_id.lo] = -1;
             _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
             _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
@@ -74,9 +73,7 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
-        _buffers[instance_id.lo].push(request);
-        _try_to_send_rpc(instance_id);
+        _try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); });
     }
 }
 
@@ -192,7 +189,10 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
+void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works) {
+    std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
+    pre_works();
+
     DeferOp decrease_defer([this]() { --_num_sending_rpc; });
     ++_num_sending_rpc;
 
@@ -265,7 +265,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
         }
 
         *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
-        request.params->set_sequence(_request_seqs[instance_id.lo]++);
+        request.params->set_sequence(++_request_seqs[instance_id.lo]);
 
         if (!request.attachment.empty()) {
             _bytes_sent += request.attachment.size();
@@ -300,10 +300,10 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id) {
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
                                             status.message());
             } else {
-                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
-                _process_send_window(ctx.instance_id, ctx.sequence);
-                _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
-                _try_to_send_rpc(ctx.instance_id);
+                _try_to_send_rpc(ctx.instance_id, [&]() {
+                    _process_send_window(ctx.instance_id, ctx.sequence);
+                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
+                });
             }
             --_total_in_flight_rpc;
         });

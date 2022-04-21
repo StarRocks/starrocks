@@ -56,6 +56,8 @@ struct TColumnDesc {
   20: optional string columnKey
   21: optional bool key
   22: optional string aggregationType
+  23: optional string dbName
+  24: optional string tableName
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column

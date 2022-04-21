@@ -60,10 +60,6 @@ public:
 
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
-    // Return NotFound if the |version| does not exist.
-    StatusOr<IteratorList> read(int64_t version, const vectorized::Schema& schema,
-                                const vectorized::RowsetReadOptions& options);
-
     // get latest version's number of rows
     size_t num_rows() const;
 
@@ -300,6 +296,8 @@ private:
     size_t _get_rowset_num_deletes(const Rowset& rowset);
 
     std::string _debug_string(bool lock, bool abbr = false) const;
+
+    std::string _debug_version_info(bool lock) const;
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 

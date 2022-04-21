@@ -2,6 +2,7 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -159,6 +160,7 @@ public class StatementPlanner {
     public static boolean supportedByNewParser(StatementBase statement) {
         return statement instanceof AlterViewStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -172,6 +174,7 @@ public class StatementPlanner {
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return statement instanceof AlterViewStmt
                 || statement instanceof AdminSetReplicaStatusStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt

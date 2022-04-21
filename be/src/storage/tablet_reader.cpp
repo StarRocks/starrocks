@@ -8,6 +8,7 @@
 #include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
@@ -46,12 +47,27 @@ void TabletReader::close() {
         _collect_iter.reset();
     }
     STLDeleteElements(&_predicate_free_list);
+    Rowset::release_readers(_rowsets);
+    _rowsets.clear();
+    _obj_pool.clear();
 }
 
 Status TabletReader::prepare() {
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    if (!st.ok()) {
+        _rowsets.clear();
+        std::stringstream ss;
+        ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str().c_str());
+    }
     _stats.rowsets_read_count += _rowsets.size();
+    Rowset::acquire_readers(_rowsets);
+    // ensure all input rowsets are loaded into memory
+    for (const auto& rowset : _rowsets) {
+        rowset->load();
+    }
     return st;
 }
 
@@ -61,7 +77,6 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
-    _rowsets.clear(); // unused anymore.
     return st;
 }
 
@@ -84,6 +99,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(_parse_seek_range(params, &rs_opts.ranges));
     rs_opts.predicates = _pushdown_predicates;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
+                                                                     &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
