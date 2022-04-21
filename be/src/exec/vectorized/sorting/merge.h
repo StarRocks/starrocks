@@ -89,6 +89,9 @@ struct SortedRuns {
     void resize(size_t size);
 
     ChunkPtr assemble() const {
+        if (chunks.empty()) {
+            return {};
+        }
         ChunkPtr result(chunks.front().clone_slice().release());
         for (int i = 1; i < chunks.size(); i++) {
             auto& run = chunks[i];

@@ -362,6 +362,9 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
+    if (chunks.empty()) {
+        return Status::OK();
+    }
     std::deque<SortedRuns> queue;
     for (auto& chunk : chunks) {
         if (chunk->num_rows() > 0) {

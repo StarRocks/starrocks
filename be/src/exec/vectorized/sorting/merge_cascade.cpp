@@ -18,6 +18,9 @@ struct CursorAlgo {
     }
 
     static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
+        if (perm.size() <= left.num_rows() + right.num_rows()) {
+            return;
+        }
         size_t start = left.range.first + right.range.first;
         size_t end = left.range.second + right.range.second;
         std::copy(perm.begin() + start, perm.begin() + end, perm.begin());
@@ -180,7 +183,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, _right_run, left_1, &perm));
             CursorAlgo::trim_permutation(left_1, _right_run, perm);
             DCHECK_EQ(_right_run.num_rows() + left_1.num_rows(), perm.size());
-            std::unique_ptr<Chunk> merged = _left_run.chunk->clone_empty(perm.size());
+            ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
             append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
             _left_run = left_2;
