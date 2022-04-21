@@ -201,6 +201,7 @@ public class Memo {
             // reinsert maybe in groupExpressions because his input was modify
             if (!groupExpressions.containsKey(reinsertExpression)) {
                 groupExpressions.put(reinsertExpression, reinsertExpression);
+                reinsertExpression.getGroup().addExpression(reinsertExpression);
             } else {
                 // group expression is already in the Memo's groupExpressions, this indicates that
                 // this is a redundant group Expression, it's should be remove.

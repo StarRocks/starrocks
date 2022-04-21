@@ -259,7 +259,7 @@ public class Group {
 
     @Override
     public String toString() {
-        return toPrettyString("", "");
+        return "->  " + "Group: " + id;
     }
 
     public String toPrettyString(String headlineIndent, String detailIndent) {
