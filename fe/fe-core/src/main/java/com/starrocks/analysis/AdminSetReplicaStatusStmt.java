@@ -55,10 +55,6 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         this.properties = properties;
     }
 
-    public Map<String, String> getProperties() {
-        return properties;
-    }
-
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
@@ -71,7 +67,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         checkProperties();
     }
 
-    private void checkProperties() throws AnalysisException {
+    public void checkProperties() throws AnalysisException {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String val = entry.getValue();
