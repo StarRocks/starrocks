@@ -94,7 +94,7 @@ public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
 
     private final TableName tblName;
-    private final PartitionNames targetPartitionNames;
+    private PartitionNames targetPartitionNames;
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
@@ -127,6 +127,8 @@ public class InsertStmt extends DmlStmt {
     private DataPartition dataPartition;
 
     private List<Column> targetColumns = Lists.newArrayList();
+    private boolean isOverwrite;
+    private long overwriteJobId;
 
     /*
      * InsertStmt may be analyzed twice, but transaction must be only begun once.
@@ -148,13 +150,14 @@ public class InsertStmt extends DmlStmt {
     }
 
     public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
-                      List<String> hints) {
+                      List<String> hints, boolean isOverwrite) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
         this.label = label;
         this.queryStatement = queryStatement;
         this.planHints = hints;
         this.targetColumnNames = cols;
+        this.isOverwrite = isOverwrite;
 
         if (!Strings.isNullOrEmpty(label)) {
             isUserSpecifiedLabel = true;
@@ -196,6 +199,22 @@ public class InsertStmt extends DmlStmt {
 
     public String getDb() {
         return tblName.getDb();
+    }
+
+    public boolean isOverwrite() {
+        return isOverwrite;
+    }
+
+    public void setOverwrite(boolean overwrite) {
+        isOverwrite = overwrite;
+    }
+
+    public long getOverwriteJobId() {
+        return overwriteJobId;
+    }
+
+    public void setOverwriteJobId(long overwriteJobId) {
+        this.overwriteJobId = overwriteJobId;
     }
 
     // TODO(zc): used to get all dbs for lock
@@ -885,6 +904,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
+        this.targetPartitionNames = targetPartitionNames;
     }
 
     public void setTargetPartitionIds(List<Long> targetPartitionIds) {

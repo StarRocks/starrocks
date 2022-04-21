@@ -77,7 +77,6 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
-
     @Mocked
     InetAddress addr1;
 

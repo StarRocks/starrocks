@@ -70,6 +70,8 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -79,6 +81,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.CreateInsertOverwriteJobInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -424,7 +427,38 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
-                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
+                    if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()) {
+                        InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                        Database db = GlobalStateMgr.getCurrentState().getDb(insertStmt.getDb());
+                        if (db == null) {
+                            LOG.warn("db:{} do not exist", insertStmt.getDb());
+                            throw new RuntimeException("db " + insertStmt.getDb() + " do not exist.");
+                        }
+                        Table table = insertStmt.getTargetTable();
+                        if (!(table instanceof OlapTable)) {
+                            LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+                            throw new RuntimeException("not supported table type for insert overwrite");
+                        }
+                        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+                        InsertOverwriteJob insertOverwriteJob =
+                                new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(), context, this,
+                                        insertStmt, db, olapTable);
+                        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+                        // add edit log
+                        CreateInsertOverwriteJobInfo info = new CreateInsertOverwriteJobInfo(insertOverwriteJob.getJobId(),
+                                insertOverwriteJob.getTargetDbId(), insertOverwriteJob.getTargetTableId(),
+                                insertOverwriteJob.getTargetTableName(), insertOverwriteJob.getOriginalTargetPartitionIds());
+                        GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
+                        try {
+                            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+                            manager.submitJob(insertOverwriteJob);
+                        } catch (Exception e) {
+                            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
+                            throw new RuntimeException("insert overwrite failed", e);
+                        }
+                    } else {
+                        handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
+                    }
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
@@ -1105,6 +1139,11 @@ public class StmtExecutor {
             }
             if (targetTable instanceof OlapTable) {
                 txnState.addTableIndexes((OlapTable) targetTable);
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+                    long jobId = ((InsertStmt) stmt).getOverwriteJobId();
+                    GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager()
+                            .registerOverwriteJobTxn(jobId, transactionId);
+                }
             }
         }
 

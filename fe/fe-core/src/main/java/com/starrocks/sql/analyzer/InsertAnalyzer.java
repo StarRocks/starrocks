@@ -13,7 +13,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
+// import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
@@ -39,7 +39,11 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
 
-        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable)) {
+                throw unsupportedException("Only support insert overwrite olap table");
+            }
+        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
@@ -49,10 +53,6 @@ public class InsertAnalyzer {
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (targetPartitionNames != null) {
-                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                    throw new SemanticException("PARTITION clause is not valid for INSERT into unpartitioned table");
-                }
-
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists");
                 }

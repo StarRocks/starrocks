@@ -476,6 +476,13 @@ public class DatabaseTransactionMgr {
             if (table == null) {
                 throw new MetaNotFoundException("Table does not exist: " + tableId);
             }
+            boolean hasRunningJobs =
+                    GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(
+                            transactionId, tableId, tableToPartition.get(tableId).stream().collect(Collectors.toList()));
+            if (hasRunningJobs) {
+                throw new TransactionCommitFailedException("There are running insert" +
+                        " overwrite jobs for the target table and partitions");
+            }
             for (Partition partition : table.getAllPartitions()) {
                 if (!tableToPartition.get(tableId).contains(partition.getId())) {
                     continue;
