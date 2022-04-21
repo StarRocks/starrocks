@@ -64,7 +64,9 @@ Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _scanner_param.thread_id = tnode.schema_scan_node.thread_id;
     }
 
-    if (tnode.limit > 0) {
+    // only for no predicate and limit parameter is set
+    if (tnode.conjuncts.empty() && tnode.limit > 0) {
+        _scanner_param.without_db_table = true;
         _scanner_param.limit = tnode.limit;
     }
     return Status::OK();
