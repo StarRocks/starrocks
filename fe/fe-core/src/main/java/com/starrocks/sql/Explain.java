@@ -185,7 +185,7 @@ public class Explain {
             PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- HIVE-SCAN [")
-                    .append(((HiveTable) scan.getTable()).getHiveTable())
+                    .append(((HiveTable) scan.getTable()).getTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
