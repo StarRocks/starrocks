@@ -27,8 +27,8 @@
 
 #include "gutil/macros.h" // for DISALLOW_COPY_AND_ASSIGN
 #include "runtime/current_thread.h"
-#include "storage/lru_cache.h"
 #include "util/defer_op.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

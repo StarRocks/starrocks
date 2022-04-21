@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lru_cache.h"
+#include "util/lru_cache.h"
 
 #include <rapidjson/document.h>
 
