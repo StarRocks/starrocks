@@ -19,7 +19,6 @@ import java.util.Map;
 public class PartitionDescTest {
 
     private List<ColumnDef> columnDefs;
-    private int partitionColSize;
     private Map<String, String> otherProperties;
     private PartitionDesc partitionDesc;
 
@@ -31,7 +30,6 @@ public class PartitionDescTest {
     public void setUp() throws AnalysisException {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
         this.columnDefs = Lists.newArrayList(id);
-        this.partitionColSize = 2;
 
         Map<String, String> otherProperties = new HashMap<>();
         otherProperties.put("storage_medium", "SSD");
@@ -43,11 +41,6 @@ public class PartitionDescTest {
     @Test(expected = NotImplementedException.class)
     public void testAnalyzeByColumnDefs() throws AnalysisException {
         this.partitionDesc.analyze(columnDefs, otherProperties);
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void testAnalyzeByPartitionColSize() throws AnalysisException {
-        this.partitionDesc.analyze(this.partitionColSize, otherProperties);
     }
 
     @Test(expected = NotImplementedException.class)
@@ -63,46 +56,6 @@ public class PartitionDescTest {
         partitionNameToId.put("p1", 1003L);
         this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
         throw new NotImplementedException();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void isSetIfNotExists() {
-        this.partitionDesc.isSetIfNotExists();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getProperties() {
-        this.partitionDesc.getProperties();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getPartitionName() {
-        this.partitionDesc.getPartitionName();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getReplicationNum() {
-        this.partitionDesc.getReplicationNum();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getPartitionDataProperty() {
-        this.partitionDesc.getPartitionDataProperty();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getVersionInfo() {
-        this.partitionDesc.getVersionInfo();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void getTabletType() {
-        this.partitionDesc.getTabletType();
-    }
-
-    @Test(expected = NotImplementedException.class)
-    public void isInMemory() {
-        this.partitionDesc.isInMemory();
     }
 
 }

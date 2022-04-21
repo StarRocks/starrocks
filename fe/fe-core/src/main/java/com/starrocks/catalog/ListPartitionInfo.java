@@ -58,7 +58,7 @@ public class ListPartitionInfo extends PartitionInfo {
         idToMultiValues.put(partitionId, multiValues);
     }
 
-    public void setIsMultiColumnPartition() {
+    private void setIsMultiColumnPartition() {
         super.isMultiColumnPartition = this.partitionColumns.size() > 1;
     }
 
@@ -140,7 +140,6 @@ public class ListPartitionInfo extends PartitionInfo {
         }
 
         sb.append("\n)");
-        System.out.println(sb);
         return sb.toString();
     }
 

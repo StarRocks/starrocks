@@ -72,18 +72,15 @@ public class MultiListPartitionDescTest {
         partitionProperties.put("tablet_type", "memory");
         partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
 
-        PartitionDesc partitionDesc =
-                new MultiListPartitionDesc(ifNotExists, partitionName, multiValues, partitionProperties);
-        MultiListPartitionDesc listPartitionDesc = (MultiListPartitionDesc) partitionDesc;
-        listPartitionDesc.analyze(2, null);
+        MultiListPartitionDesc partitionDesc = new MultiListPartitionDesc(ifNotExists, partitionName,
+                multiValues, partitionProperties);
+        partitionDesc.analyze(2, null);
 
         Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());
         Assert.assertEquals(1, partitionDesc.getReplicationNum());
         Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assert.assertEquals(true, partitionDesc.isInMemory());
-        Assert.assertEquals(1L, partitionDesc.getVersionInfo().longValue());
-        Assert.assertEquals(ifNotExists, partitionDesc.isSetIfNotExists());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
@@ -91,11 +88,7 @@ public class MultiListPartitionDescTest {
         long time = sf.parse("2022-07-09 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
-        Map<String, String> properties = partitionDesc.getProperties();
-        Assert.assertEquals(partitionProperties.size(), properties.size());
-        properties.forEach((k, v) -> Assert.assertEquals(v, partitionProperties.get(k)));
-
-        List<List<String>> multiValuesFromGet = listPartitionDesc.getMultiValues();
+        List<List<String>> multiValuesFromGet = partitionDesc.getMultiValues();
         Assert.assertEquals(multiValuesFromGet.size(), multiValues.size());
         for (int i = 0; i < multiValuesFromGet.size(); i++) {
             List<String> valuesFromGet = multiValuesFromGet.get(i);

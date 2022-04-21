@@ -3,7 +3,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.SingleListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
@@ -21,7 +20,7 @@ import java.util.Map;
 public class SingleListPartitionDescTest {
 
     @Test
-    public void testToSQL(){
+    public void testToSQL() {
         String partitionName = "p1";
         List<String> values = Lists.newArrayList("tianjin", "guangdong");
         boolean ifNotExists = false;
@@ -71,18 +70,15 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("tablet_type", "memory");
         partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
 
-        PartitionDesc partitionDesc =
-                new SingleListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
-        SingleListPartitionDesc listPartitionDesc = (SingleListPartitionDesc) partitionDesc;
-        listPartitionDesc.analyze(1, null);
+        SingleListPartitionDesc partitionDesc = new SingleListPartitionDesc(ifNotExists, partitionName,
+                values, partitionProperties);
+        partitionDesc.analyze(1, null);
 
         Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());
         Assert.assertEquals(1, partitionDesc.getReplicationNum());
         Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assert.assertEquals(true, partitionDesc.isInMemory());
-        Assert.assertEquals(1L, partitionDesc.getVersionInfo().longValue());
-        Assert.assertEquals(ifNotExists, partitionDesc.isSetIfNotExists());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
@@ -90,11 +86,7 @@ public class SingleListPartitionDescTest {
         long time = sf.parse("2022-07-09 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
-        Map<String, String> properties = partitionDesc.getProperties();
-        Assert.assertEquals(partitionProperties.size(), properties.size());
-        properties.forEach((k, v) -> Assert.assertEquals(v, partitionProperties.get(k)));
-
-        List<String> valuesFromGet = listPartitionDesc.getValues();
+        List<String> valuesFromGet = partitionDesc.getValues();
         Assert.assertEquals(valuesFromGet.size(), values.size());
         for (int i = 0; i < valuesFromGet.size(); i++) {
             Assert.assertEquals(valuesFromGet.get(i), values.get(i));

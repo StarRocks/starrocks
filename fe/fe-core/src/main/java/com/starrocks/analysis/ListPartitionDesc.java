@@ -4,7 +4,11 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.*;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 
@@ -87,21 +91,19 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException {
-        Set<String> multiListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        if (this.multiListPartitionDescs.size() != 0) {
-            for (MultiListPartitionDesc desc : this.multiListPartitionDescs) {
-                if (!multiListParttionName.add(desc.getPartitionName())) {
-                    throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
-                }
-                desc.analyze(partitionColNames.size(), tableProperties);
+        Set<String> multiListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (MultiListPartitionDesc desc : this.multiListPartitionDescs) {
+            if (!multiListPartitionName.add(desc.getPartitionName())) {
+                throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
+            desc.analyze(partitionColNames.size(), tableProperties);
         }
     }
 
     private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException {
-        Set<String> singListParttionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleListPartitionDesc desc : this.singleListPartitionDescs) {
-            if (!singListParttionName.add(desc.getPartitionName())) {
+            if (!singListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
             desc.analyze(this.partitionColNames.size(), copiedProperties);

@@ -22,12 +22,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.List;
@@ -45,58 +43,12 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public void analyze(int partitionColSize, Map<String, String> otherProperties) throws AnalysisException {
-        throw new NotImplementedException();
-    }
-
     public String toSql() {
         throw new NotImplementedException();
     }
 
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
-        throw new NotImplementedException();
-    }
-
-    /**
-     * if user set [if not exists] statement in partition clause
-     *
-     * @return
-     */
-    public boolean isSetIfNotExists() {
-        throw new NotImplementedException();
-    }
-
-    /**
-     * get partition properties
-     *
-     * @return
-     */
-    public Map<String, String> getProperties() {
-        throw new NotImplementedException();
-    }
-
-    public String getPartitionName() {
-        throw new NotImplementedException();
-    }
-
-    public short getReplicationNum() {
-        throw new NotImplementedException();
-    }
-
-    public DataProperty getPartitionDataProperty() {
-        throw new NotImplementedException();
-    }
-
-    public Long getVersionInfo() {
-        throw new NotImplementedException();
-    }
-
-    public TTabletType getTabletType() {
-        throw new NotImplementedException();
-    }
-
-    public boolean isInMemory() {
         throw new NotImplementedException();
     }
 }

@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 public class ListPartitionInfoTest {
 
@@ -29,6 +31,32 @@ public class ListPartitionInfoTest {
     public void setUp() throws DdlException, AnalysisException {
         this.listPartitionInfo = new ListPartitionDescTest().findSingleListPartitionInfo();
         this.listPartitionInfoForMulti = new ListPartitionDescTest().findMultiListPartitionInfo();
+    }
+
+    @Test
+    public void mytest() {
+        List<List<String>> multiValues = Lists.newArrayList(
+                Lists.newArrayList("2022-04-15", "guangdong"),
+                Lists.newArrayList("2022-04-15", "tianjin"),
+                Lists.newArrayList("2022-04-15", "Tianjin")
+        );
+        Set[] arr = new TreeSet[2];
+        for (List<String> values : multiValues) {
+            int duplicatedSize = 0;
+            for (int i = 0; i < values.size(); i++) {
+                if (arr[i] == null) {
+                    arr[i] = new TreeSet();
+                }
+                if (!arr[i].add(values.get(i))) {
+                    duplicatedSize++;
+                }
+            }
+            if (duplicatedSize == 2) {
+                System.out.println("has duplicated");
+            } else {
+                System.out.println("no has duplicated");
+            }
+        }
     }
 
     @Test
