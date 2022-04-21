@@ -438,6 +438,7 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
+            session.getDumpInfo().addView(view);
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;

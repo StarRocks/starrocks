@@ -48,7 +48,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     ChunkPtr right_chunk = std::make_shared<Chunk>(right_columns, map);
     Permutation perm;
     SortDescs sort_desc(std::vector<int>(num_columns, 1), std::vector<int>(num_columns, -1));
-    merge_sorted_chunks_two_way(sort_desc, left_chunk, right_chunk, &perm);
+    merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_chunk->columns()}, {right_chunk, right_chunk->columns()},
+                                &perm);
 
     size_t expected_size = left_rows + right_rows;
     std::unique_ptr<Chunk> output = left_chunk->clone_empty();

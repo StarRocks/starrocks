@@ -350,17 +350,16 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     return Status::OK();
 }
 
-Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const ChunkPtr left_chunk,
-                                           const ChunkPtr right_chunk, Permutation* output, size_t limit) {
+Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,
+                                           const Columns& right_columns, Permutation* output, size_t limit) {
     constexpr int kLeftChunkIndex = 0;
     constexpr int kRightChunkIndex = 1;
     size_t index_of_merging = 0, index_of_left = 0, index_of_right = 0;
-    size_t left_size = left_chunk->num_rows();
-    size_t right_size = right_chunk->num_rows();
+    size_t left_size = left_columns[0]->size();
+    size_t right_size = right_columns[0]->size();
     output->reserve(limit);
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
-        int cmp =
-                compare_chunk_row(descs, left_chunk->columns(), right_chunk->columns(), index_of_left, index_of_right);
+        int cmp = compare_chunk_row(descs, left_columns, right_columns, index_of_left, index_of_right);
         if (cmp <= 0) {
             output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left));
             ++index_of_left;

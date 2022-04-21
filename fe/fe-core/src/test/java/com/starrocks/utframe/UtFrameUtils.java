@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -35,6 +36,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
@@ -47,6 +49,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -62,6 +65,7 @@ import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
@@ -433,6 +437,11 @@ public class UtFrameUtils {
             starRocksAssert.useDatabase(dbName);
             starRocksAssert.withTable(entry.getValue());
         }
+        // create view
+        for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String createView = "create view " + entry.getKey() + " as " + entry.getValue();
+            starRocksAssert.withView(createView);
+        }
         // mock be num
         backendId = 10002;
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
@@ -473,33 +482,48 @@ public class UtFrameUtils {
         }
     }
 
+    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transform((statement).getQueryRelation());
+
+        Optimizer optimizer = new Optimizer();
+        OptExpression optimizedPlan = optimizer.optimize(
+                connectContext,
+                logicalPlan.getRoot(),
+                new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
+
+        ExecPlan execPlan = new PlanFragmentBuilder()
+                .createPhysicalPlan(optimizedPlan, connectContext,
+                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+
+        OperatorStrings operatorPrinter = new OperatorStrings();
+        return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+    }
+
+    private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
+        ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
+        OperatorStrings operatorPrinter = new OperatorStrings();
+        return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+    }
+
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
-
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
-
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                    .transform(((QueryStatement) statementBase).getQueryRelation());
-
-            Optimizer optimizer = new Optimizer();
-            OptExpression optimizedPlan = optimizer.optimize(
-                    connectContext,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-
-            ExecPlan execPlan = new PlanFragmentBuilder()
-                    .createPhysicalPlan(optimizedPlan, connectContext,
-                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
-
-            OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+            if (statementBase instanceof QueryStatement) {
+                return getQueryExecPlan((QueryStatement) statementBase, connectContext);
+            } else if (statementBase instanceof InsertStmt) {
+                return getInsertExecPlan((InsertStmt) statementBase, connectContext);
+            } else {
+                Preconditions.checkState(false, "Do not support the statement");
+                return null;
+            }
         } finally {
             tearMockEnv();
         }
