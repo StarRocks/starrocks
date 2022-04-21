@@ -433,7 +433,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             return st;
         }
 
-        st = _construct_row(&row, chunk, _slot_descs);
+        st = _construct_row(&row, chunk);
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
@@ -459,52 +459,120 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
     return Status::OK();
 }
 
-Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
-                                  const std::vector<SlotDescriptor*>& slot_descs) {
-    if (_scanner->_json_paths.empty()) {
-        // No json path.
+Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk) {
+    // make a copy for _slot_desc_dict.
+    auto slot_desc_dict(_slot_desc_dict);
+    try {
+        std::ostringstream oss;
 
-        for (SlotDescriptor* slot_desc : slot_descs) {
-            if (slot_desc == nullptr) {
+        for (auto field : *row) {
+            // TODO:This is ugly, but there's no good way to convert json field key to std::string.
+            // convert field key to std::string.
+            simdjson::ondemand::raw_json_string raw_key = field.key();
+            oss << raw_key;
+            auto key = oss.str();
+            oss.str("");
+
+            // look up key in the slot dict.
+            auto itr = slot_desc_dict.find(key);
+            if (itr == slot_desc_dict.end()) {
                 continue;
             }
 
-            // The columns in JsonReader's chunk are all in NullableColumn type;
+            auto slot_desc = itr->second;
+
             auto column = chunk->get_column_by_slot_id(slot_desc->id());
             const auto& col_name = slot_desc->col_name();
 
-            try {
-                simdjson::ondemand::value val = row->find_field_unordered(col_name);
-                RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), slot_desc->col_name()));
-            } catch (simdjson::simdjson_error& e) {
-                if (col_name == "__op") {
-                    // special treatment for __op column, fill default value '0' rather than null
-                    if (column->is_binary()) {
-                        column->append_strings(std::vector{Slice{"0"}});
-                    } else {
-                        column->append_datum(Datum((uint8_t)0));
-                    }
-                } else {
-                    // Column name not found, fill column with null.
-                    column->append_nulls(1);
-                }
-                continue;
-            }
+            simdjson::ondemand::value val = field.value();
+
+            // construct column with value.
+            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), slot_desc->col_name()));
+
+            // delete the written column.
+            slot_desc_dict.erase(key);
         }
-        return Status::OK();
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = strings::Substitute("construct row in object order failed, error: $0",
+                                           simdjson::error_message(e.error()));
+        return Status::DataQualityError(err_msg);
+    }
+
+    // append null to the column without data.
+    for (auto& pair : slot_desc_dict) {
+        auto col_name = pair.first;
+        auto slot_desc = pair.second;
+
+        auto column = chunk->get_column_by_slot_id(slot_desc->id());
+        const auto& col_name = slot_desc->col_name();
+
+        if (col_name == "__op") {
+            // special treatment for __op column, fill default value '0' rather than null
+            if (column->is_binary()) {
+                column->append_strings(std::vector{Slice{"0"}});
+            } else {
+                column->append_datum(Datum((uint8_t)0));
+            }
+        } else {
+            // Column name not found, fill column with null.
+            column->append_nulls(1);
+        }
+    }
+}
+
+Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk) {
+    for (SlotDescriptor* slot_desc : _slot_descs) {
+        if (slot_desc == nullptr) {
+            continue;
+        }
+
+        // The columns in JsonReader's chunk are all in NullableColumn type;
+        auto column = chunk->get_column_by_slot_id(slot_desc->id());
+        const auto& col_name = slot_desc->col_name();
+
+        try {
+            simdjson::ondemand::value val = row->find_field_unordered(col_name);
+            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), slot_desc->col_name()));
+        } catch (simdjson::simdjson_error& e) {
+            if (col_name == "__op") {
+                // special treatment for __op column, fill default value '0' rather than null
+                if (column->is_binary()) {
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_datum(Datum((uint8_t)0));
+                }
+            } else {
+                // Column name not found, fill column with null.
+                column->append_nulls(1);
+            }
+            continue;
+        }
+    }
+}
+
+Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
+    if (_scanner->_json_paths.empty()) {
+        // No json path.
+        // if number of object fields is much more than size of _slot_descs,
+        // using object as driven table to look up field key in _slot_desc_dict may get better performance.
+        if (row->count_fields() > _slot_descs.size() * 2) {
+            return _construct_row_in_object_order(row, chunk);
+        } else {
+            return _construct_row_in_slot_order(row, chunk);
+        }
     } else {
         // With json path.
 
-        size_t slot_size = slot_descs.size();
+        size_t slot_size = _slot_descs.size();
         size_t jsonpath_size = _scanner->_json_paths.size();
         for (size_t i = 0; i < slot_size; i++) {
-            if (slot_descs[i] == nullptr) {
+            if (_slot_descs[i] == nullptr) {
                 continue;
             }
-            const char* column_name = slot_descs[i]->col_name().c_str();
+            const char* column_name = _slot_descs[i]->col_name().c_str();
 
             // The columns in JsonReader's chunk are all in NullableColumn type;
-            auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(slot_descs[i]->id()).get());
+            auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_slot_descs[i]->id()).get());
             if (i >= jsonpath_size) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
@@ -531,7 +599,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                 // it would get an error "Objects and arrays can only be iterated when they are first encountered",
                 // Hence, resetting the row object is necessary here.
                 row->reset();
-                RETURN_IF_ERROR(add_nullable_column(column, slot_descs[i]->type(), slot_descs[i]->col_name(), row,
+                RETURN_IF_ERROR(add_nullable_column(column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
                 if (strcmp(column_name, "__op") == 0) {
@@ -545,7 +613,7 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk,
                     column->append_nulls(1);
                 }
             } else {
-                RETURN_IF_ERROR(_construct_column(val, column, slot_descs[i]->type(), slot_descs[i]->col_name()));
+                RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             }
         }
         return Status::OK();

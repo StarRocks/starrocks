@@ -85,8 +85,10 @@ private:
 
     Status _read_and_parse_json();
 
-    Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk,
-                          const std::vector<SlotDescriptor*>& slot_descs);
+    Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
+
+    Status _construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk) {}
+    Status _construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk) {}
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
@@ -103,6 +105,7 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed;
     std::vector<SlotDescriptor*> _slot_descs;
+    std::unordered_map<std::string, SlotDescriptor*> _slot_desc_dict;
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
