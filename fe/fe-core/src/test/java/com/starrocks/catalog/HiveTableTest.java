@@ -103,7 +103,7 @@ public class HiveTableTest {
         columns.add(new Column("col2", Type.INT, true));
         properties.put("resource", resourceName);
         HiveTable table = new HiveTable(1000, "hive_table", columns, properties);
-        Assert.assertEquals(hiveTable, table.getHiveTable());
+        Assert.assertEquals(hiveTable, table.getTableName());
         Assert.assertEquals(hiveDb, table.getHiveDb());
         Assert.assertEquals(String.format("%s.%s", hiveDb, hiveTable), table.getHiveDbTable());
         Assert.assertEquals(hdfsPath, table.getHdfsPath());
