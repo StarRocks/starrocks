@@ -24,12 +24,12 @@ package com.starrocks.analysis;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -63,7 +63,7 @@ public class AdminSetConfigStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
 
         if (configs.size() != 1) {
@@ -82,5 +82,10 @@ public class AdminSetConfigStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return redirectStatus;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminSetConfigStatement(this, context);
     }
 }

@@ -38,7 +38,6 @@
 #include "storage/async_delta_writer_executor.h"
 #include "storage/base_compaction.h"
 #include "storage/data_dir.h"
-#include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -47,6 +46,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "util/file_utils.h"
+#include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
@@ -110,6 +110,25 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            if (config::manual_compact_before_data_dir_load) {
+                uint64_t live_sst_files_size_before = 0;
+                if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                }
+                Status s = data_dir->get_meta()->compact();
+                if (!s.ok()) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
+                } else {
+                    uint64_t live_sst_files_size_after = 0;
+                    if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+                        LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                    }
+                    LOG(INFO) << "data dir " << data_dir->path() << " manual compact meta successfully, "
+                              << "live_sst_files_size_before: " << live_sst_files_size_before
+                              << " live_sst_files_size_after: " << live_sst_files_size_after
+                              << data_dir->get_meta()->get_stats();
+                }
+            }
             auto res = data_dir->load();
             if (!res.ok()) {
                 LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
@@ -141,6 +160,7 @@ Status StorageEngine::_open() {
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
     auto dirs = get_stores<false>();
+
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 

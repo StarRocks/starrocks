@@ -81,8 +81,8 @@ private:
     Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                DataSegments& segments, size_t sort_row_number);
 
-    void _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number, size_t sorted_size,
-                            size_t permutation_size, Permutation& new_permutation);
+    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number, size_t sorted_size,
+                              size_t permutation_size, Permutation& new_permutation);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 

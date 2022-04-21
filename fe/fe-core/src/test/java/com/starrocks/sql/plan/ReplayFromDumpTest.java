@@ -28,7 +28,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -402,5 +401,15 @@ public class ReplayFromDumpTest {
         // check optimizer could extract best plan
         Assert.assertTrue(replayPair.second.contains("11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
+    }
+
+    @Test
+    public void testInsertWithView() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/insert_view"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 2:Project\n" +
+                "  |  <slot 2> : 2: t2_c2\n" +
+                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
+        Assert.assertTrue(replayPair.second.contains("OLAP TABLE SINK"));
     }
 }

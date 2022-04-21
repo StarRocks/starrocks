@@ -156,18 +156,18 @@ public:
 
         auto& offsets = dst->get_offset();
         auto& bytes = dst->get_bytes();
-        size_t old_rows = offsets.size();
-        size_t total_rows = offsets.size();
-        size_t total_bytes = bytes.size();
-        offsets.resize(total_rows + _perm.size());
+        size_t old_rows = dst->size();
+        size_t num_offsets = offsets.size();
+        size_t num_bytes = bytes.size();
+        offsets.resize(num_offsets + _perm.size());
         for (auto& p : _perm) {
             Slice slice = (*srcs[p.chunk_index])[p.index_in_chunk];
-            offsets[total_rows] = offsets[total_rows - 1] + slice.get_size();
-            ++total_rows;
-            total_bytes += slice.get_size();
+            offsets[num_offsets] = offsets[num_offsets - 1] + slice.get_size();
+            ++num_offsets;
+            num_bytes += slice.get_size();
         }
 
-        bytes.resize(total_bytes);
+        bytes.resize(num_bytes);
         for (size_t i = 0; i < _perm.size(); i++) {
             Slice slice = (*srcs[_perm[i].chunk_index])[_perm[i].index_in_chunk];
             strings::memcpy_inlined(bytes.data() + offsets[old_rows + i], slice.get_data(), slice.get_size());

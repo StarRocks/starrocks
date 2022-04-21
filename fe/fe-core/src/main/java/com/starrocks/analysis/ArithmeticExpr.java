@@ -30,8 +30,8 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -316,10 +316,10 @@ public class ArithmeticExpr extends Expr {
             case MOD:
                 // numeric ops must be promoted to highest-resolution type
                 // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                commonType = findCommonType(t1, t2);
+                commonType = getCommonType(t1, t2);
                 break;
             case DIVIDE:
-                commonType = findCommonType(t1, t2);
+                commonType = getCommonType(t1, t2);
                 if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
                         || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
                     commonType = Type.DOUBLE;
@@ -403,26 +403,6 @@ public class ArithmeticExpr extends Expr {
         List<TupleId> tupleIds = Lists.newArrayList();
         getIds(tupleIds, null);
         Preconditions.checkArgument(tupleIds.size() == 1);
-    }
-
-    public static Type findCommonType(Type t1, Type t2) {
-        PrimitiveType pt1 = t1.getPrimitiveType();
-        PrimitiveType pt2 = t2.getPrimitiveType();
-
-        if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
-            return Type.DOUBLE;
-        } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
-            return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
-        } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
-            return Type.DECIMALV2;
-        } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
-            return Type.LARGEINT;
-        } else {
-            if (pt1 != PrimitiveType.BIGINT && pt2 != PrimitiveType.BIGINT) {
-                return Type.INVALID;
-            }
-            return Type.BIGINT;
-        }
     }
 
     public static Type getCommonType(Type t1, Type t2) {

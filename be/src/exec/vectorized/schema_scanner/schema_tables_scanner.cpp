@@ -295,6 +295,9 @@ Status SchemaTablesScanner::get_new_table() {
     if (nullptr != _param->wild) {
         table_params.__set_pattern(*(_param->wild));
     }
+    if (nullptr != _param->table) {
+        table_params.__set_pattern(*(_param->table));
+    }
     if (nullptr != _param->current_user_ident) {
         table_params.__set_current_user_ident(*(_param->current_user_ident));
     } else {
@@ -304,6 +307,9 @@ Status SchemaTablesScanner::get_new_table() {
         if (nullptr != _param->user_ip) {
             table_params.__set_user_ip(*(_param->user_ip));
         }
+    }
+    if (_param->limit > 0) {
+        table_params.__set_limit(_param->limit);
     }
 
     if (nullptr != _param->ip && 0 != _param->port) {

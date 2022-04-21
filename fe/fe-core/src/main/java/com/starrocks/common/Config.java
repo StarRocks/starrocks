@@ -1290,13 +1290,13 @@ public class Config extends ConfigBase {
     /**
      * If set to true, StarRocks will automatically synchronize hms metadata to the cache in fe.
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_hms_events_incremental_sync = false;
 
     /**
      * HMS polling interval in milliseconds.
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static int hms_events_polling_interval_ms = 5000;
 
     /**
@@ -1314,7 +1314,7 @@ public class Config extends ConfigBase {
     /**
      * Num of thread to process events in parallel.
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static int hms_process_events_parallel_num = 4;
 
     /**

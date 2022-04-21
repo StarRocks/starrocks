@@ -37,7 +37,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
@@ -164,8 +163,8 @@ public class DescribeStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTableName.getTbl());
             }
 
-            if (table.getType() == TableType.HIVE) {
-                // Reuse the logic of `desc <table_name>` because hive external table doesn't support view.
+            if (table.getType() == TableType.HIVE || table.getType() == TableType.HUDI) {
+                // Reuse the logic of `desc <table_name>` because hive/hudi external table doesn't support view.
                 isAllTables = false;
             }
 
@@ -180,9 +179,6 @@ public class DescribeStmt extends ShowStmt {
                 }
 
                 node = ProcService.getInstance().open(procString);
-                if (node == null) {
-                    throw new AnalysisException("Describe table[" + dbTableName.getTbl() + "] failed");
-                }
             } else {
                 if (table.getType() == TableType.OLAP) {
                     isOlapTable = true;

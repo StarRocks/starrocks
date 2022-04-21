@@ -39,6 +39,7 @@ statement
         AS queryStatement                                                               #alterView
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                        #adminSetConfig
     ;
 
 alterClause
@@ -52,6 +53,7 @@ tableRenameClause
 explainDesc
     : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
     ;
+
 
 
 partitionDesc
@@ -538,12 +540,12 @@ number
     ;
 
 nonReserved
-    : AVG
+    : AVG | ADMIN
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
     | GLOBAL
     | HASH | HOUR
     | INTERVAL

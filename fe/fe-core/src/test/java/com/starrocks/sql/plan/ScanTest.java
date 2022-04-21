@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.SchemaScanNode;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -354,5 +355,14 @@ public class ScanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 4> : nullif(1: v1, 1: v1) + 0"));
         Assert.assertTrue(plan.contains(" OUTPUT EXPRS:4: expr | 4: expr"));
+    }
+
+    @Test
+    public void testSchemaScanWithWhere() throws Exception {
+        String sql = "select column_name, table_name from information_schema.columns" +
+                " where table_schema = 'information_schema' and table_name = 'columns'";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaDb().equals("information_schema"));
+        Assert.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaTable().equals("columns"));
     }
 }

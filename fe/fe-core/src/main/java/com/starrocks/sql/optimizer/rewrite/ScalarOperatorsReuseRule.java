@@ -13,7 +13,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +82,7 @@ public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule
                         Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
                 // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
                 ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-                List<ScalarOperatorRewriteRule> rules = Arrays.asList(new NormalizePredicateRule());
+                List<ScalarOperatorRewriteRule> rules = Collections.singletonList(new NormalizePredicateRule());
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                     ScalarOperator rewriteOperator =
                             ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);

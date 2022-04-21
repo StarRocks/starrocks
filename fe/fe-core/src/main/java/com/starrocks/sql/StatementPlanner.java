@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -161,6 +162,7 @@ public class StatementPlanner {
     public static boolean supportedByNewParser(StatementBase statement) {
         return  isNewAlterTable(statement)
                 || statement instanceof AlterViewStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
@@ -184,6 +186,7 @@ public class StatementPlanner {
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return isNewAlterTable(statement)
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt

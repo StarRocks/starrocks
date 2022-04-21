@@ -20,13 +20,14 @@
 // under the License.
 
 #pragma once
+
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
 
 #include <string>
 
 #include "runtime/date_value.h"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks::vectorized {

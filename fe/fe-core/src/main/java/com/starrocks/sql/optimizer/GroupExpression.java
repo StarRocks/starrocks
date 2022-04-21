@@ -208,6 +208,25 @@ public class GroupExpression {
         return false;
     }
 
+    // use other Group Expression to update the lowestCostTable
+    public void updatePropertyWithCost(GroupExpression other) {
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> entry : other.lowestCostTable
+                .entrySet()) {
+            updatePropertyWithCost(entry.getKey(), entry.getValue().second, entry.getValue().first);
+        }
+    }
+
+    // merge other group expression state to this group expression
+    public void mergeGroupExpression(GroupExpression other) {
+        // 1. low Cost Table
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> entry : other.lowestCostTable
+                .entrySet()) {
+            updatePropertyWithCost(entry.getKey(), entry.getValue().second, entry.getValue().first);
+        }
+        // 2. outputPropertyMap
+        outputPropertyMap.putAll(other.outputPropertyMap);
+    }
+
     // This function will drive input group logical property first,
     // then derive itself's logical property
     public void deriveLogicalPropertyRecursively() {

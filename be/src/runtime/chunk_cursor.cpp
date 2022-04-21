@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "chunk_cursor.h"
+#include "runtime/chunk_cursor.h"
 
 #include <utility>
 
@@ -163,6 +163,43 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
         auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
         _current_order_by_columns.push_back(std::move(col));
     }
+}
+
+SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs)
+        : _chunk_provider(chunk_provider), _sort_exprs(sort_exprs) {}
+
+bool SimpleChunkSortCursor::is_data_ready() {
+    if (!_data_ready && !_chunk_provider(nullptr, nullptr)) {
+        return false;
+    }
+    _data_ready = true;
+    return true;
+}
+
+std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
+    DCHECK(_data_ready);
+    DCHECK(_sort_exprs);
+
+    if (_eos) {
+        return {nullptr, {}};
+    }
+    Chunk* chunk = nullptr;
+    if (!_chunk_provider(&chunk, &_eos) || !chunk) {
+        return {nullptr, {}};
+    }
+    DCHECK(!!chunk);
+
+    Columns sort_columns;
+    for (ExprContext* expr : *_sort_exprs) {
+        auto column = expr->evaluate(chunk);
+        CHECK(column.ok());
+        sort_columns.push_back(column.value());
+    }
+    return {ChunkUniquePtr(chunk), sort_columns};
+}
+
+bool SimpleChunkSortCursor::is_eos() {
+    return _eos;
 }
 
 } // namespace starrocks::vectorized

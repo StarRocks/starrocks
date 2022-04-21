@@ -36,7 +36,7 @@ Status FileReader::init(const starrocks::vectorized::HdfsFileReaderParam& param)
     // pre process conjuncts and filter file
     _pre_process_conjunct_ctxs();
     if (!_not_exist_column_conjunct_ctxs.empty()) {
-        _filter_file();
+        RETURN_IF_ERROR(_filter_file());
         if (_is_file_filtered) {
             return Status::OK();
         }
@@ -163,7 +163,7 @@ void FileReader::_pre_process_conjunct_ctxs() {
     }
 }
 
-void FileReader::_filter_file() {
+Status FileReader::_filter_file() {
     // init not exist column chunk
     std::unordered_map<SlotId, SlotDescriptor*> slot_by_id;
     for (SlotDescriptor* slot : _param.tuple_desc->slots()) {
@@ -181,11 +181,13 @@ void FileReader::_filter_file() {
     // eval
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        ExecNode::eval_conjuncts(_not_exist_column_conjunct_ctxs, not_exist_column_chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_exist_column_conjunct_ctxs, not_exist_column_chunk.get()));
     }
     if (!not_exist_column_chunk->has_rows()) {
         _is_file_filtered = true;
     }
+
+    return Status::OK();
 }
 
 Status FileReader::_filter_group(const tparquet::RowGroup& row_group, bool* is_filter) {
