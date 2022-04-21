@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exec/vectorized/chunks_sorter.h"
+
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -161,46 +163,6 @@ void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunksSorterTest, full_sort_incremental) {
-    std::vector<bool> is_asc, is_null_first;
-    is_asc.push_back(false); // cust_key
-    is_asc.push_back(true);  // cust_key
-    is_null_first.push_back(true);
-    is_null_first.push_back(true);
-    std::vector<ExprContext*> sort_exprs;
-    sort_exprs.push_back(new ExprContext(_expr_region.get()));
-    sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
-
-    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-    sorter.set_compare_strategy(ColumnInc);
-    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-    sorter.update(_runtime_state.get(), _chunk_1);
-    sorter.update(_runtime_state.get(), _chunk_2);
-    sorter.update(_runtime_state.get(), _chunk_3);
-    sorter.done(_runtime_state.get());
-
-    bool eos = false;
-    ChunkPtr page_1, page_2;
-    sorter.get_next(&page_1, &eos);
-    ASSERT_FALSE(eos);
-    ASSERT_TRUE(page_1 != nullptr);
-    sorter.get_next(&page_2, &eos);
-    ASSERT_TRUE(eos);
-    ASSERT_TRUE(page_2 == nullptr);
-
-    ASSERT_EQ(16, total_rows);
-    ASSERT_EQ(16, page_1->num_rows());
-    const size_t Size = 16;
-    std::vector<int32_t> permutation{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
-    std::vector<int> result;
-    for (size_t i = 0; i < Size; ++i) {
-        result.push_back(page_1->get(i).get(0).get_int32());
-    }
-    EXPECT_EQ(permutation, result);
-
-    clear_sort_exprs(sort_exprs);
-}
-
 static ColumnPtr make_int32_column(const std::vector<int32_t>& xs) {
     auto column = Int32Column::create();
     for (auto x : xs) {
@@ -227,6 +189,57 @@ static Permutation make_permutation(int len) {
         perm[i].index_in_chunk = i;
     }
     return perm;
+}
+
+static ChunkPtr consume_page_from_sorter(ChunksSorter& sorter) {
+    ChunkPtr res;
+    bool eos = false;
+    while (!eos) {
+        ChunkPtr chunk;
+        sorter.get_next(&chunk, &eos);
+        if (chunk) {
+            if (!res) {
+                res = chunk;
+            } else {
+                res->append(*chunk, 0, chunk->num_rows());
+            }
+        }
+    }
+
+    return res;
+}
+
+TEST_F(ChunksSorterTest, full_sort_incremental) {
+    std::vector<bool> is_asc, is_null_first;
+    is_asc.push_back(false); // cust_key
+    is_asc.push_back(true);  // cust_key
+    is_null_first.push_back(true);
+    is_null_first.push_back(true);
+    std::vector<ExprContext*> sort_exprs;
+    sort_exprs.push_back(new ExprContext(_expr_region.get()));
+    sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+    sorter.set_compare_strategy(ColumnInc);
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
+
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
+
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(16, page_1->num_rows());
+    const size_t Size = 16;
+    std::vector<int32_t> permutation{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
+    std::vector<int> result;
+    for (size_t i = 0; i < Size; ++i) {
+        result.push_back(page_1->get(i).get(0).get_int32());
+    }
+    EXPECT_EQ(permutation, result);
+
+    clear_sort_exprs(sort_exprs);
 }
 
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
@@ -297,14 +310,7 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
             sorter.done(_runtime_state.get());
 
-            bool eos = false;
-            ChunkPtr page_1, page_2;
-            sorter.get_next(&page_1, &eos);
-            ASSERT_FALSE(eos);
-            ASSERT_TRUE(page_1 != nullptr);
-            sorter.get_next(&page_2, &eos);
-            ASSERT_TRUE(eos);
-            ASSERT_TRUE(page_2 == nullptr);
+            ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
             ASSERT_EQ(kTotalRows, total_rows);
             ASSERT_EQ(limit, page_1->num_rows());
@@ -346,16 +352,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
         sorter.update(_runtime_state.get(), _chunk_3);
         sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
-
-        // print_chunk(page_1);
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
@@ -393,16 +390,7 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
         sorter.update(_runtime_state.get(), _chunk_3);
         sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
-
-        // print_chunk(page_1);
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
@@ -442,14 +430,7 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
         sorter.update(_runtime_state.get(), _chunk_3);
         sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(16, page_1->num_rows());
@@ -492,15 +473,7 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
         sorter.update(_runtime_state.get(), _chunk_3);
         sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
-
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
         // print_chunk(page_1);
 
         ASSERT_EQ(16, total_rows);
@@ -542,14 +515,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
         sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
         sorter.done(_runtime_state.get());
 
-        bool eos = false;
-        ChunkPtr page_1, page_2;
-        sorter.get_next(&page_1, &eos);
-        ASSERT_FALSE(eos);
-        ASSERT_TRUE(page_1 != nullptr);
-        sorter.get_next(&page_2, &eos);
-        ASSERT_TRUE(eos);
-        ASSERT_TRUE(page_2 == nullptr);
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
         ASSERT_EQ(16, total_rows);
         ASSERT_EQ(7, page_1->num_rows());
@@ -590,14 +556,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
             sorter.done(_runtime_state.get());
 
-            bool eos = false;
-            ChunkPtr page_1, page_2;
-            sorter.get_next(&page_1, &eos);
-            ASSERT_FALSE(eos);
-            ASSERT_TRUE(page_1 != nullptr);
-            sorter.get_next(&page_2, &eos);
-            ASSERT_TRUE(eos);
-            ASSERT_TRUE(page_2 == nullptr);
+            ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
             ASSERT_EQ(16, total_rows);
             ASSERT_EQ(limit, page_1->num_rows());
@@ -617,10 +576,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
             sorter2.done(_runtime_state.get());
-            eos = false;
-            page_1->reset();
-            sorter2.get_next(&page_1, &eos);
-            ASSERT_TRUE(eos);
+            page_1 = consume_page_from_sorter(sorter2);
             ASSERT_TRUE(page_1 == nullptr);
         }
     }
@@ -652,14 +608,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     full_sorter.update(_runtime_state.get(), _chunk_3);
     full_sorter.done(_runtime_state.get());
 
-    bool eos = false;
-    ChunkPtr page_1, page_2;
-    full_sorter.get_next(&page_1, &eos);
-    ASSERT_FALSE(eos);
-    ASSERT_TRUE(page_1 != nullptr);
-    full_sorter.get_next(&page_2, &eos);
-    ASSERT_TRUE(eos);
-    ASSERT_TRUE(page_2 == nullptr);
+    ChunkPtr page_1 = consume_page_from_sorter(full_sorter);
+
     ASSERT_EQ(6, page_1->num_rows());
     const size_t Size = 6;
     int32_t permutation[Size] = {24, 2, 52, 56, 4, 70};

@@ -88,7 +88,7 @@ int64_t ChunksSorterFullSort::mem_usage() const {
 }
 
 Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
-    SCOPED_TIMER(_sort_timer);
+    SCOPED_TIMER(_merge_timer);
 
     // Merge sorted segments
     SortDescs sort_desc(_sort_order_flag, _null_first_flag);
