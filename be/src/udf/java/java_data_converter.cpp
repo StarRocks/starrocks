@@ -161,6 +161,10 @@ void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_n
 
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val) {
     auto& helper = JVMFunctionHelper::getInstance();
+    if (col->is_nullable() && val.l == nullptr) {
+        col->append_nulls(1);
+        return;
+    }
     if (!method_type_desc.is_box) {
         switch (method_type_desc.type) {
 #define M(NAME)                                                                            \
