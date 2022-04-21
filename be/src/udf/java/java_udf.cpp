@@ -141,12 +141,12 @@ jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, 
     return res_arr;
 }
 
-void JVMFunctionHelper::_check_call_exception(FunctionContext* ctx) {
-    if (auto e = _env->ExceptionOccurred()) {
-        std::string msg = this->dumpExceptionString(e);
+void JVMFunctionHelper::check_call_exception(JNIEnv* env, FunctionContext* ctx) {
+    if (auto e = env->ExceptionOccurred()) {
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);
         LOG(WARNING) << "Exception: " << msg;
         ctx->set_error(msg.c_str());
-        _env->ExceptionClear();
+        env->ExceptionClear();
     }
 }
 
@@ -238,14 +238,14 @@ void JVMFunctionHelper::batch_update_single(FunctionContext* ctx, jobject udaf, 
                                             jobject* input, int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_single, udaf, update, state, input_arr);
-    _check_call_exception(ctx);
+    check_call_exception(_env, ctx);
     _env->DeleteLocalRef(input_arr);
 }
 
 void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, input_arr);
-    _check_call_exception(ctx);
+    check_call_exception(_env, ctx);
     _env->DeleteLocalRef(input_arr);
 }
 
@@ -253,20 +253,20 @@ jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject udf, jobject
                                       int rows) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, udf, evaluate, rows, input_arr);
-    _check_call_exception(ctx);
+    check_call_exception(_env, ctx);
     _env->DeleteLocalRef(input_arr);
     return res;
 }
 
 jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows) {
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call_no_args, caller, method, rows);
-    _check_call_exception(ctx);
+    check_call_exception(_env, ctx);
     return res;
 }
 
 jobject JVMFunctionHelper::int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows) {
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _int_batch_call, callers, method, rows);
-    _check_call_exception(ctx);
+    check_call_exception(_env, ctx);
     return res;
 }
 
@@ -616,7 +616,9 @@ JavaUDFContext::~JavaUDFContext() {
 jobject UDAFFunction::create() {
     JNIEnv* env = getJNIEnv();
     jmethodID create = _ctx->create->get_method_id();
-    return env->CallObjectMethod(_udaf_handle, create);
+    auto obj = env->CallObjectMethod(_udaf_handle, create);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
+    return obj;
 }
 
 void UDAFFunction::destroy(jobject state) {
@@ -624,6 +626,7 @@ void UDAFFunction::destroy(jobject state) {
     jmethodID destory = _ctx->destory->get_method_id();
     env->CallVoidMethod(_udaf_handle, destory, state);
     env->DeleteLocalRef(state);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
 }
 
 jvalue UDAFFunction::finalize(jobject state) {
@@ -632,6 +635,7 @@ jvalue UDAFFunction::finalize(jobject state) {
     jmethodID finalize = _ctx->finalize->get_method_id();
     jvalue res;
     res.l = env->CallObjectMethod(_udaf_handle, finalize, state);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
     return res;
 }
 
@@ -640,33 +644,36 @@ void UDAFFunction::update(jvalue* val) {
     JNIEnv* env = helper.getEnv();
     jmethodID update = _ctx->update->get_method_id();
     env->CallVoidMethodA(_udaf_handle, update, val);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
 }
 
 void UDAFFunction::merge(jobject state, jobject buffer) {
     JNIEnv* env = getJNIEnv();
     jmethodID merge = _ctx->merge->get_method_id();
     env->CallVoidMethod(_udaf_handle, merge, state, buffer);
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-    }
+    JVMFunctionHelper::check_call_exception(env, _function_context);
 }
 
 void UDAFFunction::serialize(jobject state, jobject buffer) {
     JNIEnv* env = getJNIEnv();
     jmethodID merge = _ctx->serialize->get_method_id();
     env->CallVoidMethod(_udaf_handle, merge, state, buffer);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
 }
 
 int UDAFFunction::serialize_size(jobject state) {
     JNIEnv* env = getJNIEnv();
     jmethodID serialize_size = _ctx->serialize_size->get_method_id();
-    return env->CallIntMethod(state, serialize_size);
+    int sz = env->CallIntMethod(state, serialize_size);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
+    return sz;
 }
 
 void UDAFFunction::reset(jobject state) {
     JNIEnv* env = getJNIEnv();
     jmethodID reset = _ctx->reset->get_method_id();
     env->CallVoidMethod(_udaf_handle, reset, state);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
 }
 
 jobject UDAFFunction::window_update_batch(jobject state, int peer_group_start, int peer_group_end, int frame_start,
@@ -684,7 +691,9 @@ jobject UDAFFunction::window_update_batch(jobject state, int peer_group_start, i
         jvalues[i + 5].l = cols[i];
     }
 
-    return env->CallObjectMethodA(_udaf_handle, window_update, jvalues);
+    jobject res = env->CallObjectMethodA(_udaf_handle, window_update, jvalues);
+    JVMFunctionHelper::check_call_exception(env, _function_context);
+    return res;
 }
 
 } // namespace starrocks::vectorized
