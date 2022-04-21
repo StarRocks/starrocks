@@ -66,10 +66,18 @@ public class CreateMaterializedViewTest {
                         "    k2 int,\n" +
                         "    v1 int sum\n" +
                         ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
+                        "PARTITION BY RANGE(k2)\n" +
                         "(\n" +
-                        "    PARTITION p1 values less than('2021-02-01'),\n" +
-                        "    PARTITION p2 values less than('2021-03-01')\n" +
+                        "    PARTITION p1 values less than('10'),\n" +
+                        "    PARTITION p2 values less than('20')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl3\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
@@ -140,10 +148,10 @@ public class CreateMaterializedViewTest {
     public void testFullDescPartitionByFunction() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(tbl1.k1,'ym') " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'ym') ss from tbl1 " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -153,15 +161,53 @@ public class CreateMaterializedViewTest {
             Assert.fail(e.getMessage());
         }
     }
+
+    @Test
+    public void testPartitionKeyNoBaseTablePartitionKey(){
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1 s1, k2 s2 from tbl2 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Materialized view partition key in partition exp must be base table partition key");
+        }
+    }
+
+    @Test
+    public void testBaseTableNoPartitionKey(){
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1 s1, k2 s2 from tbl3 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Materialized view base table must have partition key");
+        }
+    }
+
+
 
     @Test
     public void testFullDescPartitionByColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by s1 " +
+                "distributed by hash(s2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select k1 s1, k2 s2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -172,20 +218,86 @@ public class CreateMaterializedViewTest {
         }
     }
 
+    @Test
+    public void testFullDescPartitionByColumnNoAlias() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1, k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testFullDescPartitionByColumnMixAlias1() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select tbl1.k1, tbl1.k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testFullDescPartitionByColumnMixAlias2() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1, tbl1.k2 from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
 
     @Test
     public void testSelectHasStar() throws Exception {
-
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(ss) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select k1 ss, *  from tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "Materialized view query statement select item no supports *");
+        }
     }
 
     @Test
     public void testPartitionByFunctionNotInSelect() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by sqrt(tbl1.k1) " +
-                "distributed by hash(ss) " +
+                "partition by s8 " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select sqrt(tbl1.k1) s1, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -200,10 +312,10 @@ public class CreateMaterializedViewTest {
     public void testPartitionByAllowedFunctionNoNeedParams() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(tbl1.k1) " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1) ss from tbl1 " +
+                "as select date_format(tbl1.k1) ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -218,10 +330,10 @@ public class CreateMaterializedViewTest {
     public void testPartitionByNoAllowedFunction() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by sqrt(tbl1.k1) " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select sqrt(tbl1.k1) ss from tbl1 " +
+                "as select sqrt(tbl1.k1) ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -233,28 +345,28 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionByFunctionNoTable() throws Exception {
+    public void testPartitionByNoAlias() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
                 "partition by date_format(k1,'%Y%m') " +
-                "distributed by hash(ss) " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(k1,'%Y%m') ss from tbl1 " +
+                "as select k1, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception e) {
-            assertEquals(e.getMessage(), "Materialized view partition exp column can't find in query statement");
+            assertEquals(e.getMessage(), "Partition exp must be alias of select item");
         }
     }
 
     @Test
-    public void testDistributeByIsNull() throws Exception {
+    public void testDistributeByIsNull1() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
+                "partition by ss " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "as select tbl1.k1 ss from tbl1 " +
                 "PROPERTIES (\n" +
@@ -272,7 +384,7 @@ public class CreateMaterializedViewTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.getSessionVariable().setAllowDefaultPartition(true);
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
+                "partition by ss " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "as select tbl1.k1 ss from tbl1 " +
                 "PROPERTIES (\n" +
@@ -290,10 +402,10 @@ public class CreateMaterializedViewTest {
     public void testRefreshAsyncNoArgs() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async  " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -315,10 +427,10 @@ public class CreateMaterializedViewTest {
     public void testRefreshAsyncOnlyStart() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -342,10 +454,10 @@ public class CreateMaterializedViewTest {
     public void testRefreshAsyncOnlyEvery() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async EVERY(INTERVAL 2 MINUTE)" +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -367,10 +479,10 @@ public class CreateMaterializedViewTest {
     public void testRefreshSync() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh sync " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -385,10 +497,10 @@ public class CreateMaterializedViewTest {
     public void testRefreshManual() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by tbl1.k1 " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh manual " +
-                "as select tbl1.k1 ss from tbl1 " +
+                "as select tbl1.k1 ss, k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -403,10 +515,10 @@ public class CreateMaterializedViewTest {
     public void testQueryStatementNoSelectRelation() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(t1.k1,'%Y%m') " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(t1.k1,'%Y%m') from tbl1 t1 union select * from tbl2 t2 " +
+                "as select date_format(t1.k1,'%Y%m') ss, t1.k2 from tbl1 t1 union select * from tbl2 t2 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -421,10 +533,10 @@ public class CreateMaterializedViewTest {
     public void testTableNotInOneDatabase() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(t1.k1,'%Y%m') " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(t1.k1,'%Y%m') ss from test2.tbl3 t1 " +
+                "as select date_format(t1.k1,'%Y%m') ss, t1.k2 from test2.tbl3 t1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -439,10 +551,10 @@ public class CreateMaterializedViewTest {
     public void testTableNoOlapTable() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(tbl1.k1,'%Y%m') " +
-                "distributed by hash(ss) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'%Y%m') ss from mysql_external_table tbl1 " +
+                "as select date_format(tbl1.k1,'%Y%m') ss, tbl1.k2 from mysql_external_table tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
@@ -458,10 +570,10 @@ public class CreateMaterializedViewTest {
     public void testSelectItemNoAlias() {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
-                "partition by date_format(tbl1.k1,'%Y%m') " +
-                "distributed by hash(k1) " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "as select date_format(tbl1.k1,'%Y%m') from tbl1 " +
+                "as select date_format(tbl1.k1,'%Y%m'), k2 from tbl1 " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";

@@ -5885,7 +5885,7 @@ public class GlobalStateMgr {
             db.readUnlock();
         }
         // todo need mv entity, can't do now
-        // generate some partition desc partitionExpDesc -> rangePartitionExpDesc or other
+        // generate some partition desc partitionExpDesc -> rangePartitionDesc or other
         // check properties, need table info which in meta
         // convert query Statement to sql
     }

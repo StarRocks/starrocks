@@ -2,12 +2,14 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import org.spark_project.guava.collect.Maps;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -46,6 +48,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private KeysType myKeyType = KeysType.DUP_KEYS;
 
     private String dbName;
+
+    private List<Column> mvColumnItems = Lists.newArrayList();
+
+    private Map<Column, Expr> columnExprMap = Maps.newHashMap();
 
     public String getMvName() {
         return mvName;
@@ -111,7 +117,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.queryStatement = queryStatement;
     }
 
-    private List<Column> mvColumnItems = new ArrayList<>();
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
 
@@ -129,6 +134,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setDbName(String dbName) {
         this.dbName = dbName;
+    }
+
+    public void setColumnExprMap(Map<Column, Expr> columnExprMap) {
+        this.columnExprMap = columnExprMap;
+    }
+
+    public Map<Column, Expr> getColumnExprMap() {
+        return columnExprMap;
     }
 
     public CreateMaterializedViewStatement(String mvName, boolean ifNotExists, String comment,
@@ -149,4 +162,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);
     }
+
+
+
+
 }
