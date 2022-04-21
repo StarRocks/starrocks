@@ -16,6 +16,7 @@
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/vectorized/column_ref.h"
@@ -353,7 +354,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     suite.TearDown();
 }
 
-static void do_merge_two_way(benchmark::State& state, int num_runs) {
+static void do_merge_columnwise(benchmark::State& state, int num_runs) {
     ChunkSorterBase suite;
     suite.SetUp();
 
@@ -391,7 +392,7 @@ static void do_merge_two_way(benchmark::State& state, int num_runs) {
                 inputs.push_back(chunk2);
             }
         }
-        merge_sorted_chunks(sort_desc, inputs, &merged);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged->num_rows());
 
         num_rows += merged->num_rows();
@@ -481,7 +482,7 @@ static void BM_merge_heap(benchmark::State& state) {
     do_heap_merge(state, state.range(0), true);
 }
 static void BM_merge_columnwise(benchmark::State& state) {
-    do_merge_two_way(state, state.range(0));
+    do_merge_columnwise(state, state.range(0));
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
