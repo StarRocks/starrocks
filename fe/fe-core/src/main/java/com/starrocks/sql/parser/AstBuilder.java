@@ -182,10 +182,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {
         ParseNode parseNode = visit(context.primaryExpression());
-        if (!(parseNode instanceof Expr)) {
-            throw new IllegalArgumentException("Partition exp must be expression");
+        if (!(parseNode instanceof SlotRef)) {
+            throw new IllegalArgumentException("Partition exp must be alias of select item");
         }
-        return new PartitionExpDesc((Expr) parseNode);
+        return new PartitionExpDesc((SlotRef) parseNode);
     }
 
     @Override

@@ -4,13 +4,20 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.SlotRef;
 
 public class PartitionExpDesc extends PartitionDesc {
 
+    private SlotRef slotRef;
+    //expr in outputExpression
     private Expr expr;
 
-    public PartitionExpDesc(Expr expr) {
-        this.expr = expr;
+    public PartitionExpDesc(SlotRef slotRef) {
+        this.slotRef = slotRef;
+    }
+
+    public SlotRef getSlotRef() {
+        return slotRef;
     }
 
     public Expr getExpr() {
