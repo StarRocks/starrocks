@@ -851,7 +851,7 @@ build_opentelemetry() {
         -DCMAKE_CXX_STANDARD="17" \
         -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF \
-        -DWITH_STL=ON -DWITH_JAEGER=ON
+        -DWITH_STL=OFF -DWITH_JAEGER=ON
     make -j$PARALLEL
     make install
 }
