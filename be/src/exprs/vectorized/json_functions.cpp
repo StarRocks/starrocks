@@ -84,9 +84,14 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
-                                                              boost::escaped_list_separator<char>("\\", ".", "\""));
-    std::vector<std::string> path_exprs(tok.begin(), tok.end());
+    std::vector<std::string> path_exprs;
+    try {
+        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
+                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
+        path_exprs.assign(tok.begin(), tok.end());
+    } catch (const boost::escaped_list_error& e) {
+        return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
+    }
     std::vector<SimpleJsonPath>* parsed_paths = new std::vector<SimpleJsonPath>();
     _get_parsed_paths(path_exprs, parsed_paths);
 
