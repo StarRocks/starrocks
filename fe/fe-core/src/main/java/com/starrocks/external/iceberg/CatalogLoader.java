@@ -82,7 +82,8 @@ public interface CatalogLoader {
             this.hadoopConf = new SerializableConfiguration(conf);
             this.properties = Maps.newHashMap(properties); // wrap into a hashmap for serialization
             this.name = name;
-            this.catalogImpl = Preconditions.checkNotNull(catalogImpl, "Cannot initialize custom Catalog, impl class name is null");
+            this.catalogImpl = Preconditions.checkNotNull(catalogImpl,
+                    "Cannot initialize custom Catalog, impl class name is null");
         }
 
         @Override
