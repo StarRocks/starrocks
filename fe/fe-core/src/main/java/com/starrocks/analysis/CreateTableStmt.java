@@ -550,6 +550,10 @@ public class CreateTableStmt extends DdlStmt {
         if (!charsetNames.contains(charsetName)) {
             throw new AnalysisException("Unknown charset name: " + charsetName);
         }
+        // be is not supported yet,so Display unsupported information to the user
+        if (!charsetName.equals(DEFAULT_CHARSET_NAME)){
+            throw new AnalysisException("charset name " + charsetName + " is not supported yet");
+        }
     }
 
     public static CreateTableStmt read(DataInput in) throws IOException {

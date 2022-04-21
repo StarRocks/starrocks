@@ -200,6 +200,39 @@ public class CTASAnalyzerTest {
     }
 
     @Test
+    public void testCharacterCase() throws Exception{
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String SQL1 = "create table tt1(id int,v2 int sum) engine=olap default CHARSET=gbk aggregate key(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL1, ctx);
+
+        String SQL2 = "create table tt2(id int,v2 int sum) engine=olap default CHARSET gbk aggregate key(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL2,ctx);
+
+        String SQL3 = "create table tt3(id int,v2 int sum) engine=olap CHARSET=gbk aggregate key(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL3,ctx);
+
+        String SQL4 = "create table tt4(id int,v2 int sum) engine=olap CHARSET gbk aggregate key(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL4,ctx);
+
+        String SQL5 = "create table tt5(name varchar(20) character set gbk) engine=olap aggregate key(name) DISTRIBUTED BY HASH(name) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL5,ctx);
+
+        String SQL6 = "create table tt6(name varchar(20) char set gbk) engine=olap aggregate key(name) DISTRIBUTED BY HASH(name) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL6,ctx);
+
+        String SQL7 = "create table tt7(name varchar(20) charset gbk) engine=olap aggregate key(name) DISTRIBUTED BY HASH(name) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\",\"in_memory\"=\"false\",\"storage_format\"=\"default\");";
+
+        UtFrameUtils.parseStmtWithNewParser(SQL7,ctx);
+    }
+
+
+    @Test
     public void testSelectColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 

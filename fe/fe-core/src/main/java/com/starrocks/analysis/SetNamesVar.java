@@ -61,6 +61,10 @@ public class SetNamesVar extends SetVar {
         if (!charset.equalsIgnoreCase(DEFAULT_NAMES)&&!charset.equalsIgnoreCase(GBK_NAMES)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, charset);
         }
+        // be is not supported yet,so Display unsupported information to the user
+        if (!charset.equalsIgnoreCase(DEFAULT_NAMES)){
+            throw new AnalysisException("charset name " + charset + " is not supported yet");
+        }
     }
 
     @Override
