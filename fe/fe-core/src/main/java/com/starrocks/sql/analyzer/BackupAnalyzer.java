@@ -51,7 +51,7 @@ public class BackupAnalyzer {
             try {
                 type = BackupStmt.BackupType.valueOf(copiedProperties.get(PROP_TYPE).toUpperCase());
             } catch (Exception e) {
-                ErrorReport.reportAnalysisExceptionba(ErrorCode.ERR_COMMON_ERROR,
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid backup job type: "
                                 + copiedProperties.get(PROP_TYPE));
             }
