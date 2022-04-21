@@ -9,6 +9,7 @@ namespace starrocks::pipeline {
 
 using vectorized::Permutation;
 using vectorized::Columns;
+using vectorized::SortedRuns;
 
 ChunkPtr SortContext::pull_chunk() {
     if (!_is_merge_finish) {
@@ -24,28 +25,16 @@ void SortContext::_merge_inputs() {
     int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
     int64_t require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
 
-    std::vector<ChunkPtr> partial_sorted_chunks;
+    std::vector<SortedRuns> partial_sorted_runs;
     for (int i = 0; i < _num_partition_sinkers; ++i) {
         auto& partition_sorter = _chunks_sorter_partions[i];
-        auto data_segment = partition_sorter->get_result_data_segment();
-        if (data_segment != nullptr) {
-            size_t partition_rows = partition_sorter->get_partition_rows();
-            Permutation* sorted_permutation = partition_sorter->get_permutation();
-
-            if (partition_rows > 0) {
-                ChunkPtr sorted_chunk = data_segment->chunk;
-                if (sorted_permutation) {
-                    ChunkPtr assemble = sorted_chunk->clone_empty(sorted_permutation->size());
-                    append_by_permutation(assemble.get(), {sorted_chunk}, *sorted_permutation);
-                    partial_sorted_chunks.emplace_back(assemble);
-                } else {
-                    partial_sorted_chunks.emplace_back(sorted_chunk);
-                }
-            }
-        }
+        partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
     }
 
-    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, require_rows);
+    SortedRuns merged_run;
+    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &merged_run, require_rows);
+    // TODO: avoid assemble
+    _merged_chunk = merged_run.assemble();
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,

@@ -71,6 +71,8 @@ struct DataSegment {
 };
 using DataSegments = std::vector<DataSegment>;
 
+class SortedRuns;
+
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorter {
 public:
@@ -101,16 +103,13 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
-    virtual DataSegment* get_result_data_segment() = 0;
+    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
+    virtual SortedRuns get_sorted_runs() = 0;
+
+    // Return accurate output rows of this operator
+    virtual size_t get_output_rows() const = 0;
 
     Status finish(RuntimeState* state);
-
-    // used to get size of partition chunks.
-    virtual uint64_t get_partition_rows() const = 0;
-
-    // used to get permutation for partition chunks,
-    // and this is used only with full sort.
-    virtual Permutation* get_permutation() const = 0;
 
     bool sink_complete();
 

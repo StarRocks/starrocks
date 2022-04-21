@@ -48,6 +48,7 @@ struct SortedRun {
     bool empty() const { return range.second == range.first; }
     void reset();
     void resize(size_t size);
+    int64_t mem_usage() const { return chunk->memory_usage(); }
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
     ChunkUniquePtr clone_slice() const {
@@ -76,7 +77,7 @@ struct SortedRun {
 
 // Multiple sorted chunks kept the order, without any intersection
 struct SortedRuns {
-    std::vector<SortedRun> chunks;
+    std::deque<SortedRun> chunks;
 
     SortedRuns() = default;
     ~SortedRuns() = default;
@@ -87,6 +88,15 @@ struct SortedRuns {
     size_t num_chunks() const { return chunks.size(); }
     size_t num_rows() const;
     void resize(size_t size);
+    SortedRun& front() { return chunks.front(); }
+    void pop_front() { chunks.pop_front(); }
+    int64_t mem_usage() const {
+        int64_t res = 0;
+        for (auto& run : chunks) {
+            res += run.mem_usage();
+        }
+        return res;
+    }
 
     ChunkPtr assemble() const {
         ChunkPtr result(chunks.front().clone_slice().release());
@@ -155,6 +165,8 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                            const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<SortedRuns>& chunks, SortedRuns* output, size_t limit);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,

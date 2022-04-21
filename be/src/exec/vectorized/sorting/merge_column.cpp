@@ -361,13 +361,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
-    std::deque<SortedRuns> queue;
-    for (auto& chunk : chunks) {
-        if (chunk->num_rows() > 0) {
-            queue.push_back(SortedRun(chunk, sort_exprs));
-        }
-    }
+                           const std::vector<SortedRuns>& chunks, SortedRuns* output, size_t limit) {
+    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();
@@ -386,6 +381,15 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     *output = queue.front();
 
     return Status::OK();
+}
+
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
+    std::vector<SortedRuns> runs;
+    for (auto& chunk : chunks) {
+        runs.push_back(SortedRun(chunk, sort_exprs));
+    }
+    return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
 }
 
 // Merge multiple chunks in two-way merge

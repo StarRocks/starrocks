@@ -3,6 +3,7 @@
 #pragma once
 
 #include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "gtest/gtest_prod.h"
 
 namespace starrocks {
@@ -28,27 +29,19 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
     void get_next(ChunkPtr* chunk, bool* eos) override;
-    DataSegment* get_result_data_segment() override;
-    uint64_t get_partition_rows() const override;
-    Permutation* get_permutation() const override;
-
     bool pull_chunk(ChunkPtr* chunk) override;
+
+    SortedRuns get_sorted_runs() override;
+    size_t get_output_rows() const override;
 
     int64_t mem_usage() const override;
 
-    friend class SortHelper;
-
 private:
     Status _sort_chunks(RuntimeState* state);
-    Status _build_sorting_data(RuntimeState* state);
-    Status _sort_by_column_inc(RuntimeState* state);
 
-    void _append_rows_to_chunk(Chunk* dest, Chunk* src, const Permutation& permutation, size_t offset, size_t count);
-
-    ChunkUniquePtr _big_chunk;
-    std::unique_ptr<DataSegment> _sorted_segment;
-    mutable Permutation _sorted_permutation;
-    std::vector<uint32_t> _selective_values; // for appending selective values to sorted rows
+    size_t _total_rows = 0;
+    std::vector<ChunkPtr> _sorted_chunks; // Before merge
+    SortedRuns _merged_runs;              // After merge
 };
 
 } // namespace vectorized
