@@ -2,6 +2,8 @@
 
 #include "aggregator.h"
 
+#include <fiu/fiu-control.h>
+
 #include <algorithm>
 
 #include "common/status.h"
@@ -635,6 +637,7 @@ void Aggregator::_evaluate_group_by_exprs(vectorized::Chunk* chunk) {
 }
 
 Status Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
+    fiu_enable("expr", 1, NULL, 0);
     SCOPED_TIMER(_expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {

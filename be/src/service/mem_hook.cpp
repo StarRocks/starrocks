@@ -1,5 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <fiu/fiu.h>
 #include <gperftools/nallocx.h>
 #include <gperftools/tcmalloc.h>
 
@@ -219,6 +220,7 @@ extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         TRY_MEM_CONSUME(tc_nallocx(size, 0), nullptr);
@@ -256,6 +258,7 @@ void* my_realloc(void* p, size_t size) __THROW {
     int64_t old_size = TC_MALLOC_SIZE(p);
 
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(tc_nallocx(size, 0) - old_size, nullptr);
         void* ptr = tc_realloc(p, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -284,6 +287,7 @@ void* my_calloc(size_t n, size_t size) __THROW {
     }
 
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(n * size, nullptr);
         void* ptr = tc_calloc(n, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -308,6 +312,7 @@ void my_cfree(void* ptr) __THROW {
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_memalign(align, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -327,6 +332,7 @@ void* my_memalign(size_t align, size_t size) __THROW {
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_memalign(align, size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -346,6 +352,7 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 // valloc
 void* my_valloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_valloc(size);
         if (UNLIKELY(ptr == nullptr)) {
@@ -365,6 +372,7 @@ void* my_valloc(size_t size) __THROW {
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
+        fiu_return_on("malloc", nullptr);
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = tc_valloc(size);
         if (UNLIKELY(ptr == nullptr)) {

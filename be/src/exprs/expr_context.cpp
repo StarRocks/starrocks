@@ -22,6 +22,7 @@
 #include "exprs/expr_context.h"
 
 #include <gperftools/profiler.h>
+#include <fiu/fiu.h>
 
 #include <memory>
 #include <sstream>
@@ -181,6 +182,8 @@ StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
 }
 
 StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+    fiu_return_on("expr", Status::RuntimeError(fmt::format("Expr evaluate meet error")););
+
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();

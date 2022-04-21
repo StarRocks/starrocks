@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/project_operator.h"
 
+#include <fiu/fiu-control.h>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -23,6 +25,7 @@ StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) 
 }
 
 Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    fiu_enable_random("malloc", 1, NULL, 0, 0.5);
     TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
         ASSIGN_OR_RETURN(auto col, _common_sub_expr_ctxs[i]->evaluate(chunk.get()));

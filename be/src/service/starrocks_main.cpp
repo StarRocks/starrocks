@@ -29,6 +29,7 @@
 #endif
 
 #include <curl/curl.h>
+#include <fiu/fiu.h>
 #include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
 
@@ -229,6 +230,8 @@ int main(int argc, char** argv) {
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
     EXIT_IF_ERROR(engine->start_bg_threads());
+
+    fiu_init(0);
 
     // Begin to start services
     starrocks::ThriftRpcHelper::setup(exec_env);
