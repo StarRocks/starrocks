@@ -57,7 +57,7 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     RETURN_IF_ERROR(add_method("finalize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->finalize));
     RETURN_IF_ERROR(add_method("windowUpdate", udaf_ctx->udaf_class.clazz(), &udaf_ctx->window_update));
 
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, context, udaf_ctx);
 
     return Status::OK();
 }
