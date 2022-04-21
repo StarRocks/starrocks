@@ -25,6 +25,7 @@
 
 #include <thread>
 
+#include "testutil/parallel_test.h"
 #include "util/monotime.h"
 
 namespace starrocks {
@@ -36,7 +37,7 @@ public:
     void SetUp() override {}
 };
 
-TEST_F(StreamLoadPipeTest, append_buffer) {
+PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -73,7 +74,7 @@ TEST_F(StreamLoadPipeTest, append_buffer) {
     t1.join();
 }
 
-TEST_F(StreamLoadPipeTest, append_bytes) {
+PARALLEL_TEST(StreamLoadPipeTest, append_bytes) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -103,7 +104,7 @@ TEST_F(StreamLoadPipeTest, append_bytes) {
     t1.join();
 }
 
-TEST_F(StreamLoadPipeTest, append_bytes2) {
+PARALLEL_TEST(StreamLoadPipeTest, append_bytes2) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -142,7 +143,7 @@ TEST_F(StreamLoadPipeTest, append_bytes2) {
     t1.join();
 }
 
-TEST_F(StreamLoadPipeTest, append_mix) {
+PARALLEL_TEST(StreamLoadPipeTest, append_mix) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -201,7 +202,7 @@ TEST_F(StreamLoadPipeTest, append_mix) {
     t1.join();
 }
 
-TEST_F(StreamLoadPipeTest, cancel) {
+PARALLEL_TEST(StreamLoadPipeTest, cancel) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -223,7 +224,7 @@ TEST_F(StreamLoadPipeTest, cancel) {
     t1.join();
 }
 
-TEST_F(StreamLoadPipeTest, close) {
+PARALLEL_TEST(StreamLoadPipeTest, close) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -255,6 +256,54 @@ TEST_F(StreamLoadPipeTest, close) {
     SleepFor(MonoDelta::FromMilliseconds(10));
 
     pipe.close();
+
+    t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, read_one_message) {
+    StreamLoadPipe pipe(66, 64);
+
+    auto appender = [&pipe] {
+        int k = 0;
+        auto byte_buf = ByteBuffer::allocate(64);
+        char buf[64];
+        for (int j = 0; j < 64; ++j) {
+            buf[j] = '0' + (k++ % 10);
+        }
+        byte_buf->put_bytes(buf, 64);
+        byte_buf->flip();
+        // 1st append
+        pipe.append(byte_buf);
+
+        // 2nd append
+        pipe.append(buf, sizeof(buf));
+
+        pipe.finish();
+    };
+    std::thread t1(appender);
+
+    std::unique_ptr<uint8_t[]> buf;
+    size_t buf_cap = 0;
+    size_t buf_sz = 0;
+    // 1st message
+    auto st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(64, buf_sz);
+    for (int i = 0; i < buf_sz; ++i) {
+        ASSERT_EQ('0' + (i % 10), buf[i]);
+    }
+
+    // 2nd message
+    st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(64, buf_sz);
+    for (int i = 0; i < buf_sz; ++i) {
+        ASSERT_EQ('0' + (i % 10), buf[i]);
+    }
+
+    st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(0, buf_sz);
 
     t1.join();
 }
