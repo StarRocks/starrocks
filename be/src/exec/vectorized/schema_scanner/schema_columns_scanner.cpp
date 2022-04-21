@@ -202,7 +202,7 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
                 std::string db_name;
                 if (_param->without_db_table) {
-                    db_name = _desc_result.columns[_column_index].columnDesc.dbName;
+                    db_name = SchemaHelper::extract_db_name(_desc_result.columns[_column_index].columnDesc.dbName);
                 } else {
                     db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
                 }

@@ -509,19 +509,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
                 continue;
             }
-            String dbName = fullName.indexOf(":") >= 0 ? fullName.substring(fullName.indexOf(":") + 1) : fullName;
             Database db = Catalog.getCurrentCatalog().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, dbName,
+                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
                         continue;
                     }
                     db.readLock();
                     try {
                         Table table = db.getTable(tableName);
-                        reachLimit = setColumnDesc(columns, table, limit, true, dbName, tableName);
+                        reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
                         db.readUnlock();
                     }
