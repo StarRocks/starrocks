@@ -2,6 +2,7 @@
 
 #include "storage/column_aggregate_func.h"
 
+#include "column/vectorized_fwd.h"
 #include "storage/column_aggregator.h"
 
 namespace starrocks::vectorized {
@@ -210,6 +211,25 @@ public:
     }
 
     void append_data(Column* agg) override { down_cast<ColumnType*>(agg)->append(this->data()); }
+};
+
+template <>
+class ReplaceAggregator<BitmapColumn, BitmapValue> final : public ValueColumnAggregator<BitmapColumn, BitmapValue> {
+public:
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        auto* data = down_cast<BitmapColumn*>(src.get());
+        this->data() = *(data->get_object(row));
+    }
+
+    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
+        aggregate_impl(end - 1, src);
+    }
+
+    void append_data(Column* agg) override {
+        BitmapColumn* col = down_cast<BitmapColumn*>(agg);
+        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data());
+        col->append(std::move(bitmap));
+    }
 };
 
 template <>
@@ -543,6 +563,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_REPLACE(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
             CASE_REPLACE(OLAP_FIELD_TYPE_ARRAY, ArrayColumn, ArrayState)
+            CASE_REPLACE(OLAP_FIELD_TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_DEFAULT_WARNING(type)
         }
     }
