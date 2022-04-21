@@ -519,11 +519,12 @@ public class DatabaseTransactionMgr {
                             List<String> errorBackends = new ArrayList<String>();
                             for (long backendId : errorBackendIdsForTablet) {
                                 Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
-                                errorBackends.add(backend.getHost());
+                                errorBackends.add(backend.getId() + ":" + backend.getHost());
                             }
 
                             LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
-                                     tablet.getId(), transactionId, tablet.getId(), Joiner.on(",").join(errorBackends));
+                                    tablet.getId(), transactionId,
+                                    Joiner.on(",").join(errorBackends));
                             throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
                         }
                     }

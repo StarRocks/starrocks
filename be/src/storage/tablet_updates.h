@@ -299,6 +299,8 @@ private:
 
     std::string _debug_string(bool lock, bool abbr = false) const;
 
+    std::string _debug_version_info(bool lock) const;
+
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error(const string& msg);
