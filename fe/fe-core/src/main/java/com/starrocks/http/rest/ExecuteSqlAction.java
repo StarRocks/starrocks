@@ -76,7 +76,8 @@ public class ExecuteSqlAction extends RestBaseAction {
         SqlRequest requestBody;
         StatementBase parsedStmt;
         try {
-            Type type = new TypeToken<SqlRequest>() {}.getType();
+            Type type = new TypeToken<SqlRequest>() {
+            }.getType();
             requestBody = new Gson().fromJson(postContent, type);
             if (Strings.isNullOrEmpty(requestBody.query) || Strings.isNullOrEmpty(requestBody.query.trim())) {
                 response.appendContent(new RestBaseResult("query can not be empty").toJson());
@@ -86,7 +87,8 @@ public class ExecuteSqlAction extends RestBaseAction {
 
             checkSessionVariable(context, requestBody.context);
 
-            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(requestBody.query, context.getSessionVariable().getSqlMode());
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser
+                    .parse(requestBody.query, context.getSessionVariable().getSqlMode());
             if (stmts.size() > 1) {
                 response.appendContent(new RestBaseResult("/api/sql not support execute multiple query").toJson());
                 writeResponse(request, response, BAD_REQUEST);
