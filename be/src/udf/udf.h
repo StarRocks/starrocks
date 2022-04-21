@@ -240,6 +240,9 @@ public:
 
     bool is_constant_column(int arg_idx) const;
 
+    // Return true if it's constant and not null
+    bool is_notnull_constant_column(int i) const;
+
     std::shared_ptr<starrocks::vectorized::Column> get_constant_column(int arg_idx) const;
 
     // Create a test FunctionContext object. The caller is responsible for calling delete

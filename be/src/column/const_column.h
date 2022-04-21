@@ -40,7 +40,7 @@ public:
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
-    bool only_null() const override { return _data->is_nullable(); }
+    bool only_null() const override { return _data->is_null(0); }
 
     bool has_null() const override { return _data->has_null(); }
 

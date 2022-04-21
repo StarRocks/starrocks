@@ -39,8 +39,7 @@ public:
                 size_t row_num) const override {
         DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
-            auto const_column_sep = ctx->get_constant_column(1);
-            if (const_column_sep == nullptr) {
+            if (!ctx->is_notnull_constant_column(1)) {
                 const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
                 const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
 
@@ -60,6 +59,7 @@ public:
                     result.append(sep.get_data(), sep.get_size()).append(val.get_data(), val.get_size());
                 }
             } else {
+                auto const_column_sep = ctx->get_constant_column(1);
                 const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
                 std::string& result = this->data(state).intermediate_string;
 
@@ -102,12 +102,12 @@ public:
                                    AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
-            auto const_column_sep = ctx->get_constant_column(1);
-            if (const_column_sep == nullptr) {
+            if (!ctx->is_notnull_constant_column(1)) {
                 const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
                                                               column_sep->get_bytes().size());
             } else {
+                auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
                 this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
                                                               sep.get_size() * batch_size);

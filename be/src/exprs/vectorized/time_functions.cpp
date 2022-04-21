@@ -109,7 +109,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
 
     // find from timezone
     auto from = context->get_constant_column(1);
-    if (from->only_null() || from->is_null(0)) {
+    if (from->only_null()) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -122,7 +122,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
 
     // find to timezone
     auto to = context->get_constant_column(2);
-    if (to->only_null() || to->is_null(0)) {
+    if (to->only_null()) {
         ctc->is_valid = false;
         return Status::OK();
     }
@@ -747,16 +747,12 @@ Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
     FromUnixState* state = new FromUnixState();
     context->set_function_state(scope, state);
 
-    if (!context->is_constant_column(1)) {
-        return Status::OK();
-    }
-
-    auto column = context->get_constant_column(1);
-    if (column->only_null() || column->is_null(0)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     state->const_format = true;
+    auto column = context->get_constant_column(1);
     auto format = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
     if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
@@ -951,15 +947,11 @@ Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* contex
         return Status::OK();
     }
 
-    if (!context->is_constant_column(1)) {
+    if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
 
     ColumnPtr column = context->get_constant_column(1);
-    if (column->only_null()) {
-        return Status::OK();
-    }
-
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
     // start point to the first unspace char in string format.
@@ -1464,16 +1456,11 @@ Status TimeFunctions::datetime_trunc_prepare(starrocks_udf::FunctionContext* con
         return Status::OK();
     }
 
-    if (!context->is_constant_column(0)) {
+    if (!context->is_notnull_constant_column(0)) {
         return Status::InternalError("datetime_trunc just support const format value");
     }
 
     ColumnPtr column = context->get_constant_column(0);
-
-    if (column->only_null()) {
-        return Status::InternalError("format value can't be null");
-    }
-
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     auto format_value = slice.to_string();
 

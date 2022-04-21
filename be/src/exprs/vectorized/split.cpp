@@ -36,7 +36,7 @@ Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
     auto* state = new SplitState();
     context->set_function_state(scope, state);
 
-    if (context->is_constant_column(0) && context->is_constant_column(1)) {
+    if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
         std::vector<std::string> const_split_strings =
@@ -44,7 +44,7 @@ Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
                                StringPiece(delimiter.get_data(), delimiter.get_size()));
 
         state->const_split_strings = const_split_strings;
-    } else if (context->is_constant_column(1)) {
+    } else if (context->is_notnull_constant_column(1)) {
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
 
         state->delimiter = delimiter;
@@ -90,7 +90,7 @@ ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vect
     BinaryColumn::Ptr array_binary_column = BinaryColumn::create();
 
     auto state = reinterpret_cast<SplitState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    if (context->is_constant_column(0) && context->is_constant_column(1)) {
+    if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
         std::vector<std::string> split_string = state->const_split_strings;
         array_binary_column->reserve(row_nums * split_string.size(), haystack_columns->get_bytes().size());
 
