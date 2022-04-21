@@ -96,7 +96,7 @@ public class ColumnDef {
     private final String name;
     private final TypeDef typeDef;
     private final String DEFAULT_CHARSET = "utf8";
-    private String charsetName;
+    private String charsetName = DEFAULT_CHARSET;
     private AggregateType aggregateType;
     private boolean isKey;
     // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
@@ -113,11 +113,7 @@ public class ColumnDef {
     
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
-        if (charsetName == null) {
-            this(name, typeDef, DEFAULT_CHARSET, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
-        }else{
             this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
-        }
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
