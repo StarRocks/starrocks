@@ -1,5 +1,7 @@
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Catalog;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
@@ -26,6 +28,17 @@ public class AdminSetReplicaStatusStmtTest {
         String stmt = "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");";
         AdminSetReplicaStatusStmt adminSetReplicaStatusStmt =
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-//        Catalog.getCurrentCatalog().setConfig(adminShowConfigStmt);
+        Catalog.getCurrentCatalog().setReplicaStatus(adminSetReplicaStatusStmt);
     }
+
+    @Test
+    public void testErrorParameters() throws Exception {
+        String stmt = "admin set replica status properties(\"tablet_id\" = \"10003\",\"status\" = \"ok\");";
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
+        AdminSetReplicaStatusStmt adminSetReplicaStatusStmt =
+                (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        Catalog.getCurrentCatalog().setReplicaStatus(adminSetReplicaStatusStmt);
+    }
+
 }

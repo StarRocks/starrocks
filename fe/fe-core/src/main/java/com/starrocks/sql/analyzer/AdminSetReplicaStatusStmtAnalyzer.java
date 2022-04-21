@@ -1,8 +1,8 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -20,7 +20,7 @@ public class AdminSetReplicaStatusStmtAnalyzer {
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
             try {
-                adminSetReplicaStatusStmt.analyze(new Analyzer(Catalog.getCurrentCatalog(),session));
+                adminSetReplicaStatusStmt.analyze(new Analyzer(session.getCatalog(),session));
             } catch (UserException e) {
                 throw new SemanticException(e.getMessage(),e);
             }
