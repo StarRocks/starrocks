@@ -282,7 +282,6 @@ public class ConnectProcessor {
 
                 executor.execute();
 
-
                 // do not execute following stmt when current stmt failed, this is consistent with mysql server
                 if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                     break;
@@ -417,7 +416,6 @@ public class ConnectProcessor {
             LOG.warn("Unknown command(" + command + ")");
             return;
         }
-        System.out.println("command option is:" + command);
         ctx.setCommand(command);
         ctx.setStartTime();
 
