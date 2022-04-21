@@ -444,7 +444,11 @@ TEST_P(JsonExistTestFixture, json_exists) {
     Columns columns{ints, builder.build(true)};
 
     ctx.get()->impl()->set_constant_columns(columns);
-    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    if (!st.ok()) {
+        ASSERT_FALSE(param_exist);
+        return;
+    }
 
     ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -485,7 +489,10 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
-                                           std::make_tuple(R"({ "k1": {}})", "", true)));
+                                           std::make_tuple(R"({ "k1": {}})", "", true),
+
+                                           // error case
+                                           std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
 
 class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
 

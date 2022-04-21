@@ -114,9 +114,14 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
     //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]
     //    '$."text.abc".xyz'  ->  [$, text.abc, xyz]
     //    '$."text.abc"[1].xyz'  ->  [$, text.abc[1], xyz]
-    boost::tokenizer<boost::escaped_list_separator<char>> tok(path_string,
-                                                              boost::escaped_list_separator<char>("\\", ".", "\""));
-    std::vector<std::string> path_exprs(tok.begin(), tok.end());
+    std::vector<std::string> path_exprs;
+    try {
+        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_string,
+                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
+        path_exprs.assign(tok.begin(), tok.end());
+    } catch (const boost::escaped_list_error& e) {
+        return Status::InvalidArgument(strings::Substitute("Invalid json path $0", e.what()));
+    }
 
     for (int i = 0; i < path_exprs.size(); i++) {
         std::string col;
