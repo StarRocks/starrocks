@@ -45,6 +45,10 @@ public class ReplaceColumnRefRewriter extends ScalarOperatorVisitor<ScalarOperat
         // Rewiring predicate shouldn't change the origin project columnRefMap
 
         ScalarOperator mapperOperator = operatorMap.get(column).clone();
+        // Keep the original attribute of nullable
+        if (mapperOperator.isColumnRef()) {
+            mapperOperator.<ColumnRefOperator>cast().setNullable(column.isNullable());
+        }
         for (int i = 0; i < mapperOperator.getChildren().size() && isRecursively; ++i) {
             mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
         }
