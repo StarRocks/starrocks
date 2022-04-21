@@ -157,7 +157,7 @@ public class AlterTest {
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         try {
             Catalog.getCurrentCatalog().alterTable(alterTableStmt);
             if (expectedException) {
@@ -172,7 +172,7 @@ public class AlterTest {
     }
 
     private static void alterTableWithExceptionMsg(String sql, String msg) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
         try {
             Catalog.getCurrentCatalog().alterTable(alterTableStmt);
         } catch (Exception e) {
@@ -581,7 +581,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-07\") EVERY (interval 1 day)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
 
@@ -624,7 +624,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-15\") EVERY (interval 5 day)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
 
@@ -665,7 +665,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition_exception ADD\n" +
                 "    PARTITIONS START (\"2014-01-01\") END (\"2014-01-04\") EVERY (interval 1 day)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exception", addPartitionClause);
     }
@@ -694,7 +694,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-25\") END (\"2017-04-10\") EVERY (interval 1 week)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_week", addPartitionClause);
 
@@ -734,7 +734,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2017-04-01\") EVERY (interval 1 month)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
 
@@ -775,7 +775,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2020-01-01\") EVERY (interval 1 YEAR)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
 
@@ -816,7 +816,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"1\") END (\"4\") EVERY (1)";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
 
@@ -859,7 +859,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 1 day);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
             Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
@@ -907,7 +907,7 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 0 day);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         try {
             Catalog.getCurrentCatalog().addPartitions(db, "test_partition_0day", addPartitionClause);
@@ -955,7 +955,7 @@ public class AlterTest {
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "         START (\"2015-01-01\") END (\"2015-01-06\") EVERY (interval 1 day);";
         try {
-            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
             AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
             Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
             Assert.fail();
@@ -1000,13 +1000,13 @@ public class AlterTest {
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-02')";
-        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
+        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists", addPartitionClause2);
 
@@ -1045,13 +1045,13 @@ public class AlterTest {
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists2", addPartitionClause);
 
         String alterSQL2 =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
-        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
+        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists2", addPartitionClause2);
 
@@ -1089,12 +1089,12 @@ public class AlterTest {
         Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists3", addPartitionClause);
 
         String alterSQL2 = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
-        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL2, ctx);
+        AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL2, ctx);
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         Catalog.getCurrentCatalog().addPartitions(db, "test_partition_exists3", addPartitionClause2);
 

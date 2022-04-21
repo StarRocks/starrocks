@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
@@ -20,41 +19,29 @@ import com.starrocks.sql.common.MetaUtils;
 import java.util.List;
 
 public class AlterTableStatementAnalyzer {
-    public static void analyze(DdlStmt ddlStmt, ConnectContext session) {
-        new AlterTableStatementAnalyzerVisitor().analyze(ddlStmt, session);
+    public static void analyze(AlterTableStmt statement, ConnectContext context) {
+        TableName tbl = statement.getTbl();
+        MetaUtils.normalizationTableName(context, tbl);
+        try {
+            CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
+        }
+        List<AlterClause> alterClauseList = statement.getOps();
+        if (alterClauseList == null || alterClauseList.isEmpty()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
+        }
+        for (AlterClause alterClause : alterClauseList) {
+            if (StatementPlanner.isNewAlterTableClause(alterClause)) {
+                AlterTableStatementAnalyzer.analyze(alterClause, context);
+            } else {
+                throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
+            }
+        }
     }
 
     public static void analyze(AlterClause alterTableClause, ConnectContext session) {
         new AlterTableClauseAnalyzerVisitor().analyze(alterTableClause, session);
-    }
-
-    static class AlterTableStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        public void analyze(DdlStmt statement, ConnectContext session) {
-            visit(statement, session);
-        }
-
-        @Override
-        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
-            TableName tbl = statement.getTbl();
-            MetaUtils.normalizationTableName(context, tbl);
-            try {
-                CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
-            }
-            List<AlterClause> alterClauseList = statement.getOps();
-            if (alterClauseList == null || alterClauseList.isEmpty()) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
-            }
-            for (AlterClause alterClause : alterClauseList) {
-                if (StatementPlanner.isNewAlterTableClause(alterClause)) {
-                    AlterTableStatementAnalyzer.analyze(alterClause, context);
-                } else {
-                    throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
-                }
-            }
-            return null;
-        }
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
