@@ -307,6 +307,8 @@ private:
 
     std::string _debug_string(bool lock, bool abbr = false) const;
 
+    std::string _debug_version_info(bool lock) const;
+
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error();
@@ -381,6 +383,7 @@ private:
     // keep the scene(internal state) unchanged for further investigation, and don't crash
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
+    std::string _error_msg;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

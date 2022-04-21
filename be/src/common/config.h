@@ -469,6 +469,7 @@ CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
+CONF_Int32(update_memory_limit_percent, "60");
 
 // update interval of tablet stat cache
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
@@ -635,7 +636,10 @@ CONF_mInt32(sys_minidump_interval, "600");
 // requests will fail.
 CONF_Int16(tablet_max_versions, "1000");
 
-// will remove
+// The maximum number of pending versions allowed for a primary key tablet
+CONF_mInt32(tablet_max_pending_versions, "1000");
+
+// NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // yield PipelineDriver when maximum number of chunks has been moved

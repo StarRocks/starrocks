@@ -106,12 +106,8 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             std::shared_lock header_rdlock(tablet->get_header_lock());
             const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
             if (lastest_version == nullptr) {
-                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
-                             << ", version: " << lastest_version->start_version() << "-"
-                             << lastest_version->end_version();
-                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
-                                                    tablet->tablet_id(), lastest_version->start_version(),
-                                                    lastest_version->end_version()));
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
+                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
             }
 
             end_version = lastest_version->end_version();
@@ -228,13 +224,9 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             std::shared_lock header_rdlock(tablet->get_header_lock());
             const RowsetSharedPtr lastest_version = tablet->rowset_with_max_version();
             if (lastest_version == nullptr) {
-                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id()
-                             << ", version: " << lastest_version->start_version() << "-"
-                             << lastest_version->end_version();
+                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
                 need_remove_new_path = true;
-                res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}, version: {}-{}",
-                                                   tablet->tablet_id(), lastest_version->start_version(),
-                                                   lastest_version->end_version()));
+                res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
                 break;
             }
             int32_t new_end_version = lastest_version->end_version();
