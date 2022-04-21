@@ -552,9 +552,9 @@ Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row,
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
     if (_scanner->_json_paths.empty()) {
         // No json path.
-        // if number of object fields is much more than size of _slot_descs,
+        // if size of _slot_desc is much more than (2x) number of object fields,
         // using object as driven table to look up field key in _slot_desc_dict may get better performance.
-        if (row->count_fields() > _slot_descs.size() * 2) {
+        if (_slot_descs.size() > row->count_fields() * 2) {
             return _construct_row_in_object_order(row, chunk);
         } else {
             return _construct_row_in_slot_order(row, chunk);
