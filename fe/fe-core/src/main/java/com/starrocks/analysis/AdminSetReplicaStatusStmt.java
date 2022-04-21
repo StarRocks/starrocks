@@ -55,6 +55,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         this.properties = properties;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
