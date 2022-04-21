@@ -12,9 +12,40 @@ class ScanNode;
 
 namespace pipeline {
 
+class ScanOperatorFactory : public SourceOperatorFactory {
+public:
+    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
+
+    ~ScanOperatorFactory() override = default;
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool with_morsels() const override { return true; }
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual void do_close(RuntimeState* state) = 0;
+    virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
+
+    enum SharedPhase {
+        READY = 0,
+        OPENING = 1,
+        RUNNING = 2,
+        EOS = 3,
+    };
+
+protected:
+    ScanNode* _scan_node;
+    std::atomic<SharedPhase> _shared_phase = SharedPhase::READY;
+};
+
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                 std::atomic<ScanOperatorFactory::SharedPhase>& shared_phase);
 
     ~ScanOperator() override = default;
 
@@ -37,6 +68,10 @@ public:
 
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
+    virtual Status do_open_shared(RuntimeState* state) {
+        _shared_phase.store(ScanOperatorFactory::SharedPhase::RUNNING, std::memory_order_release);
+        return Status::OK();
+    }
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
@@ -57,6 +92,8 @@ protected:
     // And all these parallel profiles will be merged to ScanOperator's profile at the end.
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
+    std::atomic<ScanOperatorFactory::SharedPhase>& _shared_phase;
+
 private:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
@@ -71,28 +108,6 @@ private:
     std::vector<ChunkSourcePtr> _chunk_sources;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
-};
-
-class ScanOperatorFactory : public SourceOperatorFactory {
-public:
-    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
-
-    ~ScanOperatorFactory() override = default;
-
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
-
-    bool with_morsels() const override { return true; }
-
-    Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
-
-    // interface for different scan node
-    virtual Status do_prepare(RuntimeState* state) = 0;
-    virtual void do_close(RuntimeState* state) = 0;
-    virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
-
-protected:
-    ScanNode* _scan_node;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

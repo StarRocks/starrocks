@@ -15,10 +15,12 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                           std::atomic<ScanOperatorFactory::SharedPhase>& shared_phase)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id()),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
+          _shared_phase(shared_phase),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {
     for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
@@ -68,6 +70,15 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    ScanOperatorFactory::SharedPhase local_phase = _shared_phase.load(std::memory_order_acquire);
+    if (local_phase == ScanOperatorFactory::SharedPhase::EOS ||
+        local_phase == ScanOperatorFactory::SharedPhase::OPENING) {
+        return false;
+    }
+    if (local_phase == ScanOperatorFactory::SharedPhase::READY) {
+        return true;
+    }
+
     for (const auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
             return true;
@@ -104,7 +115,7 @@ bool ScanOperator::pending_finish() const {
 }
 
 bool ScanOperator::is_finished() const {
-    if (_is_finished) {
+    if (_is_finished || _shared_phase == ScanOperatorFactory::SharedPhase::EOS) {
         return true;
     }
 
@@ -130,6 +141,22 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    // Invoke do_open_shared only once for all the scan operators
+    // generated from a fragment instance, after they are ready.
+    ScanOperatorFactory::SharedPhase local_phase = _shared_phase.load(std::memory_order_acquire);
+    if (local_phase == ScanOperatorFactory::SharedPhase::READY) {
+        if (!_shared_phase.compare_exchange_strong(local_phase, ScanOperatorFactory::SharedPhase::OPENING)) {
+            return nullptr;
+        }
+        RETURN_IF_ERROR(do_open_shared(state));
+    }
+    if (local_phase == ScanOperatorFactory::SharedPhase::RUNNING) {
+        // Do nothing.
+    } else if (local_phase == ScanOperatorFactory::SharedPhase::OPENING ||
+               local_phase == ScanOperatorFactory::SharedPhase::EOS) {
+        return nullptr;
+    }
+
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);

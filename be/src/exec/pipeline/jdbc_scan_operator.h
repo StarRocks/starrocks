@@ -17,7 +17,8 @@ namespace pipeline {
 // Maybe after we put the jdbc scanner into thread pool, the two can be unified.
 class JDBCScanOperator final : public ScanOperator {
 public:
-    JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node, const TJDBCScanNode& jdbc_scan_node);
+    JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                     std::atomic<ScanOperatorFactory::SharedPhase>& shared_phase, const TJDBCScanNode& jdbc_scan_node);
     ~JDBCScanOperator() override = default;
 
     bool has_output() const override;

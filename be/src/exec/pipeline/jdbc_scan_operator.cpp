@@ -14,8 +14,9 @@ namespace starrocks {
 namespace pipeline {
 
 JDBCScanOperator::JDBCScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                                   std::atomic<ScanOperatorFactory::SharedPhase>& shared_phase,
                                    const TJDBCScanNode& jdbc_scan_node)
-        : ScanOperator(factory, id, scan_node),
+        : ScanOperator(factory, id, scan_node, shared_phase),
           _jdbc_scan_node(jdbc_scan_node),
           _conjunct_ctxs(scan_node->conjunct_ctxs()),
           _limit(scan_node->limit()),
@@ -224,7 +225,7 @@ Status JDBCScanOperatorFactory::do_prepare(RuntimeState* state) {
 void JDBCScanOperatorFactory::do_close(RuntimeState* state) {}
 
 OperatorPtr JDBCScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<JDBCScanOperator>(this, _id, _scan_node, _jdbc_scan_node);
+    return std::make_shared<JDBCScanOperator>(this, _id, _scan_node, _shared_phase, _jdbc_scan_node);
 }
 
 } // namespace pipeline

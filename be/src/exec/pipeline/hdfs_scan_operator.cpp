@@ -22,13 +22,14 @@ Status HdfsScanOperatorFactory::do_prepare(RuntimeState* state) {
 void HdfsScanOperatorFactory::do_close(RuntimeState*) {}
 
 OperatorPtr HdfsScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<HdfsScanOperator>(this, _id, _scan_node);
+    return std::make_shared<HdfsScanOperator>(this, _id, _scan_node, _shared_phase);
 }
 
 // ==================== HdfsScanOperator ====================
 
-HdfsScanOperator::HdfsScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node)
-        : ScanOperator(factory, id, scan_node) {}
+HdfsScanOperator::HdfsScanOperator(OperatorFactory* factory, int32_t id, ScanNode* scan_node,
+                                   std::atomic<ScanOperatorFactory::SharedPhase>& shared_phase)
+        : ScanOperator(factory, id, scan_node, shared_phase) {}
 
 Status HdfsScanOperator::do_prepare(RuntimeState*) {
     return Status::OK();

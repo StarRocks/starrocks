@@ -3,6 +3,7 @@
 #include "exec/pipeline/olap_chunk_source.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -26,13 +27,14 @@ OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& mo
                                  vectorized::OlapScanNode* scan_node)
         : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
+          _op(down_cast<OlapScanOperator*>(op)),
           _limit(scan_node->limit()),
-          _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()) {
-    _conjunct_ctxs = scan_node->conjunct_ctxs();
-    _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
-    _scan_range = scan_morsel->get_olap_scan_range();
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()),
+          _not_push_down_conjuncts(_op->not_push_down_conjuncts()),
+          _conjuncts_manager(_op->conjuncts_manager()) {
+    for (const auto& key_range : _op->key_ranges()) {
+        _scanner_ranges.emplace_back(key_range.get());
+    }
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
@@ -51,31 +53,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _init_counter(state);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
-    OlapScanConjunctsManager& cm = _conjuncts_manager;
-    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    cm.tuple_desc = tuple_desc;
-    cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_olap_scan_node.key_column_name;
-    cm.runtime_filters = _runtime_bloom_filters;
-    cm.runtime_state = state;
-
-    const TQueryOptions& query_options = state->query_options();
-    int32_t max_scan_key_num;
-    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
-        max_scan_key_num = query_options.max_scan_key_num;
-    } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
-    }
-    bool enable_column_expr_predicate = false;
-    if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
-        enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
-    }
-    RETURN_IF_ERROR(cm.parse_conjuncts(true, max_scan_key_num, enable_column_expr_predicate));
-    RETURN_IF_ERROR(_build_scan_range(_runtime_state));
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
+
     return Status::OK();
 }
 
@@ -123,27 +102,6 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-}
-
-Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
-    _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
-
-    // FixMe(kks): Ensure this logic is right.
-    int scanners_per_tablet = 64;
-    int num_ranges = _key_ranges.size();
-    int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
-    for (int i = 0; i < num_ranges;) {
-        _scanner_ranges.push_back(_key_ranges[i].get());
-        i++;
-        for (int j = 1;
-             i < num_ranges && j < ranges_per_scanner && _key_ranges[i]->end_include == _key_ranges[i - 1]->end_include;
-             ++j, ++i) {
-            _scanner_ranges.push_back(_key_ranges[i].get());
-        }
-    }
-    return Status::OK();
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -459,7 +417,6 @@ void OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
-    _dict_optimize_parser.close(state);
 }
 
 int64_t OlapChunkSource::last_spent_cpu_time_ns() {

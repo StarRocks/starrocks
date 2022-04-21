@@ -28,6 +28,8 @@ class RuntimeFilterProbeCollector;
 namespace pipeline {
 
 class ScanOperator;
+class OlapScanOperator;
+
 class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
@@ -76,18 +78,16 @@ private:
     void _update_realtime_counter(vectorized::Chunk* chunk);
 
     vectorized::TabletReaderParams _params = {};
-
     vectorized::OlapScanNode* _scan_node;
+    OlapScanOperator* _op;
+
     const int64_t _limit; // -1: no limit
-    std::vector<ExprContext*> _conjunct_ctxs;
-    const std::vector<ExprContext*>& _runtime_in_filters;
-    const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
     UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
     // The conjuncts couldn't push down to storage engine
-    std::vector<ExprContext*> _not_push_down_conjuncts;
+    std::vector<ExprContext*>& _not_push_down_conjuncts;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
@@ -97,10 +97,8 @@ private:
 
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
-    std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    vectorized::OlapScanConjunctsManager _conjuncts_manager;
-    vectorized::DictOptimizeParser _dict_optimize_parser;
+    vectorized::OlapScanConjunctsManager& _conjuncts_manager;
 
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
