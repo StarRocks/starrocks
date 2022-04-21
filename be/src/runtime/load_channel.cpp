@@ -27,7 +27,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
-#include "storage/lru_cache.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

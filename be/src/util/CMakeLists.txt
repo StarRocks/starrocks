@@ -108,6 +108,7 @@ set(UTIL_FILES
   gc_helper.cpp
   gc_helper_smoothstep.cpp
   sha.cpp
+  lru_cache.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
