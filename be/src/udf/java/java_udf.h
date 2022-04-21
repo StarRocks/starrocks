@@ -91,14 +91,15 @@ public:
 
     jclass object_class() { return _object_class; }
 
+    // check JNI Exception and set error in FunctionContext
+    static void check_call_exception(JNIEnv* env, FunctionContext* ctx);
+
 private:
     JVMFunctionHelper(JNIEnv* env) : _env(env) {}
     void _init();
     void _add_class_path(const std::string& path);
     // pack input array to java object array
     jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
-    // check JNI Exception and set error in FunctionContext
-    void _check_call_exception(FunctionContext* ctx);
 
 private:
     JNIEnv* _env;
@@ -275,7 +276,8 @@ struct JavaUDAFContext;
 
 class UDAFFunction {
 public:
-    UDAFFunction(jobject udaf_handle, JavaUDAFContext* ctx) : _udaf_handle(udaf_handle), _ctx(ctx) {}
+    UDAFFunction(jobject udaf_handle, FunctionContext* function_ctx, JavaUDAFContext* ctx)
+            : _udaf_handle(udaf_handle), _function_context(function_ctx), _ctx(ctx) {}
     // create a new state for UDAF
     jobject create();
     // destroy state
@@ -299,6 +301,7 @@ public:
 
 private:
     jobject _udaf_handle;
+    FunctionContext* _function_context;
     JavaUDAFContext* _ctx;
 };
 
