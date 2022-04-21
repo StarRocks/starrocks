@@ -338,7 +338,7 @@
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
     + 资源管理
-      + [资源隔离](/administration/resource_group.md)
+      + [资源隔离](/administration/Resource_Group.md)
       + [查询管理](/administration/Query_management.md)
       + [内存管理](/administration/Memory_management.md)
       + [负载均衡](/administration/Load_balance.md)
