@@ -59,6 +59,9 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
             QueryStatement queryStatement = statement.getQueryStatement();
+            // check partitionExpDesc
+            PartitionExpDesc partitionExpDesc = statement.getPartitionExpDesc();
+            checkPartitionExpDesc(partitionExpDesc);
             //check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
@@ -66,6 +69,8 @@ public class MaterializedViewAnalyzer {
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
+            SelectListItem refSelectListItem = null;
+            boolean isInSelectList = false;
             for (SelectListItem selectListItem : selectListItems) {
                 if (!selectListItem.isStar()
                         && !(selectListItem.getExpr() instanceof SlotRef)
@@ -73,10 +78,16 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view query statement select item" +
                             " must has alias except base select item");
                 }
+                if (!isInSelectList) {
+                    isInSelectList = checkExpInSelectList(partitionExpDesc.getExpr(), selectListItem);
+                    if (isInSelectList) {
+                        refSelectListItem = selectListItem;
+                    }
+                }
             }
-            // check partitionExpDesc
-            PartitionExpDesc partitionExpDesc = statement.getPartitionExpDesc();
-            checkPartitionExpDesc(partitionExpDesc, selectListItems);
+            if (!isInSelectList) {
+                throw new SemanticException("Materialized view partition exp column can't find in query statement");
+            }
             // analyze query statement, can check table and column is exists in meta
             Analyzer.analyze(queryStatement, context);
             // check table is in this database and is OlapTable
@@ -90,6 +101,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view only support olap tables");
                 }
             });
+            checkPartitionExpParams(refSelectListItem.getExpr());
             // set column
             setColumn(statement, selectRelation);
             //check partition key must be base table partition key
@@ -117,8 +129,11 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionExpDesc(PartitionExpDesc partitionExpDesc, List<SelectListItem> selectListItems) {
+        private void checkPartitionExpDesc(PartitionExpDesc partitionExpDesc) {
             Expr expr = partitionExpDesc.getExpr();
+            if (!(expr instanceof FunctionCallExpr) && !(expr instanceof SlotRef)) {
+                throw new SemanticException("Materialized view partition exp only support function and column");
+            }
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                 String functionName = functionCallExpr.getFnName().getFunction();
@@ -127,8 +142,13 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " first params must be column");
                 }
-                checkExpInSelectList(expr, selectListItems);
-                functionCallExpr = ((FunctionCallExpr) partitionExpDesc.getExpr());
+            }
+        }
+
+        private void checkPartitionExpParams(Expr expr) {
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
+                String functionName = functionCallExpr.getFnName().getFunction();
                 MVColumnPattern mvColumnPattern = FN_NAME_TO_PATTERN.get(functionName);
                 if (mvColumnPattern == null) {
                     throw new SemanticException("Materialized view partition function " +
@@ -138,24 +158,15 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " must match pattern:" + mvColumnPattern);
                 }
-            } else if (expr instanceof SlotRef) {
-                checkExpInSelectList(expr, selectListItems);
-            } else {
-                throw new SemanticException("Materialized view partition exp only support function and column");
             }
+
         }
 
-        private void checkExpInSelectList(Expr expr,
-                                              List<SelectListItem> selectListItems) {
-            boolean isInSelectList = false;
-            for (SelectListItem selectListItem : selectListItems) {
-                if (expr.equals(selectListItem.getExpr())) {
-                    isInSelectList = true;
-                    break;
-                }
-            }
-            if (!isInSelectList) {
-                throw new SemanticException("Materialized view partition exp column can't find in query statement");
+        private boolean checkExpInSelectList(Expr expr, SelectListItem selectListItem) {
+            if (expr.equals(selectListItem.getExpr())) {
+                return true;
+            } else {
+                return false;
             }
         }
 
