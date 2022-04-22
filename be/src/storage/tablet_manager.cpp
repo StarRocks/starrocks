@@ -678,7 +678,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
 }
 
 Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
-                                            const std::string& meta_binary, bool update_meta, bool force, bool restore,
+                                            std::string_view meta_binary, bool update_meta, bool force, bool restore,
                                             bool check_path) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
