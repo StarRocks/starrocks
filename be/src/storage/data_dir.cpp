@@ -364,20 +364,18 @@ Status DataDir::load() {
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                const std::string& meta_str) -> bool {
-        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
+                                                std::string_view meta_str) -> bool {
+        auto rowset_meta = std::make_shared<RowsetMeta>();
         bool parsed = rowset_meta->init(meta_str);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error
             return true;
         }
-        if (rowset_meta->rowset_type() == ALPHA_ROWSET) {
-            LOG(FATAL) << "must change V1 format to V2 format."
-                       << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                       << ", schema_hash: " << rowset_meta->tablet_schema_hash()
-                       << ", rowset_id:" << rowset_meta->rowset_id();
-        }
+        LOG_IF(FATAL, rowset_meta->rowset_type() == ALPHA_ROWSET)
+                << "must change V1 format to V2 format."
+                << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
+                << ", schema_hash: " << rowset_meta->tablet_schema_hash() << ", rowset_id:" << rowset_meta->rowset_id();
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
