@@ -23,6 +23,7 @@
 
 #include <ostream>
 #include <string>
+#include <string_view>
 
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/types.pb.h"    // for PUniqueId
@@ -41,14 +42,14 @@ inline void to_hex(T val, char* buf) {
 }
 
 template <typename T>
-inline void from_hex(T* ret, const std::string& buf) {
+inline void from_hex(T* ret, std::string_view buf) {
     T val = 0;
-    for (int i = 0; i < buf.length(); ++i) {
+    for (char c : buf) {
         int buf_val = 0;
-        if (buf.c_str()[i] >= '0' && buf.c_str()[i] <= '9')
-            buf_val = buf.c_str()[i] - '0';
+        if (c >= '0' && c <= '9')
+            buf_val = c - '0';
         else {
-            buf_val = buf.c_str()[i] - 'a' + 10;
+            buf_val = c - 'a' + 10;
         }
         val <<= 4;
         val = val | buf_val;
@@ -63,7 +64,7 @@ struct UniqueId {
     UniqueId(int64_t hi_, int64_t lo_) : hi(hi_), lo(lo_) {}
     UniqueId(const TUniqueId& tuid) : hi(tuid.hi), lo(tuid.lo) {}
     UniqueId(const PUniqueId& puid) : hi(puid.hi()), lo(puid.lo()) {}
-    UniqueId(const std::string& hi_str, const std::string& lo_str) {
+    UniqueId(std::string_view hi_str, std::string_view lo_str) {
         from_hex(&hi, hi_str);
         from_hex(&lo, lo_str);
     }
