@@ -406,10 +406,10 @@ struct THashJoinNode {
 }
 
 struct TMergeJoinNode {
-  1: required TJoinOp join_op
+  1: optional TJoinOp join_op
 
   // anything from the ON, USING or WHERE clauses that's an equi-join predicate
-  2: required list<TEqJoinCondition> eq_join_conjuncts
+  2: optional list<TEqJoinCondition> eq_join_conjuncts
 
   // anything from the ON or USING clauses (but *not* the WHERE clause) that's not an
   // equi-join predicate
