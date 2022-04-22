@@ -166,6 +166,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             CursorAlgo::trim_permutation(_left_run, right_1, perm);
             DCHECK_EQ(_left_run.num_rows() + right_1.num_rows(), perm.size());
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
+            // TODO: avoid copy the whole chunk, but copy orderby columns only
             append_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
 
             _left_run.reset();
@@ -224,6 +225,8 @@ bool MergeTwoCursor::move_cursor() {
     return true;
 }
 
+// TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only
+// In the scenario that chunk has many columns but order by a few column, that could save a lot of cpu cycles
 Status MergeCursorsCascade::init(const SortDescs& sort_desc,
                                  std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> current_level = std::move(cursors);
