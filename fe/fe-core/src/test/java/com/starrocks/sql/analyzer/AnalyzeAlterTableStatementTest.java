@@ -1,7 +1,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
@@ -54,14 +53,6 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testIllegalNewTableName() {
         TableRenameClause clause = new TableRenameClause("_newName");
-        AlterTableStatementAnalyzer.analyze(clause, connectContext);
-    }
-
-    @Test(expected = SemanticException.class)
-    public void testClauseException() {
-        List<AlterClause> ops = Lists.newArrayList();
-        AddRollupClause clause =
-                new AddRollupClause("index1", Lists.newArrayList("col1", "col2"), null, "testTbl", null);
         AlterTableStatementAnalyzer.analyze(clause, connectContext);
     }
 
