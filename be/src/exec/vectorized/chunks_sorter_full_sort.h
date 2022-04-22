@@ -37,11 +37,16 @@ public:
     int64_t mem_usage() const override;
 
 private:
-    Status _sort_chunks(RuntimeState* state);
+    Status _merge_unsorted(RuntimeState* state, const ChunkPtr& chunk);
+    Status _partial_sort(RuntimeState* state, bool done);
+    Status _merge_sorted(RuntimeState* state);
 
     size_t _total_rows = 0;
-    std::vector<ChunkPtr> _sorted_chunks; // Before merge
+    ChunkPtr _unsorted_chunk;             // Unsorted chunk, accumulate it to a larger chunk
+    std::vector<ChunkPtr> _sorted_chunks; // Partial sorted, but not merged
     SortedRuns _merged_runs;              // After merge
+
+    static constexpr size_t kBufferedChunkSize = 1024000;
 };
 
 } // namespace vectorized
