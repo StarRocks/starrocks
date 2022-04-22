@@ -5,6 +5,7 @@ package com.starrocks.external.hive.events;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -31,7 +32,7 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());
 
-        HivePartitionKey hivePartitionKey = HivePartitionKey.gen(dbName, tblName, Lists.newArrayList());
+        HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tblName, TableType.HIVE, Lists.newArrayList());
         hivePartitionKeys.add(hivePartitionKey);
     }
 
