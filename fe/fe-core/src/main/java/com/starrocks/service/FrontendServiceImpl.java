@@ -135,6 +135,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -471,60 +472,113 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
+
+        // if user query schema meta such as "select * from information_schema.columns limit 10;",
+        // in this case, there is no predicate and only has limit clause,we can call the
+        // describe_table interface only once, which can reduce RPC time from BE to FE, and
+        // the amount of data. In additional,we need add db_name & table_name values to TColumnDesc.
+        if (!params.isSetDb() && StringUtils.isBlank(params.getTable_name())) {
+            describeWithoutDbAndTable(currentUser, columns, limit);
+            return result;
+        }
         if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, params.db,
                 params.getTable_name(), PrivPredicate.SHOW)) {
             return result;
         }
         Database db = Catalog.getCurrentCatalog().getDb(params.db);
-        long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (db != null) {
             db.readLock();
             try {
                 Table table = db.getTable(params.getTable_name());
-                if (table != null) {
-                    String tableKeysType = "";
-                    if (TableType.OLAP.equals(table.getType())) {
-                        OlapTable olapTable = (OlapTable) table;
-                        tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
-                    }
-                    for (Column column : table.getBaseSchema()) {
-                        final TColumnDesc desc =
-                                new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
-                        final Integer precision = column.getType().getPrecision();
-                        if (precision != null) {
-                            desc.setColumnPrecision(precision);
-                        }
-                        final Integer columnLength = column.getType().getColumnSize();
-                        if (columnLength != null) {
-                            desc.setColumnLength(columnLength);
-                        }
-                        final Integer decimalDigits = column.getType().getDecimalDigits();
-                        if (decimalDigits != null) {
-                            desc.setColumnScale(decimalDigits);
-                        }
-                        if (column.isKey()) {
-                            // COLUMN_KEY (UNI, AGG, DUP, PRI)
-                            desc.setColumnKey(tableKeysType);
-                        } else {
-                            desc.setColumnKey("");
-                        }
-                        final TColumnDef colDef = new TColumnDef(desc);
-                        final String comment = column.getComment();
-                        if (comment != null) {
-                            colDef.setComment(comment);
-                        }
-                        columns.add(colDef);
-                        // if user set limit, then only return limit size result
-                        if (limit > 0 && columns.size() >= limit) {
-                            break;
-                        }
-                    }
-                }
+                setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
             } finally {
                 db.readUnlock();
             }
         }
         return result;
+    }
+
+    // get describeTable without db name and table name parameter, so we need iterate over
+    // dbs and tables, when reach limit, we break;
+    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
+        Catalog catalog = Catalog.getCurrentCatalog();
+        List<String> dbNames = catalog.getDbNames();
+        boolean reachLimit;
+        for (String fullName : dbNames) {
+            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+                continue;
+            }
+            Database db = Catalog.getCurrentCatalog().getDb(fullName);
+            if (db != null) {
+                for (String tableName : db.getTableNamesWithLock()) {
+                    LOG.debug("get table: {}, wait to check", tableName);
+                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, fullName,
+                            tableName, PrivPredicate.SHOW)) {
+                        continue;
+                    }
+                    db.readLock();
+                    try {
+                        Table table = db.getTable(tableName);
+                        reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
+                    } finally {
+                        db.readUnlock();
+                    }
+                    if (reachLimit) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
+                               boolean needSetDbAndTable, String db, String tbl) {
+        if (table != null) {
+            String tableKeysType = "";
+            if (TableType.OLAP.equals(table.getType())) {
+                OlapTable olapTable = (OlapTable) table;
+                tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+            }
+            for (Column column : table.getBaseSchema()) {
+                final TColumnDesc desc =
+                        new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+                final Integer precision = column.getType().getPrecision();
+                if (precision != null) {
+                    desc.setColumnPrecision(precision);
+                }
+                final Integer columnLength = column.getType().getColumnSize();
+                if (columnLength != null) {
+                    desc.setColumnLength(columnLength);
+                }
+                final Integer decimalDigits = column.getType().getDecimalDigits();
+                if (decimalDigits != null) {
+                    desc.setColumnScale(decimalDigits);
+                }
+                if (column.isKey()) {
+                    // COLUMN_KEY (UNI, AGG, DUP, PRI)
+                    desc.setColumnKey(tableKeysType);
+                } else {
+                    desc.setColumnKey("");
+                }
+                final TColumnDef colDef = new TColumnDef(desc);
+                final String comment = column.getComment();
+                if (comment != null) {
+                    colDef.setComment(comment);
+                }
+                columns.add(colDef);
+                // add db_name and table_name values to TColumnDesc if needed
+                if (needSetDbAndTable) {
+                    columns.get(columns.size() - 1).columnDesc.setDbName(db);
+                    columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
+                }
+                // if user set limit, then only return limit size result
+                if (limit > 0 && columns.size() >= limit) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

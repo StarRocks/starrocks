@@ -4,6 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HiveTableKey;
@@ -37,7 +38,7 @@ public class InsertEvent extends MetastoreTableEvent {
             insertPartition = insertMessage.getPtnObj();
             if (insertPartition != null) {
                 hivePartitionKeys.clear();
-                hivePartitionKeys.add(HivePartitionKey.gen(dbName, tblName, insertPartition.getValues()));
+                hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
@@ -76,7 +77,7 @@ public class InsertEvent extends MetastoreTableEvent {
             return cache.tableExistInCache(tableKey);
         } else {
             List<String> partVals = insertPartition.getValues();
-            HivePartitionKey partitionKey = HivePartitionKey.gen(dbName, tblName, partVals);
+            HivePartitionKey partitionKey = new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partVals);
             return cache.partitionExistInCache(partitionKey);
         }
     }

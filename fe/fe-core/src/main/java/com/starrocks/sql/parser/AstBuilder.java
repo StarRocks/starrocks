@@ -4,6 +4,7 @@ package com.starrocks.sql.parser;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
@@ -178,6 +179,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
+        Map<String, String> configs = new HashMap<>();
+        Property property = (Property) visitProperty(context.property());
+        String configKey = property.getKey();
+        String configValue = property.getValue();
+        configs.put(configKey, configValue);
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
     public ParseNode visitDropTable(StarRocksParser.DropTableContext context) {
         boolean ifExists = context.IF() != null && context.EXISTS() != null;
         boolean force = context.FORCE() != null;
@@ -235,6 +246,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitInsert(StarRocksParser.InsertContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
 
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
@@ -267,7 +282,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new InsertStmt(
-                new InsertTarget(targetTableName, null),
+                new InsertTarget(targetTableName, partitionNames),
                 context.label == null ? null : context.label.getText(),
                 targetColumnNames,
                 queryStatement,

@@ -12,43 +12,37 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                                    #statementDefault
-    | explainDesc queryStatement                                                        #explain
-    | explainDesc? INSERT INTO qualifiedName
+    : queryStatement                                                                        #statementDefault
+    | explainDesc queryStatement                                                            #explain
+    | explainDesc? INSERT INTO qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
-        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
-        AS queryStatement                                                               #createTableAsSelect
-    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
-    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
-    | USE schema=identifier                                                             #use
+        AS queryStatement                                                                   #createTableAsSelect
+    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
+    | USE schema=identifier                                                                 #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+        ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                               #createView
+        comment? AS queryStatement                                                          #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        AS queryStatement                                                               #alterView
-    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
-    | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
-    | alterSystem DROP BACKEND clusters                                                   #dropBackend
-    | alterSystem ADD FREE? BACKEND (TO clusterName)? clusters                                                   #addBackend
-    | alterSystem DROP FOLLOWER cluster                                                   #dropFollower
-    | alterSystem ADD FOLLOWER cluster                                                   #addFollower
-    | alterSystem DROP OBSERVER cluster                                                   #dropObserver
-    | alterSystem ADD OBSERVER cluster                                                   #addObserver
+        AS queryStatement                                                                   #alterView
+    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
+    | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     ;
 
 explainDesc
     : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
     ;
-
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
@@ -534,12 +528,12 @@ number
     ;
 
 nonReserved
-    : AVG
+    : AVG | ADMIN
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT | FN
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
     | GLOBAL
     | HASH | HOUR
     | INTERVAL
@@ -555,22 +549,4 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
-    ;
-
-alterSystem
-    : ALTER SYSTEM
-    ;
-
-cluster
-    : SINGLE_QUOTED_TEXT
-    | DOUBLE_QUOTED_TEXT
-    ;
-
-clusters
-    : cluster (',' cluster)*
-    ;
-
-clusterName
-    : SINGLE_QUOTED_TEXT
-    | DOUBLE_QUOTED_TEXT
     ;

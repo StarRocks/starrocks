@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
@@ -96,6 +97,12 @@ public class Analyzer {
         @Override
         public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
+            AdminSetStmtAnalyzer.analyze(adminSetConfigStmt, session);
             return null;
         }
 

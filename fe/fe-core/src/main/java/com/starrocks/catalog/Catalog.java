@@ -4769,7 +4769,7 @@ public class Catalog {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");

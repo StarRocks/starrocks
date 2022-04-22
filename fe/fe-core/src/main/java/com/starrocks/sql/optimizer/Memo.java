@@ -199,9 +199,11 @@ public class Memo {
                 groupExpression.setUnused(true);
                 GroupExpression existGroupExpression = groupExpressions.get(groupExpression);
                 if (!needMerge(groupExpression.getGroup(), existGroupExpression.getGroup())) {
-                    // groupExpression and existGroupExpression are in the same group， use existGroupExpression to
+                    // groupExpression and existGroupExpression are in the same group，use existGroupExpression to
                     // replace the bestExpression in the group
                     groupExpression.getGroup().replaceBestExpression(groupExpression, existGroupExpression);
+                    // existingGroupExpression merge the state of groupExpression
+                    existGroupExpression.mergeGroupExpression(groupExpression);
                 }
             }
         }
