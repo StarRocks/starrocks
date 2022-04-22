@@ -226,6 +226,13 @@ Status ColumnChunkReader::_try_load_dictionary(int chunk_size) {
     RETURN_IF_ERROR(decoder->set_dict(chunk_size, header.dictionary_page_header.num_values, dict_decoder.get()));
     _decoders[static_cast<int>(tparquet::Encoding::RLE_DICTIONARY)] = std::move(decoder);
 
+    // initialize rle_decoder
+    std::unique_ptr<Decoder> rle_decoder;
+    RETURN_IF_ERROR(EncodingInfo::get(metadata().type, tparquet::Encoding::RLE, &code_info));
+    RETURN_IF_ERROR(code_info->create_decoder(&rle_decoder));
+    RETURN_IF_ERROR(rle_decoder->set_dict(chunk_size, header.dictionary_page_header.num_values, dict_decoder.get()));
+    _decoders[static_cast<int>(tparquet::Encoding::RLE)] = std::move(rle_decoder);
+
     RETURN_IF_ERROR(_parse_page_header());
     return Status::OK();
 }

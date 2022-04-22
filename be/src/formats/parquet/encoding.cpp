@@ -8,6 +8,7 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/types.h"
 #include "gutil/strings/substitute.h"
+#include "exec/parquet/rle_encoding.h"
 
 namespace starrocks::parquet {
 
@@ -40,6 +41,18 @@ struct TypeEncodingTraits<type, tparquet::Encoding::RLE_DICTIONARY> {
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
         encoder->reset(new DictEncoder<typename PhysicalTypeTraits<type>::CppType>());
+        return Status::OK();
+    }
+};
+
+template <tparquet::Type::type type>
+struct TypeEncodingTraits<type, tparquet::Encoding::RLE> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        decoder->reset(new RleDecoder<typename PhysicalTypeTraits<type>::CppType>());
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        encoder->reset(new RleEncoder<typename PhysicalTypeTraits<type>::CppType>());
         return Status::OK();
     }
 };
@@ -92,6 +105,9 @@ private:
 EncodingInfoResolver::EncodingInfoResolver() {
     // BOOL
     _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
+    // BOOL support rle encode
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE>();
+
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();
