@@ -160,15 +160,13 @@ public class TabletTest {
         Tablet tablet = new Tablet();
         // version incomplete replica, but the be is dropped.
         Replica versionIncompleteReplica = new Replica(1L, 10001L,
-                8L, -1L, -1, 10L, 10L, ReplicaState.NORMAL,
-                9L, -1L, 8L, -1L);
+                8L, -1, 10L, 10L, ReplicaState.NORMAL, 9L, 8L);
         // normal replica
         Replica normalReplica = new Replica(2L, 10002L,
-                9L, -1L, -1, 10L, 10L, ReplicaState.NORMAL,
-                -1L, -1L, 9L, -1L);
+                9L, -1, 10L, 10L, ReplicaState.NORMAL, -1L, 9L);
         tablet.addReplica(versionIncompleteReplica, true);
         tablet.addReplica(normalReplica, true);
         Assert.assertEquals(Tablet.TabletStatus.COLOCATE_REDUNDANT,
-                tablet.getColocateHealthStatus(9,-1, 1, Sets.newHashSet(10002L)));
+                tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
     }
 }
