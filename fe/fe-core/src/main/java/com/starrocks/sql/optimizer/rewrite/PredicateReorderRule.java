@@ -2,16 +2,22 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.starrocks.common.FeConstants;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Predicate reorder
@@ -20,9 +26,15 @@ import java.util.List;
 public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
     public static final PredicateReorderVisitor handler = new PredicateReorderVisitor();
 
+    private final SessionVariable sessionVariable;
+
+    public PredicateReorderRule(SessionVariable sessionVariable) {
+        this.sessionVariable = sessionVariable;
+    }
+
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        if (FeConstants.OPEN_PREDICATE_REORDER) {
+        if (sessionVariable.isEnablePredicateReorder()) {
             root.getOp().accept(handler, root, null);
         }
         return root;
@@ -45,8 +57,32 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
                 return optExpression;
             }
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
+            // process statistics,
+            List<OptExpression> childOptExpressions = optExpression.getInputs();
+            Statistics.Builder statisticsBuilder = Statistics.builder();
+            if (childOptExpressions != null && childOptExpressions.size() > 0) {
+                childOptExpressions.forEach(child -> {
+                    statisticsBuilder.addColumnStatistics(child.getStatistics().getColumnStatistics());
+                });
+            } else {
+                if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+                    PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
+                    Table table = olapScanOperator.getTable();
+                    Set<ColumnRefOperator> columnRefOperators =
+                            optExpression.getStatistics().getColumnStatistics().keySet();
+                    for (ColumnRefOperator column : columnRefOperators) {
+                        ColumnStatistic columnStatistic = Catalog.getCurrentStatisticStorage().
+                                getColumnStatistic(table, column.getName());
+                        statisticsBuilder.addColumnStatistic(column, columnStatistic);
+                    }
+                } else {
+                    //other scan no support
+                    return optExpression;
+                }
+            }
+            Statistics statistics = statisticsBuilder.build();
             //reorder predicate
-            optExpression.getOp().setPredicate(predicateReorder(compoundPredicateOperator, optExpression.getStatistics()));
+            optExpression.getOp().setPredicate(predicateReorder(compoundPredicateOperator, statistics));
             return optExpression;
         }
 
@@ -61,7 +97,8 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
                 conjunctiveScalarOperators.sort((o1, o2) -> {
                     if (selectivityEstimator.estimate(o1, statistics) > selectivityEstimator.estimate(o2, statistics)) {
                         return 1;
-                    } else if (selectivityEstimator.estimate(o1, statistics) < selectivityEstimator.estimate(o2, statistics)) {
+                    } else if (selectivityEstimator.estimate(o1, statistics) <
+                            selectivityEstimator.estimate(o2, statistics)) {
                         return -1;
                     } else {
                         return 0;

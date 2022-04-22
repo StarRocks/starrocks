@@ -12,7 +12,6 @@ public class TPCHPlanTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        FeConstants.OPEN_PREDICATE_REORDER = false;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
     }
 

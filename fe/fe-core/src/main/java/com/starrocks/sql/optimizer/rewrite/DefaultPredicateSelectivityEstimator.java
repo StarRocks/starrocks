@@ -35,7 +35,7 @@ public class DefaultPredicateSelectivityEstimator {
      * AND, OR, NOT.
      *
      * @param predicate  the predicate which need to estimate
-     * @param statistics the statistics which in OptExpression
+     * @param statistics the statistics which collected
      * @return an optional double value to get the percentage of predicate selectivity
      * It returns 1.0 if the condition is not supported.
      */
@@ -55,7 +55,8 @@ public class DefaultPredicateSelectivityEstimator {
         @Override
         public Optional<Double> visit(ScalarOperator scalarOperator, Void context) {
             //follow StatisticsCalculator line 1242 logic default
-            Statistics estimatedStatistics = PredicateStatisticsCalculator.statisticsCalculate(scalarOperator, statistics);
+            Statistics estimatedStatistics =
+                    PredicateStatisticsCalculator.statisticsCalculate(scalarOperator, statistics);
             return Optional.of(estimatedStatistics.getOutputRowCount() / statistics.getOutputRowCount());
         }
 
@@ -67,6 +68,13 @@ public class DefaultPredicateSelectivityEstimator {
             ScalarOperator rightChild = predicate.getChild(1);
             ColumnStatistic leftChildStatistic = ExpressionStatisticCalculator.calculate(leftChild, statistics);
             ColumnStatistic rightChildStatistic = ExpressionStatisticCalculator.calculate(rightChild, statistics);
+            if (leftChildStatistic.hasNaNValue() || rightChildStatistic.hasNaNValue()) {
+                // because is not in range
+                return Optional.of(SELECTIVITY_MIN);
+            } else if (leftChildStatistic.isUnknown() || rightChildStatistic.isUnknown()) {
+                //because can't check
+                return Optional.of(SELECTIVITY_MAX);
+            }
             if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
                 return computeEquals(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.NE)) {
@@ -129,14 +137,16 @@ public class DefaultPredicateSelectivityEstimator {
          */
         private Optional<Double> computeEquals(BinaryPredicateOperator.BinaryType binaryType,
                                                ScalarOperator leftChild, ScalarOperator rightChild,
-                                               ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
+                                               ColumnStatistic leftChildStatistic,
+                                               ColumnStatistic rightChildStatistic) {
             if (rightChild.isConstantRef()) {
                 // can optimize if we have histogram
                 if (leftChild.getType().isNumericType()
                         || leftChild.getType().isDateType()
                         || leftChild.getType().isBoolean()) {
                     double doubleValue = ConstantOperatorUtils.getDoubleValue(((ConstantOperator) rightChild));
-                    if (doubleValue < leftChildStatistic.getMinValue() || doubleValue > leftChildStatistic.getMaxValue()) {
+                    if (doubleValue < leftChildStatistic.getMinValue() ||
+                            doubleValue > leftChildStatistic.getMaxValue()) {
                         return Optional.of(SELECTIVITY_MIN);
                     } else {
                         if (leftChildStatistic.getDistinctValuesCount() == 0) {
@@ -172,7 +182,8 @@ public class DefaultPredicateSelectivityEstimator {
          */
         private Optional<Double> computeLessOrGreat(BinaryPredicateOperator.BinaryType binaryType,
                                                     ScalarOperator leftChild, ScalarOperator rightChild,
-                                                    ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
+                                                    ColumnStatistic leftChildStatistic,
+                                                    ColumnStatistic rightChildStatistic) {
             if (rightChild.isConstantRef()) {
                 if (leftChild.getType().isNumericType()
                         || leftChild.getType().isDateType()
@@ -203,13 +214,17 @@ public class DefaultPredicateSelectivityEstimator {
          */
         private boolean isLessOrGreatValueNoOverlap(double doubleValue, ColumnStatistic columnStatistic,
                                                     BinaryPredicateOperator.BinaryType binaryType) {
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) && doubleValue <= columnStatistic.getMinValue()) {
+            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) &&
+                    doubleValue <= columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) && doubleValue < columnStatistic.getMinValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) &&
+                    doubleValue < columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) && doubleValue >= columnStatistic.getMaxValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) &&
+                    doubleValue >= columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) && doubleValue > columnStatistic.getMaxValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) &&
+                    doubleValue > columnStatistic.getMaxValue()) {
                 return true;
             } else {
                 return false;
@@ -227,13 +242,17 @@ public class DefaultPredicateSelectivityEstimator {
         private boolean isLessOrGreatValueCompleteOverlap(double doubleValue,
                                                           ColumnStatistic columnStatistic,
                                                           BinaryPredicateOperator.BinaryType binaryType) {
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) && doubleValue > columnStatistic.getMaxValue()) {
+            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) &&
+                    doubleValue > columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) && doubleValue >= columnStatistic.getMaxValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) &&
+                    doubleValue >= columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) && doubleValue < columnStatistic.getMinValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) &&
+                    doubleValue < columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) && doubleValue <= columnStatistic.getMinValue()) {
+            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) &&
+                    doubleValue <= columnStatistic.getMinValue()) {
                 return true;
             } else {
                 return false;
@@ -306,7 +325,8 @@ public class DefaultPredicateSelectivityEstimator {
             double maxRight = rightChildStatistic.getMaxValue();
             double distinctCountLeft = leftChildStatistic.getDistinctValuesCount();
             double distinctCountRight = rightChildStatistic.getDistinctValuesCount();
-            boolean allNotNull = (leftChildStatistic.getNullsFraction() == 0) && (rightChildStatistic.getNullsFraction() == 0);
+            boolean allNotNull =
+                    (leftChildStatistic.getNullsFraction() == 0) && (rightChildStatistic.getNullsFraction() == 0);
             // check overlap
             // if no overlap return SELECTIVITY_MIN
             // else if overlap return SELECTIVITY_MAX

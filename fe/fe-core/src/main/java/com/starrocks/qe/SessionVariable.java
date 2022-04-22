@@ -137,6 +137,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
+    // open predicate reorder
+    public static final String ENABLE_PREDICATE_REORDER = "enable_predicate_reorder";
+
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
@@ -395,6 +398,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
+    private boolean enablePredicateReorder = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = false;
@@ -688,6 +694,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void enableJoinReorder() {
         this.disableJoinReorder = false;
+    }
+
+    public boolean isEnablePredicateReorder() {
+        return enablePredicateReorder;
+    }
+
+    public void disablePredicateReorder() {
+        this.enablePredicateReorder = false;
+    }
+
+    public void enablePredicateReorder() {
+        this.enablePredicateReorder = true;
     }
 
     public boolean isAbleFilterUnusedColumnsInScanStage() {

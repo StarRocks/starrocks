@@ -12,7 +12,6 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        FeConstants.OPEN_PREDICATE_REORDER = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
     }
 

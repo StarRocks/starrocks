@@ -6,7 +6,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -15,19 +14,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.List;
 
 public class ExpressionTest extends PlanTestBase {
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        PlanTestBase.beforeClass();
-        FeConstants.OPEN_PREDICATE_REORDER = false;
-    }
 
     @Test
     public void testExpression() throws Exception {
