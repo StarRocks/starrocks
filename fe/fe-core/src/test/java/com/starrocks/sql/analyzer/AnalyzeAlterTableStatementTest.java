@@ -18,12 +18,14 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
+    private static AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor clauseAnalyzerVisitor;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+        clauseAnalyzerVisitor = new AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor();
     }
 
     @Test
@@ -38,7 +40,7 @@ public class AnalyzeAlterTableStatementTest {
     @Test
     public void testTableRenameClause() {
         TableRenameClause clause = new TableRenameClause("newTableName");
-        AlterTableStatementAnalyzer.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(clause, connectContext);
         Assert.assertEquals("RENAME newTableName",
                 clause.toSql());
     }
@@ -46,13 +48,13 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testEmptyNewTableName() {
         TableRenameClause clause = new TableRenameClause("");
-        AlterTableStatementAnalyzer.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(clause, connectContext);
     }
 
     @Test(expected = SemanticException.class)
     public void testIllegalNewTableName() {
         TableRenameClause clause = new TableRenameClause("_newName");
-        AlterTableStatementAnalyzer.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(clause, connectContext);
     }
 
     @Test(expected = SemanticException.class)

@@ -31,15 +31,14 @@ public class AlterTableStatementAnalyzer {
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
+        AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
         for (AlterClause alterClause : alterClauseList) {
             if (StatementPlanner.isNewAlterTableClause(alterClause)) {
-                AlterTableStatementAnalyzer.analyze(alterClause, context);
+                alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            } else {
+                throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
             }
         }
-    }
-
-    public static void analyze(AlterClause alterTableClause, ConnectContext session) {
-        new AlterTableClauseAnalyzerVisitor().analyze(alterTableClause, session);
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {

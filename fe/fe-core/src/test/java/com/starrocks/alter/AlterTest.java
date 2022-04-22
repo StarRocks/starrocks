@@ -157,7 +157,7 @@ public class AlterTest {
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             Catalog.getCurrentCatalog().alterTable(alterTableStmt);
             if (expectedException) {
@@ -289,6 +289,11 @@ public class AlterTest {
         // add partition when dynamic partition is disable
         stmt = "alter table test.tbl1 add partition p4 values less than('2020-04-10') ('replication_num' = '1')";
         alterTable(stmt, false);
+        //rename table
+        stmt = "alter table test.tbl1 rename newTableName";
+        alterTable(stmt, false);
+        stmt = "alter table test.tbl1 rename _test";
+        alterTable(stmt, true);
     }
 
     // test batch update range partitions' properties
