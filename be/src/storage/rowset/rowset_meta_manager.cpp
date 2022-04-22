@@ -21,6 +21,8 @@
 
 #include "storage/rowset/rowset_meta_manager.h"
 
+#include <fmt/format.h>
+
 #include <string>
 #include <vector>
 
@@ -39,9 +41,8 @@ bool RowsetMetaManager::check_rowset_meta(KVStore* meta, const TabletUid& tablet
     return meta->get(META_COLUMN_FAMILY_INDEX, key, &value).ok();
 }
 
-Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
-                               const RowsetMetaPB& rowset_meta_pb) {
-    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
+Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb) {
+    std::string key = fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_meta_pb.rowset_id_v2());
     std::string value;
     bool ret = rowset_meta_pb.SerializeToString(&value);
     if (!ret) {
@@ -62,7 +63,7 @@ Status RowsetMetaManager::remove(KVStore* meta, const TabletUid& tablet_uid, con
 }
 
 string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id) {
-    return ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
+    return fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_id.to_string());
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
