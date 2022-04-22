@@ -202,7 +202,8 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         std::lock_guard l1(_partitions_ids_lock);
         for (auto& [_, delta_writer] : _delta_writers) {
             if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
-                delta_writer->abort();
+                // no data load, abort txn without printing log
+                delta_writer->abort(false);
             } else {
                 auto cb = new WriteCallback(context.get());
                 delta_writer->commit(cb);

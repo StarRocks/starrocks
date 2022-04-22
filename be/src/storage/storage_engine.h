@@ -190,6 +190,9 @@ public:
     // public for ut
     size_t compaction_check_one_round();
 
+    // public for ut
+    void clean_unused_txns();
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -205,8 +208,6 @@ private:
     Status _judge_and_update_effective_cluster_id(int32_t cluster_id);
 
     bool _delete_tablets_on_unused_root_path();
-
-    void _clean_unused_txns();
 
     void _clean_unused_rowset_metas();
 

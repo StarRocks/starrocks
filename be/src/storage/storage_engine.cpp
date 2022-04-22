@@ -772,7 +772,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     (void)_tablet_manager->start_trash_sweep();
 
     // clean rubbish transactions
-    _clean_unused_txns();
+    clean_unused_txns();
 
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
@@ -846,7 +846,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
     }
 }
 
-void StorageEngine::_clean_unused_txns() {
+void StorageEngine::clean_unused_txns() {
     std::set<TabletInfo> tablet_infos;
     _txn_manager->get_all_related_tablets(&tablet_infos);
     for (auto& tablet_info : tablet_infos) {

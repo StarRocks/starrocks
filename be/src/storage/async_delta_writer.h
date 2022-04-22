@@ -47,7 +47,7 @@ public:
     void commit(AsyncDeltaWriterCallback* cb);
 
     // [thread-safe and wait-free]
-    void abort();
+    void abort(bool with_log = true);
 
     int64_t partition_id() const { return _writer->partition_id(); }
 
