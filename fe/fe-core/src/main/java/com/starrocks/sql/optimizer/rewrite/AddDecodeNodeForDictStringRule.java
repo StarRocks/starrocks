@@ -833,12 +833,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Boolean visitCastOperator(CastOperator operator, Void context) {
-            return operator.getChild(0).accept(this, null);
+            return false;
         }
 
         @Override
         public Boolean visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-            return operator.getChildren().stream().allMatch(scalarOperator -> scalarOperator.accept(this, null));
+            return false;
         }
 
         @Override
