@@ -113,7 +113,7 @@ public class ColumnDef {
     
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
-            this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+            this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef, comment);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
