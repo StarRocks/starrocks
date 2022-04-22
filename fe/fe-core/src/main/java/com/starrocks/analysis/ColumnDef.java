@@ -202,9 +202,15 @@ public class ColumnDef {
         // When string type length is not assigned, it need to be assigned to 1.
         if (typeDef.getType().isScalarType()) {
             final ScalarType targetType = (ScalarType) typeDef.getType();
-            if (targetType.getPrimitiveType().isStringType()
-                    && !targetType.isAssignedStrLenInColDefinition()) {
-                targetType.setLength(1);
+            if (targetType.getPrimitiveType().isStringType()) {
+                if (!targetType.isAssignedStrLenInColDefinition()) {
+                    targetType.setLength(1);
+                }
+            }else{
+                // if character setting is not for varchar type, Display unsupported information to the user
+                if (charsetName!=null){
+                    throw new AnalysisException("character setting is only supported for type varchar in column definition");
+                }
             }
         }
 
