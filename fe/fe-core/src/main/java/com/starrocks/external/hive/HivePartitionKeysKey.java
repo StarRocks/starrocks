@@ -24,14 +24,6 @@ public class HivePartitionKeysKey {
         this.tableType = tableType;
     }
 
-    public HivePartitionKeysKey(String databaseName, String tableName, List<Column> partitionColumns) {
-        this(databaseName, tableName, TableType.HIVE, partitionColumns);
-    }
-
-    public static HivePartitionKeysKey gen(String databaseName, String tableName, List<Column> partitionColumns) {
-        return new HivePartitionKeysKey(databaseName, tableName, partitionColumns);
-    }
-
     public String getDatabaseName() {
         return databaseName;
     }

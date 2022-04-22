@@ -27,16 +27,6 @@ public class HiveTableColumnsKey {
         this.tableType = tableType;
     }
 
-    public HiveTableColumnsKey(String databaseName, String tableName, List<Column> partitionColumns,
-                               List<String> columnNames) {
-        this(databaseName, tableName, partitionColumns, columnNames, TableType.HIVE);
-    }
-
-    public static HiveTableColumnsKey gen(String databaseName, String tableName, List<Column> partitionColumns,
-                                          List<String> columnNames) {
-        return new HiveTableColumnsKey(databaseName, tableName, partitionColumns, columnNames);
-    }
-
     public String getDatabaseName() {
         return databaseName;
     }
