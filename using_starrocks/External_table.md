@@ -529,7 +529,7 @@ insert into external_t select * from other_table;
 
 ## Apache Iceberg外表
 
-StarRocks支持通过外表的方式查询Apache Iceberg数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在StarRock创建外表，查询Apache Iceberg中的数据。
+StarRocks支持通过外表的方式查询Apache Iceberg数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在StarRocks创建外表，查询Apache Iceberg中的数据。
 
 ### 前提条件
 
