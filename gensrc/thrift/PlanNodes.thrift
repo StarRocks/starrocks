@@ -842,6 +842,7 @@ struct TPlanNode {
   32: optional TAssertNumRowsNode assert_num_rows_node
   33: optional TIntersectNode intersect_node
   34: optional TExceptNode except_node
+  35: optional TMergeJoinNode merge_join_node
 
   // For vector query engine
   // 50 is reserved, please don't use
