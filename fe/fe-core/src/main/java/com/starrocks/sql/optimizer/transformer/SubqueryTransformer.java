@@ -285,9 +285,6 @@ public class SubqueryTransformer {
 
             ColumnRefOperator outputPredicateRef =
                     columnRefFactory.create(subquery, subquery.getType(), subquery.isNullable());
-            if (subqueryOutput.isColumnRef()) {
-                subqueryOutput.<ColumnRefOperator>cast().setNullable(subquery.isNullable());
-            }
             context.builder.getExpressionMapping().put(subquery, outputPredicateRef);
 
             // The Apply's output column is the subquery's result

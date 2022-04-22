@@ -25,6 +25,32 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testHavingNullableSubQuery() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT t1a, count(*)\n" +
+                "FROM test_all_type_not_null\n" +
+                "GROUP BY t1a\n" +
+                "HAVING ANY_VALUE(t1a <= (\n" +
+                "\tSELECT t1a\n" +
+                "\tFROM test_all_type_not_null\n" +
+                "\tWHERE t1a = 'not exists'\n" +
+                "));";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], any_value[([22: expr, BOOLEAN, true]); args: BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
+                "  |  group by: [1: t1a, VARCHAR, false]\n" +
+                "  |  having: [24: any_value, BOOLEAN, true]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                "  |  22 <-> [1: t1a, VARCHAR, false] <= [11: t1a, VARCHAR, true]\n" +
+                "  |  cardinality: 1");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testCountDistinctBitmapHll() throws Exception {
         String sql = "select count(distinct v1), count(distinct v2), count(distinct v3), count(distinct v4), " +
                 "count(distinct b1), count(distinct b2), count(distinct b3), count(distinct b4) from test_object;";
