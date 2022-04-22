@@ -12,26 +12,26 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                                    #statementDefault
-    | explainDesc queryStatement                                                        #explain
-    | explainDesc? INSERT INTO qualifiedName
+    : queryStatement                                                                        #statementDefault
+    | explainDesc queryStatement                                                            #explain
+    | explainDesc? INSERT INTO qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
-        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
-        AS queryStatement                                                               #createTableAsSelect
-    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
-    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?  #delete
-    | USE schema=identifier                                                             #use
+        AS queryStatement                                                                   #createTableAsSelect
+    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
+    | USE schema=identifier                                                                 #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+        ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                               #createView
+        comment? AS queryStatement                                                          #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
@@ -44,8 +44,6 @@ statement
 explainDesc
     : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
     ;
-
-
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
