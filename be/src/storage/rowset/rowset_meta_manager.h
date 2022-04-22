@@ -35,8 +35,7 @@ class RowsetMetaManager {
 public:
     static bool check_rowset_meta(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
 
-    static Status save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
-                       const RowsetMetaPB& rowset_meta_pb);
+    static Status save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb);
 
     static Status flush(KVStore* meta);
 
