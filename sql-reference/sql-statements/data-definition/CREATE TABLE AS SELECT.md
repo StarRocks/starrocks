@@ -27,7 +27,7 @@ AS SELECT query
 | COMMENT          | 表注释。                                                     |
 | partition_desc   | 分区方式。更多说明，请参见 [partition_desc](CREATE%20TABLE.md/#syntax)。如果不填写，则默认为无分区。 |
 | distribution_desc | 分桶方式。更多说明，请参见 [distribution_desc](CREATE%20TABLE.md/#syntax)。如果不填写，则默认分桶键为CBO统计信息中最高基数的列，分桶数量为10。如果CBO中没有相关统计信息，则默认分桶键为第一列。 |
-| properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](CREATE%20TABLE.md/#syntax)。目前CTA仅支持创建ENGINE类型为OLAP的表。 |
+| properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](CREATE%20TABLE.md/#syntax)。目前CTAS仅支持创建ENGINE类型为OLAP的表。 |
 
 ### 查询部分
 
@@ -85,7 +85,7 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-示例四：根据三张原表 lineorder、customer、supplier 和 part，创建一个新表 lineorder_flat，并且调整分区和分桶方式。
+示例四：根据四张原表 lineorder、customer、supplier 和 part，创建一个新表 lineorder_flat，并且调整分区和分桶方式。
 
 ```SQL
 CREATE TABLE lineorder_flat
