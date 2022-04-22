@@ -193,16 +193,12 @@ public class HiveRepository {
         metaCache.refreshColumnStats(hmsTable);
     }
 
-    public void clearCache(String resourceName, String dbName, String tableName) {
-        clearCache(resourceName, dbName, tableName, false);
-    }
-
-    public void clearCache(String resourceName, String dbName, String tableName, boolean isHudiTable) {
+    public void clearCache(HiveMetaStoreTableInfo hmsTable) {
         try {
-            HiveMetaCache metaCache = getMetaCache(resourceName);
-            metaCache.clearCache(dbName, tableName, isHudiTable);
+            HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+            metaCache.clearCache(hmsTable);
         } catch (DdlException e) {
-            LOG.warn("clean table {}.{} cache failed.", dbName, tableName,  e);
+            LOG.warn("clean table {}.{} cache failed.", hmsTable.getDb(), hmsTable.getTable(),  e);
         }
     }
 

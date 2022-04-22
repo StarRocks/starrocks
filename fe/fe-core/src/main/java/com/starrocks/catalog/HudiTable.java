@@ -501,8 +501,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop() {
         if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getHiveRepository().
-                    clearCache(this.resourceName, this.db, this.table, true);
+            Catalog.getCurrentCatalog().getHiveRepository().clearCache(hmsTableInfo);
         }
     }
 
