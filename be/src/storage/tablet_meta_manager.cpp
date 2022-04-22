@@ -420,18 +420,17 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
     return store->get_meta()->write_batch(&wb);
 }
 
-Status TabletMetaManager::traverse_headers(KVStore* meta,
-                                           std::function<bool(long, long, const std::string&)> const& func) {
+Status TabletMetaManager::walk(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
-        // TODO: avoid converting to std::string
-        std::string value_str(value);
         TTabletId tablet_id;
         TSchemaHash schema_hash;
         if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
             LOG(WARNING) << "invalid tablet_meta key:" << key;
             return true;
         }
-        return func(tablet_id, schema_hash, value_str);
+        return func(tablet_id, schema_hash, value);
     };
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
 }

@@ -75,11 +75,11 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     ASSERT_EQ(OLAP_FIELD_TYPE_INT, load_meta->tablet_schema().column(0).type());
 
     load_meta.reset(new TabletMeta());
-    auto visit_func = [&](long tablet_id, long schema_hash, const std::string& meta) -> bool {
+    auto visit_func = [&](long tablet_id, long schema_hash, std::string_view meta) -> bool {
         CHECK(load_meta->deserialize(meta).ok());
         return true;
     };
-    ASSERT_TRUE(TabletMetaManager::traverse_headers(_data_dir->get_meta(), visit_func).ok());
+    ASSERT_TRUE(TabletMetaManager::walk(_data_dir->get_meta(), visit_func).ok());
     ASSERT_EQ(1, load_meta->table_id());
     ASSERT_EQ(2, load_meta->tablet_id());
     ASSERT_EQ(3, load_meta->schema_hash());

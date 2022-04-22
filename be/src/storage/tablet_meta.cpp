@@ -413,9 +413,9 @@ Status TabletMeta::serialize(string* meta_binary) {
     return Status::OK();
 }
 
-Status TabletMeta::deserialize(const string& meta_binary) {
+Status TabletMeta::deserialize(std::string_view data) {
     TabletMetaPB tablet_meta_pb;
-    if (!tablet_meta_pb.ParseFromString(meta_binary)) {
+    if (!tablet_meta_pb.ParseFromArray(data.data(), data.size())) {
         LOG(WARNING) << "parse tablet meta failed";
         return Status::InternalError("parse TabletMetaPB from string failed");
     }
