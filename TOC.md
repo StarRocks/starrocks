@@ -272,7 +272,6 @@
         + [JSON 类型转换](/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)
       + [JSON 运算符](/sql-reference/sql-functions/json-functions/json-operators.md)
     + 聚合函数
-      + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
       + [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)
