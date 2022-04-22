@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "common/logging.h"
 
 namespace starrocks::vectorized {
