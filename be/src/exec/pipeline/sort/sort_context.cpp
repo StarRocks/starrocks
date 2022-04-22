@@ -45,6 +45,7 @@ void SortContext::_merge_inputs() {
         }
     }
 
+    // TODO: avoid merge into a big chunk
     merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_chunks, &_merged_chunk, require_rows);
 }
 
