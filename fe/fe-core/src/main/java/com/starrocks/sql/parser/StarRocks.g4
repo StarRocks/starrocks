@@ -34,11 +34,11 @@ statement
         comment? AS queryStatement                                                          #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        AS queryStatement                                                               #alterView
-    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                    #dropTable
-    | DROP VIEW (IF EXISTS)? qualifiedName                                              #dropView
-    | ADMIN SET REPLICA STATUS properties                                               #adminSetReplicaStatus
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                        #adminSetConfig
+        AS queryStatement                                                                   #alterView
+    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
+    | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
+    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     ;
 
 explainDesc

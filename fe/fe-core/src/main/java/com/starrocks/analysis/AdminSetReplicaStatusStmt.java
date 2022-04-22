@@ -67,7 +67,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         checkProperties();
     }
 
-    public void checkProperties() throws AnalysisException {
+    private void checkProperties() throws AnalysisException {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String val = entry.getValue();
@@ -97,6 +97,10 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         if (tabletId == -1 || backendId == -1 || status == null) {
             throw new AnalysisException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
         }
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public long getTabletId() {

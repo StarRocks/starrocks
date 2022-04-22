@@ -2,9 +2,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+
+import java.util.Map;
 
 public class AdminSetReplicaStatusStmtAnalyzer {
     public static void analyze(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt, ConnectContext session) {
@@ -20,11 +23,47 @@ public class AdminSetReplicaStatusStmtAnalyzer {
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt,
                                                         ConnectContext session) {
             try {
-                adminSetReplicaStatusStmt.checkProperties();
+                checkProperties(adminSetReplicaStatusStmt);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage(), e);
             }
             return null;
+        }
+
+        private void checkProperties(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt) throws AnalysisException {
+            long tabletId = -1;
+            long backendId = -1;
+            ReplicaStatus status = null;
+            Map<String, String> properties = adminSetReplicaStatusStmt.getProperties();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                String key = entry.getKey();
+                String val = entry.getValue();
+
+                if (key.equalsIgnoreCase("tablet_id")) {
+                    try {
+                        tabletId = Long.valueOf(val);
+                    } catch (NumberFormatException e) {
+                        throw new AnalysisException("Invalid tablet id format: " + val);
+                    }
+                } else if (key.equalsIgnoreCase("backend_id")) {
+                    try {
+                        backendId = Long.valueOf(val);
+                    } catch (NumberFormatException e) {
+                        throw new AnalysisException("Invalid backend id format: " + val);
+                    }
+                } else if (key.equalsIgnoreCase("status")) {
+                    status = ReplicaStatus.valueOf(val.toUpperCase());
+                    if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
+                        throw new AnalysisException("Do not support setting replica status as " + val);
+                    }
+                } else {
+                    throw new AnalysisException("Unknown property: " + key);
+                }
+            }
+
+            if (tabletId == -1 || backendId == -1 || status == null) {
+                throw new AnalysisException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
+            }
         }
     }
 }
