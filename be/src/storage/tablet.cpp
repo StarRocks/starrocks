@@ -280,7 +280,7 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 
 // snapshot manager may call this api to check if version exists, so that
 // the version maybe not exist
-const RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
+RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
     auto iter = _rs_version_map.find(version);
     if (iter == _rs_version_map.end()) {
         VLOG(3) << "no rowset for version:" << version << ", tablet: " << full_name();
@@ -292,7 +292,7 @@ const RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) cons
 // This function only be called by SnapshotManager to perform incremental clone.
 // It will be called under protected of _meta_lock(SnapshotManager will fetch it manually),
 // so it is no need to lock here.
-const RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const {
+RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const {
     if (_updates != nullptr) {
         DCHECK_EQ(version.first, version.second);
         return _updates->get_delta_rowset(version.second);
@@ -306,7 +306,7 @@ const RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) 
 }
 
 // Already under _meta_lock
-const RowsetSharedPtr Tablet::rowset_with_max_version() const {
+RowsetSharedPtr Tablet::rowset_with_max_version() const {
     Version max_version = _tablet_meta->max_version();
     if (max_version.first == -1) {
         return nullptr;
@@ -431,7 +431,7 @@ void Tablet::delete_expired_stale_rowset() {
         return;
     }
 
-    const RowsetSharedPtr lastest_delta = rowset_with_max_version();
+    RowsetSharedPtr lastest_delta = rowset_with_max_version();
     if (lastest_delta == nullptr) {
         LOG(WARNING) << "lastest_delta is null " << tablet_id();
         return;
