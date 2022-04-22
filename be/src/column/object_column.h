@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "common/object_pool.h"
 #include "util/bitmap_value.h"
 
