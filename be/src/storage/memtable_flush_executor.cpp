@@ -24,7 +24,7 @@
 #include <memory>
 
 #include "runtime/current_thread.h"
-#include "storage/vectorized/memtable.h"
+#include "storage/memtable.h"
 
 namespace starrocks {
 

@@ -22,8 +22,8 @@
 #include "storage/rowset/default_value_column_iterator.h"
 
 #include "storage/column_block.h"
+#include "storage/range.h"
 #include "storage/types.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 

@@ -394,7 +394,7 @@ void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, con
                          << exec_state->fragment_instance_id();
         }
     }
-    // NOTE: 'exec_state' is desconstructed here without lock
+    // NOTE: 'exec_state' is deconstructed here without lock
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
@@ -479,6 +479,8 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
                                          const std::shared_ptr<const vectorized::JoinRuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
+    _exec_env->add_rf_event(
+            {params.query_id(), params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
     size_t size = params.probe_finst_ids_size();
     for (size_t i = 0; i < size; i++) {
         TUniqueId frag_inst_id;

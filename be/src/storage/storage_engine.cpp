@@ -32,11 +32,12 @@
 #include <set>
 
 #include "common/status.h"
+#include "cumulative_compaction.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
+#include "storage/base_compaction.h"
 #include "storage/data_dir.h"
-#include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -44,11 +45,11 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/base_compaction.h"
-#include "storage/vectorized/cumulative_compaction.h"
 #include "util/file_utils.h"
+#include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
+#include "util/stopwatch.hpp"
 #include "util/thread.h"
 #include "util/time.h"
 #include "util/trace.h"
@@ -109,6 +110,25 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            if (config::manual_compact_before_data_dir_load) {
+                uint64_t live_sst_files_size_before = 0;
+                if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                }
+                Status s = data_dir->get_meta()->compact();
+                if (!s.ok()) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
+                } else {
+                    uint64_t live_sst_files_size_after = 0;
+                    if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+                        LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                    }
+                    LOG(INFO) << "data dir " << data_dir->path() << " manual compact meta successfully, "
+                              << "live_sst_files_size_before: " << live_sst_files_size_before
+                              << " live_sst_files_size_after: " << live_sst_files_size_after
+                              << data_dir->get_meta()->get_stats();
+                }
+            }
             auto res = data_dir->load();
             if (!res.ok()) {
                 LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
@@ -140,6 +160,7 @@ Status StorageEngine::_open() {
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
     auto dirs = get_stores<false>();
+
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
@@ -502,6 +523,11 @@ void StorageEngine::stop() {
 
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();
+
+    _checker_cv.notify_all();
+    if (_compaction_checker_thread.joinable()) {
+        _compaction_checker_thread.join();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -541,6 +567,47 @@ void StorageEngine::_start_clean_fd_cache() {
     VLOG(10) << "Cleaning file descriptor cache";
     _file_cache->prune();
     VLOG(10) << "Cleaned file descriptor cache";
+}
+
+void StorageEngine::compaction_check() {
+    int checker_one_round_sleep_time_s = 1800;
+    while (!bg_worker_stopped()) {
+        MonotonicStopWatch stop_watch;
+        stop_watch.start();
+        LOG(INFO) << "start to check compaction";
+        size_t num = compaction_check_one_round();
+        stop_watch.stop();
+        LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
+                  << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
+        std::unique_lock<std::mutex> lk(_checker_mutex);
+        _checker_cv.wait_for(lk, std::chrono::seconds(checker_one_round_sleep_time_s),
+                             [this] { return bg_worker_stopped(); });
+    }
+}
+
+// Base compaction may be started by time(once every day now)
+// Compaction checker will check whether to schedule base compaction for tablets
+size_t StorageEngine::compaction_check_one_round() {
+    size_t batch_size = 1000;
+    int batch_sleep_time_ms = 1000;
+    std::vector<TabletSharedPtr> tablets;
+    tablets.reserve(batch_size);
+    size_t tablets_num_checked = 0;
+    while (!bg_worker_stopped()) {
+        bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
+        for (auto& tablet : tablets) {
+            _compaction_manager->update_tablet(tablet, true, false);
+        }
+        tablets_num_checked += tablets.size();
+        tablets.clear();
+        if (finished) {
+            break;
+        }
+        std::unique_lock<std::mutex> lk(_checker_mutex);
+        _checker_cv.wait_for(lk, std::chrono::milliseconds(batch_sleep_time_ms),
+                             [this] { return bg_worker_stopped(); });
+    }
+    return tablets_num_checked;
 }
 
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
@@ -714,7 +781,35 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
+    _do_manual_compact();
+
     return res;
+}
+
+void StorageEngine::_do_manual_compact() {
+    auto data_dirs = get_stores();
+    for (auto data_dir : data_dirs) {
+        uint64_t live_sst_files_size_before = 0;
+        if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
+            LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+            continue;
+        }
+        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
+            Status s = data_dir->get_meta()->compact();
+            if (!s.ok()) {
+                LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
+            } else {
+                uint64_t live_sst_files_size_after = 0;
+                if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_after)) {
+                    LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
+                }
+                LOG(INFO) << "data dir " << data_dir->path() << " manual compact meta successfully, "
+                          << "live_sst_files_size_before: " << live_sst_files_size_before
+                          << " live_sst_files_size_after: " << live_sst_files_size_after
+                          << data_dir->get_meta()->get_stats();
+            }
+        }
+    }
 }
 
 void StorageEngine::_clean_unused_rowset_metas() {

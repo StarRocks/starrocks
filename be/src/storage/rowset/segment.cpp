@@ -34,16 +34,18 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+#include "segment_chunk_iterator_adapter.h"
+#include "segment_iterator.h"
+#include "segment_options.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
-#include "storage/rowset/vectorized/segment_chunk_iterator_adapter.h"
-#include "storage/rowset/vectorized/segment_iterator.h"
-#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
+#include "storage/vectorized_column_predicate.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -65,8 +67,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::s
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema),
-                                            DeleterWithMemTracker<Segment>(mem_tracker));
+    auto segment = std::shared_ptr<Segment>(
+            new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, mem_tracker),
+            DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
     RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
@@ -164,11 +167,12 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
 }
 
 Segment::Segment(const private_type&, std::shared_ptr<fs::BlockManager> blk_mgr, std::string fname, uint32_t segment_id,
-                 const TabletSchema* tablet_schema)
+                 const TabletSchema* tablet_schema, MemTracker* mem_tracker)
         : _block_mgr(std::move(blk_mgr)),
           _fname(std::move(fname)),
           _tablet_schema(tablet_schema),
-          _segment_id(segment_id) {}
+          _segment_id(segment_id),
+          _mem_tracker(mem_tracker) {}
 
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
@@ -188,7 +192,7 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& sche
                                                   const vectorized::SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates) {
+    for (const auto& pair : read_options.predicates_for_zone_map) {
         ColumnId column_id = pair.first;
         if (_column_readers[column_id] == nullptr || !_column_readers[column_id]->has_zone_map()) {
             continue;
@@ -271,8 +275,7 @@ Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB*
             continue;
         }
 
-        auto res = ColumnReader::create(mem_tracker, _block_mgr, footer->mutable_columns(iter->second), _fname,
-                                        footer->version(), _tablet_schema->is_in_memory());
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
         if (!res.ok()) {
             return res.status();
         }

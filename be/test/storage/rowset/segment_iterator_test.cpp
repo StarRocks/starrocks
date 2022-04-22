@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/rowset/vectorized/segment_iterator.h"
+#include "storage/rowset/segment_iterator.h"
 
 #include <memory>
 #include <string>
@@ -9,16 +9,16 @@
 #include "common/object_pool.h"
 #include "env/env_memory.h"
 #include "gtest/gtest.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/fs/block_manager.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
-#include "storage/rowset/vectorized/segment_options.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/chunk_iterator.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 

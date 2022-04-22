@@ -36,7 +36,7 @@ private:
     std::map<int, std::vector<ExprContext*>> slot_index_to_expr_ctxs; // from conjunct_ctxs
 
 public:
-    static void eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
+    static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
     Status get_column_predicates(PredicateParser* parser, std::vector<std::unique_ptr<ColumnPredicate>>* preds);
 

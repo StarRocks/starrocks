@@ -22,6 +22,7 @@ public class UpdateStmt extends DmlStmt {
         this.wherePredicate = wherePredicate;
     }
 
+    @Override
     public TableName getTableName() {
         return tableName;
     }

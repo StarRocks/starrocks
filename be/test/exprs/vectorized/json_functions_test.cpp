@@ -32,6 +32,29 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
+    Status test_extract_from_object(std::string input, std::string jsonpath, std::string* output) {
+        // reverse for padding.
+        input.reserve(input.size() + simdjson::SIMDJSON_PADDING);
+
+        simdjson::ondemand::parser parser;
+        simdjson::ondemand::document doc;
+        EXPECT_EQ(simdjson::error_code::SUCCESS, parser.iterate(input).get(doc));
+
+        simdjson::ondemand::object obj;
+
+        EXPECT_EQ(simdjson::error_code::SUCCESS, doc.get_object().get(obj));
+
+        std::vector<SimpleJsonPath> path;
+        JsonFunctions::parse_json_paths(jsonpath, &path);
+
+        simdjson::ondemand::value val;
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
+        std::string_view sv = simdjson::to_json_string(val);
+
+        output->assign(sv.data(), sv.size());
+        return Status::OK();
+    }
+
 public:
     TExprNode expr_node;
 };
@@ -421,7 +444,11 @@ TEST_P(JsonExistTestFixture, json_exists) {
     Columns columns{ints, builder.build(true)};
 
     ctx.get()->impl()->set_constant_columns(columns);
-    JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    if (!st.ok()) {
+        ASSERT_FALSE(param_exist);
+        return;
+    }
 
     ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns);
     ASSERT_TRUE(!!result);
@@ -462,7 +489,10 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
-                                           std::make_tuple(R"({ "k1": {}})", "", true)));
+                                           std::make_tuple(R"({ "k1": {}})", "", true),
+
+                                           // error case
+                                           std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
 
 class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
 
@@ -606,6 +636,25 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(std::vector<std::string>{"1"}, "NULL"),
                 std::make_tuple(std::vector<std::string>{R"("a")", "1", "1"}, R"(NULL)"),
                 std::make_tuple(std::vector<std::string>{R"("")"}, R"(NULL)")));
+
+TEST_F(JsonFunctionsTest, extract_from_object_test) {
+    std::string output;
+    Status st;
+
+    st = test_extract_from_object(R"({"data" : 1})", "$.data", &output);
+    EXPECT_OK(st);
+    EXPECT_STREQ(output.data(), "1");
+
+    st = test_extract_from_object(R"({"data" : 1})", "$.dataa", &output);
+    EXPECT_STATUS(Status::NotFound(""), st);
+
+    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output);
+    EXPECT_OK(st);
+    EXPECT_STREQ(output.data(), "2");
+
+    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output);
+    EXPECT_STATUS(Status::NotFound(""), st);
+}
 
 } // namespace vectorized
 } // namespace starrocks

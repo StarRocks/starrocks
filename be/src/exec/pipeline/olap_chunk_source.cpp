@@ -13,22 +13,22 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
+#include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
+#include "storage/predicate_parser.h"
+#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/column_predicate_rewriter.h"
-#include "storage/vectorized/predicate_parser.h"
-#include "storage/vectorized/projection_iterator.h"
 
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-OlapChunkSource::OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node)
-        : ChunkSource(std::move(morsel)),
+OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                                 vectorized::OlapScanNode* scan_node)
+        : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
-          _runtime_profile(op->unique_metrics()) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
@@ -53,7 +53,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
 
-    OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
@@ -271,7 +271,6 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
 
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
-
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
@@ -441,7 +440,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         }
         if (!_not_push_down_conjuncts.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()
@@ -463,6 +462,20 @@ void OlapChunkSource::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 }
 
+int64_t OlapChunkSource::last_spent_cpu_time_ns() {
+    int64_t time_ns = _last_spent_cpu_time_ns;
+    _last_spent_cpu_time_ns += _reader->stats().decompress_ns;
+    _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
+    _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
+    return _last_spent_cpu_time_ns - time_ns;
+}
+
+int64_t OlapChunkSource::last_scan_rows_num() {
+    int64_t temp = _last_scan_rows_num;
+    _last_scan_rows_num = 0;
+    return temp;
+}
+
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
@@ -470,16 +483,10 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
+    _last_scan_rows_num += _reader->stats().raw_rows_read;
+
     _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += chunk->num_rows();
-}
-
-int64_t OlapChunkSource::last_spent_cpu_time_ns() {
-    int64_t time_ns = _last_spent_cpu_time_ns;
-    _last_spent_cpu_time_ns += _reader->stats().decompress_ns;
-    _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
-    _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
-    return _last_spent_cpu_time_ns - time_ns;
 }
 
 void OlapChunkSource::_update_counter() {
@@ -500,6 +507,8 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
+    _last_scan_rows_num += _reader->mutable_stats()->raw_rows_read;
+
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);

@@ -92,7 +92,7 @@ template <typename HashSet>
 size_t ExceptHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs) {
     size_t max_size = 0;
     for (auto expr : exprs) {
-        ColumnPtr key_column = expr->evaluate(chunk.get());
+        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
         max_size += key_column->max_one_element_serialize_size();
         if (!key_column->is_nullable()) {
             max_size += sizeof(bool);
@@ -105,7 +105,7 @@ template <typename HashSet>
 void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
                                                 size_t chunk_size) {
     for (auto expr : exprs) {
-        ColumnPtr key_column = expr->evaluate(chunk.get());
+        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {

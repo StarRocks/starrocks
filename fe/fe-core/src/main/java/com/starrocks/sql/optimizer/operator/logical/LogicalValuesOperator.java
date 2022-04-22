@@ -12,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class LogicalValuesOperator extends LogicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
@@ -58,23 +57,12 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        LogicalValuesOperator that = (LogicalValuesOperator) o;
-        return Objects.equals(columnRefSet, that.columnRefSet) &&
-                Objects.equals(rows, that.rows);
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), columnRefSet, rows);
+        return System.identityHashCode(this);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {

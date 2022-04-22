@@ -2,8 +2,6 @@
 
 #include "exec/parquet/file_reader.h"
 
-#include <thrift/protocol/TDebugProtocol.h>
-
 #include "column/column_helper.h"
 #include "env/env.h"
 #include "exec/exec_node.h"
@@ -13,7 +11,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/strings/substitute.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/memcmp.h"
@@ -38,7 +36,7 @@ Status FileReader::init(const starrocks::vectorized::HdfsFileReaderParam& param)
     // pre process conjuncts and filter file
     _pre_process_conjunct_ctxs();
     if (!_not_exist_column_conjunct_ctxs.empty()) {
-        _filter_file();
+        RETURN_IF_ERROR(_filter_file());
         if (_is_file_filtered) {
             return Status::OK();
         }
@@ -165,7 +163,7 @@ void FileReader::_pre_process_conjunct_ctxs() {
     }
 }
 
-void FileReader::_filter_file() {
+Status FileReader::_filter_file() {
     // init not exist column chunk
     std::unordered_map<SlotId, SlotDescriptor*> slot_by_id;
     for (SlotDescriptor* slot : _param.tuple_desc->slots()) {
@@ -183,11 +181,13 @@ void FileReader::_filter_file() {
     // eval
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        ExecNode::eval_conjuncts(_not_exist_column_conjunct_ctxs, not_exist_column_chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_exist_column_conjunct_ctxs, not_exist_column_chunk.get()));
     }
     if (!not_exist_column_chunk->has_rows()) {
         _is_file_filtered = true;
     }
+
+    return Status::OK();
 }
 
 Status FileReader::_filter_group(const tparquet::RowGroup& row_group, bool* is_filter) {
@@ -203,8 +203,8 @@ Status FileReader::_filter_group(const tparquet::RowGroup& row_group, bool* is_f
         }
 
         for (auto& min_max_conjunct_ctx : _param.min_max_conjunct_ctxs) {
-            auto min_column = min_max_conjunct_ctx->evaluate(min_chunk.get());
-            auto max_column = min_max_conjunct_ctx->evaluate(max_chunk.get());
+            ASSIGN_OR_RETURN(auto min_column, min_max_conjunct_ctx->evaluate(min_chunk.get()));
+            ASSIGN_OR_RETURN(auto max_column, min_max_conjunct_ctx->evaluate(max_chunk.get()));
 
             auto min = min_column->get(0).get_int8();
             auto max = max_column->get(0).get_int8();
@@ -252,8 +252,8 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
                 column_order = column_idx < column_orders.size() ? &column_orders[column_idx] : nullptr;
             }
 
-            Status status = _decode_min_max_column(*column_meta, column_order, &(*min_chunk)->columns()[i],
-                                                   &(*max_chunk)->columns()[i]);
+            Status status = _decode_min_max_column(*field, _param.timezone, slot->type(), *column_meta, column_order,
+                                                   &(*min_chunk)->columns()[i], &(*max_chunk)->columns()[i]);
             if (!status.ok()) {
                 *exist = false;
                 return Status::OK();
@@ -274,7 +274,8 @@ int FileReader::_get_partition_column_idx(const std::string& col_name) const {
     return -1;
 }
 
-Status FileReader::_decode_min_max_column(const tparquet::ColumnMetaData& column_meta,
+Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
+                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
                                           vectorized::ColumnPtr* max_column) {
     if (!_can_use_min_max_stats(column_meta, column_order)) {
@@ -292,8 +293,21 @@ Status FileReader::_decode_min_max_column(const tparquet::ColumnMetaData& column
             RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_meta.statistics.min, &min_value));
             RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_meta.statistics.max, &max_value));
         }
-        (*min_column)->append_numbers(&min_value, sizeof(int32_t));
-        (*max_column)->append_numbers(&max_value, sizeof(int32_t));
+        std::unique_ptr<ColumnConverter> converter;
+        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+
+        if (!converter->need_convert) {
+            (*min_column)->append_numbers(&min_value, sizeof(int32_t));
+            (*max_column)->append_numbers(&max_value, sizeof(int32_t));
+        } else {
+            vectorized::ColumnPtr min_scr_column = converter->create_src_column();
+            min_scr_column->append_numbers(&min_value, sizeof(int32_t));
+            converter->convert(min_scr_column, min_column->get());
+
+            vectorized::ColumnPtr max_scr_column = converter->create_src_column();
+            max_scr_column->append_numbers(&max_value, sizeof(int32_t));
+            converter->convert(max_scr_column, max_column->get());
+        }
         return Status::OK();
     }
     case tparquet::Type::type::INT64: {
@@ -306,8 +320,21 @@ Status FileReader::_decode_min_max_column(const tparquet::ColumnMetaData& column
             RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_meta.statistics.max, &max_value));
             RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_meta.statistics.min, &min_value));
         }
-        (*min_column)->append_numbers(&min_value, sizeof(int64_t));
-        (*max_column)->append_numbers(&max_value, sizeof(int64_t));
+        std::unique_ptr<ColumnConverter> converter;
+        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+
+        if (!converter->need_convert) {
+            (*min_column)->append_numbers(&min_value, sizeof(int64_t));
+            (*max_column)->append_numbers(&max_value, sizeof(int64_t));
+        } else {
+            vectorized::ColumnPtr min_scr_column = converter->create_src_column();
+            min_scr_column->append_numbers(&min_value, sizeof(int64_t));
+            converter->convert(min_scr_column, min_column->get());
+
+            vectorized::ColumnPtr max_scr_column = converter->create_src_column();
+            max_scr_column->append_numbers(&max_value, sizeof(int64_t));
+            converter->convert(max_scr_column, max_column->get());
+        }
         return Status::OK();
     }
     case tparquet::Type::type::BYTE_ARRAY: {
@@ -320,8 +347,21 @@ Status FileReader::_decode_min_max_column(const tparquet::ColumnMetaData& column
             RETURN_IF_ERROR(PlainDecoder<Slice>::decode(column_meta.statistics.min, &min_slice));
             RETURN_IF_ERROR(PlainDecoder<Slice>::decode(column_meta.statistics.max, &max_slice));
         }
-        (*min_column)->append_strings(std::vector<Slice>{min_slice});
-        (*max_column)->append_strings(std::vector<Slice>{max_slice});
+        std::unique_ptr<ColumnConverter> converter;
+        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+
+        if (!converter->need_convert) {
+            (*min_column)->append_strings(std::vector<Slice>{min_slice});
+            (*max_column)->append_strings(std::vector<Slice>{max_slice});
+        } else {
+            vectorized::ColumnPtr min_scr_column = converter->create_src_column();
+            min_scr_column->append_strings(std::vector<Slice>{min_slice});
+            converter->convert(min_scr_column, min_column->get());
+
+            vectorized::ColumnPtr max_scr_column = converter->create_src_column();
+            max_scr_column->append_strings(std::vector<Slice>{max_slice});
+            converter->convert(max_scr_column, max_column->get());
+        }
         return Status::OK();
     }
     default:

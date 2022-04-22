@@ -48,10 +48,12 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
 
     private Set<Pair<Long, Integer>> tableIdWithSchemaHash;
     private boolean isInMemory;
+    private boolean enablePersistentIndex;
     private TTabletMetaType metaType;
 
-    // <tablet id, tablet schema hash, tablet in memory>
-    private List<Triple<Long, Integer, Boolean>> tabletToInMemory;
+    // <tablet id, tablet schema hash, tablet in memory> or
+    // <tablet id, tablet schema hash, tablet enable persistent index>
+    private List<Triple<Long, Integer, Boolean>> tabletToMeta;
 
     public UpdateTabletMetaInfoTask(long backendId, Set<Pair<Long, Integer>> tableIdWithSchemaHash,
                                     TTabletMetaType metaType) {
@@ -63,19 +65,25 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
 
     public UpdateTabletMetaInfoTask(long backendId,
                                     Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    boolean isInMemory,
-                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch) {
-        this(backendId, tableIdWithSchemaHash, TTabletMetaType.INMEMORY);
-        this.isInMemory = isInMemory;
+                                    boolean metaValue,
+                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
+                                    TTabletMetaType metaType) {
+        this(backendId, tableIdWithSchemaHash, metaType);
+        if (metaType == TTabletMetaType.INMEMORY) {
+            this.isInMemory = metaValue;
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            this.enablePersistentIndex = metaValue;
+        }
         this.latch = latch;
     }
 
     public UpdateTabletMetaInfoTask(long backendId,
-                                    List<Triple<Long, Integer, Boolean>> tabletToInMemory) {
+                                    List<Triple<Long, Integer, Boolean>> tabletToMeta,
+                                    TTabletMetaType metaType) {
         super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
-                -1L, -1L, -1L, -1L, -1L, tabletToInMemory.hashCode());
-        this.metaType = TTabletMetaType.INMEMORY;
-        this.tabletToInMemory = tabletToInMemory;
+                -1L, -1L, -1L, -1L, -1L, tabletToMeta.hashCode());
+        this.metaType = metaType;
+        this.tabletToMeta = tabletToMeta;
     }
 
     public void countDownLatch(long backendId, Set<Pair<Long, Integer>> tablets) {
@@ -139,11 +147,35 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                     }
                 } else {
                     // for ReportHandler
-                    for (Triple<Long, Integer, Boolean> triple : tabletToInMemory) {
+                    for (Triple<Long, Integer, Boolean> triple : tabletToMeta) {
                         TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                         metaInfo.setTablet_id(triple.getLeft());
                         metaInfo.setSchema_hash(triple.getMiddle());
                         metaInfo.setIs_in_memory(triple.getRight());
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                }
+                break;
+            }
+            case ENABLE_PERSISTENT_INDEX: {
+                if (latch != null) {
+                    // for schema change
+                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(pair.first);
+                        metaInfo.setSchema_hash(pair.second);
+                        metaInfo.setEnable_persistent_index(enablePersistentIndex);
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                } else {
+                    // for ReportHandler
+                    for (Triple<Long, Integer, Boolean> triple : tabletToMeta) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(triple.getLeft());
+                        metaInfo.setSchema_hash(triple.getMiddle());
+                        metaInfo.setEnable_persistent_index(triple.getRight());
                         metaInfo.setMeta_type(metaType);
                         metaInfos.add(metaInfo);
                     }

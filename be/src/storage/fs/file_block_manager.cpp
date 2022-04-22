@@ -245,11 +245,9 @@ public:
     const BlockId& id() const override;
     const std::string& path() const override;
 
-    Status size(uint64_t* sz) const override;
+    Status size(uint64_t* sz) override;
 
-    Status read(uint64_t offset, Slice result) const override;
-
-    Status readv(uint64_t offset, const Slice* results, size_t res_cnt) const override;
+    Status read(uint64_t offset, Slice result) override;
 
     void handle_error(const Status& s) const;
 
@@ -306,19 +304,14 @@ const string& FileReadableBlock::path() const {
     return _path;
 }
 
-Status FileReadableBlock::size(uint64_t* sz) const {
+Status FileReadableBlock::size(uint64_t* sz) {
     DCHECK(!_closed.load());
     ASSIGN_OR_RETURN(*sz, _file->get_size());
     return Status::OK();
 }
 
-Status FileReadableBlock::read(uint64_t offset, Slice result) const {
-    return readv(offset, &result, 1);
-}
-
-Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t res_cnt) const {
-    DCHECK(!_closed.load());
-    return _file->readv_at(offset, results, res_cnt);
+Status FileReadableBlock::read(uint64_t offset, Slice result) {
+    return _file->read_at_fully(offset, result.data, result.size);
 }
 
 } // namespace internal

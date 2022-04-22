@@ -4,10 +4,15 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class SubqueryTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
     public void testCountConstantWithSubquery() throws Exception {
@@ -117,4 +122,22 @@ public class SubqueryTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+    @Test
+    public void testAssertWithJoin() throws Exception {
+        String sql = "SELECT max(1) FROM t0 WHERE 1 = (SELECT t1.v4 FROM t0, t1 WHERE t1.v4 IN (SELECT t1.v4 FROM  t1))";
+        String explainString = getFragmentPlan(sql);
+        Assert.assertTrue(explainString.contains("  8:Project\n" +
+                "  |  <slot 7> : 7: v4\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
+    }
+
+    @Test
+    public void testCorrelatedSubQuery() throws Exception {
+        String sql = "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
+        getFragmentPlan(sql);
+    }
 }

@@ -32,9 +32,9 @@ public:
     void reset();
     bool reset(const std::string& cidr_str);
     bool contains(const std::string& ip);
+    static bool ip_to_int(const std::string& ip_str, uint32_t* value);
 
 private:
-    bool ip_to_int(const std::string& ip_str, uint32_t* value);
     bool contains(uint32_t ip_int);
 
     uint32_t _address{0};

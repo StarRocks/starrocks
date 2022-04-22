@@ -75,7 +75,6 @@ set(UTIL_FILES
   broker_load_error_hub.cpp
   null_load_error_hub.cpp
   time.cpp
-  os_info.cpp
 # coding_util.cpp
   cidr.cpp
   core_local.cpp
@@ -109,6 +108,7 @@ set(UTIL_FILES
   gc_helper.cpp
   gc_helper_smoothstep.cpp
   sha.cpp
+  lru_cache.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

@@ -202,9 +202,7 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
     case HLL_DATA_FULL: {
         uint32_t num_non_zero_registers = 0;
         for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
-            if (_registers.data[i] != 0) {
-                num_non_zero_registers++;
-            }
+            num_non_zero_registers += (_registers.data[i] != 0);
         }
         // each register in sparse format will occupy 3bytes, 2 for index and
         // 1 for register value. So if num_non_zero_registers is greater than

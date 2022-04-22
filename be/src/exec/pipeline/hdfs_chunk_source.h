@@ -26,7 +26,8 @@ namespace pipeline {
 class ScanOperator;
 class HdfsChunkSource final : public ChunkSource {
 public:
-    HdfsChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::HdfsScanNode* scan_node);
+    HdfsChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                    vectorized::HdfsScanNode* scan_node);
 
     ~HdfsChunkSource() override;
 
@@ -59,7 +60,7 @@ private:
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
-    void _init_partition_values();
+    Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
     void _init_chunk(ChunkPtr* chunk);
 
@@ -126,7 +127,6 @@ private:
 
     // ======================================
     // The following are profile metrics
-    RuntimeProfile* _runtime_profile;
     vectorized::HdfsScanProfile _profile;
 };
 } // namespace pipeline

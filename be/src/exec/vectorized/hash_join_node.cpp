@@ -183,8 +183,13 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     }
     param->predicate_slots = predicate_slots;
 
-    for (auto i = 0; i < _probe_expr_ctxs.size(); i++) {
-        param->join_keys.emplace_back(JoinKeyDesc{_probe_expr_ctxs[i]->root()->type().type, _is_null_safes[i]});
+    for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
+        Expr* expr = _build_expr_ctxs[i]->root();
+        if (expr->is_slotref()) {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], down_cast<ColumnRef*>(expr)});
+        } else {
+            param->join_keys.emplace_back(JoinKeyDesc{&expr->type(), _is_null_safes[i], nullptr});
+        }
     }
 }
 
@@ -227,14 +232,18 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
+            SCOPED_TIMER(_build_conjunct_evaluate_timer);
+            _evaluate_build_keys(chunk);
+        }
+
+        {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
-            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk));
+            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
         }
     }
 
     {
-        // build hash table: compute key columns, and then build the hash table.
         RETURN_IF_ERROR(_build(state));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
@@ -526,41 +535,9 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 }
 
 Status HashJoinNode::_build(RuntimeState* state) {
-    {
-        SCOPED_TIMER(_build_conjunct_evaluate_timer);
-        // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
-        // Splice the Chunks from Scan on the right table into a big Chunk
-        // In some scenarios, such as when the left and right tables are selected incorrectly
-        // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
-        // which will cause the output of wrong data.
-        // Currently, a defense needs to be added.
-        // After a better solution is available, the BigChunk mechanism can be removed.
-        if (_ht.get_build_chunk()->reach_capacity_limit()) {
-            return Status::InternalError("Total size of single column exceed the limit of hash join");
-        }
-
-        for (auto& _build_expr_ctx : _build_expr_ctxs) {
-            const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
-            ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());
-            if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                ColumnPtr column = ColumnHelper::create_column(data_type, true);
-                column->append_nulls(_ht.get_build_chunk()->num_rows());
-                _ht.get_key_columns().emplace_back(column);
-            } else if (column_ptr->is_constant()) {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(_ht.get_build_chunk()->num_rows(), 0);
-                _ht.get_key_columns().emplace_back(const_column->data_column());
-            } else {
-                _ht.get_key_columns().emplace_back(column_ptr);
-            }
-        }
-    }
-
-    {
-        SCOPED_TIMER(_build_ht_timer);
-        TRY_CATCH_BAD_ALLOC(_ht.build(state));
-    }
-
+    // build hash table
+    SCOPED_TIMER(_build_ht_timer);
+    TRY_CATCH_BAD_ALLOC(_ht.build(state));
     return Status::OK();
 }
 
@@ -572,6 +549,27 @@ static inline bool check_chunk_zero_and_create_new(ChunkPtr* chunk) {
         return true;
     }
     return false;
+}
+
+Status HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
+    _key_columns.resize(0);
+    size_t num_rows = chunk->num_rows();
+    for (auto& ctx : _build_expr_ctxs) {
+        const TypeDescriptor& data_type = ctx->root()->type();
+        ASSIGN_OR_RETURN(ColumnPtr key_column, ctx->evaluate(chunk.get()));
+        if (key_column->only_null()) {
+            ColumnPtr column = ColumnHelper::create_column(data_type, true);
+            column->append_nulls(num_rows);
+            _key_columns.emplace_back(column);
+        } else if (key_column->is_constant()) {
+            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
+            const_column->data_column()->assign(num_rows, 0);
+            _key_columns.emplace_back(const_column->data_column());
+        } else {
+            _key_columns.emplace_back(key_column);
+        }
+    }
+    return Status::OK();
 }
 
 Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk,
@@ -637,7 +635,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                     SCOPED_TIMER(_probe_conjunct_evaluate_timer);
                     _key_columns.resize(0);
                     for (auto& probe_expr_ctx : _probe_expr_ctxs) {
-                        ColumnPtr column_ptr = probe_expr_ctx->evaluate(_probing_chunk.get());
+                        ASSIGN_OR_RETURN(ColumnPtr column_ptr, probe_expr_ctx->evaluate(_probing_chunk.get()));
                         if (column_ptr->is_nullable() && column_ptr->is_constant()) {
                             ColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
                             column->append_nulls(_probing_chunk->num_rows());
@@ -660,7 +658,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
             }
         }
 
-        TRY_CATCH_BAD_ALLOC(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probing_chunk, chunk, &_ht_has_remain)));
         if (!_ht_has_remain) {
             _probing_chunk = nullptr;
         }
@@ -673,7 +671,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 
         if (!_other_join_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_other_join_conjunct_evaluate_timer);
-            _process_other_conjunct(chunk);
+            RETURN_IF_ERROR(_process_other_conjunct(chunk));
             if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
             }
@@ -681,7 +679,7 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_where_conjunct_evaluate_timer);
-            eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
             if (check_chunk_zero_and_create_new(chunk)) {
                 continue;
@@ -698,7 +696,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
     while (!_build_eos) {
-        TRY_CATCH_BAD_ALLOC(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain));
+        TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain)));
 
         eval_join_runtime_filters(chunk);
 
@@ -710,7 +708,7 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
         }
 
         if (!_conjunct_ctxs.empty()) {
-            eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
             if (check_chunk_zero_and_create_new(chunk)) {
                 _build_eos = !_right_table_has_remain;
@@ -727,14 +725,14 @@ Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     return Status::OK();
 }
 
-void HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
-                                                   bool& hit_all) {
+Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filter& filter, bool& filter_all,
+                                                     bool& hit_all) {
     filter_all = false;
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
-        ColumnPtr column = ctx->evaluate((*chunk).get());
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()));
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -761,6 +759,8 @@ void HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filt
             hit_all = true;
         }
     }
+
+    return Status::OK();
 }
 
 void HashJoinNode::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
@@ -792,60 +792,64 @@ void HashJoinNode::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start
     }
 }
 
-void HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
+Status HashJoinNode::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column,
+                                                             size_t column_count) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
     _ht.remove_duplicate_index(&filter);
     (*chunk)->set_num_rows(0);
+
+    return Status::OK();
 }
 
-void HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
+Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
-        break;
+        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_semi_join_with_other_conjunct(chunk);
-        break;
+        return _process_semi_join_with_other_conjunct(chunk);
     case TJoinOp::RIGHT_ANTI_JOIN:
-        _process_right_anti_join_with_other_conjunct(chunk);
-        break;
+        return _process_right_anti_join_with_other_conjunct(chunk);
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
-        eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
+        return eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get());
     }
 }
 

@@ -40,6 +40,81 @@ PARALLEL_TEST(BinaryColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflow) {
+    // small column
+    auto column = BinaryColumn::create();
+    for (size_t i = 0; i < 10; i++) {
+        column->append(std::to_string(i));
+    }
+    auto ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+#ifdef NDEBUG
+    // offset overflow
+    column = BinaryColumn::create();
+    size_t count = 1 << 30;
+    for (size_t i = 0; i < count; i++) {
+        column->append(std::to_string(i));
+    }
+    ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value()->is_large_binary());
+    ASSERT_EQ(ret.value()->size(), count);
+
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(ret.value()->get(i).get_slice().to_string(), std::to_string(i));
+    }
+
+    /*
+    // row size overflow
+    // the case will allocate a lot of memory, so temp remove it
+    count = Column::MAX_CAPACITY_LIMIT + 5;
+    column = BinaryColumn::create();
+    column->reserve(count);
+    for (size_t i = 0; i < count; i++) {
+        column->append("a");
+    }
+    ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(!ret.ok());
+    */
+#endif
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_binary_column_downgrade) {
+    auto column = BinaryColumn::create();
+    column->append_string("test");
+    ASSERT_FALSE(column->has_large_column());
+    auto ret = column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+
+    auto large_column = LargeBinaryColumn::create();
+    ASSERT_TRUE(large_column->has_large_column());
+    for (size_t i = 0; i < 10; i++) {
+        large_column->append_string(std::to_string(i));
+    }
+    ret = large_column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(ret.value()->has_large_column());
+    ASSERT_EQ(ret.value()->size(), 10);
+    for (size_t i = 0; i < 10; i++) {
+        ASSERT_EQ(ret.value()->get(i).get_slice(), Slice(std::to_string(i)));
+    }
+
+#ifdef NDEBUG
+    large_column = LargeBinaryColumn::create();
+    size_t count = 1 << 29;
+    for (size_t i = 0; i < count; i++) {
+        large_column->append("0123456789");
+    }
+    ret = large_column->downgrade();
+    ASSERT_FALSE(ret.ok());
+#endif
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_get_data) {
     auto column = BinaryColumn::create();
     for (int i = 0; i < 100; i++) {
@@ -528,10 +603,11 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_EQ("cdef", slices[3]);
     ASSERT_EQ("mno", slices[4]);
 
+#ifdef NDEBUG
     // This case will alloc a lot of memory (16G) and run slowly,
     // So i temp comment it and will open if i find one better solution
     /*
-    size_t count = (1ul<<31ul) + 5;
+    size_t count = (1ul << 31ul) + 5;
     auto c5 = BinaryColumn::create();
     c5->get_bytes().resize(count);
     c5->get_offset().resize(count + 1);
@@ -546,6 +622,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     ASSERT_TRUE(c5->update_rows(*c6, c6_replace_idxes.data()).ok());
     ASSERT_EQ(c5->size(), count);
     */
+#endif
 }
 
 // NOLINTNEXTLINE

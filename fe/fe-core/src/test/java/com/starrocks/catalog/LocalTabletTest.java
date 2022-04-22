@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.thrift.TStorageMedium;
@@ -152,5 +153,18 @@ public class LocalTabletTest {
 
         dis.close();
         file.delete();
+    }
+
+    @Test
+    public void testGetColocateHealthStatus() throws Exception {
+        LocalTablet tablet = new LocalTablet();
+        Replica versionIncompleteReplica = new Replica(1L, 10001L, 8,
+                -1, 10, 10, ReplicaState.NORMAL, 9, 8);
+        Replica normalReplica = new Replica(1L, 10002L, 9,
+                -1, 10, 10, ReplicaState.NORMAL, -1, 9);
+        tablet.addReplica(versionIncompleteReplica, true);
+        tablet.addReplica(normalReplica, true);
+        Assert.assertEquals(LocalTablet.TabletStatus.COLOCATE_REDUNDANT,
+                tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
     }
 }

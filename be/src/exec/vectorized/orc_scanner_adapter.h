@@ -64,8 +64,8 @@ public:
     int num_columns() const { return _src_slot_descriptors.size(); }
 
     // to decode min and max value from column stats.
-    static Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
-                                       ColumnPtr max_col);
+    Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
+                                ColumnPtr max_col, int64_t tz_offset_in_seconds);
     Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                         Filter* filter);
     size_t get_cvb_size();
@@ -137,6 +137,9 @@ private:
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
     std::vector<FillColumnFunction> _fill_functions;
+    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
+                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
+                                    std::string* orc_column_name);
     Status _init_include_columns();
     Status _init_position_in_orc();
     Status _init_src_types();

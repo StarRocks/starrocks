@@ -45,8 +45,6 @@ import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
@@ -72,7 +70,6 @@ import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.EtlJobType;
@@ -94,6 +91,7 @@ import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -101,6 +99,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.Constants;
@@ -120,7 +119,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -143,7 +141,6 @@ public class StmtExecutor {
     private final MysqlSerializer serializer;
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
-    private Analyzer analyzer;
     private RuntimeProfile profile;
     private Coordinator coord = null;
     private MasterOpExecutor masterOpExecutor = null;
@@ -193,6 +190,11 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
         profile.addChild(summaryProfile);
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        profile.addChild(plannerProfile);
+        context.getPlannerProfile().build(plannerProfile);
+
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
             coord.endProfile();
@@ -293,7 +295,7 @@ public class StmtExecutor {
 
             // Entrance to the new planner
             if (isStatisticsOrAnalyzer(parsedStmt, context) || StatementPlanner.supportedByNewAnalyzer(parsedStmt)) {
-                try {
+                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
                         context.getDumpInfo().reset();
@@ -413,19 +415,12 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
-                    if (parsedStmt instanceof InsertStmt) {
-                        handleInsertStmtWithNewPlanner(execPlan, (InsertStmt) parsedStmt);
-                    } else if (parsedStmt instanceof UpdateStmt) {
-                        handleUpdateStmtWithNewPlanner(execPlan, (UpdateStmt) parsedStmt);
-                    } else {
-                        throw unsupportedException(
-                                "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
-                    }
+                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
                 } catch (Throwable t) {
-                    LOG.warn("handle dml stmt fail", t);
+                    LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
                     throw t;
                 } finally {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -506,7 +501,7 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleInsertStmtWithNewPlanner(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
+            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getSessionVariable().isReportSucc()) {
                 writeProfile(beginTimeInNanoSecond);
             }
@@ -524,31 +519,18 @@ public class StmtExecutor {
 
     private void resolveParseStmtForForward() throws AnalysisException {
         if (parsedStmt == null) {
-            // Parse statement with parser generated by CUP&FLEX
-            SqlScanner input = new SqlScanner(new StringReader(originStmt.originStmt),
-                    context.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
+            List<StatementBase> stmts;
             try {
-                parsedStmt = SqlParserUtils.getStmt(parser, originStmt.idx);
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt.originStmt,
+                        context.getSessionVariable().getSqlMode());
+                parsedStmt = stmts.get(originStmt.idx);
                 parsedStmt.setOrigStmt(originStmt);
-            } catch (Error e) {
-                LOG.info("error happened when parsing stmt {}, id: {}", originStmt, context.getStmtId(), e);
-                throw new AnalysisException("sql parsing error, please check your sql");
-            } catch (AnalysisException e) {
-                String syntaxError = parser.getErrorMsg(originStmt.originStmt);
-                LOG.info("analysis exception happened when parsing stmt {}, id: {}, error: {}",
-                        originStmt, context.getStmtId(), syntaxError, e);
-                if (syntaxError == null) {
-                    throw e;
-                } else {
-                    throw new AnalysisException(syntaxError, e);
-                }
+            } catch (ParsingException parsingException) {
+                throw new AnalysisException(parsingException.getMessage());
             } catch (Exception e) {
-                // TODO(lingbin): we catch 'Exception' to prevent unexpected error,
-                // should be removed this try-catch clause future.
-                LOG.info("unexpected exception happened when parsing stmt {}, id: {}, error: {}",
-                        originStmt, context.getStmtId(), parser.getErrorMsg(originStmt.originStmt), e);
-                throw new AnalysisException("Unexpected exception: " + e.getMessage());
+                parsedStmt = com.starrocks.sql.parser.SqlParser.parseWithOldParser(originStmt.originStmt,
+                        context.getSessionVariable().getSqlMode(), originStmt.idx);
+                parsedStmt.setOrigStmt(originStmt);
             }
         }
     }
@@ -592,7 +574,6 @@ public class StmtExecutor {
             return;
         }
 
-        analyzer = new Analyzer(context.getCatalog(), context);
         // Convert show statement to select statement here
         if (parsedStmt instanceof ShowStmt) {
             QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
@@ -603,12 +584,13 @@ public class StmtExecutor {
 
         if (parsedStmt instanceof QueryStmt
                 || parsedStmt instanceof QueryStatement
-                || parsedStmt instanceof InsertStmt
+                || parsedStmt instanceof DmlStmt
                 || parsedStmt instanceof CreateTableAsSelectStmt) {
             Preconditions.checkState(false, "Shouldn't reach here");
         } else {
             try {
-                parsedStmt.analyze(analyzer);
+                LOG.info("try analyze xxxx");
+                parsedStmt.analyze(new Analyzer(context.getCatalog(), context));
             } catch (AnalysisException e) {
                 throw e;
             } catch (Exception e) {
@@ -620,7 +602,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel() {
-        if (parsedStmt instanceof DeleteStmt) {
+        if (parsedStmt instanceof DeleteStmt && !((DeleteStmt) parsedStmt).supportNewPlanner()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
@@ -1014,7 +996,7 @@ public class StmtExecutor {
                 || statement instanceof CreateAnalyzeJobStmt;
     }
 
-    public void handleUpdateStmtWithNewPlanner(ExecPlan execPlan, UpdateStmt stmt) throws Exception {
+    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(execPlan.getExplainString(stmt.getExplainLevel()));
             return;
@@ -1023,34 +1005,37 @@ public class StmtExecutor {
             context.getQueryDetail().setExplain(execPlan.getExplainString(TExplainLevel.NORMAL));
         }
 
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
-
-        String label = "update_" + DebugUtil.printId(context.getExecutionId());
-        handleDMLStmtWithNewPlanner(execPlan, database, targetTable, label);
-    }
-
-    public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
-        if (stmt.getQueryStatement().isExplain()) {
-            handleExplainStmt(execPlan.getExplainString(stmt.getQueryStatement().getExplainLevel()));
+        // special handling for delete of non-primary key table, using old handler
+        if (stmt instanceof DeleteStmt && !((DeleteStmt) stmt).supportNewPlanner()) {
+            try {
+                context.getCatalog().getDeleteHandler().process((DeleteStmt) stmt);
+                context.getState().setOk();
+            } catch (QueryStateException e) {
+                if (e.getQueryState().getStateType() != MysqlStateType.OK) {
+                    LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                }
+                context.setState(e.getQueryState());
+            }
             return;
         }
-        if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(execPlan.getExplainString(TExplainLevel.NORMAL));
-        }
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
         Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
         Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
 
-        String label = Strings.isNullOrEmpty(stmt.getLabel()) ?
-                "insert_" + DebugUtil.printId(context.getExecutionId()) : stmt.getLabel();
-        handleDMLStmtWithNewPlanner(execPlan, database, targetTable, label);
-    }
+        String label = DebugUtil.printId(context.getExecutionId());
+        if (stmt instanceof InsertStmt) {
+            String stmtLabel = ((InsertStmt) stmt).getLabel();
+            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
+        } else if (stmt instanceof UpdateStmt) {
+            label = "update_" + label;
+        } else if (stmt instanceof DeleteStmt) {
+            label = "delete_" + label;
+        } else {
+            throw unsupportedException(
+                    "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
+        }
 
-    public void handleDMLStmtWithNewPlanner(ExecPlan execPlan, Database database, Table targetTable,
-                                            String label) throws Exception {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         long transactionId = -1;

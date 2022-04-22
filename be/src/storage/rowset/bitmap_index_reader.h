@@ -126,9 +126,9 @@ public:
     // }
     Status read_union_bitmap(const vectorized::SparseRange& range, Roaring* result);
 
-    inline rowid_t bitmap_nums() const { return _num_bitmap; }
+    rowid_t bitmap_nums() const { return _num_bitmap; }
 
-    inline rowid_t current_ordinal() const { return _current_rowid; }
+    rowid_t current_ordinal() const { return _current_rowid; }
 
 private:
     BitmapIndexReader* _reader;

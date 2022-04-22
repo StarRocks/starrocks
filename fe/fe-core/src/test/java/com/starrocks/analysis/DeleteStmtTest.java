@@ -57,8 +57,8 @@ public class DeleteStmtTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("testDb", "testTbl"),
                 new PartitionNames(false, Lists.newArrayList("partition")), wherePredicate);
 
-        Assert.assertEquals("testDb", deleteStmt.getDbName());
-        Assert.assertEquals("testTbl", deleteStmt.getTableName());
+        Assert.assertEquals("testDb", deleteStmt.getTableName().getDb());
+        Assert.assertEquals("testTbl", deleteStmt.getTableName().getTbl());
         Assert.assertEquals(Lists.newArrayList("partition"), deleteStmt.getPartitionNames());
         Assert.assertEquals("DELETE FROM `testDb`.`testTbl` PARTITION (partition) WHERE `k1` = 'abc'",
                 deleteStmt.toSql());

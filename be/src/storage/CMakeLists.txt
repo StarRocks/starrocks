@@ -35,7 +35,6 @@ add_library(Storage STATIC
     del_vector.cpp
     hll.cpp
     key_coder.cpp
-    lru_cache.cpp
     memtable_flush_executor.cpp
     null_predicate.cpp
     kv_store.cpp
@@ -99,10 +98,10 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/vectorized/rowset_writer_adapter.cpp
-    rowset/vectorized/segment_chunk_iterator_adapter.cpp
-    rowset/vectorized/segment_iterator.cpp
-    rowset/vectorized/segment_options.cpp
+    rowset/rowset_writer_adapter.cpp
+    rowset/segment_chunk_iterator_adapter.cpp
+    rowset/segment_iterator.cpp
+    rowset/segment_options.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
@@ -110,43 +109,43 @@ add_library(Storage STATIC
     task/engine_publish_version_task.cpp
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
-    vectorized/aggregate_iterator.cpp
-    vectorized/async_delta_writer.cpp
-    vectorized/chunk_helper.cpp
-    vectorized/column_predicate_cmp.cpp
-    vectorized/column_predicate.cpp
-    vectorized/column_in_predicate.cpp
-    vectorized/column_not_in_predicate.cpp
-    vectorized/column_null_predicate.cpp
-    vectorized/column_or_predicate.cpp
-    vectorized/column_expr_predicate.cpp
-    vectorized/conjunctive_predicates.cpp
-    vectorized/convert_helper.cpp
-    vectorized/delete_predicates.cpp
-    vectorized/disjunctive_predicates.cpp
-    vectorized/empty_iterator.cpp
-    vectorized/merge_iterator.cpp
-    vectorized/predicate_parser.cpp
-    vectorized/projection_iterator.cpp
-    vectorized/push_handler.cpp
-    vectorized/row_source_mask.cpp
-    vectorized/schema_change.cpp
-    vectorized/tablet_reader.cpp
-    vectorized/tablet_reader_params.cpp
-    vectorized/meta_reader.cpp
-    vectorized/seek_tuple.cpp
-    vectorized/union_iterator.cpp
-    vectorized/unique_iterator.cpp
-    vectorized/column_aggregate_func.cpp
-    vectorized/chunk_aggregator.cpp
-    vectorized/delta_writer.cpp
-    vectorized/memtable.cpp
-    vectorized/base_compaction.cpp
-    vectorized/cumulative_compaction.cpp
-    vectorized/compaction.cpp
-    vectorized/rowset_merger.cpp
-    vectorized/column_predicate_rewriter.cpp
-    vectorized/column_predicate_dict_conjuct.cpp
+    aggregate_iterator.cpp
+    async_delta_writer.cpp
+    chunk_helper.cpp
+    column_predicate_cmp.cpp
+    column_predicate.cpp
+    column_in_predicate.cpp
+    column_not_in_predicate.cpp
+    column_null_predicate.cpp
+    column_or_predicate.cpp
+    column_expr_predicate.cpp
+    conjunctive_predicates.cpp
+    convert_helper.cpp
+    delete_predicates.cpp
+    disjunctive_predicates.cpp
+    empty_iterator.cpp
+    merge_iterator.cpp
+    predicate_parser.cpp
+    projection_iterator.cpp
+    push_handler.cpp
+    row_source_mask.cpp
+    schema_change.cpp
+    tablet_reader.cpp
+    tablet_reader_params.cpp
+    meta_reader.cpp
+    seek_tuple.cpp
+    union_iterator.cpp
+    unique_iterator.cpp
+    column_aggregate_func.cpp
+    chunk_aggregator.cpp
+    delta_writer.cpp
+    memtable.cpp
+    base_compaction.cpp
+    cumulative_compaction.cpp
+    compaction.cpp
+    rowset_merger.cpp
+    column_predicate_rewriter.cpp
+    column_predicate_dict_conjuct.cpp
     compaction_context.cpp
     compaction_task.cpp
     compaction_utils.cpp

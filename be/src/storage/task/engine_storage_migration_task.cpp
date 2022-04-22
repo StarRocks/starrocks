@@ -34,7 +34,6 @@ EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSch
 
 Status EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
-
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "Not found tablet: " << _tablet_id;
@@ -127,25 +126,42 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             return res;
         }
 
+        TabletMetaSharedPtr stale_tablet_meta(new (std::nothrow) TabletMeta());
+        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, stale_tablet_meta.get());
+        if (st.ok() && stale_tablet_meta->tablet_state() == TABLET_SHUTDOWN) {
+            // When tablet state is TABLET_SHUTDOWN, it means it's a tablet to be GCed
+            // Try to delete it right now.
+            // If delete success, go on the process, or return failure.
+            // If there is queries running on the tablet, should return failure
+            Status st = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+            if (st.ok() || st.is_not_found()) {
+                // delete tablet from shutdown tablets successully, and continue the migration
+                LOG(INFO) << "Successfully delete stale TABLET_SHUTDOWN tablet:" << _tablet_id
+                          << " from path:" << _dest_store->path();
+            } else {
+                LOG(WARNING) << "delete shutdown tablet failed. st:" << st;
+                return st;
+            }
+        } else if (st.ok()) {
+            LOG(WARNING) << "tablet_meta already exist. tablet:" << tablet->full_name()
+                         << ", tablet state:" << stale_tablet_meta->tablet_state()
+                         << ", dest path:" << _dest_store->path() << ", source path:" << tablet->data_dir()->path();
+            return Status::AlreadyExist(fmt::format("tablet_meta already exist. tablet: {}", tablet->full_name()));
+        } else if (!st.is_not_found()) {
+            LOG(WARNING) << "get tablet_meta failed. tablet: " << tablet->full_name();
+            return Status::NotFound(fmt::format("get tablet_meta failed. tablet: {}", tablet->full_name()));
+        }
+
         std::stringstream root_path_stream;
         root_path_stream << _dest_store->path() << DATA_PREFIX << "/" << shard;
         schema_hash_path = SnapshotManager::instance()->get_schema_hash_full_path(tablet, root_path_stream.str());
+
         // if dir already exist then return err, it should not happen
         // should not remove the dir directly
         if (FileUtils::check_exist(schema_hash_path)) {
             LOG(INFO) << "Path already exist. "
                       << "schema_hash_path: " << schema_hash_path;
             return Status::AlreadyExist(fmt::format("Path already exist. schema_hash_path: {}", schema_hash_path));
-        }
-
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
-        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
-        if (st.ok()) {
-            LOG(WARNING) << "tablet_meta already exist. tablet:" << tablet->full_name();
-            return Status::AlreadyExist(fmt::format("tablet_meta already exist. tablet: {}", tablet->full_name()));
-        } else if (!st.is_not_found()) {
-            LOG(WARNING) << "tablet_meta not found. tablet: " << tablet->full_name();
-            return Status::NotFound(fmt::format("tablet_meta not found. tablet: {}", tablet->full_name()));
         }
 
         st = FileUtils::create_dir(schema_hash_path);

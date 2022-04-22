@@ -2,6 +2,7 @@
 
 #include "exec/parquet/page_reader.h"
 
+#include "common/config.h"
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
@@ -12,7 +13,9 @@ static constexpr size_t kHeaderBufSize = 1024;
 static constexpr size_t kHeaderBufMaxSize = 16 * 1024;
 
 PageReader::PageReader(RandomAccessFile* file, uint64_t start_offset, uint64_t length)
-        : _stream(file, start_offset, length), _start_offset(start_offset), _finish_offset(start_offset + length) {}
+        : _stream(file, start_offset, length), _start_offset(start_offset), _finish_offset(start_offset + length) {
+    _stream.reserve(config::parquet_buffer_stream_reserve_size);
+}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {

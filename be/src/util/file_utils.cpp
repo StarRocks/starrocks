@@ -46,15 +46,7 @@ Status FileUtils::create_dir(Env* env, const std::string& path) {
     if (path.empty()) {
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", path));
     }
-    std::filesystem::path p(path);
-
-    std::string partial_path;
-    for (const auto& it : p) {
-        partial_path.append(it.string());
-        partial_path.append("/");
-        RETURN_IF_ERROR(env->create_dir_if_missing(partial_path));
-    }
-    return Status::OK();
+    return env->create_dir_recursive(path);
 }
 
 Status FileUtils::create_dir(const std::string& path) {

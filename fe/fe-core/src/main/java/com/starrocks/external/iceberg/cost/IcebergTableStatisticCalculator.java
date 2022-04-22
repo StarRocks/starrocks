@@ -84,7 +84,8 @@ public class IcebergTableStatisticCalculator {
                 }
 
                 int fieldId = idColumn.getKey();
-                columnStatistics.add(generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList));
+                columnStatistics.add(
+                        generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList.get(0)));
             }
         }
         return columnStatistics;
@@ -115,7 +116,8 @@ public class IcebergTableStatisticCalculator {
             }
 
             int fieldId = idColumn.getKey();
-            ColumnStatistic columnStatistic = generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList);
+            ColumnStatistic columnStatistic =
+                    generateColumnStatistic(icebergFileStats, fieldId, recordCount, columnList.get(0));
             statisticsBuilder.addColumnStatistic(columnList.get(0), columnStatistic);
         }
         statisticsBuilder.setOutputRowCount(recordCount);
@@ -154,8 +156,10 @@ public class IcebergTableStatisticCalculator {
                                   Map<Integer, Object> lowerBounds,
                                   Map<Integer, Long> nullCounts,
                                   long recordCount) {
-        icebergFileStats.updateStats(icebergFileStats.getMinValues(), lowerBounds, nullCounts, recordCount, i -> (i > 0));
-        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMinValues(), lowerBounds, i -> (i > 0));
+        icebergFileStats.updateStats(icebergFileStats.getMinValues(), lowerBounds, nullCounts, recordCount,
+                i -> (i > 0));
+        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMinValues(), lowerBounds,
+                i -> (i > 0));
     }
 
     private void updateSummaryMax(IcebergFileStats icebergFileStats,
@@ -163,8 +167,10 @@ public class IcebergTableStatisticCalculator {
                                   Map<Integer, Object> upperBounds,
                                   Map<Integer, Long> nullCounts,
                                   long recordCount) {
-        icebergFileStats.updateStats(icebergFileStats.getMaxValues(), upperBounds, nullCounts, recordCount, i -> (i < 0));
-        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMaxValues(), upperBounds, i -> (i < 0));
+        icebergFileStats.updateStats(icebergFileStats.getMaxValues(), upperBounds, nullCounts, recordCount,
+                i -> (i < 0));
+        updatePartitionedStats(icebergFileStats, partitionFields, icebergFileStats.getMaxValues(), upperBounds,
+                i -> (i < 0));
     }
 
     private void updatePartitionedStats(
@@ -251,49 +257,9 @@ public class IcebergTableStatisticCalculator {
     }
 
     private ColumnStatistic generateColumnStatistic(IcebergFileStats icebergFileStats,
-                                            int fieldId,
-                                            double recordCount,
-                                            List<ColumnRefOperator> columnList) {
-        ColumnStatistic.Builder columnBuilder = ColumnStatistic.builder();
-        boolean isEstimated = true;
-        // nulls fraction
-        Long nullCount = icebergFileStats.getNullCounts().get(fieldId);
-        if (nullCount != null) {
-            columnBuilder.setNullsFraction(nullCount / recordCount);
-        } else {
-            isEstimated = false;
-        }
-
-        // avg row size
-        if (icebergFileStats.getColumnSizes() != null) {
-            // Notice that columnSize here is column * row count which updated in updateColumnSizes below
-            Long columnSize = icebergFileStats.getColumnSizes().get(fieldId);
-            if (columnSize != null) {
-                columnBuilder.setAverageRowSize(columnSize / recordCount);
-            } else {
-                columnBuilder.setAverageRowSize(columnList.get(0).getType().getTypeSize());
-            }
-        } else {
-            columnBuilder.setAverageRowSize(columnList.get(0).getType().getTypeSize());
-        }
-
-        // min max stats
-        Object min = icebergFileStats.getMinValues().get(fieldId);
-        Object max = icebergFileStats.getMaxValues().get(fieldId);
-        if (min instanceof Number && max instanceof Number) {
-            columnBuilder.setMinValue(((Number) min).doubleValue());
-            columnBuilder.setMaxValue(((Number) max).doubleValue());
-        } else {
-            isEstimated = false;
-        }
-
-        // TODO: get num distinct value count from file stats
-        columnBuilder.setDistinctValuesCount(1);
-
-        if (isEstimated) {
-            return columnBuilder.build();
-        } else {
-            return ColumnStatistic.unknown();
-        }
+                                                    int fieldId,
+                                                    double recordCount,
+                                                    ColumnRefOperator columnRefOperator) {
+        return ColumnStatistic.unknown();
     }
 }

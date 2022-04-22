@@ -76,6 +76,57 @@ public:
 };
 
 // NOLINTNEXTLINE
+TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
+#ifdef NDEBUG
+    size_t row_count = 1 << 30;
+    auto c1 = BinaryColumn::create();
+    c1->resize(row_count);
+    auto c2 = BinaryColumn::create();
+    for (size_t i = 0; i < row_count; i++) {
+        c2->append(std::to_string(i));
+    }
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(c1, 1);
+    chunk->append_column(c2, 2);
+
+    Status st = chunk->upgrade_if_overflow();
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(chunk->get_column_by_slot_id(1)->is_binary());
+    ASSERT_TRUE(chunk->get_column_by_slot_id(2)->is_large_binary());
+#endif
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_chunk_downgrade) {
+    auto c1 = BinaryColumn::create();
+    c1->append_string("1");
+    auto c2 = BinaryColumn::create();
+    c2->append_string("11");
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(c1, 1);
+    chunk->append_column(c2, 2);
+    ASSERT_FALSE(chunk->has_large_column());
+
+    auto ret = chunk->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(chunk->has_large_column());
+
+    auto c3 = LargeBinaryColumn::create();
+    c3->append_string("1");
+    auto c4 = LargeBinaryColumn::create();
+    c4->append_string("2");
+    chunk = std::make_shared<Chunk>();
+    chunk->append_column(c3, 1);
+    chunk->append_column(c4, 2);
+    ASSERT_TRUE(chunk->has_large_column());
+
+    ret = chunk->downgrade();
+    ASSERT_FALSE(chunk->has_large_column());
+    ASSERT_TRUE(ret.ok());
+    ASSERT_FALSE(chunk->has_large_column());
+}
+
+// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_construct) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 

@@ -374,23 +374,21 @@ Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, std
 // TODO(ygl):
 // 1. if term > 0 then save to remote meta store first using term
 // 2. save to local meta store
-Status TabletMetaManager::save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                               const TabletMetaSharedPtr& tablet_meta) {
+Status TabletMetaManager::save(DataDir* store, const TabletMetaSharedPtr& tablet_meta) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta->to_meta_pb(&tablet_meta_pb);
     if (tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS) {
         LOG(WARNING) << "does support save TabletMetaSharedPtr for PRIMARY_KEYS";
         return Status::NotSupported("does support save TabletMetaSharedPtr for PRIMARY_KEYS");
     }
-    return save(store, tablet_id, schema_hash, tablet_meta_pb);
+    return save(store, tablet_meta_pb);
 }
 
-Status TabletMetaManager::save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                               const TabletMetaPB& meta_pb) {
+Status TabletMetaManager::save(DataDir* store, const TabletMetaPB& meta_pb) {
     if (meta_pb.schema().keys_type() != KeysType::PRIMARY_KEYS && meta_pb.has_updates()) {
         return Status::InvalidArgument("non primary key with updates");
     }
-    std::string key = encode_tablet_meta_key(tablet_id, schema_hash);
+    std::string key = encode_tablet_meta_key(meta_pb.tablet_id(), meta_pb.schema_hash());
     std::string val = meta_pb.SerializeAsString();
 
     TabletMetaPB tmp;
@@ -406,8 +404,8 @@ Status TabletMetaManager::save(DataDir* store, TTabletId tablet_id, TSchemaHash 
     }
 
     if (meta_pb.has_updates() && meta_pb.updates().has_next_log_id()) {
-        std::string lower = encode_meta_log_key(tablet_id, 0);
-        std::string upper = encode_meta_log_key(tablet_id, meta_pb.updates().next_log_id());
+        std::string lower = encode_meta_log_key(meta_pb.tablet_id(), 0);
+        std::string upper = encode_meta_log_key(meta_pb.tablet_id(), meta_pb.updates().next_log_id());
         st = batch.DeleteRange(cf, lower, upper);
         if (!st.ok()) {
             return to_status(st);
@@ -803,7 +801,8 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
-                                              vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
+                                              vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -826,6 +825,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
         auto dv_value = rssid_delvec.second->save();
         st = batch.Put(handle, dv_key, dv_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    if (enable_persistent_index) {
+        auto meta_key = encode_persistent_index_key(tsid.tablet_id);
+        auto meta_value = index_meta.SerializeAsString();
+        st = batch.Put(handle, meta_key, meta_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);

@@ -10,8 +10,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
+#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
-#include "runtime/vectorized/time_types.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -81,7 +81,6 @@ int main(int argc, char** argv) {
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);
-    starrocks::pipeline::QueryContextManager::instance()->clear();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

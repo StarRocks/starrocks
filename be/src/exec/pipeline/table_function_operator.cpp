@@ -84,7 +84,6 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
-
     size_t chunk_size = state->chunk_size();
     size_t remain_chunk_size = chunk_size;
     std::vector<vectorized::ColumnPtr> output_columns;

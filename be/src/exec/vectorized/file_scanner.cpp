@@ -6,13 +6,13 @@
 
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "env/compressed_file.h"
 #include "env/env.h"
 #include "env/env_broker.h"
 #include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/decompressor.h"
 #include "gutil/strings/substitute.h"
+#include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -134,7 +134,8 @@ void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk,
     }
 }
 
-ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast) {
+StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src,
+                                            starrocks::vectorized::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
     // materialize
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
@@ -156,8 +157,7 @@ ChunkPtr FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src, st
 
         int dest_index = ctx_index++;
         ExprContext* ctx = _dest_expr_ctx[dest_index];
-
-        auto col = ctx->evaluate(cast.get());
+        ASSIGN_OR_RETURN(auto col, ctx->evaluate(cast.get()));
         uintptr_t col_pointer = reinterpret_cast<uintptr_t>(col.get());
         if (column_pointers.contains(col_pointer)) {
             col = col->clone();
@@ -252,7 +252,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
-        src_file = std::make_shared<StreamPipeSequentialFile>(std::move(pipe));
+        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe));
+        src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
         break;
     }
     case TFileType::FILE_BROKER: {
@@ -270,7 +271,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     using DecompressorPtr = std::shared_ptr<Decompressor>;
     std::unique_ptr<Decompressor> dec;
     RETURN_IF_ERROR(Decompressor::create_decompressor(compression, &dec));
-    *file = std::make_shared<CompressedSequentialFile>(std::move(src_file), DecompressorPtr(dec.release()));
+    auto stream = std::make_unique<io::CompressedInputStream>(src_file->stream(), DecompressorPtr(dec.release()));
+    *file = std::make_shared<SequentialFile>(std::move(stream), range_desc.path);
     return Status::OK();
 }
 

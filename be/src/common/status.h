@@ -113,6 +113,8 @@ public:
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
+    static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }

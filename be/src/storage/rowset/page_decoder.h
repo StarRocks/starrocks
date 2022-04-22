@@ -26,8 +26,8 @@
 #include "runtime/timestamp_value.h"
 #include "storage/column_block.h" // for ColumnBlockView
 #include "storage/fs/block_manager.h"
+#include "storage/range.h"
 #include "storage/rowset/page_pointer.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks::vectorized {
 class Column;

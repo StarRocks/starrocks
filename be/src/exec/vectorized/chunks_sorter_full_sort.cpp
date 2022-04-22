@@ -16,8 +16,8 @@ namespace starrocks::vectorized {
 
 ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                                           const std::string& sort_keys, size_t size_of_chunk_batch)
-        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, false, size_of_chunk_batch) {
+                                           const std::string& sort_keys)
+        : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, false) {
     _selective_values.resize(_state->chunk_size());
 }
 
@@ -28,12 +28,18 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
         _big_chunk = chunk->clone_empty();
     }
 
-    if (_big_chunk->num_rows() + chunk->num_rows() > std::numeric_limits<uint32_t>::max()) {
-        LOG(WARNING) << "full sort row is " << _big_chunk->num_rows() + chunk->num_rows();
-        return Status::InternalError("Full sort in single query instance only support at most 4294967295 rows");
+    size_t target_rows = _big_chunk->num_rows() + chunk->num_rows();
+    if (target_rows > Column::MAX_CAPACITY_LIMIT) {
+        LOG(WARNING) << "Full sort rows exceed limit " << target_rows;
+        return Status::InternalError(fmt::format("Full sort rows exceed limit: {}", target_rows));
     }
 
     _big_chunk->append(*chunk);
+
+    if (_big_chunk->reach_capacity_limit()) {
+        LOG(WARNING) << "Full sort encounter big chunk overflow issue";
+        return Status::InternalError(fmt::format("Full sort encounter big chunk overflow issue"));
+    }
 
     DCHECK(!_big_chunk->has_const_column());
     return Status::OK();
@@ -127,7 +133,7 @@ Status ChunksSorterFullSort::_build_sorting_data(RuntimeState* state) {
 
     _sorted_permutation.resize(row_count);
     for (uint32_t i = 0; i < row_count; ++i) {
-        _sorted_permutation[i] = {0, i, i};
+        _sorted_permutation[i] = {0, i};
     }
 
     return Status::OK();

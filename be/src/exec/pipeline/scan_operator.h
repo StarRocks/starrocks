@@ -38,21 +38,29 @@ public:
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
-    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel) = 0;
-
-protected:
-    ScanNode* _scan_node = nullptr;
+    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _merge_chunk_source_profiles();
+
+protected:
+    ScanNode* _scan_node = nullptr;
+    // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
+    // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
+    // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
+    // should share one profile because these ChunkSources are serial in timeline.
+    // And all these parallel profiles will be merged to ScanOperator's profile at the end.
+    std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
+
+private:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
 
     bool _is_finished = false;
 

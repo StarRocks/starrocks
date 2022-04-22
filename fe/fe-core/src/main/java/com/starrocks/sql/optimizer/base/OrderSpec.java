@@ -57,6 +57,11 @@ public class OrderSpec {
         return true;
     }
 
+    @Override
+    public String toString() {
+        return orderDescs.toString();
+    }
+
     public static OrderSpec createEmpty() {
         return new OrderSpec(Lists.newArrayList());
     }

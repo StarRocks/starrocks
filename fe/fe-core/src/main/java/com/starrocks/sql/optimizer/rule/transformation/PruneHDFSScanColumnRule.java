@@ -134,22 +134,12 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {
-        if (scanOperator instanceof LogicalHiveScanOperator) {
-            return scanColumns.size() != 0 && !((LogicalHiveScanOperator) scanOperator).getPartitionColumns().containsAll(
-                    scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
-        }
-        return scanColumns.size() != 0;
+        return scanColumns.size() != 0 && !scanOperator.getPartitionColumns().containsAll(
+                scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
     }
 
     private boolean isPartitionColumn(LogicalScanOperator scanOperator, String columnName) {
-        if (scanOperator instanceof LogicalHiveScanOperator) {
-            // Hive partition columns is not materialized column, so except partition columns
-            return ((LogicalHiveScanOperator) scanOperator).getPartitionColumns().contains(columnName);
-        }
-        if (scanOperator instanceof LogicalHudiScanOperator) {
-            // Hudi partition columns is not materialized column, so except partition columns
-            return ((LogicalHudiScanOperator) scanOperator).getPartitionColumns().contains(columnName);
-        }
-        return false;
+        // Hive/Hudi partition columns is not materialized column, so except partition columns
+        return scanOperator.getPartitionColumns().contains(columnName);
     }
 }

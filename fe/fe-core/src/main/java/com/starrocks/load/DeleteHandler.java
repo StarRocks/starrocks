@@ -149,8 +149,8 @@ public class DeleteHandler implements Writable {
     }
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
-        String dbName = stmt.getDbName();
-        String tableName = stmt.getTableName();
+        String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
         List<String> partitionNames = stmt.getPartitionNames();
         List<Predicate> conditions = stmt.getDeleteConditions();
         Database db = Catalog.getCurrentCatalog().getDb(dbName);
@@ -417,7 +417,7 @@ public class DeleteHandler implements Writable {
         return partitionNames;
     }
 
-    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table, 
+    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table,
                                                                    List<Column> partitionColumns)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
@@ -429,7 +429,7 @@ public class DeleteHandler implements Writable {
         for (Predicate condition : deleteConditions) {
             SlotRef slotRef = (SlotRef) condition.getChild(0);
             String columnName = slotRef.getColumnName();
-            
+
             // filter condition is not partition column;
             if (partitionColumns.stream().noneMatch(e -> e.getName().equals(columnName))) {
                 continue;
@@ -832,7 +832,8 @@ public class DeleteHandler implements Writable {
                 predicate.setChild(childNo, LiteralExpr.create("0", Type.TINYINT));
             }
         }
-        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+        LiteralExpr result =
+                LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {

@@ -15,17 +15,11 @@ import java.io.File;
 import java.util.UUID;
 
 public class DateTruncTest {
-    private static String runningDir = "fe/mocked/DateTruncTest/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext ctx;
-
-    @After
-    public void tearDown() throws Exception {
-        FileUtils.deleteDirectory(new File(runningDir));
-    }
 
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setQueryId(UUIDUtil.genUUID());
     }

@@ -371,12 +371,11 @@ build_gperftools() {
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
-    LD_LIBRARY_PATH="${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
     
-    CFLAGS=$CFLAGS
+    CFLAGS=$OLD_FLAGS
 }
 
 # zlib
@@ -386,7 +385,14 @@ build_zlib() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL 
+    make -j$PARALLEL
+    make install
+
+    # build minizip
+    cd $TP_SOURCE_DIR/$ZLIB_SOURCE/contrib/minizip
+    autoreconf --force --install
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static=yes --enable-shared=no
+    make -j$PARALLEL
     make install
 }
 
@@ -833,6 +839,23 @@ build_vpack() {
     make install
 }
 
+# opentelemetry
+build_opentelemetry() {
+    check_if_source_exist $OPENTELEMETRY_SOURCE
+
+    cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    $CMAKE_CMD .. \
+        -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
+        -DBUILD_TESTING=OFF -DWITH_EXAMPLES=OFF \
+        -DWITH_STL=OFF -DWITH_JAEGER=ON
+    make -j$PARALLEL
+    make install
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -875,6 +898,7 @@ build_mariadb
 build_aliyun_oss_jars
 build_aws_cpp_sdk
 build_vpack
+build_opentelemetry
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

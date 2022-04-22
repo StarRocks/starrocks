@@ -122,7 +122,7 @@ public:
     const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
-    void eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
+    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
@@ -137,6 +137,14 @@ public:
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }
     RuntimeProfile* unique_metrics() { return _unique_metrics.get(); }
+
+    // The different operators have their own independent logic for calculating Cost
+    virtual int64_t get_cpu_cost() const { return _total_cost_cpu_time_ns_counter->value(); }
+    virtual int64_t get_last_growth_cpu_time_ns() {
+        int64_t growth_time = _total_cost_cpu_time_ns_counter->value() - _last_growth_cpu_time_ns;
+        _last_growth_cpu_time_ns = _total_cost_cpu_time_ns_counter->value();
+        return growth_time;
+    }
 
 protected:
     OperatorFactory* _factory;
@@ -176,6 +184,9 @@ protected:
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
+
+    RuntimeProfile::Counter* _total_cost_cpu_time_ns_counter = nullptr;
+    int64_t _last_growth_cpu_time_ns = 0;
 
 private:
     void _init_rf_counters(bool init_bloom);

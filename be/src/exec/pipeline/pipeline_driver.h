@@ -139,14 +139,13 @@ class PipelineDriver {
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   int32_t driver_id, bool is_root)
+                   int32_t driver_id)
             : _operators(operators),
               _first_unfinished(0),
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _source_node_id(operators[0]->get_plan_node_id()),
               _driver_id(driver_id),
-              _is_root(is_root),
               _state(DriverState::NOT_READY) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
@@ -155,8 +154,7 @@ public:
     }
 
     PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id,
-                             driver._is_root) {}
+            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
     ~PipelineDriver();
 
@@ -334,8 +332,6 @@ public:
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     void check_short_circuit();
 
-    bool is_root() const { return _is_root; }
-
     std::string to_readable_string() const;
 
     workgroup::WorkGroup* workgroup();
@@ -391,7 +387,6 @@ private:
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
-    const bool _is_root;
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueuePtr _morsel_queue = nullptr;
@@ -416,12 +411,6 @@ private:
     RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _output_full_timer = nullptr;
-    RuntimeProfile::Counter* _local_rf_waiting_set_counter = nullptr;
-
-    RuntimeProfile::Counter* _schedule_counter = nullptr;
-    RuntimeProfile::Counter* _schedule_effective_counter = nullptr;
-    RuntimeProfile::Counter* _schedule_rows_per_chunk = nullptr;
-    RuntimeProfile::Counter* _schedule_accumulated_chunks_moved = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;

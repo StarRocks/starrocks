@@ -1064,6 +1064,25 @@ void OrcScannerAdapter::build_column_name_set(std::unordered_set<std::string>* n
     }
 }
 
+Status OrcScannerAdapter::_slot_to_orc_column_name(const SlotDescriptor* desc,
+                                                   const std::unordered_map<int, std::string>& column_id_to_orc_name,
+                                                   std::string* orc_column_name) {
+    auto it = _name_to_column_id.find(desc->col_name());
+    if (it == _name_to_column_id.end()) {
+        auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
+                                     desc->col_name());
+        return Status::NotFound(s);
+    }
+    auto it2 = column_id_to_orc_name.find(it->second);
+    if (it2 == column_id_to_orc_name.end()) {
+        auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
+                                     desc->col_name());
+        return Status::NotFound(s);
+    }
+    *orc_column_name = it2->second;
+    return Status::OK();
+}
+
 Status OrcScannerAdapter::_init_include_columns() {
     build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType());
     std::unordered_map<int, std::string> column_id_to_orc_name;
@@ -1077,27 +1096,20 @@ Status OrcScannerAdapter::_init_include_columns() {
 
     for (SlotDescriptor* desc : _src_slot_descriptors) {
         if (desc == nullptr) continue;
-        auto it = _name_to_column_id.find(desc->col_name());
-        if (it == _name_to_column_id.end()) {
-            auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
-                                         desc->col_name());
-            return Status::NotFound(s);
-        }
-        auto it2 = column_id_to_orc_name.find(it->second);
-        if (it2 == column_id_to_orc_name.end()) {
-            auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
-                                         desc->col_name());
-            return Status::NotFound(s);
-        }
-        orc_column_names.push_back(it2->second);
+        std::string orc_column_name;
+        RETURN_IF_ERROR(_slot_to_orc_column_name(desc, column_id_to_orc_name, &orc_column_name));
+        orc_column_names.emplace_back(orc_column_name);
     }
+
     _row_reader_options.include(orc_column_names);
 
     if (_lazy_load_ctx != nullptr) {
         std::list<std::string> orc_lazy_load_column_names;
         for (SlotDescriptor* desc : _lazy_load_ctx->lazy_load_slots) {
             if (desc == nullptr) continue;
-            orc_lazy_load_column_names.push_back(desc->col_name());
+            std::string orc_column_name;
+            RETURN_IF_ERROR(_slot_to_orc_column_name(desc, column_id_to_orc_name, &orc_column_name));
+            orc_lazy_load_column_names.emplace_back(orc_column_name);
         }
         _row_reader_options.includeLazyLoadColumnNames(orc_lazy_load_column_names);
     }
@@ -2028,7 +2040,8 @@ static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnS
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
 static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                      const ColumnPtr& min_col, const ColumnPtr& max_col) {
+                                      int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
+                                      const ColumnPtr& max_col) {
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
@@ -2042,7 +2055,7 @@ static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::Col
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            orc_ts_to_native_ts(&min, utc_tzinfo, 0, secs, ns);
+            orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns);
         }
 
         {
@@ -2053,7 +2066,7 @@ static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::Col
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            orc_ts_to_native_ts(&max, utc_tzinfo, 0, secs, ns);
+            orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns);
         }
 
         DOWN_CAST_ASSIGN_MIN_MAX(PrimitiveType::TYPE_DATETIME);
@@ -2062,7 +2075,7 @@ static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::Col
 }
 
 Status OrcScannerAdapter::decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats,
-                                               ColumnPtr min_col, ColumnPtr max_col) {
+                                               ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds) {
     if (slot->is_nullable()) {
         auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
         auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
@@ -2092,7 +2105,7 @@ Status OrcScannerAdapter::decode_min_max_value(SlotDescriptor* slot, const orc::
         return decode_date_min_max(ptype, stats, min_col, max_col);
 
     case PrimitiveType::TYPE_DATETIME:
-        return decode_datetime_min_max(ptype, stats, min_col, max_col);
+        return decode_datetime_min_max(ptype, stats, tz_offset_in_seconds, min_col, max_col);
 
     default:
         return Status::NotSupported("Not support to decode min/max from orc column stats. type = " +

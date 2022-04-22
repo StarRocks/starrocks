@@ -32,7 +32,8 @@ public:
 private:
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
 
-    const TPlanNode& _tnode;
+    // Only used for profile
+    std::string _sort_keys;
     int64_t _offset;
 
     // _sort_exec_exprs contains the ordering expressions

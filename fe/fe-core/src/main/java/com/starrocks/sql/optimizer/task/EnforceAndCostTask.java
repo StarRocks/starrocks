@@ -163,7 +163,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 // compute the output property
                 OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver();
                 Pair<PhysicalPropertySet, Double> outputPropertyWithCost = outputPropertyDeriver
-                        .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression, childrenBestExprList,
+                        .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression,
                                 childrenOutputProperties, curTotalCost);
                 PhysicalPropertySet outputProperty = outputPropertyWithCost.first;
                 curTotalCost = outputPropertyWithCost.second;
@@ -264,7 +264,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
     private void setSatisfiedPropertyWithCost(PhysicalPropertySet outputProperty,
                                               List<PhysicalPropertySet> inputProperties) {
-        // groupExpression can satisfy the itself output property
+        // groupExpression can satisfy its own output property
         setPropertyWithCost(groupExpression, outputProperty, inputProperties);
         // groupExpression can satisfy the ANY type output property
         setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, inputProperties);
@@ -289,7 +289,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                         requiredProperty, Lists.newArrayList(outputProperty));
             }
         } else {
-
             // outputProperty is superset of requiredProperty
             if (!outputProperty.equals(requiredProperty)) {
                 setPropertyWithCost(groupExpression, outputProperty, requiredProperty, inputProperties);
