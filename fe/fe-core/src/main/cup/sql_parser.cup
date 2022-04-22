@@ -309,11 +309,11 @@ nonterminal ValueList value_clause;
 
 // No return.
 nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_or_index, opt_storage, opt_wild_where,
-            charset, opt_charset_name, equal, transaction_characteristics, isolation_level,
+            charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String user, opt_user, opt_character_name, opt_equal_or_not;
+nonterminal String user, opt_user, opt_charset_name, opt_character_name, opt_equal_or_not;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
