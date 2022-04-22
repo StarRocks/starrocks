@@ -22,7 +22,10 @@ struct SortedRun {
     SortedRun(ChunkPtr ichunk, const Columns& columns)
             : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
 
-    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {}
+    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
+        DCHECK_LE(start, end);
+        DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
+    }
 
     SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
 
@@ -43,7 +46,13 @@ struct SortedRun {
     }
 
     size_t num_columns() const { return orderby.size(); }
-    size_t num_rows() const { return range.second - range.first; }
+    size_t start_index() const { return range.first; }
+    size_t end_index() const { return range.second; }
+    size_t num_rows() const {
+        DCHECK_LE(range.first, range.second);
+        DCHECK_LT(range.second - range.first, Column::MAX_CAPACITY_LIMIT);
+        return range.second - range.first;
+    }
     const Column* get_column(int index) const { return orderby[index].get(); }
     bool empty() const { return range.second == range.first; }
     void reset();
@@ -55,6 +64,7 @@ struct SortedRun {
             return chunk->clone_unique();
         } else {
             size_t slice_rows = num_rows();
+            DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
             ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
             cloned->append(*chunk, range.first, slice_rows);
             return cloned;
