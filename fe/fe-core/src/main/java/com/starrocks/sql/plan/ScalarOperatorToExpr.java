@@ -452,8 +452,19 @@ public class ScalarOperatorToExpr {
                     new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
                             operator.getDictColumn().getName(),
                             dictExpr.isNullable());
+            
+            // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
+            // the PlaceHolder and the original string column have the same id,
+            // so we need to save the original string column first and restore it after we build the expression
+
+            // 1. save the previous expr, it was null or string column
+            final Expr old = context.colRefToExpr.get(key);
+            // 2. use a placeholder instead of string column to build DictMapping
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExecExpression(call, context);
+            // 3. recover the previous column
+            context.colRefToExpr.put(key, old);
+
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
             return result;
