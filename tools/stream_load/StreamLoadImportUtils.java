@@ -17,7 +17,7 @@ public class StreamLoadImportUtils {
     private static Integer threadNumber = Math.min(Runtime.getRuntime().availableProcessors(), 32);
     private static volatile BlockingDeque<String> blockingQueue = new LinkedBlockingDeque<>();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
         resetDefaultConfig(args);
         printConfig();
         initWorkerThread();
@@ -37,6 +37,9 @@ public class StreamLoadImportUtils {
                 blockingQueue.addLast(stringBuilder.toString());
                 count = size;
                 stringBuilder = new StringBuilder();
+                while (blockingQueue.size() > size) {
+                    Thread.sleep(30L);
+                }
             }
         }
         // clear string builder
