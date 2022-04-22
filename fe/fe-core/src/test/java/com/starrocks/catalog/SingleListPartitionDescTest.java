@@ -41,23 +41,6 @@ public class SingleListPartitionDescTest {
         Assert.assertEquals(sql, partitionDesc.toSql());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDuplicatedValue() throws AnalysisException {
-        String partitionName = "p1";
-        List<String> values = Lists.newArrayList("guangdong", "guangdong");
-        boolean ifNotExists = false;
-        Map<String, String> partitionProperties = new HashMap<>();
-        partitionProperties.put("storage_medium", "SSD");
-        partitionProperties.put("replication_num", "1");
-        partitionProperties.put("in_memory", "true");
-        partitionProperties.put("tablet_type", "memory");
-        partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
-
-        SingleItemListPartitionDesc partitionDesc =
-                new SingleItemListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
-        partitionDesc.analyze(1, null);
-    }
-
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
         String partitionName = "p1";

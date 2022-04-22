@@ -10,6 +10,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 
 import java.util.List;
 import java.util.Map;
@@ -161,26 +162,30 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) {
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) throws DdlException {
         List<Column> partitionColumns = this.findPartitionColumns(columns);
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
-        this.singleListPartitionDescs.forEach(desc -> {
-            long partitionId = partitionNameToId.get(desc.getPartitionName());
-            listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-            listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-            listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
-            listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
-            listPartitionInfo.setValues(partitionId, desc.getValues());
-        });
-        this.multiListPartitionDescs.forEach(desc -> {
-            long partitionId = partitionNameToId.get(desc.getPartitionName());
-            listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
-            listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
-            listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
-            listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
-            listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
-        });
-        return listPartitionInfo;
+        try{
+            ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
+            for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs){
+                long partitionId = partitionNameToId.get(desc.getPartitionName());
+                listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
+                listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
+                listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
+                listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
+                listPartitionInfo.setValues(partitionId, desc.getValues());
+            }
+            for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs){
+                long partitionId = partitionNameToId.get(desc.getPartitionName());
+                listPartitionInfo.setDataProperty(partitionId, desc.getPartitionDataProperty());
+                listPartitionInfo.setIsInMemory(partitionId, desc.isInMemory());
+                listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
+                listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
+                listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
+            }
+            return listPartitionInfo;
+        }catch (AnalysisException exception){
+            throw new DdlException(exception.getMessage());
+        }
     }
 
     private List<Column> findPartitionColumns(List<Column> columns) {

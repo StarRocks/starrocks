@@ -8,6 +8,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import org.apache.spark.sql.catalyst.plans.logical.Except;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -104,6 +105,41 @@ public class ListPartitionDescTest {
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
         return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testInvalidValueAndColumnTypeForMultiPartition() throws AnalysisException, DdlException {
+        List<String> partitionColNames = Lists.newArrayList("dt", "province");
+        MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
+                //aaaa is invalid value for a date type column dt, it will throw a DdlException
+                Lists.newArrayList(Lists.newArrayList("aaaa", "guangdong")
+                        , Lists.newArrayList("2022-04-15", "tianjin")), null);
+
+        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
+        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+        listPartitionDesc.analyze(this.findColumnDefList(), null);
+
+        Map<String, Long> partitionNameToId = new HashMap<>();
+        partitionNameToId.put("p1", 10001L);
+
+        listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testInvalidValueAndColumnTypeForSinglePartition() throws AnalysisException, DdlException {
+        List<String> partitionColNames = Lists.newArrayList("user_id");
+        SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
+                //beijing is invalid value for a bigint type column user_id, it will throw a DdlException
+                Lists.newArrayList("guangdong", "beijing"), null);
+
+        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
+        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+        listPartitionDesc.analyze(this.findColumnDefList(), null);
+
+        Map<String, Long> partitionNameToId = new HashMap<>();
+        partitionNameToId.put("p1", 10001L);
+
+        listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
     @Test
@@ -317,4 +353,6 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
     }
+
+
 }

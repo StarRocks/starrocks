@@ -3,6 +3,9 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.PartitionValue;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -24,14 +27,14 @@ public class ListPartitionInfo extends PartitionInfo {
 
     @SerializedName("partitionColumns")
     private List<Column> partitionColumns;
-
     //serialize values for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
     @SerializedName("idToMultiValues")
     private Map<Long, List<List<String>>> idToMultiValues;
-
+    private Map<Long, List<List<LiteralExpr>>> idToMultiPartitionValues;
     //serialize values for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
+    private Map<Long, List<LiteralExpr>> idToPartitionValues;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -40,22 +43,70 @@ public class ListPartitionInfo extends PartitionInfo {
         this.setIsMultiColumnPartition();
 
         idToValues = new HashMap<>();
+        idToPartitionValues = new HashMap<>();
         idToMultiValues = new HashMap<>();
+        idToMultiPartitionValues = new HashMap<>();
     }
 
     public ListPartitionInfo() {
         super();
         idToValues = new HashMap<>();
+        idToPartitionValues = new HashMap<>();
         idToMultiValues = new HashMap<>();
+        idToMultiPartitionValues = new HashMap<>();
         partitionColumns = new ArrayList<>();
     }
 
-    public void setValues(long partitionId, List<String> values) {
+    public void setValues(long partitionId, List<String> values) throws AnalysisException {
+        idToPartitionValues.put(partitionId, this.toSinglePartitionValues(values));
         idToValues.put(partitionId, values);
     }
 
-    public void setMultiValues(long partitionId, List<List<String>> multiValues) {
-        idToMultiValues.put(partitionId, multiValues);
+    /**
+     * 1. transform string partition value to LiteralExpr
+     * 2. Check that the partition value and the partition column are valid
+     *
+     * @param values partition values
+     * @return
+     * @throws AnalysisException
+     */
+    private List<LiteralExpr> toSinglePartitionValues(List<String> values) throws AnalysisException {
+        List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
+        for (String value : values) {
+            //there only one partition column for single partition list
+            Type type = partitionColumns.get(0).getType();
+            LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+            partitionValues.add(partitionValue);
+        }
+        return partitionValues;
+    }
+
+    public void setMultiValues(long partitionId, List<List<String>> multiValues) throws AnalysisException {
+        this.idToMultiPartitionValues.put(partitionId, this.toMultiPartitionValues(multiValues));
+        this.idToMultiValues.put(partitionId, multiValues);
+    }
+
+    /**
+     * 1. transform string partition value to LiteralExpr
+     * 2. Check that the partition value and the partition column are valid
+     *
+     * @param multiValues partition values
+     * @return
+     * @throws AnalysisException
+     */
+    private List<List<LiteralExpr>> toMultiPartitionValues(List<List<String>> multiValues) throws AnalysisException {
+        List<List<LiteralExpr>> multiPartitionValues = new ArrayList<>(multiValues.size());
+        for (List<String> values : multiValues) {
+            List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
+            for (int i = 0; i < values.size(); i++) {
+                String value = values.get(i);
+                Type type = partitionColumns.get(i).getType();
+                LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+                partitionValues.add(partitionValue);
+            }
+            multiPartitionValues.add(partitionValues);
+        }
+        return multiPartitionValues;
     }
 
     private void setIsMultiColumnPartition() {
