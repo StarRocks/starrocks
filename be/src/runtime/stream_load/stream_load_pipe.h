@@ -94,7 +94,7 @@ public:
         }
         // cancelled
         if (_cancelled) {
-            return _err_st;
+            return Status::InternalError("cancelled");
         }
 
         // finished
