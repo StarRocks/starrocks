@@ -238,6 +238,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitInsert(StarRocksParser.InsertContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
 
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
@@ -270,7 +274,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new InsertStmt(
-                new InsertTarget(targetTableName, null),
+                new InsertTarget(targetTableName, partitionNames),
                 context.label == null ? null : context.label.getText(),
                 targetColumnNames,
                 queryStatement,
