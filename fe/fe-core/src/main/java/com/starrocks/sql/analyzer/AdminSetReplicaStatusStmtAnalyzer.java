@@ -2,11 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
@@ -24,10 +20,6 @@ public class AdminSetReplicaStatusStmtAnalyzer {
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt,
                                                         ConnectContext session) {
             try {
-                // check auth
-                if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-                }
                 adminSetReplicaStatusStmt.checkProperties();
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage(), e);
