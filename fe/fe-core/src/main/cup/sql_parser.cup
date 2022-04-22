@@ -313,7 +313,7 @@ nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_o
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String user, opt_user, opt_charset_name, opt_character_name;
+nonterminal String user, opt_user, opt_charset_name, opt_character_name, opt_equal_or_not;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
@@ -2692,19 +2692,30 @@ old_or_new_charset_name_or_default ::=
     :}
     ;
 
-opt_charset_name ::=
-    {: RESULT = "utf8"; :}
-    | KW_CHAR KW_SET old_or_new_charset_name_or_default
-    | KW_DEFAULT KW_CHARSET EQUAL ident:charsetName
-    {: RESULT = charsetName; :}
-    | KW_CHARSET EQUAL ident:charsetName
-    {: RESULT = charsetName; :}
-    | KW_DEFAULT KW_CHARSET ident:charsetName
-    {: RESULT = charsetName; :}
-    | KW_CHARSET ident:charsetName
-    {: RESULT = charsetName; :}
+opt_equal_or_not ::=
+    ident_or_text:id
+    {:
+        RESULT = id;
+    :}
+    | EQUAL ident_or_text:id
+    {:
+        RESULT = id;
+    :}
     ;
 
+opt_charset_name ::=
+    {:
+        RESULT = "utf8";
+    :}
+    | KW_DEFAULT charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    | charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    ;
 
 opt_character_name ::=
     /* empty */
