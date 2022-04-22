@@ -41,7 +41,6 @@ public class AnalyzeAlterTableStatementTest {
         AlterTableStatementAnalyzer.analyze(clause, connectContext);
         Assert.assertEquals("RENAME newTableName",
                 clause.toSql());
-
     }
 
     @Test(expected = SemanticException.class)
