@@ -1334,6 +1334,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     int32_t end_version = -1;
     Status status;
     std::vector<std::unique_ptr<TabletReader>> readers;
+    Schema base_schema;
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
@@ -1347,7 +1348,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             return status;
         }
         VLOG(3) << "versions to be changed size:" << versions_to_be_changed.size();
-        Schema base_schema;
         if (config::enable_schema_change_v2) {
             base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
                     base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
