@@ -122,7 +122,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("cast", new Integer(SqlParserSymbols.KW_CAST));
         keywordMap.put("chain", new Integer(SqlParserSymbols.KW_CHAIN));
         keywordMap.put("char", new Integer(SqlParserSymbols.KW_CHAR));
-        keywordMap.put("character", new Integer(SqlParserSymbols.KW_CHARACTER));
+        keywordMap.put("character", new Integer(SqlParserSymbols.KW_CHAR));
         keywordMap.put("charset", new Integer(SqlParserSymbols.KW_CHARSET));
         keywordMap.put("check", new Integer(SqlParserSymbols.KW_CHECK));
         keywordMap.put("cluster", new Integer(SqlParserSymbols.KW_CLUSTER));
