@@ -64,7 +64,7 @@ public class StreamLoadImportUtils {
             System.exit(0);
         }
         if (auth == null) {
-            System.out.println("auth not empty , please set --auth=username:password");
+            System.out.println("auth not empty , please set --u=username:password");
             System.exit(0);
         }
         if (sourceFilePath == null) {
