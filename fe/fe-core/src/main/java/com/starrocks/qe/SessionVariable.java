@@ -929,6 +929,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return joinImplementationMode;
     }
 
+    public void setJoinImplementationMode(String joinImplementationMode) {
+        this.joinImplementationMode = joinImplementationMode;
+    }
+
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
     }
