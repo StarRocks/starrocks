@@ -38,12 +38,12 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | alterSystem DROP BACKEND clusters                                                   #dropBackend
-    | alterSystem ADD FREE? BACKEND (TO clusterName)? clusters                            #addBackend
-    | alterSystem DROP FOLLOWER cluster                                                   #dropFollower
-    | alterSystem ADD FOLLOWER cluster                                                   #addFollower
-    | alterSystem DROP OBSERVER cluster                                                   #dropObserver
-    | alterSystem ADD OBSERVER cluster                                                   #addObserver
+    | alterSystem DROP BACKEND '(' string (',' string)* ')'                                                   #dropBackend
+    | alterSystem ADD FREE? BACKEND (TO string)? '(' string (',' string)* ')'                            #addBackend
+    | alterSystem DROP FOLLOWER string                                                   #dropFollower
+    | alterSystem ADD FOLLOWER string                                                   #addFollower
+    | alterSystem DROP OBSERVER string                                                   #dropObserver
+    | alterSystem ADD OBSERVER string                                                   #addObserver
     ;
 
 explainDesc
@@ -559,18 +559,4 @@ nonReserved
 
 alterSystem
     : ALTER SYSTEM
-    ;
-
-cluster
-    : SINGLE_QUOTED_TEXT
-    | DOUBLE_QUOTED_TEXT
-    ;
-
-clusters
-    : cluster (',' cluster)*
-    ;
-
-clusterName
-    : SINGLE_QUOTED_TEXT
-    | DOUBLE_QUOTED_TEXT
     ;
