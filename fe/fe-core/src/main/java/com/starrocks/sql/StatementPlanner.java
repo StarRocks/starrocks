@@ -186,8 +186,8 @@ public class StatementPlanner {
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return isNewAlterTable(statement)
-                || statement instanceof AdminSetConfigStmt
                 || statement instanceof AlterViewStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt

@@ -34,8 +34,6 @@ public class AlterTableStatementAnalyzer {
         for (AlterClause alterClause : alterClauseList) {
             if (StatementPlanner.isNewAlterTableClause(alterClause)) {
                 AlterTableStatementAnalyzer.analyze(alterClause, context);
-            } else {
-                throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
             }
         }
     }
