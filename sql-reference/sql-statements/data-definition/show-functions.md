@@ -1,31 +1,30 @@
 # SHOW FUNCTIONS
 
-## description
+## 功能
 
-### Syntax
+查看数据库下所有的自定义(系统提供)的函数。查看指定数据库的函数，未指定数据库则直接查询当前会话所在数据库，需要对查询数据库拥有 `SHOW` 权限。详细用户权限控制请参考 [GRANT](../account-management/GRANT.md) 章节。
+
+## 语法
 
 ```sql
-SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern']
+SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern'];
 ```
 
-### Parameters
+注：方括号 [] 中内容可省略不写。
+
+说明：
 
 ```plain text
 full:表示显示函数的详细信息
-
 builtin:表示显示系统提供的函数
-
 db: 要查询的数据库名字
-
 function_pattern`: 用来过滤函数名称的参数
 ```
 
-查看数据库下所有的自定义(系统提供)的函数。如果用户指定了数据库，那么查看对应数据库的，
-否则直接查询当前会话所在数据库需要对这个数据库拥有 `SHOW` 权限
+## 示例
 
-## example
-
-```Plain Text
+```sql
+-- \G表示将查询结果进行按列打印
 mysql> show full functions in testDb\G
 *************************** 1. row ***************************
         Signature: my_add(INT,INT)
@@ -53,6 +52,6 @@ mysql> show builtin functions in testDb like 'year%';
 2 rows in set (0.00 sec)
 ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,FUNCTIONS
+SHOW，FUNCTIONS

@@ -1,10 +1,10 @@
 # CREATE TABLE AS SELECT
 
-## Description  
+## 功能  
 
 CREATE TABLE AS SELECT（简称 CTAS）可以查询原表，并基于查询结果，创建一个新表并且导入数据。
 
-## Syntax
+## 语法
 
 ```SQL
 CREATE TABLE [IF NOT EXISTS] [database.]table_name
@@ -17,9 +17,11 @@ AS SELECT query
 [ ... ]
 ```
 
-## Parameters
+注：方括号 [] 中内容可省略不写。
 
-### 建表部分
+### 参数说明
+
+#### 建表部分
 
 | 参数             | 说明                                                         |
 | ---------------- | ------------------------------------------------------------ |
@@ -29,33 +31,37 @@ AS SELECT query
 | distribution_desc | 分桶方式。更多说明，请参见 [distribution_desc](CREATE%20TABLE.md/#syntax)。如果不填写，则默认分桶键为CBO统计信息中最高基数的列，分桶数量为10。如果CBO中没有相关统计信息，则默认分桶键为第一列。 |
 | properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](CREATE%20TABLE.md/#syntax)。目前CTAS仅支持创建ENGINE类型为OLAP的表。 |
 
-### 查询部分
+#### 查询部分
 
-支持`... AS SELECT query` 直接指定具体列，比如 `... AS SELECT a, b, c FROM table_a;` ，则新建表的列名为a，b， c 。
+支持 `... AS SELECT query` 直接指定具体列，比如 `... AS SELECT a, b, c FROM table_a;` ，则新建表的列名为 a，b， c 。
 
-支持`... AS SELECT query` 使用表达式，并且建议您为新表的列设置具有业务意义的别名，便于后续识别，比如`... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，设置新列名为x，y，z。
+支持 `... AS SELECT query` 使用表达式，并且建议您为新表的列设置具有业务意义的别名，便于后续识别，比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，设置新列名为 x，y，z。
 
-## Usage Notes
+## 使用说明
 
-- 仅支持 ENGINE 类型为 OLAP ；数据模型为 Duplicate Key，排序键为前三列（数据类型的存储空间不能超过36字节）。
+- 仅支持 ENGINE 类型为 OLAP ；[数据模型](/table_design/Data_model.md) 为 [Duplicate Key](/table_design/Data_model.md#明细模型)，排序键为前三列（数据类型的存储空间不能超过 36 字节）。
 - 暂不支持设置索引。
-- 暂无法对 CTAS 提供事务保证。如果 CTAS 语句执行失败（FE重启等原因），则可能存在如下情况：
+- 暂无法对 CTAS 提供事务保证。如果 CTAS 语句执行失败（FE 重启等原因），则可能存在如下情况：
   - 新表可能已创建且未删除。
   - 新表可能已创建，此时，如果除 CTAS 外存在其他导入（比如 INSERT ）将数据导入至新表，则首次成功导入的数据，视为该数据的第一版本。
 - 创建成功后，您需要手动授予用户权限。
 
-## Examples
+## 示例
 
-示例一：复制原表 order，创建一个新表 order_new。
+### 复制原表
+
+复制原表 order，创建一个新表 order_new。
 
 ```SQL
 CREATE TABLE order_new
 AS SELECT * FROM order;
 ```
 
-示例二：根据原表 order 的列 k1、k2 和 k3，创建一个新表 order_new，并指定列名为 a、b 和 c。
+### 基于原表改变列名称创建新表
 
-> 指定的列数需要与`... AS SELECT query` 的列数保持一致。
+根据原表 order 的列 k1、k2 和 k3，创建一个新表 order_new，并指定列名为 a、b 和 c。
+
+> 指定的列数需要与 `... AS SELECT query` 的列数保持一致。
 
 ```SQL
 CREATE TABLE order_new a, b, c
@@ -67,7 +73,9 @@ CREATE TABLE order_new
 AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
 ```
 
-示例三：`... AS SELECT query`使用表达式，根据表达式结果，创建一个新表，并重新指定列名。
+### 基于原表使用表达式生成新表的新列
+
+`... AS SELECT query` 使用表达式，根据表达式结果，创建一个新表，并重新指定列名。
 
 > 建议您为新表的列名设置具有业务意义的别名，便于后续识别。
 

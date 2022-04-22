@@ -1,24 +1,27 @@
 # DROP VIEW
 
-## description
+## 功能
 
-该语句用于删除一个逻辑视图 VIEW
+该语句用于删除一个逻辑视图 VIEW。
 
-语法：
+创建 VIEW 操作请参考 [CREATE VIEW](../data-definition/CREATE%20VIEW.md) 章节。
+
+## 语法
 
 ```sql
-DROP VIEW [IF EXISTS]
-[db_name.]view_name;
+DROP VIEW [IF EXISTS] [db_name.]view_name;
 ```
 
-## example
+注：方括号 [] 中内容可省略不写。
 
-1. 如果存在，删除 example_db 上的视图 example_view
+## 示例
+
+1. 如果存在，删除 example_db 上的视图 example_view。
 
     ```sql
     DROP VIEW IF EXISTS example_db.example_view;
     ```
 
-## keyword
+## 关键字(keywords)
 
-DROP,VIEW
+DROP，VIEW

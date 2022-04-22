@@ -1,23 +1,25 @@
 # CREATE DATABASE
 
-## description
+## 功能
 
-该语句用于新建数据库（database）
+该语句用于创建数据库(database)。
 
-语法：
+## 语法
 
 ```sql
 CREATE DATABASE [IF NOT EXISTS] db_name;
 ```
 
-## example
+注：方括号 [] 中内容可省略不写。
 
-1. 新建数据库 db_test
+## 示例
+
+1. 新建数据库 db_test。
 
     ```sql
     CREATE DATABASE db_test;
     ```
 
-## keyword
+## 关键字(keywords)
 
-CREATE,DATABASE
+CREATE， DATABASE

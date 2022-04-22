@@ -1,28 +1,30 @@
 # ALTER DATABASE
 
-## description
+## 功能
 
 该语句用于设置指定数据库的属性。（仅管理员使用）
 
-语法：
+## 语法
 
-1. 设置数据库数据量配额，单位为B/K/KB/M/MB/G/GB/T/TB/P/PB
+### 设置数据库数据量配额
 
-    ```sql
-    ALTER DATABASE db_name SET DATA QUOTA quota;
-    ```
+单位为 B/K/KB/M/MB/G/GB/T/TB/P/PB。
 
-2. 重命名数据库
+```sql
+ALTER DATABASE db_name SET DATA QUOTA quota;
+```
 
-    ```sql
-    ALTER DATABASE db_name RENAME new_db_name;
-    ```
+### 重命名数据库
 
-3. 设置数据库的副本数量配额
+```sql
+ALTER DATABASE db_name RENAME new_db_name;
+```
 
-    ```sql
-    ALTER DATABASE db_name SET REPLICA QUOTA quota;
-    ```
+### 设置数据库的副本数量配额
+
+```sql
+ALTER DATABASE db_name SET REPLICA QUOTA quota;
+```
 
 说明：
 
@@ -31,7 +33,7 @@
 数据库的默认数据量配额和默认副本数量配额均为 2^63 - 1。
 ```
 
-## example
+## 示例
 
 1. 设置指定数据库数据量配额
 
@@ -57,6 +59,6 @@
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
 
-## keyword
+## 关键字(keywords)
 
-ALTER,DATABASE,RENAME
+ALTER，DATABASE，RENAME

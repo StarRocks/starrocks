@@ -1,10 +1,10 @@
 # BACKUP
 
-## description
+## 功能
 
-该语句用于备份指定数据库下的数据。该命令为异步操作。提交成功后，需通过 SHOW BACKUP 命令查看进度。仅支持备份 OLAP 类型的表。
+该语句用于备份指定数据库下的数据。该命令为 **异步** 操作。提交成功后，需通过 `SHOW BACKUP` 命令查看进度。仅支持备份 **OLAP** 类型的表。
 
-语法：
+## 语法
 
 ```sql
 BACKUP SNAPSHOT [db_name].{snapshot_name}
@@ -16,17 +16,22 @@ ON (
 PROPERTIES ("key"="value", ...);
 ```
 
+注：方括号 [] 中内容可省略不写。
+
 说明：
 
-1. 同一数据库下只能有一个正在执行的 BACKUP 或 RESTORE 任务。
+1. 同一数据库下只能有一个正在执行的 `BACKUP` 或 `RESTORE` 任务。
 2. ON 子句中标识需要备份的表和分区。如果不指定分区，则默认备份该表的所有分区。
-3. PROPERTIES 目前支持以下属性：
-"type" = "full"：表示这是一次全量更新（默认）。
-"timeout" = "3600"：任务超时时间，默认为一天。单位秒。
+3. `PROPERTIES` 目前支持以下属性：
 
-## example
+    ```plain text
+    "type" = "full"：表示这是一次全量更新（默认）。
+    "timeout" = "3600"：任务超时时间，默认为一天。单位秒。
+    ```
 
-1. 全量备份 example_db 下的表 example_tbl 到仓库 example_repo 中：
+## 示例
+
+1. 全量备份 example_db 下的表 example_tbl 到仓库 example_repo 中。
 
     ```sql
     BACKUP SNAPSHOT example_db.snapshot_label1
@@ -35,7 +40,7 @@ PROPERTIES ("key"="value", ...);
     PROPERTIES ("type" = "full");
     ```
 
-2. 全量备份 example_db 下，表 example_tbl 的 p1, p2 分区，以及表 example_tbl2 到仓库 example_repo 中：
+2. 全量备份 example_db 下，表 example_tbl 的 p1, p2 分区，以及表 example_tbl2 到仓库 example_repo 中。
 
     ```sql
     BACKUP SNAPSHOT example_db.snapshot_label2
@@ -47,6 +52,6 @@ PROPERTIES ("key"="value", ...);
     );
     ```
 
-## keyword
+## 关键字(keywords)
 
 BACKUP

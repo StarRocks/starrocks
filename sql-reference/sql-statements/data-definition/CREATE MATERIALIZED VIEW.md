@@ -1,20 +1,27 @@
 # CREATE MATERIALIZED VIEW
 
-## description
+## 功能
 
 该语句用于创建物化视图。
 
 说明:
 
-异步语法，调用成功后仅表示创建物化视图的任务提交成功，用户需要先通过 ``` show alter table rollup ``` 来查看物化视图的创建进度。
-在显示 FINISHED 后既可通过 ``` desc [table_name] all ``` 命令来查看物化视图的 schema 了。
+**异步** 语法，调用成功后仅表示创建物化视图的任务提交成功，用户需要先通过 ` show alter table rollup ` 来查看物化视图的创建进度。
 
-语法：
+在显示 FINISHED 后既可通过 `desc [table_name] all` 命令来查看物化视图的 schema 了。
+
+删除物化视图参考 [DROP MATERIALIZED](../data-definition/DROP%20MATERIALIZED%20VIEW.md) 章节。
+
+## 语法
 
 ```sql
 CREATE MATERIALIZED VIEW [MV name] as [query]
-[PROPERTIES ("key" = "value")]
+[PROPERTIES ("key" = "value")];
 ```
+
+注：方括号 [] 中内容可省略不写。
+
+说明：
 
 1. MV name
 
@@ -30,28 +37,28 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
     SELECT select_expr[, select_expr ...]
     FROM [Base view name]
     GROUP BY column_name[, column_name ...]
-    ORDER BY column_name[, column_name ...]
+    ORDER BY column_name[, column_name ...];
     ```
 
     语法和查询语句语法一致。
 
-    select_expr: 物化视图的 schema 中所有的列。
+    **select_expr**: 物化视图的 schema 中所有的列。
     + 仅支持不带表达式计算的单列，聚合列。
     + 其中聚合函数目前仅支持 SUM, MIN, MAX 三种，且聚合函数的参数只能是不带表达式计算的单列。
     + 至少包含一个单列。
     + 所有涉及到的列，均只能出现一次。
 
-    base view name: 物化视图的原始表名，必填项。
+    **base view name**: 物化视图的原始表名，必填项。
     + 必须是单表，且非子查询
 
-    group by: 物化视图的分组列，选填项。
+    **group by**: 物化视图的分组列，选填项。
     + 不填则数据不进行分组。
 
-    order by: 物化视图的排序列，选填项。
+    **order by**: 物化视图的排序列，选填项。
     + 排序列的声明顺序必须和 select_expr 中列声明顺序一致。
     + 如果不声明 order by，则根据规则自动补充排序列。
     如果物化视图是聚合类型，则所有的分组列自动补充为排序列。
-    如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于3个，则前三个作为排序列。
+    如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于 3 个，则前三个作为排序列。
     + 如果 query 中包含分组列的话，则排序列必须和分组列一致。
 
 3. properties
@@ -59,20 +66,21 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
     声明物化视图的一些配置，选填项。
 
     ```sql
-
     PROPERTIES ("key" = "value", "key" = "value" ...)
     ```
 
     以下几个配置，均可声明在此处：
 
+    ```plain text
     short_key: 排序列的个数。
     timeout: 物化视图构建的超时时间。
+    ```
 
-## example
+## 示例
 
-Base 表结构为
+Base 表结构为：
 
-```Plain Text
+```sql
 mysql> desc duplicate_table;
 +-------+--------+------+------+---------+-------+
 | Field | Type   | Null | Key  | Default | Extra |
@@ -84,16 +92,16 @@ mysql> desc duplicate_table;
 +-------+--------+------+------+---------+-------+
 ```
 
-1. 创建一个仅包含原始表 （k1, k2）列的物化视图
+1. 创建一个仅包含原始表 （k1, k2）列的物化视图。
 
     ```sql
     create materialized view k1_k2 as
     select k1, k2 from duplicate_table;
     ```
 
-    物化视图的 schema 如下图，物化视图仅包含两列 k1, k2 且不带任何聚合
+    物化视图的 schema 如下图，物化视图仅包含两列 k1, k2 且不带任何聚合。
 
-    ```plain text
+    ```sql
     +-----------------+-------+--------+------+------+---------+-------+
     | IndexName       | Field | Type   | Null | Key  | Default | Extra |
     +-----------------+-------+--------+------+------+---------+-------+
@@ -102,7 +110,7 @@ mysql> desc duplicate_table;
     +-----------------+-------+--------+------+------+---------+-------+
     ```
 
-2. 创建一个以 k2 为排序列的物化视图
+2. 创建一个以 k2 为排序列的物化视图。
 
     ```sql
     create materialized view k2_order as
@@ -111,7 +119,7 @@ mysql> desc duplicate_table;
 
     物化视图的 schema 如下图，物化视图仅包含两列 k2, k1，其中 k2 列为排序列，不带任何聚合。
 
-    ```plain text
+    ```sql
     +-----------------+-------+--------+------+-------+---------+-------+
     | IndexName       | Field | Type   | Null | Key   | Default | Extra |
     +-----------------+-------+--------+------+-------+---------+-------+
@@ -120,7 +128,7 @@ mysql> desc duplicate_table;
     +-----------------+-------+--------+------+-------+---------+-------+
     ```
 
-3. 创建一个以 k1, k2 分组，k3 列为 SUM 聚合的物化视图
+3. 创建一个以 k1, k2 分组，k3 列为 SUM 聚合的物化视图。
 
     ```sql
     create materialized view k1_k2_sumk3 as
@@ -131,7 +139,7 @@ mysql> desc duplicate_table;
 
     由于物化视图没有声明排序列，且物化视图带聚合数据，系统默认补充分组列 k1, k2 为排序列。
 
-    ```plain text
+    ```sql
     +-----------------+-------+--------+------+-------+---------+-------+
     | IndexName       | Field | Type   | Null | Key   | Default | Extra |
     +-----------------+-------+--------+------+-------+---------+-------+
@@ -141,16 +149,16 @@ mysql> desc duplicate_table;
     +-----------------+-------+--------+------+-------+---------+-------+
     ```
 
-4. 创建一个去除重复行的物化视图
+4. 创建一个去除重复行的物化视图。
 
     ```sql
     create materialized view deduplicate as
     select k1, k2, k3, k4 from duplicate_table group by k1, k2, k3, k4;
     ```
 
-    物化视图 schema 如下图，物化视图包含 k1, k2, k3, k4列，且不存在重复行。
+    物化视图 schema 如下图，物化视图包含 k1, k2, k3, k4 列，且不存在重复行。
 
-    ```plain text
+    ```sql
     +-----------------+-------+--------+------+-------+---------+-------+
     | IndexName       | Field | Type   | Null | Key   | Default | Extra |
     +-----------------+-------+--------+------+-------+---------+-------+
@@ -166,7 +174,7 @@ mysql> desc duplicate_table;
 
     all_type_table 的 schema 如下：
 
-    ```plain text
+    ```sql
     +-------+--------------+------+-------+---------+-------+
     | Field | Type         | Null | Key   | Default | Extra |
     +-------+--------------+------+-------+---------+-------+
@@ -190,7 +198,7 @@ mysql> desc duplicate_table;
     系统默认补充的排序列为 k3, k4, k5 三列。这三列类型的字节数之和为 4(INT) + 8(BIGINT) + 16(DECIMAL) = 28 < 36。所以补充的是这三列作为排序列。
     物化视图的 schema 如下，可以看到其中 k3, k4, k5 列的 key 字段为 true，也就是排序列。k6, k7 列的 key 字段为 false，也就是非排序列。
 
-    ```plain text
+    ```sql
     +----------------+-------+--------------+------+-------+---------+-------+
     | IndexName      | Field | Type         | Null | Key   | Default | Extra |
     +----------------+-------+--------------+------+-------+---------+-------+
@@ -202,6 +210,6 @@ mysql> desc duplicate_table;
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
 
-## keyword
+## 关键字(keywords)
 
-CREATE, MATERIALIZED, VIEW
+CREATE， MATERIALIZED， VIEW
