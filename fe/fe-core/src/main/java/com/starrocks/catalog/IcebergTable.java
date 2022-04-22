@@ -149,22 +149,25 @@ public class IcebergTable extends Table {
         IcebergCatalogType type = icebergResource.getCatalogType();
         icebergProperties.put(ICEBERG_CATALOG, type.name());
         LOG.info("Iceberg table type is " + type.name());
+        IcebergCatalog icebergCatalog;
         switch (type) {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
-                validateColumn(IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs()));
+                icebergCatalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs());
                 break;
             case CUSTOM_CATALOG:
                 icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());
                 for (String key : copiedProps.keySet()) {
                     icebergProperties.put(key, copiedProps.remove(key));
                 }
-                validateColumn(IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties));
+                icebergCatalog = IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
                 break;
             default:
                 throw new DdlException("unsupported catalog type " + type.name());
         }
         this.resourceName = resourceName;
+
+        validateColumn(icebergCatalog);
 
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
