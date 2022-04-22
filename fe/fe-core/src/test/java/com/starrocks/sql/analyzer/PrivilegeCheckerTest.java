@@ -173,4 +173,26 @@ public class PrivilegeCheckerTest {
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
 
     }
+
+    @Test
+    public void testAdminSetReplicaStatus() throws Exception {
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze("default_cluster");
+
+        String sql = "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+    }
 }

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -49,6 +50,15 @@ public class PrivilegeChecker {
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             check(statement.getQueryStatement(), session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
+            // check auth
+            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
             return null;
         }
 
