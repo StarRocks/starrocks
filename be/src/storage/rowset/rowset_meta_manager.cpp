@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
+#include "storage/kv_store.h"
 
 namespace starrocks {
 
@@ -65,21 +66,21 @@ string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
-        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func) {
+        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func) {
     auto traverse_rowset_meta_func = [&func](std::string_view key, std::string_view value) -> bool {
-        std::string key_str(key);
-        std::string value_str(value);
         // key format: rst_uuid_rowset_id
-        std::vector<std::string> parts = strings::Split(key_str, "_");
+        std::vector<StringPiece> parts = strings::Split(StringPiece(key.data(), static_cast<int>(key.size())), "_");
         if (parts.size() != 3) {
             LOG(WARNING) << "invalid rowset key:" << key << ", splitted size:" << parts.size();
             return true;
         }
         RowsetId rowset_id;
-        rowset_id.init(parts[2]);
-        std::vector<std::string> uid_parts = strings::Split(parts[1], "-");
-        TabletUid tablet_uid(uid_parts[0], uid_parts[1]);
-        return func(tablet_uid, rowset_id, value_str);
+        rowset_id.init(std::string_view(parts[2].data(), parts[2].size()));
+        std::vector<StringPiece> uid_parts = strings::Split(parts[1], "-");
+        std::string_view p1(uid_parts[0].data(), uid_parts[0].size());
+        std::string_view p2(uid_parts[1].data(), uid_parts[1].size());
+        TabletUid tablet_uid(p1, p2);
+        return func(tablet_uid, rowset_id, value);
     };
     return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
 }

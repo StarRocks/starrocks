@@ -30,6 +30,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
@@ -475,22 +476,7 @@ struct RowsetId {
     int64_t mi = 0;
     int64_t lo = 0;
 
-    void init(const std::string& rowset_id_str) {
-        // for new rowsetid its a 48 hex string
-        // if the len < 48, then it is an old format rowset id
-        if (rowset_id_str.length() < 48) {
-            int64_t high = std::stol(rowset_id_str, nullptr, 10);
-            init(1, high, 0, 0);
-        } else {
-            int64_t high = 0;
-            int64_t middle = 0;
-            int64_t low = 0;
-            from_hex(&high, rowset_id_str.substr(0, 16));
-            from_hex(&middle, rowset_id_str.substr(16, 16));
-            from_hex(&low, rowset_id_str.substr(32, 16));
-            init(high >> 56, high & LOW_56_BITS, middle, low);
-        }
-    }
+    void init(std::string_view rowset_id_str);
 
     // to compatiable with old version
     void init(int64_t rowset_id) { init(1, rowset_id, 0, 0); }
