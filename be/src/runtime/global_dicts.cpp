@@ -206,7 +206,10 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     for (int i = 0; i < codes.size(); ++i) {
         dict_opt_ctx->code_convert_map[codes[i]] = i;
     }
-    // insert dict result to
+    // insert dict result to global dicts
+
+    // old lowcardinality optimization origin_expr return type was TYPE_INT
+    // we want make old_version also generate new dict
     if (origin_expr->type().type == TYPE_VARCHAR || is_old_version) {
         DCHECK_GE(targetSlotId, 0);
         ColumnViewer<TYPE_VARCHAR> viewer(result_column);
