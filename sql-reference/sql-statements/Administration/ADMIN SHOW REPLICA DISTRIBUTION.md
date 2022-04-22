@@ -1,20 +1,22 @@
 # ADMIN SHOW REPLICA DISTRIBUTION
 
-## description
+## 功能
 
-该语句用于展示一个表或分区副本分布状态
+该语句用于展示一个表或分区副本分布状态。
 
-语法：
+## 语法
 
 ```sql
 ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
 ```
 
+注：方括号 [] 中内容可省略不写。
+
 说明：
 
-结果中的 Graph 列以图形的形式展示副本分布比例
+结果中的 Graph 列以图形的形式展示副本分布比例。
 
-## example
+## 示例
 
 1. 查看表的副本分布
 
@@ -28,6 +30,6 @@ ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
     ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
     ```
 
-## keyword
+## 关键字(keywords)
 
-ADMIN,SHOW,REPLICA,DISTRIBUTION
+ADMIN，SHOW，REPLICA，DISTRIBUTION

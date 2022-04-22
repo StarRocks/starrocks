@@ -114,11 +114,11 @@ bin/start_fe.sh --daemon
 
 * 如果 FE 启动失败，可能是由于端口号被占用，可修改配置文件 conf/fe.conf 中的端口号 http_port。
 * 使用 jps 命令查看 java 进程确认 "StarRocksFe" 存在。
-* 使用浏览器访问 `FE ip:http_port`（默认8030），打开 StarRocks 的 WebUI， 用户名为 root， 密码为空。
+* 使用浏览器访问 `FE ip:http_port`（默认 8030），打开 StarRocks 的 WebUI， 用户名为 root， 密码为空。
 
 ### 使用 MySQL 客户端访问 FE
 
-StarRocks 可通过 [Mysql 客户端进行连接](#%E4%BD%BF%E7%94%A8mysql%E5%AE%A2%E6%88%B7%E7%AB%AF%E8%AE%BF%E9%97%AEstarrocks)，使用 Add/Drop 命令添加/删除 fe/be 节点，实现对集群的 [扩容/缩容](../administration/Scale_up_down.md) 操作。
+StarRocks 可通过 Mysql 客户端进行连接，使用 Add/Drop 命令添加/删除 fe/be 节点，实现对集群的 [扩容/缩容](../administration/Scale_up_down.md) 操作。
 
 第一步: 安装 mysql 客户端，版本建议 5.5+(如果已经安装，可忽略此步)：
 
@@ -299,7 +299,7 @@ Alive 为 true 代表状态正常。
 
 ### FE 的高可用集群部署
 
-StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md#FE高可用部署)。
+StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md#fe高可用部署)。
 
 ### 集群升级
 

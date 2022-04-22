@@ -1,15 +1,17 @@
 # SHOW TABLE STATUS
 
-## description
+## 功能
 
 该语句用于查看 Table 的一些信息。
 
-语法：
+## 语法
 
 ```sql
 SHOW TABLE STATUS
 [FROM db] [LIKE "pattern"]
 ```
+
+注：方括号 [] 中内容可省略不写。
 
 说明：
 
@@ -17,7 +19,7 @@ SHOW TABLE STATUS
 1. 该语句主要用于兼容 MySQL 语法，目前仅显示 Comment 等少量信息
 ```
 
-## example
+## 示例
 
 1. 查看当前数据库下所有表的信息
 
@@ -31,6 +33,6 @@ SHOW TABLE STATUS
     SHOW TABLE STATUS FROM db LIKE "%example%";
     ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,TABLE,STATUS
+SHOW，TABLE，STATUS

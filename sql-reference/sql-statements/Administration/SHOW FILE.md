@@ -1,16 +1,16 @@
 # SHOW FILE
 
-## description
+## 功能
 
-该语句用于展示一个 database 内创建的文件
+该语句用于展示一个 database 内创建的文件。
 
-语法：
+## 语法
 
 ```sql
 SHOW FILE [FROM database];
 ```
 
-说明：
+命令返回结果说明：
 
 ``` plain text
 FileId:     文件ID，全局唯一
@@ -21,7 +21,7 @@ FileSize:   文件大小，单位字节
 MD5:        文件的 MD5
 ```
 
-## example
+## 示例
 
 1. 查看数据库 my_database 中已上传的文件
 
@@ -29,6 +29,6 @@ MD5:        文件的 MD5
     SHOW FILE FROM my_database;
     ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,FILE
+SHOW，FILE

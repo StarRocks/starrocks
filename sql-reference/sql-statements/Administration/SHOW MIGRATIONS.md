@@ -1,17 +1,17 @@
 # SHOW MIGRATIONS
 
-## description
+## 功能
 
-该语句用于查看数据库迁移的进度
+该语句用于查看数据库迁移的进度。
 
-语法:
+## 语法
 
 ```sql
-SHOW MIGRATIONS
+SHOW MIGRATIONS；
 ```
 
-## keyword
+## 关键字(keywords)
 
 ```sql
-SHOW,MIGRATIONS
+SHOW，MIGRATIONS
 ```

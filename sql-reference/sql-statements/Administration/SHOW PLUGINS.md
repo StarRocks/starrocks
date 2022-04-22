@@ -1,10 +1,10 @@
 # SHOW PLUGINS
 
-## description
+## 功能
 
 该语句用于展示已安装的插件。
 
-语法:
+## 语法
 
 ```sql
 SHOW PLUGINS;
@@ -12,7 +12,7 @@ SHOW PLUGINS;
 
 该命令会展示所有用户安装的和系统内置的插件。
 
-## example
+## 示例
 
 1. 展示已安装的插件：
 
@@ -20,6 +20,6 @@ SHOW PLUGINS;
     SHOW PLUGINS;
     ```
 
-## keyword
+## 关键字(keywords)
 
 SHOW PLUGINS

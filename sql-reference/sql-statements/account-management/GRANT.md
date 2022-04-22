@@ -1,16 +1,22 @@
 # GRANT
 
-## description
+## 功能
 
 GRANT 命令用于赋予指定用户或角色指定的权限。
 
-### Syntax
+### 语法
 
-GRANT privilege_list ON db_name[.tbl_name] TO user_identity [ROLE role_name]
+注：方括号 [] 中内容可省略不写。
 
-GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
+```SQL
+GRANT privilege_list ON db_name[.tbl_name] TO user_identity [ROLE role_name];
 
-privilege_list 是需要赋予的权限列表，以逗号分隔。当前 StarRocks 支持如下权限：
+GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name];
+```
+
+**privilege_list**
+
+需要赋予的权限列表，以逗号分隔。当前 StarRocks 支持如下权限：
 
 ```plain text
 NODE_PRIV：集群节点操作权限，包括节点上下线等操作，只有 root 用户有该权限，不可赋予其他用户。
@@ -24,8 +30,9 @@ DROP_PRIV：对指定的库或表的删除权限
 USAGE_PRIV: 对指定资源的使用权限
 ```
 
-旧版权限中的 ALL 和 READ_WRITE 会被转换成：SELECT_PRIV,LOAD_PRIV,ALTER_PRIV,CREATE_PRIV,DROP_PRIV；
-READ_ONLY 会被转换为 SELECT_PRIV。
+旧版权限中的 `ALL` 和 `READ_WRITE` 会被转换成：`SELECT_PRIV，LOAD_PRIV，ALTER_PRIV，CREATE_PRIV，DROP_PRIV`；
+
+`READ_ONLY` 会被转换为 `SELECT_PRIV`。
 
 权限分类：
 
@@ -35,7 +42,9 @@ READ_ONLY 会被转换为 SELECT_PRIV。
 3. 资源权限：USAGE_PRIV
 ```
 
-db_name[.tbl_name] 支持以下三种形式：
+**db_name [.tbl_name]**
+
+支持以下三种形式：
 
 ```plain text
 1. *.* 权限可以应用于所有库及其中所有表
@@ -43,9 +52,11 @@ db_name[.tbl_name] 支持以下三种形式：
 3. db.tbl 权限可以应用于指定库下的指定表
 ```
 
-这里指定的库或表可以是不存在的库和表。
+这里指定的库或表 **可以是不存在的库和表**。
 
-resource_name 支持以下两种形式：
+**resource_name**
+
+支持以下两种形式：
 
 ```plain text
 1. * 权限应用于所有资源
@@ -54,15 +65,13 @@ resource_name 支持以下两种形式：
 
 这里指定的资源可以是不存在的资源。
 
-```plain text
-user_identity：
-```
+**user_identity**
 
-这里的 user_identity 语法同 CREATE USER。且必须为使用 CREATE USER 创建过的 user_identity。user_identity 中的host可以是域名，如果是域名的话，权限的生效时间可能会有1分钟左右的延迟。
+这里的 `user_identity` 语法与 [CREATE USER](../account-management/CREATE%20USER.md) 章节中的相同。且必须为使用 `CREATE USER` 创建过的 `user_identity`。`user_identity` 中的 host 可以是域名，如果是域名的话，权限的生效时间可能会有 1 分钟左右的延迟。
 
 也可以将权限赋予指定的 ROLE，如果指定的 ROLE 不存在，则会自动创建。
 
-## example
+## 示例
 
 1. 授予所有库和表的权限给用户
 
@@ -100,6 +109,6 @@ user_identity：
     GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
     ```
 
-## keyword
+## 关键字(keywords)
 
 GRANT

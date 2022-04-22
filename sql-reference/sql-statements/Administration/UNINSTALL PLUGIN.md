@@ -1,10 +1,10 @@
 # UNINTALL PLUGIN
 
-## description
+## 功能
 
 该语句用于卸载一个插件。
 
-语法
+## 语法
 
 ```SQL
 UNINSTALL PLUGIN plugin_name;
@@ -14,7 +14,7 @@ plugin_name 可以通过 `SHOW PLUGINS;` 命令查看。
 
 只能卸载非 builtin 的插件。
 
-## example
+## 示例
 
 1. 卸载一个插件：
 
@@ -22,6 +22,6 @@ plugin_name 可以通过 `SHOW PLUGINS;` 命令查看。
     UNINSTALL PLUGIN auditdemo;
     ```
 
-## keyword
+## 关键字(keywords)
 
-UNINSTALL,PLUGIN
+UNINSTALL，PLUGIN

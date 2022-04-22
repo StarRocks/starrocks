@@ -1,14 +1,16 @@
 # ADMIN SHOW CONFIG
 
-## description
+## 功能
 
-该语句用于展示当前集群的配置（当前仅支持展示 FE 的配置项）
+该语句用于展示当前集群的配置（当前仅支持展示 FE 的配置项）。
 
-语法：
+## 语法
 
 ```sql
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
+
+注：方括号 [] 中内容可省略不写。
 
 说明：
 
@@ -23,15 +25,15 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 6. Comment：    配置项说明
 ```
 
-## example
+## 示例
 
-1. 查看当前FE节点的配置
+1. 查看当前 FE 节点的配置。
 
     ```sql
     ADMIN SHOW FRONTEND CONFIG;
     ```
 
-2. 使用like谓词搜索当前Fe节点的配置
+2. 使用 like 谓词搜索当前 Fe 节点的配置。
 
     ```plain text
     mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%check_java_version%';
@@ -43,6 +45,6 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
     1 row in set (0.00 sec)
     ```
 
-## keyword
+## 关键字(keywords)
 
-ADMIN,SHOW,CONFIG
+ADMIN，SHOW，CONFIG

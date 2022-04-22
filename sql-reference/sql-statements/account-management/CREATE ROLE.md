@@ -1,10 +1,10 @@
 # CREATE ROLE
 
-## description
+## 功能
 
-该语句为：用户去创建一个角色
+创建一个角色，对创建好的角色可以进行 [授权](../account-management/GRANT.md#语法) 操作。可参考 [创建用户](../account-management/CREATE%20USER.md) 章节最后一个示例对用户进行授权，拥有该角色的用户会拥有角色被赋予的权限。创建好的角色可进行 [删除](../account-management/DROP%20ROLE.md).
 
- 语法：
+## 语法
 
 ```sql
 CREATE ROLE role1;
@@ -12,7 +12,7 @@ CREATE ROLE role1;
 
  该语句创建一个无权限的角色，可以后续通过 GRANT 命令赋予该角色权限。
 
-## example
+## 示例
 
  1. 创建一个角色
 
@@ -20,6 +20,6 @@ CREATE ROLE role1;
   CREATE ROLE role1;
   ```
 
-## keyword
+## 关键字(keywords)
 
 CREATE, ROLE
