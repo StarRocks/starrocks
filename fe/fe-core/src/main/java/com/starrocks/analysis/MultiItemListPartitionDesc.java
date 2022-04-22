@@ -13,7 +13,10 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 
 public class MultiItemListPartitionDesc extends PartitionDesc {

@@ -4,7 +4,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
@@ -14,7 +13,10 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 
 public class SingleItemListPartitionDesc extends PartitionDesc {
