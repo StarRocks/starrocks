@@ -90,6 +90,7 @@ public class MetricCalculator extends TimerTask {
 
         // query latency
         List<QueryDetail> queryList = QueryDetailQueue.getQueryDetailsAfterTime(lastQueryEventTime);
+        ResourceGroupMetricMgr.updateQueryLatency(queryList);
         List<Long> latencyList = new ArrayList<>();
         double latencySum = 0L;
         for (QueryDetail queryDetail : queryList) {
