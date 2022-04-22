@@ -1,8 +1,8 @@
 # DESCRIBE
 
-## description
+## 描述
 
-该语句用于展示指定 table 的 schema 信息
+该语句用于展示指定 table 的 schema 信息。
 
 语法：
 
@@ -12,22 +12,22 @@ DESC[RIBE] [db_name.]table_name [ALL];
 
 说明：
 
-如果指定 ALL，则显示该 table 的所有 index(rollup) 的 schema
+"[]" 中的内容可省略。如果指定 ALL，则显示该 table 的所有字段，索引及物化视图信息。
 
-## example
+## 示例
 
-1. 显示Base表Schema
+1. 查看表字段信息  
 
     ```sql
     DESC table_name;
     ```
 
-2. 显示表所有 index 的 schema
+2. 查看表的字段，索引及物化视图信息
 
     ```sql
     DESC db1.table_name ALL;
     ```
 
-## keyword
+## 关键字 (keywords)
 
-DESCRIBE,DESC
+DESCRIBE, DESC

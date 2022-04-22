@@ -1,35 +1,49 @@
 # DECIMAL
 
-## description
+## 描述
 
-DECIMAL(P[,S])
+DECIMAL(P [, S])
 
-高精度定点数，P代表一共有多少个有效数字(precision)，S代表小数点后最多有多少数字(scale)
+高精度定点数，P 代表一共有多少个有效数字(precision)，S 代表小数点后最多有多少数字(scale)。
 
-1.19.0及以后版本对decimal类型的（P，S）有默认值设置，默认是decimal（10，0）
+1.19.0 及以后版本对 decimal 类型的（P，S）有默认值设置，默认是 decimal（10，0）。
 
 例如：
-1.19.0版本可成功执行`select cast（‘12.35’ as decimal）;`1.19之前版本执行`select cast（‘12.35’ as decimal）;`或者`select cast（‘12.35’ as decimal（5））;`会提示failed，需明确指定p,s的值,如：`select cast（‘12.35’ as decimal（5，1）;`
+1.19.0 版本可成功执行 `select cast（‘12.35’ as decimal）;` 1.19 之前版本执行 `select cast（‘12.35’ as decimal）;` 或者 `select cast（‘12.35’ as decimal（5））;` 会提示 failed，需明确指定 P, S 的值, 如：`select cast（‘12.35’ as decimal（5，1）;`
 
-* Decimal V2
+* DecimalV2
 
-  P的范围是[1,27], S的范围[0, 9], 另外，P必须要大于等于S的取值。默认的S取值为0。
+  P 的范围是 [1,27], S 的范围 [0, 9], 另外，P 必须要大于等于 S 的取值。默认的 S 取值为 0。
 
-* Fast Decimal  (1.18版本默认)
+* Fast Decimal  (1.18 版本默认)
 
-  P的范围是[1,38], S的范围[0, P]。默认的S取值为0。
-  StarRocks-1.18版本开始起, decimal类型支持更高精度的FastDecimal
+  P 的范围是 [1,38], S 的范围 [0, P]。默认的 S 取值为 0。
+  StarRocks-1.18 版本开始起, decimal 类型支持更高精度的 FastDecimal。
 
   主要优化有：
   
-  1. 内部采用多种宽度的整数表示decimal, decimal(P<=18, S)使用64bit整数, 相比于原来decimal v2实现统一采用128bit整数, 算数运算和转换运算在64bit的处理器上使用更少的指令数量, 因此性能有大幅提升。
-  2. Fast Decimal 实现和decimal v2相比, 具体算法做了极致的优化, 尤其是乘法运算，性能提升有4倍左右。
+  1. 内部采用多种宽度的整数表示 decimal, decimal(P <= 18, S)使用 64bit 整数, 相比于原来 decimalV2 实现统一采用 128bit 整数, 算数运算和转换运算在 64bit 的处理器上使用更少的指令数量, 因此性能有大幅提升。
+  2. Fast Decimal 实现和 decimalV2 相比, 具体算法做了极致的优化, 尤其是乘法运算，性能提升有 4 倍左右。
   
   当前的限制：
   
-  1. 目前fast decimal 不支持array类型, 如果用户想使用array(decimal)类型, 请使用array(double)类型, 或者关闭decimal v3之后, 使用array(decimal)类型。
-  2. hive直连外表中, orc和parquet数据格式对decimal暂未支持
+  1. 目前 fast decimal 不支持 array 类型, 如果用户想使用 array(decimal)类型, 请使用 array(double) 类型, 或者关闭 decimalV3 之后, 使用 array(decimal) 类型。
+  2. hive 直连外表中, orc 和 parquet 数据格式对 decimal 暂未支持
 
-## keyword
+## 示例
+
+创建表时指定字段类型为 DECIMAL。
+
+```sql
+CREATE TABLE decimalDemo (
+    pk BIGINT(20) NOT NULL COMMENT "",
+    account DECIMAL(12,4) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(pk)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(pk) BUCKETS 4;
+```
+
+## 关键字
 
 DECIMAL

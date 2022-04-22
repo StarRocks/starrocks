@@ -1,11 +1,25 @@
 # FLOAT
 
-## description
+## 描述
 
 FLOAT
 
-4字节浮点数
+4 字节浮点数。
 
-## keyword
+## 示例
+
+创建表时指定字段类型为 FLOAT
+
+```sql
+CREATE TABLE floatDemo (
+    pk BIGINT(20) NOT NULL COMMENT "",
+    channel FLOAT COMMENT "4 bytes"
+) ENGINE=OLAP 
+DUPLICATE KEY(pk)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(pk) BUCKETS 4;
+```
+
+## 关键字
 
 FLOAT
