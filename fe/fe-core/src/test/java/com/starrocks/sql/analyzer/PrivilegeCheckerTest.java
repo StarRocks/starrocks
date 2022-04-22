@@ -175,7 +175,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testAdminSetReplicaStatus() throws Exception {
+    public void testAdminSet() throws Exception {
         auth = starRocksAssert.getCtx().getCatalog().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
