@@ -8,7 +8,7 @@ BIGINT
 
 ## 示例
 
-创建表时指定字段类型为 BIGINT
+创建表时指定字段类型为 BIGINT。
 
 ```sql
 CREATE TABLE bigIntDemo (
