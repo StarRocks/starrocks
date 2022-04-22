@@ -13,19 +13,11 @@ public class HivePartitionKey {
     private final List<String> partitionValues;
     private final TableType tableType;
 
-    public HivePartitionKey(String databaseName, String tableName, List<String> partitionValues) {
-        this(databaseName, tableName, TableType.HIVE, partitionValues);
-    }
-
     public HivePartitionKey(String databaseName, String tableName, TableType tableType, List<String> partitionValues) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionValues = partitionValues;
         this.tableType = tableType;
-    }
-
-    public static HivePartitionKey gen(String databaseName, String tableName, List<String> partitionValues) {
-        return new HivePartitionKey(databaseName, tableName, partitionValues);
     }
 
     public String getTableName() {

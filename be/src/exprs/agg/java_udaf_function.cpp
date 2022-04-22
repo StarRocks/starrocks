@@ -71,7 +71,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle, context, udaf_ctx);
 
     return Status::OK();
 }

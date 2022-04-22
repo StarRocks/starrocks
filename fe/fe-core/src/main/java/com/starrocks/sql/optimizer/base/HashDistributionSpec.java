@@ -7,6 +7,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class HashDistributionSpec extends DistributionSpec {
     private final HashDistributionDesc hashDistributionDesc;
@@ -31,31 +32,43 @@ public class HashDistributionSpec extends DistributionSpec {
 
         // Local shuffle, including bucket shuffle and colocate shuffle, only need to verify the shuffleColumns part,
         // no need to care about the extra part in requiredShuffleColumns
-        if (!getHashDistributionDesc().isLocalShuffle() && requiredShuffleColumns.size() != shuffleColumns.size()) {
+        if (requiredShuffleColumns.size() < shuffleColumns.size()) {
             return false;
         }
 
-        for (int i = 0; i < shuffleColumns.size(); i++) {
-            int requiredShuffleColumn = requiredShuffleColumns.get(i);
-            int outputShuffleColumn = shuffleColumns.get(i);
-            /*
-             * Given the following example：
-             *      SELECT * FROM A JOIN B ON A.a = B.b
-             *      JOIN C ON B.b = C.c
-             *      JOIN D ON C.c = D.d
-             *      JOIN E ON D.d = E.e
-             * We focus on the third join `.. join D ON C.c = D.d`
-             * requiredColumn: D.d
-             * outputColumn: A.a
-             * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
-             *
-             * A.a can be mapped to D.d through joinEquivalentColumns
-             */
-            if (!propertyInfo.isEquivalentJoinOnColumns(requiredShuffleColumn, outputShuffleColumn)) {
-                return false;
+        if (getHashDistributionDesc().isLocalShuffle()) {
+            // Minority meets majority
+            List<ColumnRefSet> requiredEquivalentColumns = requiredShuffleColumns.stream()
+                    .map(c -> propertyInfo.getEquivalentColumns(c)).collect(Collectors.toList());
+            List<ColumnRefSet> shuffleEquivalentColumns = shuffleColumns.stream()
+                    .map(s -> propertyInfo.getEquivalentColumns(s)).collect(Collectors.toList());
+            return requiredEquivalentColumns.containsAll(shuffleEquivalentColumns);
+        } else if (requiredShuffleColumns.size() == shuffleColumns.size()) {
+            // must keep same
+            for (int i = 0; i < shuffleColumns.size(); i++) {
+                int requiredShuffleColumn = requiredShuffleColumns.get(i);
+                int outputShuffleColumn = shuffleColumns.get(i);
+                /*
+                 * Given the following example：
+                 *      SELECT * FROM A JOIN B ON A.a = B.b
+                 *      JOIN C ON B.b = C.c
+                 *      JOIN D ON C.c = D.d
+                 *      JOIN E ON D.d = E.e
+                 * We focus on the third join `.. join D ON C.c = D.d`
+                 * requiredColumn: D.d
+                 * outputColumn: A.a
+                 * joinEquivalentColumns: [A.a, B.b, C.c, D.d]
+                 *
+                 * A.a can be mapped to D.d through joinEquivalentColumns
+                 */
+                if (!propertyInfo.isEquivalentJoinOnColumns(requiredShuffleColumn, outputShuffleColumn)) {
+                    return false;
+                }
             }
+            return true;
         }
-        return true;
+
+        return false;
     }
 
     public boolean isSatisfy(DistributionSpec spec) {

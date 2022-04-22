@@ -293,11 +293,12 @@ public class HiveMetaCache {
             throws DdlException {
         String dbName = hmsTable.getDb();
         String tableName = hmsTable.getTable();
+        Table.TableType tableType = hmsTable.getTableType();
         List<Column> partColumns = getPartitionColumns(hmsTable);
         List<String> columnNames = getAllColumnNames(hmsTable);
-        HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, partColumns);
+        HivePartitionKeysKey hivePartitionKeysKey = new HivePartitionKeysKey(dbName, tableName, tableType, partColumns);
         HiveTableKey hiveTableKey = HiveTableKey.gen(dbName, tableName);
-        HiveTableColumnsKey hiveTableColumnsKey = HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
+        HiveTableColumnsKey hiveTableColumnsKey = new HiveTableColumnsKey(dbName, tableName, partColumns, columnNames, tableType);
         Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             ImmutableMap<PartitionKey, Long> partitionKeys = loadPartitionKeys(hivePartitionKeysKey);
@@ -307,8 +308,7 @@ public class HiveMetaCache {
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
-                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName,
-                        hmsTable.getTableType(), new ArrayList<>());
+                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName, tableType, new ArrayList<>());
                 partitionsCache.put(hivePartitionKey, loadPartition(hivePartitionKey));
                 partitionStatsCache.put(hivePartitionKey, loadPartitionStats(hivePartitionKey));
             }
@@ -344,23 +344,28 @@ public class HiveMetaCache {
         List<String> columnNames = getAllColumnNames(hmsTable);
         try {
             HiveTableColumnsKey hiveTableColumnsKey =
-                    HiveTableColumnsKey.gen(hmsTable.getDb(), hmsTable.getTable(), partColumns, columnNames);
+                    new HiveTableColumnsKey(hmsTable.getDb(), hmsTable.getTable(),
+                            partColumns, columnNames, hmsTable.getTableType());
             tableColumnStatsCache.put(hiveTableColumnsKey, loadTableColumnStats(hiveTableColumnsKey));
         } catch (Exception e) {
             throw new DdlException("refresh table column statistic cached failed: " + e.getMessage());
         }
     }
 
-    public void clearCache(String dbName, String tableName, boolean isHudiTable) {
-        HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, null);
+    public void clearCache(HiveMetaStoreTableInfo hmsTable) {
+        String dbName = hmsTable.getDb();
+        String tableName = hmsTable.getTable();
+        Table.TableType tableType = hmsTable.getTableType();
+        HivePartitionKeysKey hivePartitionKeysKey = new HivePartitionKeysKey(dbName, tableName, tableType, null);
         ImmutableMap<PartitionKey, Long> partitionKeys = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
         partitionKeysCache.invalidate(hivePartitionKeysKey);
         tableStatsCache.invalidate(HiveTableKey.gen(dbName, tableName));
-        tableColumnStatsCache.invalidate(HiveTableColumnsKey.gen(dbName, tableName, null, null));
+        tableColumnStatsCache.invalidate(new HiveTableColumnsKey(dbName, tableName, null, null, tableType));
         if (partitionKeys != null) {
             for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
                 HivePartitionKey pKey =
-                        HivePartitionKey.gen(dbName, tableName, Utils.getPartitionValues(entry.getKey(), isHudiTable));
+                        new HivePartitionKey(dbName, tableName, tableType,
+                                Utils.getPartitionValues(entry.getKey(), tableType == Table.TableType.HUDI));
                 partitionsCache.invalidate(pKey);
                 partitionStatsCache.invalidate(pKey);
             }

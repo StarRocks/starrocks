@@ -129,10 +129,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+    public String getTableName() {
+        return hiveTable;
+    }
+
+    @Override
     public List<Column> getPartitionColumns() {
         return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
     }
 
+    @Override
     public List<String> getPartitionColumnNames() {
         return partColumnNames;
     }
@@ -539,8 +545,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop() {
         if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getHiveRepository().
-                    clearCache(this.resourceName, this.hiveDb, this.hiveTable);
+            Catalog.getCurrentCatalog().getHiveRepository().clearCache(hmsTableInfo);
             Catalog.getCurrentCatalog().getMetastoreEventsProcessor().unregisterTable(this);
         }
     }
