@@ -261,9 +261,28 @@ void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx,
     }
 }
 
+<<<<<<< HEAD
 Status DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx) {
     DCHECK_EQ(conjunct->root()->type().type, TYPE_BOOLEAN);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
+=======
+Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
+                                           SlotId targetSlotId) {
+    // DCHECK_NE(expr_ctx->root()->type().type, TYPE_VARCHAR);
+    SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
+    SlotId expr_slot_id = need_decode_slot_id;
+
+    bool is_old_version = true;
+    Expr* origin_expr = expr_ctx->root();
+    if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
+        origin_expr = f->get_child(1);
+        std::vector<SlotId> slots;
+        f->get_slot_ids(&slots);
+        expr_slot_id = slots.back();
+        is_old_version = false;
+    }
+
+>>>>>>> aad0106b (fix rolling upgrade problems (#5393))
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
     // Slice -> dict-code
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
@@ -279,8 +298,43 @@ Status DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeCon
         dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
         return Status::OK();
     }
+<<<<<<< HEAD
     // unpack result column
     result_column = ColumnHelper::unpack_and_duplicate_const_column(result_column->size(), result_column);
+=======
+    // insert dict result to global dicts
+
+    // old lowcardinality optimization origin_expr return type was TYPE_INT
+    // we want make old_version also generate new dict
+    if (origin_expr->type().type == TYPE_VARCHAR || is_old_version) {
+        DCHECK_GE(targetSlotId, 0);
+        ColumnViewer<TYPE_VARCHAR> viewer(result_column);
+        int num_rows = codes.size();
+
+        GlobalDictMap result_map;
+        RGlobalDictMap rresult_map;
+        std::vector<Slice> values;
+        values.reserve(num_rows);
+
+        // distinct result values
+        int id_allocator = 1;
+        for (int i = 0; i < num_rows; ++i) {
+            if (!viewer.is_null(i)) {
+                auto value = viewer.value(i);
+                Slice slice(value.data, value.size);
+                result_map.lazy_emplace(slice, [&](const auto& ctor) {
+                    id_allocator++;
+                    auto data = _runtime_state->instance_mem_pool()->allocate(value.size);
+                    memcpy(data, value.data, value.size);
+                    slice = Slice(data, slice.size);
+                    ctor(slice, id_allocator);
+                    values.emplace_back(slice);
+                });
+            } else {
+                dict_opt_ctx->result_nullable = true;
+            }
+        }
+>>>>>>> aad0106b (fix rolling upgrade problems (#5393))
 
     bool result_nullable = result_column->is_nullable();
     ColumnPtr data_column = result_column;
