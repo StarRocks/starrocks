@@ -212,6 +212,7 @@ public:
             if (intersect != 0) {
                 size_t left_rows = left_run.num_rows();
                 size_t right_rows = right_run.num_rows();
+                DCHECK_LT(left_rows + right_rows, Column::MAX_CAPACITY_LIMIT);
                 output->resize(0);
                 output->reserve(left_rows + right_rows);
 
@@ -235,6 +236,7 @@ public:
                 std::vector<EqualRange> equal_ranges;
                 equal_ranges.emplace_back(left_run.range, right_run.range);
                 size_t count = left_run.range.second + right_run.range.second;
+                DCHECK_LT(count, Column::MAX_CAPACITY_LIMIT);
                 output->resize(count);
                 equal_ranges.reserve(std::max((size_t)1, count / 4));
 
@@ -362,6 +364,9 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<SortedRuns>& chunks, SortedRuns* output, size_t limit) {
+    if (chunks.empty()) {
+        return Status::OK();
+    }
     std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
@@ -387,7 +392,9 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
     std::vector<SortedRuns> runs;
     for (auto& chunk : chunks) {
-        runs.push_back(SortedRun(chunk, sort_exprs));
+        if (!chunk->is_empty()) {
+            runs.push_back(SortedRun(chunk, sort_exprs));
+        }
     }
     return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
 }
