@@ -138,6 +138,7 @@ tEnv.executeSql(
 | sink.buffer-flush.interval-ms | NO | 300000 | String | the flushing time interval, range: **[1000ms, 3600000ms]**. |
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: **[0, 10]**. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: **[100, 60000]**. |
+| sink.properties.format|  NO | CSV | String | The file format of data loaded into starrocks. Valid values: **CSV** and **JSON**. Default value: **CSV**. |
 | sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**. |
 
 ### 注意事项

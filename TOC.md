@@ -280,6 +280,7 @@
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
       + [min](/sql-reference/sql-functions/aggregate-functions/min.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
+      + [retention](/sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](/sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](/sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
@@ -323,6 +324,8 @@
     + 加密函数
       + [md5](/sql-reference/sql-functions/encryption-functions/md5.md)
       + [sha2](/sql-reference/sql-functions/encryption-functions/sha2.md)
+    + 数学函数
+      + [square](/sql-reference/sql-functions/math-functions/square.md)
   + [系统变量](/reference/System_variable.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
