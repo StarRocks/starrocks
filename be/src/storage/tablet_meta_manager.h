@@ -95,7 +95,7 @@ public:
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
-    static Status traverse_headers(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func);
+    static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 

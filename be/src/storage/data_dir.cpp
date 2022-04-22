@@ -393,7 +393,7 @@ Status DataDir::load() {
     std::set<int64_t> tablet_ids;
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
-                                                                    const std::string& value) -> bool {
+                                                                    std::string_view value) -> bool {
         Status st =
                 _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
         if (!st.ok() && !st.is_not_found()) {
@@ -411,7 +411,7 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::traverse_headers(_kv_store, load_tablet_func);
+    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()
