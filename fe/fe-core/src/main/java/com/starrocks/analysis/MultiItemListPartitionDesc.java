@@ -4,7 +4,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
@@ -14,32 +13,27 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
-public class SingleListPartitionDesc extends PartitionDesc {
+public class MultiItemListPartitionDesc extends PartitionDesc {
 
     private final boolean ifNotExists;
     private final String partitionName;
-    private final List<String> values;
+    private final List<List<String>> multiValues;
     private final Map<String, String> partitionProperties;
-
     private DataProperty partitionDataProperty;
     private Short replicationNum;
     private Boolean isInMemory;
     private TTabletType tabletType;
     private Long versionInfo;
 
-    public SingleListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
-                                   Map<String, String> partitionProperties) {
+    public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
+                                      Map<String, String> partitionProperties) {
         super.type = PartitionType.LIST;
-        this.ifNotExists = ifNotExists;
         this.partitionName = partitionName;
-        this.values = values;
+        this.ifNotExists = ifNotExists;
+        this.multiValues = multiValues;
         this.partitionProperties = partitionProperties;
     }
 
@@ -59,8 +53,8 @@ public class SingleListPartitionDesc extends PartitionDesc {
         return this.isInMemory;
     }
 
-    public List<String> getValues() {
-        return this.values;
+    public List<List<String>> getMultiValues() {
+        return this.multiValues;
     }
 
     public String getPartitionName() {
@@ -68,21 +62,21 @@ public class SingleListPartitionDesc extends PartitionDesc {
     }
 
     public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
-        if (partitionColSize != 1) {
-            throw new AnalysisException("Partition column size should be one when use single list partition ");
-        }
-        Set<String> treeSet = Sets.newTreeSet();
-        for (String value : values) {
-            if (!treeSet.add(value)) {
-                throw new AnalysisException("Duplicated value" + value);
-            }
-        }
+        FeNameFormat.checkPartitionName(this.getPartitionName());
+        this.analyzeValues(partitionColSize);
         this.analyzeProperties(tableProperties);
     }
 
-    private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(this.getPartitionName());
+    private void analyzeValues(int partitionColSize) throws AnalysisException {
+        for (List<String> values : this.multiValues) {
+            if (values.size() != partitionColSize) {
+                throw new AnalysisException(
+                        "(" + String.join(",", values) + ") size should be equal to partition column size ");
+            }
+        }
+    }
 
+    private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {
         // copy one. because ProperAnalyzer will remove entry after analyze
         Map<String, String> copiedTableProperties = Optional.ofNullable(tableProperties)
                 .map(properties -> Maps.newHashMap(properties))
@@ -125,12 +119,15 @@ public class SingleListPartitionDesc extends PartitionDesc {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION ").append(this.partitionName).append(" VALUES IN (");
-        sb.append(this.values.stream().map(value -> "\'" + value + "\'")
-                .collect(Collectors.joining(",")));
+        String items = this.multiValues.stream()
+                .map(values -> "(" + values.stream().map(value -> "'" + value + "'")
+                        .collect(Collectors.joining(",")) + ")")
+                .collect(Collectors.joining(","));
+        sb.append(items);
         sb.append(")");
-        if (partitionProperties != null && !partitionProperties.isEmpty()) {
+        if (this.partitionProperties != null && !this.partitionProperties.isEmpty()) {
             sb.append(" (");
-            sb.append(new PrintableMap(partitionProperties, "=", true, false));
+            sb.append(new PrintableMap(this.partitionProperties, "=", true, false));
             sb.append(")");
         }
         return sb.toString();
@@ -138,6 +135,6 @@ public class SingleListPartitionDesc extends PartitionDesc {
 
     @Override
     public String toString() {
-        return toSql();
+        return this.toSql();
     }
 }

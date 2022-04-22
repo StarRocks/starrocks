@@ -62,6 +62,14 @@ public class ListPartitionInfo extends PartitionInfo {
         super.isMultiColumnPartition = this.partitionColumns.size() > 1;
     }
 
+    public Map<Long, List<List<String>>> getIdToMultiValues() {
+        return idToMultiValues;
+    }
+
+    public Map<Long, List<String>> getIdToValues() {
+        return idToValues;
+    }
+
     /**
      * serialize data to log
      *
@@ -171,4 +179,8 @@ public class ListPartitionInfo extends PartitionInfo {
         return StringUtils.removeEnd(sb.toString(), ",\n");
     }
 
+    @Override
+    public List<Column> getPartitionColumns() {
+        return this.partitionColumns;
+    }
 }

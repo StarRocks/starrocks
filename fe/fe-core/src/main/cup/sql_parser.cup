@@ -248,8 +248,8 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_INNER, KW_INSERT, KW_INT, KW_SIGNED, KW_INTERMEDIATE, KW_INTERSECT, KW_INTERVAL, KW_INTO, KW_IGNORE, KW_IS, KW_ISNULL, KW_ISOLATION,
     KW_JOIN, KW_JSON,
     KW_KEY, KW_KEYS, KW_KILL,
-    KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LOAD,
-    KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL, KW_LIST,
+    KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
+    KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
     KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MIGRATE, KW_MIGRATIONS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OUTER, KW_OUTFILE, KW_OVER,
@@ -432,8 +432,8 @@ nonterminal List<PartitionDesc> range_partition_desc_list;
 nonterminal List<PartitionDesc> opt_list_partition_desc_list;
 nonterminal List<PartitionDesc> list_partition_desc_list;
 nonterminal PartitionDesc list_partition_desc;
-nonterminal List<List<String>> multi_list_partition_desc;
-nonterminal List<String> multi_list_partition_item_desc;
+nonterminal List<List<String>> list_partition_multi_item_list;
+nonterminal List<String> list_partition_multi_item;
 
 nonterminal List<AccessPrivilege> privilege_list;
 nonterminal List<String> string_list;
@@ -2022,22 +2022,22 @@ list_partition_desc ::=
     KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
         string_list:values RPAREN opt_key_value_map:properties
     {:
-        RESULT = new SingleListPartitionDesc(ifNotExists, partName, values, properties);
+        RESULT = new SingleItemListPartitionDesc(ifNotExists, partName, values, properties);
     :}
     | KW_PARTITION opt_if_not_exists:ifNotExists ident:partName KW_VALUES KW_IN LPAREN
-        multi_list_partition_desc:multiValues RPAREN opt_key_value_map:properties
+        list_partition_multi_item_list:multiValues RPAREN opt_key_value_map:properties
     {:
-        RESULT = new MultiListPartitionDesc(ifNotExists, partName, multiValues, properties);
+        RESULT = new MultiItemListPartitionDesc(ifNotExists, partName, multiValues, properties);
     :}
     ;
 
-multi_list_partition_desc ::=
-    multi_list_partition_desc:list COMMA multi_list_partition_item_desc:desc
+list_partition_multi_item_list ::=
+    list_partition_multi_item_list:list COMMA list_partition_multi_item:desc
     {:
         list.add(desc);
         RESULT = list;
     :}
-    | multi_list_partition_item_desc:desc
+    | list_partition_multi_item:desc
     {:
         List<List<String>> arrayList = new ArrayList();
         arrayList.add(desc);
@@ -2045,7 +2045,7 @@ multi_list_partition_desc ::=
     :}
     ;
 
-multi_list_partition_item_desc ::=
+list_partition_multi_item ::=
     LPAREN string_list:values RPAREN
     {:
         RESULT = values;

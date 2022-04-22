@@ -3,7 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.SingleListPartitionDesc;
+import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
@@ -31,8 +31,8 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("tablet_type", "memory");
         partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
 
-        SingleListPartitionDesc partitionDesc =
-                new SingleListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
+        SingleItemListPartitionDesc partitionDesc =
+                new SingleItemListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
         String sql =
                 "PARTITION p1 VALUES IN " +
                         "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2022-07-09 12:12:12\", " +
@@ -53,8 +53,8 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("tablet_type", "memory");
         partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
 
-        SingleListPartitionDesc partitionDesc =
-                new SingleListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
+        SingleItemListPartitionDesc partitionDesc =
+                new SingleItemListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
         partitionDesc.analyze(1, null);
     }
 
@@ -70,7 +70,7 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("tablet_type", "memory");
         partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
 
-        SingleListPartitionDesc partitionDesc = new SingleListPartitionDesc(ifNotExists, partitionName,
+        SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(ifNotExists, partitionName,
                 values, partitionProperties);
         partitionDesc.analyze(1, null);
 

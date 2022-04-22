@@ -16,14 +16,14 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- *  entrance describe for list partition
+ * entrance describe for list partition
  */
 public class ListPartitionDesc extends PartitionDesc {
 
     // describe for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
-    private final List<SingleListPartitionDesc> singleListPartitionDescs;
+    private final List<SingleItemListPartitionDesc> singleListPartitionDescs;
     // describe for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
-    private final List<MultiListPartitionDesc> multiListPartitionDescs;
+    private final List<MultiItemListPartitionDesc> multiListPartitionDescs;
 
     private final List<String> partitionColNames;
 
@@ -35,16 +35,16 @@ public class ListPartitionDesc extends PartitionDesc {
         this.multiListPartitionDescs = Lists.newArrayList();
         if (partitionDescs != null) {
             for (PartitionDesc partitionDesc : partitionDescs) {
-                if (partitionDesc instanceof SingleListPartitionDesc) {
-                    singleListPartitionDescs.add((SingleListPartitionDesc) partitionDesc);
-                } else if (partitionDesc instanceof MultiListPartitionDesc) {
-                    multiListPartitionDescs.add((MultiListPartitionDesc) partitionDesc);
+                if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                    this.singleListPartitionDescs.add((SingleItemListPartitionDesc) partitionDesc);
+                } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                    this.multiListPartitionDescs.add((MultiItemListPartitionDesc) partitionDesc);
                 }
             }
         }
     }
 
-    public List<String> findAllParitionName() {
+    public List<String> findAllPartitionName() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
         this.multiListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -62,23 +62,23 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     private void analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
-        if (partitionColNames == null || partitionColNames.isEmpty()) {
+        if (this.partitionColNames == null || this.partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }
         Set<String> partColNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (String partitionCol : partitionColNames) {
+        for (String partitionCol : this.partitionColNames) {
             if (!partColNames.add(partitionCol)) {
                 throw new AnalysisException("Duplicated partition column " + partitionCol);
             }
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
                 if (columnDef.getName().equals(partitionCol)) {
-                    if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
-                        throw new AnalysisException("The partition column could not be aggregated column");
-                    }
                     if (columnDef.getType().isFloatingPointType() || columnDef.getType().isComplexType()) {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
+                    }
+                    if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
+                        throw new AnalysisException("The partition column could not be aggregated column");
                     }
                     found = true;
                     break;
@@ -92,28 +92,74 @@ public class ListPartitionDesc extends PartitionDesc {
 
     private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException {
         Set<String> multiListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (MultiListPartitionDesc desc : this.multiListPartitionDescs) {
+        List<List<String>> allMultiValues = Lists.newArrayList();
+        for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
             if (!multiListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
-            desc.analyze(partitionColNames.size(), tableProperties);
+            desc.analyze(this.partitionColNames.size(), tableProperties);
+            allMultiValues.addAll(desc.getMultiValues());
         }
+        this.analyzeDuplicateValues(this.partitionColNames.size(), allMultiValues);
     }
 
     private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException {
+        List<String> allValues = Lists.newArrayList();
         Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (SingleListPartitionDesc desc : this.singleListPartitionDescs) {
+        for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
             if (!singListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
             desc.analyze(this.partitionColNames.size(), copiedProperties);
+            allValues.addAll(desc.getValues());
+        }
+        this.analyzeDuplicateValues(allValues);
+    }
+
+    /**
+     * Check if duplicate values are found
+     * If the value of the member in the same position is equals, it is considered a duplicate
+     * @param partitionColSize the partition column size
+     * @param allMultiValues values from multi list partition
+     * @throws AnalysisException
+     */
+    private void analyzeDuplicateValues(int partitionColSize, List<List<String>> allMultiValues) throws AnalysisException {
+        List<List<String>> tempMultiValues = new ArrayList<>(allMultiValues.size());
+        for (List<String> values : allMultiValues) {
+            for (List<String> tempValues : tempMultiValues){
+                int duplicatedSize = 0;
+                for (int i = 0; i < values.size(); i++) {
+                    if(values.get(i).equals(tempValues.get(i))){
+                        duplicatedSize++;
+                    }
+                }
+                if (duplicatedSize == partitionColSize) {
+                    throw new AnalysisException("Duplicate values " +
+                            "(" + String.join(",", values) + ") not allow");
+                }
+            }
+            tempMultiValues.add(values);
+        }
+    }
+
+    /**
+     * Check if duplicate values are found
+     * Use hashSet to check duplicate value
+     * @param allValues values from single list partition
+     * @throws AnalysisException
+     */
+    private void analyzeDuplicateValues(List<String> allValues) throws AnalysisException {
+        Set<String> hashSet = new HashSet<>();
+        for (String value : allValues) {
+            if (!hashSet.add(value)) {
+                throw new AnalysisException("Duplicated value" + value);
+            }
         }
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        List<Column> partitionColumns = this.toPartitionColumns(columns);
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) {
+        List<Column> partitionColumns = this.findPartitionColumns(columns);
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
         this.singleListPartitionDescs.forEach(desc -> {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -134,33 +180,13 @@ public class ListPartitionDesc extends PartitionDesc {
         return listPartitionInfo;
     }
 
-    /**
-     * check and getPartitionColumns
-     *
-     * @param columns columns from table
-     * @return
-     * @throws DdlException
-     */
-    private List<Column> toPartitionColumns(List<Column> columns) throws DdlException {
+    private List<Column> findPartitionColumns(List<Column> columns) {
         List<Column> partitionColumns = Lists.newArrayList();
-        for (String colName : partitionColNames) {
-            boolean find = false;
+        for (String colName : this.partitionColNames) {
             for (Column column : columns) {
                 if (column.getName().equalsIgnoreCase(colName)) {
-                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("The partition column could not be aggregated column");
-                    }
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
-                        throw new DdlException(String.format("Invalid partition column '%s': %s",
-                                column.getName(), "invalid data type " + column.getType()));
-                    }
                     partitionColumns.add(column);
-                    find = true;
-                    break;
                 }
-            }
-            if (!find) {
-                throw new DdlException("Partition column[" + colName + "] does not found");
             }
         }
         return partitionColumns;
@@ -174,14 +200,14 @@ public class ListPartitionDesc extends PartitionDesc {
                 .map(item -> "`" + item + "`")
                 .collect(Collectors.joining(",")));
         sb.append(")(\n");
-        if (!multiListPartitionDescs.isEmpty()) {
-            String multiList = multiListPartitionDescs.stream()
+        if (!this.multiListPartitionDescs.isEmpty()) {
+            String multiList = this.multiListPartitionDescs.stream()
                     .map(item -> "  " + item.toSql())
                     .collect(Collectors.joining(",\n"));
             sb.append(multiList);
         }
-        if (!singleListPartitionDescs.isEmpty()) {
-            String sinleList = singleListPartitionDescs.stream()
+        if (!this.singleListPartitionDescs.isEmpty()) {
+            String sinleList = this.singleListPartitionDescs.stream()
                     .map(item -> "  " + item.toSql())
                     .collect(Collectors.joining(",\n"));
             sb.append(sinleList);
