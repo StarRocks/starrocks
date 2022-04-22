@@ -2574,6 +2574,20 @@ public class JoinTest extends PlanTestBase {
                     "  |    \n" +
                     "  4:EXCHANGE");
         }
+        {
+            String sql = "select * from ( select * from t5 join[bucket] t1 on t5.v16 = t1.v4 and t5.v17 = t1.v5) s1 " +
+                    "join[bucket] t2 on s1.v4 = t2.v7";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)");
+        }
+        {
+            String sql = "select * from t5 join[bucket] ( select * from t2 join[bucket] t1 on t2.v7 = t1.v4) s1 " +
+                    "on t5.v16 = s1.v4 and t5.v17 = s1.v5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n");
+        }
         FeConstants.runningUnitTest = false;
     }
 
