@@ -2711,6 +2711,10 @@ opt_character_name ::=
     {:
         RESULT = null;
     :}
+    | KW_CHARACTER KW_SET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
     | KW_CHAR KW_SET ident:characterName
     {:
         RESULT = characterName;
