@@ -133,9 +133,9 @@ public class Optimizer {
 
         //add join implementRule
         String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
-        if ("merge".equals(joinImplementationMode)) {
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
             context.getRuleSet().addMergeJoinImplementationRule();
-        } else if ("hash".equals(joinImplementationMode)) {
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
             context.getRuleSet().addHashJoinImplementationRule();
         } else {
             context.getRuleSet().addAutoJoinImplementationRule();
