@@ -320,6 +320,16 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
+
+    for (const auto& key_desc : _table_items->join_keys) {
+        if (key_desc.col_ref) {
+            _table_items->key_columns.emplace_back(nullptr);
+        } else {
+            auto key_column = ColumnHelper::create_column(*key_desc.type, false);
+            key_column->append_default();
+            _table_items->key_columns.emplace_back(key_column);
+        }
+    }
 }
 
 int64_t JoinHashTable::mem_usage() {
@@ -342,7 +352,21 @@ int64_t JoinHashTable::mem_usage() {
     return usage;
 }
 
-void JoinHashTable::build(RuntimeState* state) {
+Status JoinHashTable::build(RuntimeState* state) {
+    RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
+    _table_items->has_large_column = _table_items->build_chunk->has_large_column();
+
+    // If the join key is column ref of build chunk, fetch from build chunk directly
+    size_t join_key_count = _table_items->join_keys.size();
+    for (size_t i = 0; i < join_key_count; i++) {
+        if (_table_items->join_keys[i].col_ref != nullptr) {
+            SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
+            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
+        }
+    }
+
+    RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
+
     _hash_map_type = _choose_join_hash_map();
 
     switch (_hash_map_type) {
@@ -360,10 +384,12 @@ void JoinHashTable::build(RuntimeState* state) {
     default:
         assert(false);
     }
+
+    return Status::OK();
 }
 
-void JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-                          bool* eos) {
+Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                            bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
@@ -376,9 +402,13 @@ void JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, Chunk
     default:
         assert(false);
     }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
+    return Status::OK();
 }
 
-void JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
     case JoinHashMapType::empty:
         break;
@@ -391,9 +421,13 @@ void JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos
     default:
         assert(false);
     }
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
+    return Status::OK();
 }
 
-void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns) {
     Columns& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
@@ -405,6 +439,20 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
             columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
         }
         columns[i]->append(*column);
+    }
+
+    for (size_t i = 0; i < _table_items->key_columns.size(); i++) {
+        // If the join key is slot ref, will get from build chunk directly,
+        // otherwise will append from key_column of input
+        if (_table_items->join_keys[i].col_ref == nullptr) {
+            // upgrade to nullable column
+            if (!_table_items->key_columns[i]->is_nullable() && key_columns[i]->is_nullable()) {
+                size_t row_count = _table_items->key_columns[i]->size();
+                _table_items->key_columns[i] =
+                        NullableColumn::create(_table_items->key_columns[i], NullColumn::create(row_count, 0));
+            }
+            _table_items->key_columns[i]->append(*key_columns[i]);
+        }
     }
 
     if (_need_create_tuple_columns) {
@@ -457,6 +505,20 @@ void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
     }
 }
 
+Status JoinHashTable::_upgrade_key_columns_if_overflow() {
+    for (auto& column : _table_items->key_columns) {
+        auto ret = column->upgrade_if_overflow();
+        if (!ret.ok()) {
+            return ret.status();
+        } else if (ret.value() != nullptr) {
+            column = ret.value();
+        } else {
+            continue;
+        }
+    }
+    return Status::OK();
+}
+
 JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     size_t size = _table_items->join_keys.size();
     DCHECK_GT(size, 0);
@@ -468,7 +530,7 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     }
 
     if (size == 1 && !_table_items->join_keys[0].is_null_safe_equal) {
-        switch (_table_items->join_keys[0].type) {
+        switch (_table_items->join_keys[0].type->type) {
         case PrimitiveType::TYPE_BOOLEAN:
             return JoinHashMapType::keyboolean;
         case PrimitiveType::TYPE_TINYINT:
@@ -513,7 +575,7 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
         if (join_key.is_null_safe_equal) {
             total_size_in_byte += 1;
         }
-        size_t s = _get_size_of_fixed_and_contiguous_type(join_key.type);
+        size_t s = _get_size_of_fixed_and_contiguous_type(join_key.type->type);
         if (s > 0) {
             total_size_in_byte += s;
         } else {

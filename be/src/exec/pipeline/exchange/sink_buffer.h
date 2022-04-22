@@ -9,6 +9,7 @@
 #include <queue>
 #include <unordered_set>
 
+#include "bthread/mutex.h"
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
@@ -31,15 +32,11 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
-
-    // The following fileds are initialized by SinkBuffer
-    int64_t enqueue_nanos;
 };
 
 struct ClosureContext {
     TUniqueId instance_id;
     int64_t sequence;
-    int64_t enqueue_nanos;
     int64_t send_timestamp;
 };
 
@@ -72,6 +69,8 @@ public:
 
     void add_request(TransmitChunkInfo& request);
     bool is_full() const;
+
+    void set_finishing();
     bool is_finished() const;
 
     // Add counters to the given profile
@@ -82,14 +81,19 @@ public:
     void cancel_one_sinker();
 
 private:
-    void _update_time(const TUniqueId& instance_id, const int64_t enqueue_nanos, const int64_t send_timestamp,
-                      const int64_t receive_timestamp);
+    using Mutex = bthread::Mutex;
+
+    void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
+                              const int64_t receive_timestamp);
     // Update the discontinuous acked window, here are the invariants:
     // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
     // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
-    void _try_to_send_rpc(const TUniqueId& instance_id);
+
+    // Try to send rpc if buffer is not empty and channel is not busy
+    // And we need to put this function and other extra works(pre_works) together as an atomic operation
+    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
@@ -98,16 +102,6 @@ private:
     // `accumulated_network_time / average_concurrency`
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
-
-    // Roughly estimate whole wait time which including
-    // 1. the time waiting in the queue
-    // 2. the network time
-    // 3. the processing time at the receiving side
-    // For each destination, we may send multiply packages at the same time, and the time is
-    // related to the degree of concurrency, so the wait_time will be calculated as
-    // `accumulated_wait_time / average_concurrency`
-    // And we just pick the maximum accumulated_wait_time among all destination
-    int64_t _wait_time();
 
     FragmentContext* _fragment_ctx;
     const MemTracker* _mem_tracker;
@@ -140,8 +134,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
-    phmap::flat_hash_map<int64_t, TimeTrace> _wait_times;
-    phmap::flat_hash_map<int64_t, std::unique_ptr<std::mutex>> _mutexes;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
@@ -163,6 +156,9 @@ private:
     std::atomic<int64_t> _bytes_sent = 0;
     std::atomic<int64_t> _request_sent = 0;
 
+    int64_t _pending_timestamp = -1;
+    mutable int64_t _last_full_timestamp = -1;
+    mutable int64_t _full_time = 0;
 }; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline

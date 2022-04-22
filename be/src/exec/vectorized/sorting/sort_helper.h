@@ -114,11 +114,9 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
 
             if (notnull_range.first < notnull_range.second) {
                 tie[notnull_range.first] = 0;
-                RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation,
-                                                      tie, notnull_range, build_tie, limit, limited));
             }
             if (range_first <= null_range.first && null_range.first < range_last) {
-                // Mark all null as 0, they don
+                // Mark all null as equal
                 std::fill(tie.begin() + null_range.first, tie.begin() + null_range.second, 1);
 
                 // Cut off null and non-null
@@ -126,10 +124,14 @@ static inline Status sort_and_tie_helper_nullable_vertical(const bool& cancel,
             }
         }
 
-        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
+        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ","));
     }
 
-    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
+    // TODO(Murphy): avoid sort the null datums in the column
+    RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation, tie, range,
+                                          build_tie, limit, limited));
+
+    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ","));
 
     return Status::OK();
 }
@@ -141,8 +143,8 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
                                                   const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
                                                   bool is_null_first, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
-    VLOG(2) << fmt::format("nullable column tie before sort: {}\n", fmt::join(tie, ","));
-    VLOG(2) << fmt::format("nullable column before sort: {}\n", dubug_column(column, permutation));
+    VLOG(2) << fmt::format("nullable column before sort: column={} tie={}\n", dubug_column(column, permutation),
+                           fmt::join(tie, ","));
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -164,11 +166,9 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
 
             if (notnull_range.first < notnull_range.second) {
                 tie[notnull_range.first] = 0;
-                RETURN_IF_ERROR(sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie,
-                                                    notnull_range, build_tie));
             }
             if (range_first <= null_range.first && null_range.first < range_last) {
-                // Mark all null as 0, they don
+                // Mark all null datum as equal
                 std::fill(tie.begin() + null_range.first, tie.begin() + null_range.second, 1);
 
                 // Cut off null and non-null
@@ -176,13 +176,28 @@ static inline Status sort_and_tie_helper_nullable(const bool& cancel, const Null
             }
         }
 
-        VLOG(3) << fmt::format("column after iteration: [{}, {}): {}\n", range_first, range_last,
-                               dubug_column(column, permutation));
-        VLOG(3) << fmt::format("tie after iteration: [{}, {}] {}\n", range_first, range_last, fmt::join(tie, ",    "));
+        VLOG(3) << fmt::format("after sort range[{}, {}] tie={} column={}\n", range_first, range_last,
+                               fmt::join(tie, ","), dubug_column(column, permutation));
     }
 
-    VLOG(2) << fmt::format("nullable column tie after sort: {}\n", fmt::join(tie, ",    "));
-    VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
+    // TODO(Murphy): avoid sort the null datums in the column, eliminate the extra overhead
+    // Some benchmark numbers:
+    // --------------------------------------------------------------------------------------------------------------------------------------
+    // Benchmark                                         Time             CPU   Iterations  data_size items_per_second  mem_usage rows_sorted
+    // --------------------------------------------------------------------------------------------------------------------------------------
+    // BM_fullsort_column_incr/64/4               44942516 ns     44904324 ns           13    4.1943M       5.83783M/s   10.5021M    3.40787M
+    // BM_fullsort_column_incr/512/4             527808528 ns    527777351 ns            1   33.5544M       3.97355M/s   83.9025M    2.09715M
+    // BM_fullsort_column_incr/4096/4           6197780685 ns   6197019209 ns            1   268.435M        2.7073M/s   671.105M    16.7772M
+    // BM_fullsort_column_incr/32768/4          46811357585 ns   46799493931 ns            1   2.14748G       2.86793M/s   5.36873G    134.218M
+    // BM_fullsort_column_incr_nullable/64/4      49548060 ns     49545725 ns           14   5.24288M       5.29095M/s   11.5507M    3.67002M
+    // BM_fullsort_column_incr_nullable/512/4    568248214 ns    568200327 ns            1    41.943M       3.69087M/s   92.2911M    2.09715M
+    // BM_fullsort_column_incr_nullable/4096/4  5816112918 ns   5815603071 ns            1   335.544M       2.88486M/s   738.214M    16.7772M
+    // BM_fullsort_column_incr_nullable/32768/4 60430519397 ns   60424234298 ns            1   2.68435G       2.22126M/s    5.9056G    134.218M
+    RETURN_IF_ERROR(
+            sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie, range, build_tie));
+
+    VLOG(2) << fmt::format("nullable column after sort: tie={} column={}\n", fmt::join(tie, ","),
+                           dubug_column(column, permutation));
 
     return Status::OK();
 }
@@ -226,8 +241,8 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
         }
     };
 
-    VLOG(2) << fmt::format("tie before sort: {}\n", fmt::join(tie, ","));
-    VLOG(2) << fmt::format("column before sort: {}\n", dubug_column(column, permutation));
+    VLOG(2) << fmt::format("column before sort: column={} tie={}\n", dubug_column(column, permutation),
+                           fmt::join(tie, ","));
 
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -251,14 +266,31 @@ static inline Status sort_and_tie_helper(const bool& cancel, const Column* colum
             }
         }
 
-        VLOG(3) << fmt::format("column after iteration: [{}, {}) {}\n", range_first, range_last,
+        VLOG(3) << fmt::format("after iteration: column={} tie={}\n", fmt::join(tie, ",   "),
                                dubug_column(column, permutation));
-        VLOG(3) << fmt::format("tie after iteration: {}\n", fmt::join(tie, ",   "));
     }
 
-    VLOG(2) << fmt::format("tie after sort: {}\n", fmt::join(tie, ",   "));
-    VLOG(2) << fmt::format("nullable column after sort: {}\n", dubug_column(column, permutation));
+    VLOG(2) << fmt::format("column after sort: column={} tie={}\n", dubug_column(column, permutation),
+                           fmt::join(tie, ","));
     return Status::OK();
+}
+
+static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, const Columns& rhs, size_t lhs_row,
+                                    size_t rhs_row) {
+    DCHECK_EQ(lhs.size(), rhs.size());
+    DCHECK_LE(desc.num_columns(), lhs.size());
+    DCHECK_LE(desc.num_columns(), rhs.size());
+
+    int num_columns = desc.num_columns();
+    for (int i = 0; i < num_columns; i++) {
+        auto& lhs_column = lhs[i];
+        auto& rhs_column = rhs[i];
+        int x = lhs_column->compare_at(lhs_row, rhs_row, *rhs_column, desc.get_column_desc(i).null_first);
+        if (x != 0) {
+            return x * desc.get_column_desc(i).sort_order;
+        }
+    }
+    return 0;
 }
 
 } // namespace starrocks::vectorized

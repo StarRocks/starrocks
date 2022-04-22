@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 
+#include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
@@ -25,7 +26,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
+        _thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -35,16 +36,16 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
+        _thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
-void GlobalDriverExecutor::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
+void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
 }
 
-void GlobalDriverExecutor::worker_thread() {
+void GlobalDriverExecutor::_worker_thread() {
     const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
@@ -73,13 +74,13 @@ void GlobalDriverExecutor::worker_thread() {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    finalize_driver(driver, runtime_state, DriverState::CANCELED);
+                    _finalize_driver(driver, runtime_state, DriverState::CANCELED);
                 }
                 continue;
             }
             // a blocked driver is canceled because of fragment cancellation or query expiration.
             if (driver->is_finished()) {
-                finalize_driver(driver, runtime_state, driver->driver_state());
+                _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
 
@@ -88,17 +89,33 @@ void GlobalDriverExecutor::worker_thread() {
             auto status = driver->process(runtime_state, worker_id);
             this->_driver_queue->update_statistics(driver);
 
-            if (!status.ok()) {
-                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", error=" << status.status().to_string();
-                query_ctx->cancel(status.status());
+            // check If large query, if true, cancel it
+            bool is_big_query = false;
+            if (driver->fragment_ctx()->enable_resource_group()) {
+                auto wg = driver->workgroup();
+                if (wg) {
+                    is_big_query = wg->is_big_query(*query_ctx);
+                }
+            }
+
+            if (!status.ok() || is_big_query) {
+                if (is_big_query) {
+                    LOG(WARNING) << "[Driver] Process exceed limit, query_id="
+                                 << print_id(driver->query_ctx()->query_id())
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                    query_ctx->cancel(Status::Corruption("exceed limit, is big query"));
+                } else {
+                    LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                                 << ", error=" << status.status().to_string();
+                    query_ctx->cancel(status.status());
+                }
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
+                    _finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
                 }
                 continue;
             }
@@ -112,7 +129,7 @@ void GlobalDriverExecutor::worker_thread() {
             case FINISH:
             case CANCELED:
             case INTERNAL_ERROR: {
-                finalize_driver(driver, runtime_state, driver_state);
+                _finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
             case INPUT_EMPTY:
@@ -148,7 +165,7 @@ void GlobalDriverExecutor::submit(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
-    update_profile_by_level(fragment_ctx, done);
+    _update_profile_by_level(fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
@@ -172,7 +189,7 @@ void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, cons
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::update_profile_by_level(FragmentContext* fragment_ctx, bool done) {
+void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ctx, bool done) {
     if (!done) {
         return;
     }
@@ -199,7 +216,7 @@ void GlobalDriverExecutor::update_profile_by_level(FragmentContext* fragment_ctx
             continue;
         }
 
-        remove_non_core_metrics(fragment_ctx, driver_profiles);
+        _remove_non_core_metrics(fragment_ctx, driver_profiles);
 
         RuntimeProfile::merge_isomorphic_profiles(driver_profiles);
         // all the isomorphic profiles will merged into the first profile
@@ -223,8 +240,8 @@ void GlobalDriverExecutor::update_profile_by_level(FragmentContext* fragment_ctx
     }
 }
 
-void GlobalDriverExecutor::remove_non_core_metrics(FragmentContext* fragment_ctx,
-                                                   std::vector<RuntimeProfile*>& driver_profiles) {
+void GlobalDriverExecutor::_remove_non_core_metrics(FragmentContext* fragment_ctx,
+                                                    std::vector<RuntimeProfile*>& driver_profiles) {
     if (fragment_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
         return;
     }

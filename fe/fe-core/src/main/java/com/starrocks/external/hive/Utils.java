@@ -4,6 +4,7 @@ package com.starrocks.external.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
@@ -19,6 +20,11 @@ import java.util.Map;
 
 public class Utils {
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
+        return createPartitionKey(values, columns, false);
+    }
+
+    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+                                                  boolean isHudiTable) throws AnalysisException {
         Preconditions.checkState(values.size() == columns.size(),
                 String.format("columns size is %d, but values size is %d", columns.size(), values.size()));
 
@@ -31,6 +37,8 @@ public class Utils {
             LiteralExpr exprValue;
             if (HiveMetaClient.PARTITION_NULL_VALUE.equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
+            } else if (isHudiTable && HiveMetaClient.HUDI_PARTITION_NULL_VALUE.equals(rawValue)) {
+                exprValue = NullLiteral.create(type);
             } else {
                 exprValue = LiteralExpr.create(rawValue, type);
             }
@@ -40,13 +48,24 @@ public class Utils {
     }
 
     public static List<String> getPartitionValues(PartitionKey partitionKey) {
+        return getPartitionValues(partitionKey, false);
+    }
+
+    public static List<String> getPartitionValues(PartitionKey partitionKey, boolean isHudiTable) {
         // get string value from partitionKey
         // using __HIVE_DEFAULT_PARTITION__ replace null value
         List<LiteralExpr> literalValues = partitionKey.getKeys();
         List<String> values = new ArrayList<>(literalValues.size());
         for (LiteralExpr value : literalValues) {
             if (value instanceof NullLiteral) {
-                values.add(HiveMetaClient.PARTITION_NULL_VALUE);
+                if (isHudiTable) {
+                    values.add(HiveMetaClient.HUDI_PARTITION_NULL_VALUE);
+                } else {
+                    values.add(HiveMetaClient.PARTITION_NULL_VALUE);
+                }
+            } else if (value instanceof BoolLiteral) {
+                BoolLiteral boolValue = ((BoolLiteral) value);
+                values.add(String.valueOf(boolValue.getValue()));
             } else {
                 values.add(value.getStringValue());
             }

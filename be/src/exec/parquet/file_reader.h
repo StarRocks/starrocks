@@ -51,7 +51,7 @@ private:
     void _pre_process_conjunct_ctxs();
 
     // filter file using not exist column conjuncts
-    void _filter_file();
+    Status _filter_file();
 
     // create and inti group reader
     Status _create_and_init_group_reader(int row_group_number);
@@ -94,7 +94,8 @@ private:
     static Status _check_magic(const uint8_t* file_magic);
 
     // decode min/max value from row group stats
-    static Status _decode_min_max_column(const tparquet::ColumnMetaData& column_meta,
+    static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
+                                         const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                          const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
                                          vectorized::ColumnPtr* max_column);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,

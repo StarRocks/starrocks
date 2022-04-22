@@ -74,6 +74,7 @@ struct TCreateTabletReq {
     12: optional bool is_eco_mode
     13: optional TStorageFormat storage_format
     14: optional TTabletType tablet_type
+    15: optional bool enable_persistent_index
 }
 
 struct TDropTabletReq {
@@ -253,7 +254,8 @@ struct TRecoverTabletReq {
 
 enum TTabletMetaType {
     PARTITIONID,
-    INMEMORY
+    INMEMORY,
+    ENABLE_PERSISTENT_INDEX
 }
 
 struct TTabletMetaInfo {
@@ -262,6 +264,7 @@ struct TTabletMetaInfo {
     3: optional Types.TPartitionId partition_id
     4: optional TTabletMetaType meta_type
     5: optional bool is_in_memory
+    6: optional bool enable_persistent_index
 }
 
 struct TUpdateTabletMetaInfoReq {

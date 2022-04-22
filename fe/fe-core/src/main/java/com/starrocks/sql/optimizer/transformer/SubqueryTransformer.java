@@ -44,6 +44,10 @@ public class SubqueryTransformer {
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
                                            Map<Integer, ExpressionMapping> cteContext) {
+        if (subOpt.getExpressionMapping().hasExpression(expression)) {
+            return subOpt;
+        }
+
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, true, cteContext));
 
@@ -53,6 +57,10 @@ public class SubqueryTransformer {
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
                                                  Expr expression, Map<Integer, ExpressionMapping> cteContext) {
+        if (subOpt.getExpressionMapping().hasExpression(expression)) {
+            return subOpt;
+        }
+
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, false, cteContext));
 

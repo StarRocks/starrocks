@@ -8,7 +8,7 @@
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/vectorized/string_functions.h"
-#include "runtime/vectorized/Volnitsky.h"
+#include "runtime/Volnitsky.h"
 #include "util/utf8.h"
 
 namespace starrocks::vectorized {

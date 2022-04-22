@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <stdexcept>
 
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -22,6 +23,17 @@
 #include "util/utf8.h"
 
 namespace starrocks::vectorized {
+
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func)                         \
+    if (col->reach_capacity_limit()) {                                         \
+        col->reset_column();                                                   \
+        throw std::runtime_error("binary column exceed 4G in function" #func); \
+    }
+
+#define RETURN_COLUMN(col, func_name)               \
+    auto VARNAME_LINENUM(res) = col;                \
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func); \
+    return VARNAME_LINENUM(res);
 
 constexpr size_t CONCAT_SMALL_OPTIMIZE_THRESHOLD = 16 << 20;
 
@@ -817,7 +829,8 @@ public:
         }
         dst_bytes.resize(dst_off, ' ');
         builder.set_has_null(has_null);
-        return builder.build(v1->is_constant());
+
+        RETURN_COLUMN(builder.build(v1->is_constant()), "space");
     }
 };
 
@@ -937,7 +950,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
 
     dst_bytes.resize(dst_off);
     builder.set_has_null(has_null);
-    return builder.build(ColumnHelper::is_all_const(columns));
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "repeat");
 }
 
 static inline ColumnPtr repeat_const(const Columns& columns) {
@@ -998,7 +1011,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         fast_repeat(dst_begin + dst_offsets[i], (uint8_t*)s.data, s.size, dst_slice_size / s.size);
     }
     builder.set_has_null(has_null);
-    return builder.build(ColumnHelper::is_all_const(columns));
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "repeat");
 }
 
 // repeat
@@ -1400,12 +1413,12 @@ static inline ColumnPtr pad(FunctionContext* context, const Columns& columns) {
 
 // lpad
 ColumnPtr StringFunctions::lpad(FunctionContext* context, const Columns& columns) {
-    return pad<PAD_TYPE_LEFT>(context, columns);
+    RETURN_COLUMN(pad<PAD_TYPE_LEFT>(context, columns), "lpad");
 }
 
 // rpad
 ColumnPtr StringFunctions::rpad(FunctionContext* context, const Columns& columns) {
-    return pad<PAD_TYPE_RIGHT>(context, columns);
+    RETURN_COLUMN(pad<PAD_TYPE_RIGHT>(context, columns), "rpad");
 }
 
 // append_trailing_char_if_absent
@@ -1492,7 +1505,8 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
         if (!dst_data.empty()) {
             dst_data.resize(dst_offsets.back());
         }
-        return dst;
+
+        RETURN_COLUMN(dst, "append_trailing_char_if_absent");
     } else {
         ColumnViewer<TYPE_VARCHAR> src_viewer(columns[0]);
         ColumnViewer<TYPE_VARCHAR> tailing_viewer(columns[1]);
@@ -1523,7 +1537,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
             dst_builder.append(Slice(s));
         }
 
-        return dst_builder.build(ColumnHelper::is_all_const(columns));
+        RETURN_COLUMN(dst_builder.build(ColumnHelper::is_all_const(columns)), "append_trailing_char_if_absent");
     }
 }
 

@@ -25,6 +25,9 @@ public class WorkGroup implements Writable {
     public static final String SOURCE_IP = "source_ip";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MEM_LIMIT = "mem_limit";
+    public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
+    public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
+    public static final String BIG_QUERY_CPU_CORE_SECOND_LIMIT = "big_query_cpu_core_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
     public static final ShowResultSetMetaData META_DATA =
@@ -33,6 +36,9 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("Id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("MemLimit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("BigQueryMemLimit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("BigQueryScanRowsLimit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("BigQueryCpuCoreSecondLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("ConcurrencyLimit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Classifiers", ScalarType.createVarchar(1024)))
@@ -47,6 +53,12 @@ public class WorkGroup implements Writable {
     private Integer cpuCoreLimit;
     @SerializedName(value = "memLimit")
     private Double memLimit;
+    @SerializedName(value = "bigQueryMemLimit")
+    private Long bigQueryMemLimit;
+    @SerializedName(value = "bigQueryScanRowsLimit")
+    private Long bigQueryScanRowsLimit;
+    @SerializedName(value = "bigQueryCpuCoreSecondLimit")
+    private Long bigQueryCpuCoreSecondLimit;
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
     @SerializedName(value = "workGroupType")
@@ -69,6 +81,21 @@ public class WorkGroup implements Writable {
         row.add("" + this.id);
         row.add("" + cpuCoreLimit);
         row.add("" + (memLimit * 100) + "%");
+        if (bigQueryMemLimit != null) {
+            row.add("" + bigQueryMemLimit);
+        } else {
+            row.add("" + 0);
+        }
+        if (bigQueryScanRowsLimit != null) {
+            row.add("" + bigQueryScanRowsLimit);
+        } else {
+            row.add("" + 0);
+        }
+        if (bigQueryCpuCoreSecondLimit != null) {
+            row.add("" + bigQueryCpuCoreSecondLimit);
+        } else {
+            row.add("" + 0);
+        }
         row.add("" + concurrencyLimit);
         row.add("" + workGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
@@ -123,6 +150,19 @@ public class WorkGroup implements Writable {
         if (memLimit != null) {
             twg.setMem_limit(memLimit);
         }
+           
+        if (bigQueryMemLimit != null) {
+            twg.setBig_query_mem_limit(bigQueryMemLimit);
+        }
+        
+        if (bigQueryScanRowsLimit != null) {
+            twg.setBig_query_scan_rows_limit(bigQueryScanRowsLimit);
+        }
+
+        if (bigQueryCpuCoreSecondLimit != null) {
+            twg.setBig_query_cpu_core_second_limit(bigQueryCpuCoreSecondLimit);
+        }
+
         if (concurrencyLimit != null) {
             twg.setConcurrency_limit(concurrencyLimit);
         }
@@ -147,6 +187,30 @@ public class WorkGroup implements Writable {
 
     public void setMemLimit(double memLimit) {
         this.memLimit = memLimit;
+    }
+    
+    public Long getBigQueryMemLimit() {
+        return bigQueryMemLimit;
+    }
+
+    public void setBigQueryMemLimit(long limit) {
+        bigQueryMemLimit = limit;
+    }
+
+    public Long getBigQueryScanRowsLimit() {
+        return bigQueryScanRowsLimit;
+    }
+
+    public void setBigQueryScanRowsLimit(long limit) {
+        bigQueryScanRowsLimit = limit;
+    }
+
+    public Long getBigQueryCpuCoreSecondLimit() {
+        return bigQueryCpuCoreSecondLimit;
+    }
+
+    public void setBigQueryCpuCoreSecondLimit(long limit) {
+        bigQueryCpuCoreSecondLimit = limit;
     }
 
     public Integer getConcurrencyLimit() {

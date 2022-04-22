@@ -152,7 +152,7 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(10,5)) * cast(v2 as decimal64(9,7)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("1:Project\n" +
-                        "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
     }
 
     @Test
@@ -219,14 +219,21 @@ public class ExpressionTest extends PlanTestBase {
                 + " as j "
                 + "where j.x3 > 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Project\n"
-                + "  |  <slot 1> : 1: v1\n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: 3: v3 > 1\n"
-                + "  |  \n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0\n"));
+        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+                "  |  predicates: 3: v3 > 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 10\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode"));
     }
 
     @Test(expected = SemanticException.class)
@@ -313,7 +320,8 @@ public class ExpressionTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("nullif('2021-01-12', '2021-01-11')");
 
         sql = "select nullif(date('2021-01-12'), STR_TO_DATE('2020-11-02', '%Y-%m-%d %H:%i:%s'));";
-        starRocksAssert.query(sql).explainContains("nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
+        starRocksAssert.query(sql)
+                .explainContains("nullif('2021-01-12 00:00:00', str_to_date('2020-11-02', '%Y-%m-%d %H:%i:%s'))");
 
         sql = "select if(3, 4, 5);";
         starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), 4, 5)");
@@ -509,7 +517,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testLargeIntMod() throws Exception {
         String sql = "select -123 % 100000000000000000000000000000000000";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("-123 % 100000000000000000000000000000000000"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 2> : -123\n" +
+                "  |  "));
     }
 
     @Test
@@ -953,5 +963,18 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select cast(cast(id_bool as boolean) as string) from test_bool;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(11: id_bool AS VARCHAR(65533))");
+    }
+
+    @Test
+    public void testDecimalReuse() throws Exception {
+        String sql = "select id_decimal + 1, id_decimal + 2 from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "common expressions:\n" +
+                "  |  <slot 13> : CAST(10: id_decimal AS DECIMAL64(18,2))");
+
+        sql = "select concat(cast(t1c as varchar(10)), 'a'), concat(cast(t1c as varchar(10)), 'b') from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "common expressions:\n" +
+                "  |  <slot 13> : CAST(3: t1c AS VARCHAR(10))");
     }
 }

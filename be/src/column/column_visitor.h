@@ -20,6 +20,7 @@ public:
     virtual Status visit(const vectorized::ConstColumn& column);
     virtual Status visit(const vectorized::ArrayColumn& column);
     virtual Status visit(const vectorized::BinaryColumn& column);
+    virtual Status visit(const vectorized::LargeBinaryColumn& column);
     virtual Status visit(const vectorized::Int8Column& column);
     virtual Status visit(const vectorized::UInt8Column& column);
     virtual Status visit(const vectorized::Int16Column& column);

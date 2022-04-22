@@ -12,34 +12,37 @@ singleStatement
     ;
 
 statement
-    : queryStatement                                                                    #statementDefault
-    | explainDesc queryStatement                                                        #explain
-    | explainDesc? INSERT INTO qualifiedName
+    : queryStatement                                                                        #statementDefault
+    | explainDesc queryStatement                                                            #explain
+    | explainDesc? INSERT INTO qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
-        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*)) #insert
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))    #insert
     | CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')? comment?
         partitionDesc?
         distributionDesc?
         properties?
-        AS queryStatement                                                               #createTableAsSelect
-    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?    #update
-    | USE schema=identifier                                                             #use
+        AS queryStatement                                                                   #createTableAsSelect
+    | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
+    | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
+    | USE schema=identifier                                                                 #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
-        ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+        ((LIKE pattern=string) | (WHERE expression))?                                       #showTables
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                          #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        comment? AS queryStatement                               #createView
+        comment? AS queryStatement                                                          #createView
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-        AS queryStatement                                                               #alterView
+        AS queryStatement                                                                   #alterView
+    | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
+    | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
+    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     ;
 
 explainDesc
     : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
     ;
-
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
@@ -236,6 +239,7 @@ relationPrimary
 
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifier
     ;
 
 tabletList
@@ -250,10 +254,30 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
+
+/**
+ * Operator precedences are shown in the following list, from highest precedence to the lowest.
+ *
+ * !
+ * - (unary minus), ~ (unary bit inversion)
+ * ^
+ * *, /, DIV, %, MOD
+ * -, +
+ * &
+ * |
+ * = (comparison), <=>, >=, >, <=, <, <>, !=, IS, LIKE, REGEXP
+ * BETWEEN, CASE WHEN
+ * NOT
+ * AND, &&
+ * XOR
+ * OR, ||
+ * = (assignment)
+ */
+
 expression
     : booleanExpression                                                                   #expressionDefault
-    | (NOT | LOGICAL_NOT) expression                                                      #logicalNot
-    | left=expression operator=AND right=expression                                       #logicalBinary
+    | NOT expression                                                                      #logicalNot
+    | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
@@ -277,49 +301,62 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
-    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) valueExpression                    #arithmeticUnary
-    | left = valueExpression operator = (ASTERISK_SYMBOL | SLASH_SYMBOL |
-        PERCENT_SYMBOL | INT_DIV | BITAND| BITOR | BITXOR)
+    | left = valueExpression operator = BITXOR right = valueExpression                    #arithmeticBinary
+    | left = valueExpression operator = (
+              ASTERISK_SYMBOL
+            | SLASH_SYMBOL
+            | PERCENT_SYMBOL
+            | INT_DIV
+            | MOD)
       right = valueExpression                                                             #arithmeticBinary
-    | left = valueExpression operator =
-        (PLUS_SYMBOL | MINUS_SYMBOL) right = valueExpression                              #arithmeticBinary
-    | left = valueExpression CONCAT right = valueExpression                               #concat
+    | left = valueExpression operator = (PLUS_SYMBOL | MINUS_SYMBOL)
+        right = valueExpression                                                           #arithmeticBinary
+    | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
+    | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
     ;
 
 primaryExpression
-    : NULL                                                                                #nullLiteral
+    : variable                                                                            #var
+    | columnReference                                                                     #columnRef
+    | functionCall                                                                        #functionCallExpression
+    | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
+    | primaryExpression COLLATE (identifier | string)                                     #collate
+    | NULL                                                                                #nullLiteral
     | interval                                                                            #intervalLiteral
     | DATE string                                                                         #typeConstructor
     | DATETIME string                                                                     #typeConstructor
     | number                                                                              #numericLiteral
     | booleanValue                                                                        #booleanLiteral
     | string                                                                              #stringLiteral
-    | variable                                                                            #var
-    | primaryExpression COLLATE (identifier | string)                                     #collate
-    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=INTEGER_VALUE ']'                                 #arraySubscript
-    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
-    | subquery                                                                            #subqueryExpression
-    | EXISTS '(' query ')'                                                                #exists
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | columnReference                                                                     #columnRef
-    | primaryExpression ARROW string                                                      #arrowExpression
-    | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
+    | left = primaryExpression CONCAT right = primaryExpression                           #concat
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
+    | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
+    | EXISTS '(' query ')'                                                                #exists
+    | subquery                                                                            #subqueryExpression
+    | CAST '(' expression AS type ')'                                                     #cast
+    | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
+    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
+    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
+    | primaryExpression ARROW string                                                      #arrowExpression
+    ;
+
+functionCall
+    : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
     | specialFunctionExpression                                                           #specialFunction
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #functionCall
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
-    | CAST '(' expression AS type ')'                                                     #cast
+    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
-    | COUNT '(' ASTERISK_SYMBOL ')'
+    | COUNT '(' ASTERISK_SYMBOL? ')'
     | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
@@ -349,9 +386,13 @@ specialFunctionExpression
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
     | LEFT '(' expression ',' expression ')'
+    | LIKE '(' expression ',' expression ')'
     | MINUTE '(' expression ')'
+    | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
+    | REGEXP '(' expression ',' expression ')'
     | RIGHT '(' expression ',' expression ')'
+    | RLIKE '(' expression ',' expression ')'
     | SECOND '(' expression ')'
     | TIMESTAMPADD '(' unitIdentifier ',' expression ',' expression ')'
     | TIMESTAMPDIFF '(' unitIdentifier ',' expression ',' expression ')'
@@ -487,12 +528,12 @@ number
     ;
 
 nonReserved
-    : ARRAY | AVG
+    : AVG | ADMIN
     | BUCKETS
-    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT
+    | CAST | CONNECTION_ID| CURRENT | COMMENT | COMMIT | COSTS | COUNT | CONFIG
     | DATA | DATABASE | DATE | DATETIME | DAY
     | END | EXTRACT | EVERY
-    | FILTER | FIRST | FOLLOWING | FORMAT
+    | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND
     | GLOBAL
     | HASH | HOUR
     | INTERVAL

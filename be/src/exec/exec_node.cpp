@@ -163,8 +163,12 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
+    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
+    }
+    if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
+        _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
@@ -510,7 +514,7 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
     }
 }
 
-static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk) {
+Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk) {
     vectorized::Column::Filter filter(chunk->num_rows(), 1);
     vectorized::Column::Filter* raw_filter = &filter;
 
@@ -529,7 +533,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
     int zero_count = 0;
 
     for (auto* ctx : ctxs) {
-        ColumnPtr column = ctx->evaluate(chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -538,7 +542,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
         } else if (0 == true_count) {
             // all not hit, return
             chunk->set_num_rows(0);
-            return;
+            return Status::OK();
         } else {
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, nullptr);
             zero_count = SIMD::count_zero(*raw_filter);
@@ -547,7 +551,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
                 if (rows == 0) {
                     // When all rows in chunk is filtered, direct return
                     // No need to execute the following predicate
-                    return;
+                    return Status::OK();
                 }
                 filter.assign(rows, 1);
                 zero_count = 0;
@@ -555,17 +559,18 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
         }
     }
     if (zero_count == 0) {
-        return;
+        return Status::OK();
     }
     chunk->filter(*raw_filter);
+    return Status::OK();
 }
 
-void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                              vectorized::FilterPtr* filter_ptr) {
+Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
+                                vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
     DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
-        return;
+        return Status::OK();
     }
 
     // if we don't need filter, then we can prune chunk during eval conjuncts.
@@ -576,6 +581,7 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
     // but here for simplicity, we just check columns numbers absolute value.
     // TO BE NOTED, that there is no storng evidence that this has better performance.
     // It's just by intuition.
+    TRY_CATCH_ALLOC_SCOPE_START()
     const int eager_prune_max_column_number = 5;
     if (filter_ptr == nullptr && chunk->num_columns() <= eager_prune_max_column_number) {
         return eager_prune_eval_conjuncts(ctxs, chunk);
@@ -588,7 +594,7 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
     vectorized::Column::Filter* raw_filter = filter.get();
 
     for (auto* ctx : ctxs) {
-        ColumnPtr column = ctx->evaluate(chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -597,33 +603,35 @@ void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized:
         } else if (0 == true_count) {
             // all not hit, return
             chunk->set_num_rows(0);
-            return;
+            return Status::OK();
         } else {
             bool all_zero = false;
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, &all_zero);
             if (all_zero) {
                 chunk->set_num_rows(0);
-                return;
+                return Status::OK();
             }
         }
     }
 
     int zero_count = SIMD::count_zero(*raw_filter);
     if (zero_count == 0) {
-        return;
+        return Status::OK();
     }
     chunk->filter(*raw_filter);
+    TRY_CATCH_ALLOC_SCOPE_END()
+    return Status::OK();
 }
 
-size_t ExecNode::eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                            vectorized::Filter* filter) {
+StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
+                                                      vectorized::Filter* filter) {
     // No need to do expression if none rows
     DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ColumnPtr column = ctx->evaluate(chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {

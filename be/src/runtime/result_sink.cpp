@@ -33,7 +33,7 @@
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/vectorized/statistic_result_writer.h"
+#include "runtime/statistic_result_writer.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

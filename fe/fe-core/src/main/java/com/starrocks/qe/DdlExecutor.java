@@ -56,7 +56,6 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropAnalyzeJobStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
@@ -139,8 +138,6 @@ public class DdlExecutor {
             catalog.getRoutineLoadManager().stopRoutineLoadJob((StopRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterRoutineLoadStmt) {
             catalog.getRoutineLoadManager().alterRoutineLoadJob((AlterRoutineLoadStmt) ddlStmt);
-        } else if (ddlStmt instanceof DeleteStmt) {
-            catalog.getDeleteHandler().process((DeleteStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateUserStmt) {
             CreateUserStmt stmt = (CreateUserStmt) ddlStmt;
             catalog.getAuth().createUser(stmt);

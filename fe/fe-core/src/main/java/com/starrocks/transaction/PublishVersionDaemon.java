@@ -106,6 +106,9 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                 } else {
                     allTaskFinished = false;
+                    // Publish version task may succeed and finish in quorum replicas
+                    // but not finish in one replica.
+                    // here collect the backendId that do not finish publish version
                     unfinishedBackends.add(publishVersionTask.getBackendId());
                 }
             }

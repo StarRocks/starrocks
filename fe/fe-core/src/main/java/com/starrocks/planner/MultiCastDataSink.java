@@ -44,8 +44,7 @@ public class MultiCastDataSink extends DataSink {
 
     @Override
     protected TDataSink toThrift() {
-        List<TDataStreamSink> streamSinkList = dataStreamSinks.stream()
-                .map(s -> new TDataStreamSink(s.getExchNodeId().asInt(), s.getOutputPartition().toThrift()))
+        List<TDataStreamSink> streamSinkList = dataStreamSinks.stream().map(d -> d.toThrift().getStream_sink())
                 .collect(Collectors.toList());
         TMultiCastDataStreamSink sink = new TMultiCastDataStreamSink(streamSinkList, destinations);
 

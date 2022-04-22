@@ -29,18 +29,18 @@
 #include <set>
 
 #include "gutil/strings/substitute.h"
-#include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/rowset/vectorized/segment_options.h"
+#include "rowset_options.h"
+#include "segment_options.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
+#include "storage/delete_predicates.h"
+#include "storage/empty_iterator.h"
+#include "storage/merge_iterator.h"
+#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
+#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/chunk_iterator.h"
-#include "storage/vectorized/delete_predicates.h"
-#include "storage/vectorized/empty_iterator.h"
-#include "storage/vectorized/merge_iterator.h"
-#include "storage/vectorized/projection_iterator.h"
-#include "storage/vectorized/union_iterator.h"
 #include "util/file_utils.h"
 
 namespace starrocks {
@@ -240,6 +240,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
+    seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;

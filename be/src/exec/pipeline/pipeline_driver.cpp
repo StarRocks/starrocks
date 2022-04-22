@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
@@ -34,12 +35,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _first_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FirstInputEmptyTime", "InputEmptyTime");
     _followup_input_empty_timer = ADD_CHILD_TIMER(_runtime_profile, "FollowupInputEmptyTime", "InputEmptyTime");
     _output_full_timer = ADD_CHILD_TIMER(_runtime_profile, "OutputFullTime", "PendingTime");
-    _local_rf_waiting_set_counter = ADD_COUNTER(_runtime_profile, "LocalRfWaitingSet", TUnit::UNIT);
-
-    _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCounter", TUnit::UNIT);
-    _schedule_effective_counter = ADD_COUNTER(_runtime_profile, "ScheduleEffectiveCounter", TUnit::UNIT);
-    _schedule_rows_per_chunk = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedRowsPerChunk", TUnit::UNIT);
-    _schedule_accumulated_chunks_moved = ADD_COUNTER(_runtime_profile, "ScheduleAccumulatedChunkMoved", TUnit::UNIT);
 
     DCHECK(_state == DriverState::NOT_READY);
     // fill OperatorWithDependency instances into _dependencies from _operators.
@@ -55,16 +50,20 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
         const auto* global_rf_collector = op->runtime_bloom_filters();
+        auto is_scan_operator = dynamic_cast<ScanOperator*>(op.get()) != nullptr;
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 _global_rf_descriptors.emplace_back(desc);
             }
 
-            _global_rf_wait_timeout_ns =
-                    std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
+            auto wait_time_ns = 1000'000L * (is_scan_operator ? global_rf_collector->scan_wait_timeout_ms()
+                                                              : global_rf_collector->wait_timeout_ms());
+            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, wait_time_ns);
         }
     }
-    _local_rf_waiting_set_counter->set((int64_t)all_local_rf_set.size());
+    if (!all_local_rf_set.empty()) {
+        _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
+    }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
     source_operator()->add_morsel_queue(_morsel_queue.get());
@@ -178,6 +177,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // Check curr_op finished again
                 if (curr_op->is_finished()) {
+                    // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
@@ -304,34 +304,25 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
-    COUNTER_UPDATE(_schedule_counter, driver_acct().get_schedule_times());
-    COUNTER_UPDATE(_schedule_effective_counter, driver_acct().get_schedule_effective_times());
-    COUNTER_UPDATE(_schedule_rows_per_chunk, driver_acct().get_rows_per_chunk());
-    COUNTER_UPDATE(_schedule_accumulated_chunks_moved, driver_acct().get_accumulated_chunks_moved());
     _update_overhead_timer();
 
-    // last root driver cancel the all drivers' execution and notify FE the
-    // fragment's completion but do not unregister the FragmentContext because
-    // some non-root drivers maybe has pending io io tasks hold the reference to
-    // object owned by FragmentContext.
-    if (is_root()) {
-        if (_fragment_ctx->count_down_root_drivers()) {
-            _fragment_ctx->finish();
-            auto status = _fragment_ctx->final_status();
-            _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status,
-                                                                                             true);
-        }
-    }
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
-        _fragment_ctx->destroy_pass_through_chunk_buffer();
+        _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            QueryContextManager::instance()->remove(query_id);
+            if (_fragment_ctx->enable_resource_group()) {
+                if (_workgroup) {
+                    _workgroup->decr_num_queries();
+                }
+            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

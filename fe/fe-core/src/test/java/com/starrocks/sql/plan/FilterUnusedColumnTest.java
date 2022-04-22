@@ -26,13 +26,44 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        // for agg table
+        starRocksAssert.withTable("CREATE TABLE `metrics_detail` ( \n" +
+                "`tags_id` int(11) NULL COMMENT \"\", \n" + 
+                "`timestamp` datetime NULL COMMENT \"\", \n" +
+                "`value` double SUM NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP \n" + 
+                "AGGREGATE KEY(`tags_id`, `timestamp`) \n" +
+                "COMMENT \"OLAP\" \n" +
+                "PARTITION BY RANGE(`timestamp`)\n" + 
+                "(PARTITION p20200704 VALUES [('0000-01-01 00:00:00'), ('2020-07-05 00:00:00')))\n" + 
+                "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" + 
+                "\"enable_persistent_index\" = \"false\"\n" +
+                ");");
+        // for primary key table
+        starRocksAssert.withTable("CREATE TABLE `primary_table` ( \n" +
+                "`tags_id` int(11) NOT NULL COMMENT \"\", \n" + 
+                "`timestamp` datetime NOT NULL COMMENT \"\", \n" +
+                "`k3` varchar(65533) NOT NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP \n" + 
+                "PRIMARY KEY(`tags_id`, `timestamp`) \n" +
+                "COMMENT \"OLAP\" \n" +
+                "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
+        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
     }
 
     @Test
     public void testFilterComplexPredicate() throws Exception {
-        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
         String sql = "select\n" +
                 "            ref_0.d_dow as c1 from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_day_name = ref_0.d_day_name limit 137;\n";
@@ -42,7 +73,6 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
     @Test
     public void testFilterSinglePredicate() throws Exception {
-        connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
         String sql = "select\n" +
                 "            ref_0.d_dow as c1 from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_day_name = \"dd\" limit 137;\n";
@@ -51,12 +81,50 @@ public class FilterUnusedColumnTest extends PlanTestBase {
     }
 
     @Test
-    public void testFilterProjection() throws Exception {
+    public void testFilterSinglePredicateWithoutOutputColumns() throws Exception {
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        String sql = "select 1 from tpcds_100g_date_dim as ref_0 where ref_0.d_day_name=\"dd\" limit 137";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+    }
+
+    @Test
+    public void testFilterProjection() throws Exception {
         String sql = "select\n" +
                 "            ref_0.d_dow as c1, year(d_date) as year from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_date = \'1997-12-31\' limit 137;\n";
         String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+    }
+
+    @Test 
+    public void testFilterAggTable() throws Exception {
+        String sql = "select timestamp\n" +
+                "               from metrics_detail where value is NULL limit 10;";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+    }
+
+    @Test 
+    public void testFilterPrimaryKeyTable() throws Exception {
+        String sql = "select timestamp\n" +
+                "               from primary_table where k3 = \"test\" limit 10;";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+    }
+
+    @Test
+    public void testFilterDoublePredicateColumn() throws Exception {
+        String sql = "select t1a from test_all_type where t1f > 1";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+
+        sql = "select t1a from test_all_type where t1f is null";
+        plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+
+        sql = "select t1a from test_all_type where t1f in (1.0, 2.0)";
+        plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
 }

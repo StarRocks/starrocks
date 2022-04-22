@@ -30,8 +30,8 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_meta.h"
-#include "storage/vectorized/chunk_iterator.h"
 
 namespace starrocks {
 
@@ -125,7 +125,7 @@ public:
     Status load();
 
     const TabletSchema& schema() const { return *_schema; }
-    inline void set_schema(const TabletSchema* schema) { _schema = schema; }
+    void set_schema(const TabletSchema* schema) { _schema = schema; }
 
     virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                                                 const vectorized::RowsetReadOptions& options) = 0;
@@ -229,7 +229,7 @@ public:
     void release() {
         // if the refs by reader is 0 and the rowset is closed, should release the resouce
         uint64_t current_refs = --_refs_by_reader;
-        if (current_refs == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
+        if (current_refs == 0) {
             {
                 std::lock_guard<std::mutex> release_lock(_lock);
                 // rejudge _refs_by_reader because we do not add lock in create reader
@@ -245,6 +245,25 @@ public:
                         << ", tabletid:" << _rowset_meta->tablet_id();
             }
         }
+    }
+
+    static size_t get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
+        size_t num_segments = 0;
+        std::for_each(rowsets.begin(), rowsets.end(),
+                      [&num_segments](const RowsetSharedPtr& rowset) { num_segments += rowset->num_segments(); });
+        return num_segments;
+    }
+
+    static void acquire_readers(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->acquire(); });
+    }
+
+    static void release_readers(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->release(); });
+    }
+
+    static void close_rowsets(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
 protected:

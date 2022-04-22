@@ -172,7 +172,7 @@ public:
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
     static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
-                                      simdjson::ondemand::value& value) noexcept;
+                                      simdjson::ondemand::value* value) noexcept;
 
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
 

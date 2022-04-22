@@ -4,28 +4,9 @@
 
 #include <memory>
 
-#include "common/status.h"
-#include "exec/parquet/types.h"
-#include "gen_cpp/parquet_types.h"
-#include "runtime/types.h"
-#include "utils.h"
-
-namespace starrocks {
-class RandomAccessFile;
-namespace vectorized {
-class Column;
-struct HdfsScanStats;
-} // namespace vectorized
-} // namespace starrocks
+#include "column_converter.h"
 
 namespace starrocks::parquet {
-
-class ParquetField;
-
-struct ColumnReaderOptions {
-    vectorized::HdfsScanStats* stats = nullptr;
-    std::string timezone;
-};
 
 class ColumnReader {
 public:
@@ -58,6 +39,9 @@ public:
     virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
+
+public:
+    std::unique_ptr<ColumnConverter> converter;
 };
 
 } // namespace starrocks::parquet

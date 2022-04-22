@@ -78,7 +78,7 @@ public class CreateTableStmtTest {
         // col
         cols = Lists.newArrayList();
         cols.add(new ColumnDef("col1", new TypeDef(ScalarType.createType(PrimitiveType.INT))));
-        cols.add(new ColumnDef("col2", new TypeDef(ScalarType.createCharType(10))));
+        cols.add(new ColumnDef("col2", new TypeDef(ScalarType.createVarcharType(10))));
         colsName = Lists.newArrayList();
         colsName.add("col1");
         colsName.add("col2");
@@ -235,6 +235,38 @@ public class CreateTableStmtTest {
 
     @Test
     public void testBitmapWithoutAggregateMethod() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.AGG_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("AGG_KEYS table should specify aggregate type for non-key column[col3]");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithPrimaryKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithUniqueKey() throws Exception {
+        ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
+        cols.add(col3);
+        CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",
+                new KeysDesc(KeysType.UNIQUE_KEYS, colsName), null,
+                hashDistributioin, null, null, "");
+        stmt.analyze(analyzer);
+    }
+
+    @Test
+    public void testBitmapWithDuplicateKey() throws Exception {
         ColumnDef col3 = new ColumnDef("col3", new TypeDef(ScalarType.createType(PrimitiveType.BITMAP)));
         cols.add(col3);
         CreateTableStmt stmt = new CreateTableStmt(false, false, tblNameNoDb, cols, "olap",

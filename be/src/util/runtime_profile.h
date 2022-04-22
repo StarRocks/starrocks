@@ -309,7 +309,7 @@ public:
     // parent_counter_name.
     // If the counter already exists, the existing counter object is returned.
     Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
-    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ""); }
+    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
@@ -334,6 +334,9 @@ public:
 
     // Copy all but the bucket counters from src profile
     void copy_all_counters_from(RuntimeProfile* src_profile);
+
+    // Remove the counter object with 'name', and it will remove all the child counters recursively
+    void remove_counter(const std::string& name);
 
     // Clean all the counters except saved_counter_names
     void remove_counters(const std::set<std::string>& saved_counter_names);
@@ -459,11 +462,16 @@ public:
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+public:
+    // The root counter name for all top level counters.
+    const static std::string ROOT_COUNTER;
+
 private:
     // vector of (profile, indentation flag)
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
 
     RuntimeProfile* _parent;
 
@@ -484,9 +492,9 @@ private:
     /// All counters in this profile must be of unit AveragedCounter.
     bool _is_averaged_profile;
 
-    // Map from counter names to counters.  The profile owns the memory for the
-    // counters.
-    typedef std::map<std::string, Counter*> CounterMap;
+    // Map from counter names to counters and parent counter names.
+    // The profile owns the memory for the counters.
+    typedef std::map<std::string, std::pair<Counter*, std::string>> CounterMap;
     CounterMap _counter_map;
 
     // Map from parent counter name to a set of child counter name.

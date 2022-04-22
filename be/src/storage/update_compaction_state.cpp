@@ -2,12 +2,12 @@
 
 #include "storage/update_compaction_state.h"
 
+#include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "util/stack_util.h"
 
 namespace starrocks::vectorized {

@@ -22,7 +22,7 @@
 #include "storage/task/engine_alter_tablet_task.h"
 
 #include "runtime/current_thread.h"
-#include "storage/vectorized/schema_change.h"
+#include "storage/schema_change.h"
 #include "util/defer_op.h"
 
 namespace starrocks {

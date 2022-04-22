@@ -13,6 +13,9 @@
 namespace starrocks::vectorized {
 
 struct DataSegment {
+    static const uint8_t BEFORE_LAST_RESULT = 2;
+    static const uint8_t IN_LAST_RESULT = 1;
+
     ChunkPtr chunk;
     Columns order_by_columns;
 
@@ -34,12 +37,9 @@ struct DataSegment {
         chunk = cnk;
         order_by_columns.reserve(sort_exprs->size());
         for (ExprContext* expr_ctx : (*sort_exprs)) {
-            order_by_columns.push_back(expr_ctx->evaluate(chunk.get()));
+            order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
         }
     }
-
-    static const uint8_t BEFORE_LAST_RESULT = 2;
-    static const uint8_t IN_LAST_RESULT = 1;
 
     // there is two compares in the method,
     // the first is:
@@ -83,6 +83,7 @@ using DataSegments = std::vector<DataSegment>;
 class ChunksSorter {
 public:
     static constexpr int USE_HEAP_SORTER_LIMIT_SZ = 1024;
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -91,14 +92,13 @@ public:
      * @param size_of_chunk_batch  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
     ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn,
-                 size_t size_of_chunk_batch = 1000);
+                 const std::vector<bool>* is_null_first, const std::string& sort_keys, const bool is_topn);
     virtual ~ChunksSorter();
 
-    static vectorized::ChunkPtr materialize_chunk_before_sort(vectorized::Chunk* chunk,
-                                                              TupleDescriptor* materialized_tuple_desc,
-                                                              const SortExecExprs& sort_exec_exprs,
-                                                              const std::vector<OrderByType>& order_by_types);
+    static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,
+                                                                        TupleDescriptor* materialized_tuple_desc,
+                                                                        const SortExecExprs& sort_exec_exprs,
+                                                                        const std::vector<OrderByType>& order_by_types);
 
     virtual void setup_runtime(RuntimeProfile* profile);
 
@@ -131,7 +131,7 @@ public:
     void set_compare_strategy(CompareStrategy cmp) { _compare_strategy = cmp; }
 
 protected:
-    inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
+    size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
 
@@ -143,8 +143,6 @@ protected:
     const bool _is_topn;
 
     size_t _next_output_row = 0;
-
-    const size_t _size_of_chunk_batch;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;

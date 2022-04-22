@@ -19,21 +19,14 @@ import java.util.List;
 import java.util.UUID;
 
 public class CreateTableWithDecimalTypesTest {
-    private static String runningDir =
-            "fe/mocked/CreateTableWithDecimalTypesTest/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");

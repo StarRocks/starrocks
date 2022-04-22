@@ -13,7 +13,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
     int32_t num_partitions = _source->get_sources().size();
 
     for (size_t i = 0; i < _partitions_columns.size(); ++i) {
-        _partitions_columns[i] = _partition_expr_ctxs[i]->evaluate(chunk.get());
+        ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()));
         DCHECK(_partitions_columns[i] != nullptr);
     }
 
@@ -30,6 +30,17 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
         for (const vectorized::ColumnPtr& column : _partitions_columns) {
             column->crc32_hash(&_hash_values[0], 0, num_rows);
         }
+    }
+
+    // When the local exchange is the successor of ExchangeSourceOperator,
+    // the data flow is `exchange sink -> exchange source -> local exchange`.
+    // `exchange sink -> exchange source` (phase 1) determines which fragment instance to deliver each row,
+    // while `exchange source -> local exchange` (phase 2) determines which pipeline driver to deliver each row.
+    // To avoid hash two times and data skew due to hash one time, phase 1 hashes one time
+    // and phase 2 applies xorshift32 on the hash value.
+    // Note that xorshift32 rehash must be applied for both local shuffle here and exchange sink.
+    for (int32_t i = 0; i < num_rows; ++i) {
+        _hash_values[i] = HashUtil::xorshift32(_hash_values[i]);
     }
 
     // Compute row indexes for each channel.

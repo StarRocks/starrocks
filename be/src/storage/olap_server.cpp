@@ -28,11 +28,12 @@
 #include <string>
 
 #include "common/status.h"
+#include "storage/compaction.h"
+#include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized/compaction.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -80,38 +81,53 @@ Status StorageEngine::start_bg_threads() {
     }
     int32_t data_dir_num = data_dirs.size();
 
-    // base and cumulative compaction threads
-    int32_t base_compaction_num_threads_per_disk = std::max<int32_t>(1, config::base_compaction_num_threads_per_disk);
-    int32_t cumulative_compaction_num_threads_per_disk =
-            std::max<int32_t>(1, config::cumulative_compaction_num_threads_per_disk);
-    int32_t base_compaction_num_threads = base_compaction_num_threads_per_disk * data_dir_num;
-    int32_t cumulative_compaction_num_threads = cumulative_compaction_num_threads_per_disk * data_dir_num;
+    if (!config::enable_event_based_compaction_framework) {
+        // base and cumulative compaction threads
+        int32_t base_compaction_num_threads_per_disk =
+                std::max<int32_t>(1, config::base_compaction_num_threads_per_disk);
+        int32_t cumulative_compaction_num_threads_per_disk =
+                std::max<int32_t>(1, config::cumulative_compaction_num_threads_per_disk);
+        int32_t base_compaction_num_threads = base_compaction_num_threads_per_disk * data_dir_num;
+        int32_t cumulative_compaction_num_threads = cumulative_compaction_num_threads_per_disk * data_dir_num;
 
-    // calc the max concurrency of compaction tasks
-    int32_t max_compaction_concurrency = config::max_compaction_concurrency;
-    if (max_compaction_concurrency < 0 ||
-        max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
-        max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
-    }
-    vectorized::Compaction::init(max_compaction_concurrency);
+        // calc the max concurrency of compaction tasks
+        int32_t max_compaction_concurrency = config::max_compaction_concurrency;
+        if (max_compaction_concurrency < 0 ||
+            max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
+            max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
+        }
+        vectorized::Compaction::init(max_compaction_concurrency);
 
-    _base_compaction_threads.reserve(base_compaction_num_threads);
-    for (uint32_t i = 0; i < base_compaction_num_threads; ++i) {
-        _base_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
-            _base_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+        _base_compaction_threads.reserve(base_compaction_num_threads);
+        for (uint32_t i = 0; i < base_compaction_num_threads; ++i) {
+            _base_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
+                _base_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+            });
+            Thread::set_thread_name(_base_compaction_threads.back(), "base_compact");
+        }
+        LOG(INFO) << "base compaction threads started. number: " << base_compaction_num_threads;
+
+        _cumulative_compaction_threads.reserve(cumulative_compaction_num_threads);
+        for (uint32_t i = 0; i < cumulative_compaction_num_threads; ++i) {
+            _cumulative_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
+                _cumulative_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+            });
+            Thread::set_thread_name(_cumulative_compaction_threads.back(), "cumulat_compact");
+        }
+        LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
+    } else {
+        // new compaction framework
+        _compaction_scheduler = std::thread([] {
+            CompactionScheduler compaction_scheduler;
+            compaction_scheduler.schedule();
         });
-        Thread::set_thread_name(_base_compaction_threads.back(), "base_compact");
-    }
-    LOG(INFO) << "base compaction threads started. number: " << base_compaction_num_threads;
+        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+        LOG(INFO) << "compaction scheduler started";
 
-    _cumulative_compaction_threads.reserve(cumulative_compaction_num_threads);
-    for (uint32_t i = 0; i < cumulative_compaction_num_threads; ++i) {
-        _cumulative_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
-            _cumulative_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
-        });
-        Thread::set_thread_name(_cumulative_compaction_threads.back(), "cumulat_compact");
+        _compaction_checker_thread = std::thread([this] { compaction_check(); });
+        Thread::set_thread_name(_compaction_checker_thread, "compact_check");
+        LOG(INFO) << "compaction checker started";
     }
-    LOG(INFO) << "cumulative compaction threads started. number: " << cumulative_compaction_num_threads;
 
     int32_t update_compaction_num_threads_per_disk =
             std::max<int32_t>(1, config::update_compaction_num_threads_per_disk);

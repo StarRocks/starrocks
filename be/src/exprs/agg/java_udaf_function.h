@@ -22,13 +22,6 @@
 
 namespace starrocks::vectorized {
 
-template <bool handle_null>
-jvalue cast_to_jvalue(MethodTypeDescriptor method_type_desc, const Column* col, int row_num);
-void release_jvalue(MethodTypeDescriptor method_type_desc, jvalue val);
-void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
-Status get_java_udaf_function(int fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                              starrocks_udf::FunctionContext* context, AggregateFunction** func);
-
 template <bool handle_null = true>
 class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
@@ -40,14 +33,14 @@ public:
         jvalue args[num_args + 1];
         args[0].l = this->data(state).handle;
         for (int i = 0; i < num_args; ++i) {
-            args[i + 1] = cast_to_jvalue<handle_null>(ctx->impl()->udaf_ctxs()->update->method_desc[i + 2], columns[i],
-                                                      row_num);
+            auto& method_type = ctx->impl()->udaf_ctxs()->update->method_desc[i + 2];
+            args[i + 1] = cast_to_jvalue<handle_null>(method_type.type, method_type.is_box, columns[i], row_num);
         }
 
         ctx->impl()->udaf_ctxs()->_func->update(args);
 
         for (int i = 0; i < num_args; ++i) {
-            release_jvalue(ctx->impl()->udaf_ctxs()->update->method_desc[i + 2], args[i + 1]);
+            release_jvalue(ctx->impl()->udaf_ctxs()->update->method_desc[i + 2].is_box, args[i + 1]);
         }
     }
 
@@ -109,7 +102,7 @@ public:
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
-        release_jvalue(udaf_ctx->finalize->method_desc[0], val);
+        release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,

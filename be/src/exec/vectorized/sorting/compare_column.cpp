@@ -140,8 +140,9 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
-        const BinaryColumn::Container& lhs_datas = column.get_data();
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+        const auto& lhs_datas = column.get_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
         if (_sort_order == 1) {
@@ -223,7 +224,8 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
+    template <typename T>
+    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         auto& data = column.get_data();
         for (size_t i = 1; i < column.size(); i++) {
             (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;

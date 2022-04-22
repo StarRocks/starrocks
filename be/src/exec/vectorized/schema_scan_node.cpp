@@ -63,6 +63,12 @@ Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.schema_scan_node.__isset.thread_id) {
         _scanner_param.thread_id = tnode.schema_scan_node.thread_id;
     }
+
+    // only for no predicate and limit parameter is set
+    if (tnode.conjuncts.empty() && tnode.limit > 0) {
+        _scanner_param.without_db_table = true;
+        _scanner_param.limit = tnode.limit;
+    }
     return Status::OK();
 }
 
@@ -235,7 +241,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         {
             SCOPED_TIMER(_filter_timer);
             if (!_conjunct_ctxs.empty()) {
-                ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get());
+                RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get()));
             }
         }
         row_num = chunk_dst->num_rows();

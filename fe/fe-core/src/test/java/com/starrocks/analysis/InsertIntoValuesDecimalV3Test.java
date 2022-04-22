@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.UUID;
 
 public class InsertIntoValuesDecimalV3Test {
-    private static String runningDir = "fe/mocked/InsertIntoValuesDecimalV3/" + UUID.randomUUID().toString() + "/";
     private static StarRocksAssert starRocksAssert;
 
     @Rule
@@ -32,14 +31,9 @@ public class InsertIntoValuesDecimalV3Test {
 
     private static ConnectContext ctx;
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
-    }
-
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr =
                 "CREATE TABLE if not exists test_table (\n" +
                         "\tcol_int INT NOT NULL, \n" +

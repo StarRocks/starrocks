@@ -21,10 +21,11 @@
 
 #pragma once
 
-#include <boost/thread/thread.hpp>
 #include <cstdlib>
 #include <functional>
 #include <list>
+#include <mutex>
+#include <set>
 
 #include "common/status.h"
 

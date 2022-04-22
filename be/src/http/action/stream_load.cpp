@@ -349,8 +349,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.__set_loadId(ctx->id.to_thrift());
     if (ctx->use_streaming) {
         auto pipe =
-                std::make_shared<StreamLoadPipe>(1024 * 1024 /* max_buffered_bytes */, 64 * 1024 /* min_chunk_size */,
-                                                 ctx->body_bytes /* total_length */);
+                std::make_shared<StreamLoadPipe>(1024 * 1024 /* max_buffered_bytes */, 64 * 1024 /* min_chunk_size */);
         RETURN_IF_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe));
         request.fileType = TFileType::FILE_STREAM;
         ctx->body_sink = pipe;
@@ -431,10 +430,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     } else {
         request.__set_strip_outer_array(false);
     }
-    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
-        request.__set_partial_update(true);
-    } else {
-        request.__set_partial_update(false);
+    if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {
+            request.__set_partial_update(false);
+        } else if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "true")) {
+            request.__set_partial_update(true);
+        } else {
+            return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
+        }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));

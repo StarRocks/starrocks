@@ -36,7 +36,6 @@
 #include <memory>
 
 #include "common/logging.h"
-#include "exprs/slot_ref.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"

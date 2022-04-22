@@ -619,4 +619,39 @@ public class LimitTest extends PlanTestBase {
                 "  |  limit: 157"));
     }
 
+    @Test
+    public void testWhereLimitSubquery() throws Exception {
+        String sql = "select * from (select * from t0 limit 2) xx where xx.v1 = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: 1: v1 = 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 2");
+    }
+
+    @Test
+    public void testGroupingSetLimitSubquery() throws Exception {
+        String sql = "select v1, v2, v3 from (select * from t0 limit 2) xx group by cube(v1, v2, v3)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:REPEAT_NODE\n" +
+                "  |  repeat: repeat 7 lines [[], [1], [2], [1, 2], [3], [1, 3], [2, 3], [1, 2, 3]]\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 2");
+    }
+
+    @Test
+    public void testProjectLimitSubquery() throws Exception {
+        String sql = "select v1 + 1, v2 + 2, v3 + 3 from (select * from t0 limit 2) xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 4> : 1: v1 + 1\n" +
+                "  |  <slot 5> : 2: v2 + 2\n" +
+                "  |  <slot 6> : 3: v3 + 3\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }

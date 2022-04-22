@@ -22,8 +22,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.iceberg.expressions.Expression;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.iceberg.expressions.Expressions.and;
 import static org.apache.iceberg.expressions.Expressions.equal;
@@ -224,7 +226,10 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
             case DATE:
                 return Math.toIntExact(((DateLiteral) literalExpr).toLocalDateTime().toLocalDate().toEpochDay());
             case DATETIME:
-                return ((DateLiteral) literalExpr).toLocalDateTime().toLocalDate().toEpochDay();
+                // TODO: get more precision epoch microseconds
+                long value = ((DateLiteral) literalExpr).toLocalDateTime()
+                        .toEpochSecond(OffsetDateTime.now().getOffset());
+                return TimeUnit.MICROSECONDS.convert(value, TimeUnit.SECONDS);
             default:
                 return null;
         }

@@ -3,7 +3,9 @@
 #include "env/env_memory.h"
 
 #include <butil/files/file_path.h>
+#include <fmt/format.h>
 
+#include "io/array_input_stream.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -22,79 +24,16 @@ struct Inode {
 
 using InodePtr = std::shared_ptr<Inode>;
 
-class MemoryRandomAccessFile final : public RandomAccessFile {
+class MemoryFileInputStream : public io::SeekableInputStreamWrapper {
 public:
-    MemoryRandomAccessFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
-
-    ~MemoryRandomAccessFile() override = default;
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
-        const std::string& content = _inode->data;
-        if (offset >= content.size()) {
-            return 0;
-        }
-        size_t nread = std::min<size_t>(size, content.size() - offset);
-        memcpy(data, content.data() + offset, nread);
-        return nread;
+    MemoryFileInputStream(InodePtr inode)
+            : io::SeekableInputStreamWrapper(&_stream, kDontTakeOwnership), _inode(std::move(inode)) {
+        _stream.reset(_inode->data.data(), _inode->data.size());
     }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
-        const std::string& content = _inode->data;
-        if (offset + size > content.size()) {
-            return Status::EndOfFile("Cannot read required number of bytes");
-        }
-        memcpy(data, content.data() + offset, size);
-        return Status::OK();
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        const std::string& data = _inode->data;
-        size_t total_size = 0;
-        for (int i = 0; i < res_cnt; ++i) {
-            total_size += res[i].size;
-        }
-        if (offset + total_size > data.size()) {
-            return Status::IOError("Cannot read required bytes");
-        }
-        for (int i = 0; i < res_cnt; ++i) {
-            memcpy(res[i].data, data.data() + offset, res[i].size);
-            offset += res[i].size;
-        }
-        return Status::OK();
-    }
-
-    StatusOr<uint64_t> get_size() const override { return _inode->data.size(); }
-
-    const std::string& filename() const override { return _path; }
 
 private:
-    std::string _path;
+    io::ArrayInputStream _stream;
     InodePtr _inode;
-};
-
-class MemorySequentialFile final : public SequentialFile {
-public:
-    MemorySequentialFile(std::string path, InodePtr inode) : _random_file(std::move(path), std::move(inode)) {}
-
-    ~MemorySequentialFile() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        ASSIGN_OR_RETURN(auto nread, _random_file.read_at(_offset, data, size));
-        _offset += nread;
-        return nread;
-    }
-
-    const std::string& filename() const override { return _random_file.filename(); }
-
-    Status skip(uint64_t n) override {
-        ASSIGN_OR_RETURN(auto size, _random_file.get_size());
-        _offset = std::min(_offset + n, size);
-        return Status::OK();
-    }
-
-private:
-    uint64_t _offset = 0;
-    MemoryRandomAccessFile _random_file;
 };
 
 class MemoryWritableFile final : public WritableFile {
@@ -204,7 +143,8 @@ public:
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            return std::make_unique<MemorySequentialFile>(path.value(), iter->second);
+            auto stream = std::make_shared<MemoryFileInputStream>(iter->second);
+            return std::make_unique<SequentialFile>(std::move(stream), path.value());
         }
     }
 
@@ -218,7 +158,8 @@ public:
         if (iter == _namespace.end()) {
             return Status::NotFound(path.value());
         } else {
-            return std::make_unique<MemoryRandomAccessFile>(path.value(), iter->second);
+            auto stream = std::make_unique<MemoryFileInputStream>(iter->second);
+            return std::make_unique<RandomAccessFile>(std::move(stream), path.value());
         }
     }
 
@@ -320,6 +261,24 @@ public:
             _namespace[dirname.value()] = std::make_shared<Inode>(kDir, "");
             return Status::OK();
         }
+    }
+
+    Status create_dir_recursive(const butil::FilePath& dirname) {
+        std::vector<std::string> components;
+        dirname.GetComponents(&components);
+        std::string path;
+        bool created;
+        for (auto&& e : components) {
+            if (path.empty()) {
+                path = e;
+            } else if (path.back() == '/') {
+                path = fmt::format("{}{}", path, e);
+            } else {
+                path = fmt::format("{}/{}", path, e);
+            }
+            RETURN_IF_ERROR(create_dir_if_missing(butil::FilePath(path), &created));
+        }
+        return Status::OK();
     }
 
     Status delete_dir(const butil::FilePath& dirname) {
@@ -537,6 +496,12 @@ Status EnvMemory::create_dir_if_missing(const std::string& dirname, bool* create
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dirname, &new_path));
     return _impl->create_dir_if_missing(butil::FilePath(new_path), created);
+}
+
+Status EnvMemory::create_dir_recursive(const std::string& dirname) {
+    std::string new_path;
+    RETURN_IF_ERROR(canonicalize(dirname, &new_path));
+    return _impl->create_dir_recursive(butil::FilePath(new_path));
 }
 
 Status EnvMemory::delete_dir(const std::string& dirname) {

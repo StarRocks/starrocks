@@ -5,7 +5,7 @@
 #include <sstream>
 #include <vector>
 
-#include "storage/backgroud_task.h"
+#include "storage/background_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
@@ -125,7 +125,7 @@ struct CompactionTaskInfo {
     }
 };
 
-class CompactionTask : public BackgroudTask {
+class CompactionTask : public BackgroundTask {
 public:
     CompactionTask(CompactionAlgorithm algorithm)
             : _task_info(algorithm), _runtime_profile("compaction"), _mem_tracker(nullptr) {
@@ -255,6 +255,7 @@ protected:
         }
         _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
         _tablet->save_meta();
+        Rowset::close_rowsets(_input_rowsets);
         LOG(INFO) << "commit compaction. output version:" << _task_info.output_version
                   << ", output rowset version:" << _output_rowset->version()
                   << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();

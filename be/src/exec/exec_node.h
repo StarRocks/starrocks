@@ -151,10 +151,10 @@ public:
     // evaluate exprs over chunk to get a filter
     // if filter_ptr is not null, save filter to filter_ptr.
     // then running filter on chunk.
-    static void eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                               vectorized::FilterPtr* filter_ptr = nullptr);
-    static size_t eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                             vectorized::Filter* filter);
+    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
+                                 vectorized::FilterPtr* filter_ptr = nullptr);
+    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
+                                                       vectorized::Filter* filter);
 
     static void eval_filter_null_values(vectorized::Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
 

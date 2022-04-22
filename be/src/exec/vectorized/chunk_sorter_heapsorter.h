@@ -213,11 +213,8 @@ class HeapChunkSorter final : public ChunksSorter {
 public:
     using DataSegmentPtr = std::shared_ptr<DataSegment>;
     HeapChunkSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                    const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset, size_t limit,
-                    size_t size_of_chunk_batch)
-            : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true, size_of_chunk_batch),
-              _offset(offset),
-              _limit(limit) {}
+                    const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset, size_t limit)
+            : ChunksSorter(state, sort_exprs, is_asc, is_null_first, sort_keys, true), _offset(offset), _limit(limit) {}
     ~HeapChunkSorter() = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -238,7 +235,7 @@ public:
     void setup_runtime(RuntimeProfile* profile) override;
 
 private:
-    inline size_t _number_of_rows_to_sort() const { return _offset + _limit; }
+    size_t _number_of_rows_to_sort() const { return _offset + _limit; }
 
     // For TOPN cases, we can filter out a very large amount of data with
     // the elements at the top of the heap, which will significantly improve the sorting performance

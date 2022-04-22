@@ -13,9 +13,9 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
-#include "storage/vectorized/conjunctive_predicates.h"
-#include "storage/vectorized/tablet_reader.h"
+#include "storage/tablet_reader.h"
 
 namespace starrocks {
 
@@ -30,7 +30,8 @@ namespace pipeline {
 class ScanOperator;
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, ScanOperator* op, vectorized::OlapScanNode* scan_node);
+    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+                    vectorized::OlapScanNode* scan_node);
 
     ~OlapChunkSource() override = default;
 
@@ -49,7 +50,10 @@ public:
     Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
     Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
                                                            int worker_id, workgroup::WorkGroupPtr running_wg) override;
+
+    // Return last bytes of Scan or Exchange Data, then reset it
     int64_t last_spent_cpu_time_ns() override;
+    int64_t last_scan_rows_num() override;
 
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
@@ -116,13 +120,11 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
-    RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     int64_t _last_spent_cpu_time_ns = 0;
 
-    RuntimeProfile* _scan_profile = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;

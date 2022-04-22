@@ -21,13 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 // DROP TABLE
 public class DropTableStmt extends DdlStmt {
@@ -62,6 +57,10 @@ public class DropTableStmt extends DdlStmt {
         return tableName.getTbl();
     }
 
+    public TableName getTableNameObject() {
+        return tableName;
+    }
+
     public boolean isView() {
         return isView;
     }
@@ -72,27 +71,33 @@ public class DropTableStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            tableName.setDb(analyzer.getDefaultDb());
-        }
-        tableName.analyze(analyzer);
-
-        // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
-                tableName.getTbl(), PrivPredicate.DROP)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-        }
     }
 
     @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("DROP TABLE ").append(tableName.toSql());
+        if (isView()) {
+            stringBuilder.append("DROP VIEW ");
+        } else {
+            stringBuilder.append("DROP TABLE ");
+        }
+        if (isSetIfExists()) {
+            stringBuilder.append("IF EXISTS ");
+        }
+        stringBuilder.append(tableName.toSql());
+        if (isForceDrop()) {
+            stringBuilder.append(" FORCE");
+        }
         return stringBuilder.toString();
     }
 
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropTableStmt(this, context);
     }
 }

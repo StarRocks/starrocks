@@ -7,7 +7,7 @@
 #include "exprs/vectorized/binary_function.h"
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/vectorized/Volnitsky.h"
+#include "runtime/Volnitsky.h"
 
 namespace starrocks::vectorized {
 

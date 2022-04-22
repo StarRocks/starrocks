@@ -104,7 +104,7 @@ size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkP
                                                           const std::vector<ExprContext*>& exprs) {
     size_t max_size = 0;
     for (auto* expr : exprs) {
-        ColumnPtr key_column = expr->evaluate(chunkPtr.get());
+        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get());
         max_size += key_column->max_one_element_serialize_size();
         if (!key_column->is_nullable()) {
             max_size += sizeof(bool);
@@ -117,7 +117,7 @@ template <typename HashSet>
 void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                                    size_t chunk_size) {
     for (auto expr : exprs) {
-        ColumnPtr key_column = expr->evaluate(chunkPtr.get());
+        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get());
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {

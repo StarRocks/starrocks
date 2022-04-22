@@ -206,7 +206,8 @@ message TabletSchemaPB {
     optional double bf_fpp = 6; // OLAPHeaderMessage.bf_fpp
     optional uint32 next_column_unique_id = 7; // OLAPHeaderMessage.next_column_unique_id
     optional bool DEPRECATED_is_in_memory = 8 [default=false];
-    optional int64 id = 9;
+    optional int64 deprecated_id = 9; // deprecated
+    optional int64 id = 50;
 }
 
 enum TabletStatePB {
@@ -287,6 +288,7 @@ message TabletMetaPB {
     optional RowsetTypePB preferred_rowset_type = 16;
     optional TabletTypePB tablet_type = 17;
     optional TabletUpdatesPB updates = 50; // used for new updatable tablet
+    optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
 }
 
 message OLAPIndexHeaderMessage {

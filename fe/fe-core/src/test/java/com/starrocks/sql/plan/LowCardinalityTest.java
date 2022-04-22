@@ -668,8 +668,28 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testJoin() throws Exception {
-        String sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
-        String plan = getFragmentPlan(sql);
+        String sql;
+        String plan;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select *\n" +
+                "from(\n" +
+                "        select S_SUPPKEY,\n" +
+                "            S_NATIONKEY\n" +
+                "        from supplier\n" +
+                "    ) l\n" +
+                "    right outer join [shuffle] (\n" +
+                "        select S_SUPPKEY,\n" +
+                "            max(S_ADDRESS) as MS\n" +
+                "        from supplier_nullable\n" +
+                "        group by S_SUPPKEY\n" +
+                "    ) r on l.S_SUPPKEY = r.S_SUPPKEY\n" +
+                "    and l.S_NATIONKEY = r.MS;";
+        plan = getVerboseExplain(sql);
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 21: S_ADDRESS"));
+
+        sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>"));
@@ -734,17 +754,33 @@ public class LowCardinalityTest extends PlanTestBase {
     @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
-        String plan = getFragmentPlan(sql);
+        String sql = null;
+        String plan = null;
+
+        sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+
+        sql = "select S_ADDRESS from supplier order by S_ADDRESS";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  1:SORT\n" +
+                "  |  order by: [9, INT, false] ASC"));
+
+        sql = "select S_NAME from supplier_nullable order by upper(S_ADDRESS), S_NAME";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
+                "  |  order by: [11, INT, true] ASC, [2, VARCHAR, false] ASC"));
 
         sql = "select substr(S_ADDRESS, 0, 1) from supplier group by substr(S_ADDRESS, 0, 1) " +
                 "order by substr(S_ADDRESS, 0, 1)";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  7:Decode\n" +
                 "  |  <dict id 11> : <string id 9>\n" +
                 "  |  string functions:\n" +
                 "  |  <function id 11> : DictExpr(10: S_ADDRESS,[substr(<place-holder>, 0, 1)])"));
+        Assert.assertTrue(plan.contains("  5:SORT\n" +
+                "  |  order by: [11, INT, true] ASC"));
+
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

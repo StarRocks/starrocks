@@ -316,10 +316,10 @@ public class ArithmeticExpr extends Expr {
             case MOD:
                 // numeric ops must be promoted to highest-resolution type
                 // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                commonType = findCommonType(t1, t2);
+                commonType = getCommonType(t1, t2);
                 break;
             case DIVIDE:
-                commonType = findCommonType(t1, t2);
+                commonType = getCommonType(t1, t2);
                 if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
                         || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
                     commonType = Type.DOUBLE;
@@ -405,9 +405,9 @@ public class ArithmeticExpr extends Expr {
         Preconditions.checkArgument(tupleIds.size() == 1);
     }
 
-    public static Type findCommonType(Type t1, Type t2) {
-        PrimitiveType pt1 = t1.getPrimitiveType();
-        PrimitiveType pt2 = t2.getPrimitiveType();
+    public static Type getCommonType(Type t1, Type t2) {
+        PrimitiveType pt1 = t1.getNumResultType().getPrimitiveType();
+        PrimitiveType pt2 = t2.getNumResultType().getPrimitiveType();
 
         if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
             return Type.DOUBLE;
@@ -417,11 +417,47 @@ public class ArithmeticExpr extends Expr {
             return Type.DECIMALV2;
         } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
             return Type.LARGEINT;
-        } else {
-            if (pt1 != PrimitiveType.BIGINT && pt2 != PrimitiveType.BIGINT) {
-                return Type.INVALID;
-            }
+        } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
             return Type.BIGINT;
+        } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
+                (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                        pt2.ordinal() <= PrimitiveType.INT.ordinal())) {
+            return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t2 is INVALID TYPE:
+            return t1;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t1 is INVALID TYPE:
+            return t2;
+        } else {
+            return Type.INVALID;
+        }
+    }
+
+    public static Type getBiggerType(Type t) {
+        switch (t.getNumResultType().getPrimitiveType()) {
+            case TINYINT:
+                return Type.SMALLINT;
+            case SMALLINT:
+                return Type.INT;
+            case INT:
+            case BIGINT:
+                return Type.BIGINT;
+            case LARGEINT:
+                return Type.LARGEINT;
+            case DOUBLE:
+                return Type.DOUBLE;
+            case DECIMALV2:
+                return Type.DECIMALV2;
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return t;
+            default:
+                return Type.INVALID;
         }
     }
 

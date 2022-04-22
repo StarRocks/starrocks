@@ -22,6 +22,11 @@ public abstract class ScalarOperator implements Cloneable {
         this.type = requireNonNull(type, "type is null");
     }
 
+    @SuppressWarnings("unchecked")
+    public <T> T cast() {
+        return (T) this;
+    }
+
     public boolean isConstant() {
         for (ScalarOperator child : getChildren()) {
             if (!child.isConstant()) {

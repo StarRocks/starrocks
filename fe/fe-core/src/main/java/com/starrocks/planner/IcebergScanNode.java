@@ -4,7 +4,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
@@ -32,7 +35,9 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -78,7 +83,7 @@ public class IcebergScanNode extends ScanNode {
 
     /**
      * Extracts predicates from conjuncts that can be pushed down to Iceberg.
-     *
+     * <p>
      * Since Iceberg will filter data files by metadata instead of scan data files,
      * we pushdown all predicates to Iceberg to get the minimum data files to scan.
      * Here are three cases for predicate pushdown:
@@ -151,6 +156,9 @@ public class IcebergScanNode extends ScanNode {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
+                if (file.fileSizeInBytes() == 0) {
+                    continue;
+                }
 
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 

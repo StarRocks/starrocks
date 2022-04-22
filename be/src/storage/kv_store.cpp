@@ -255,12 +255,10 @@ Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::
     return to_status(it->status());
 }
 
-Status KVStore::compact(uint64_t* size_before, uint64_t* size_after) {
+Status KVStore::compact() {
     rocksdb::ColumnFamilyHandle* handle = _handles[META_COLUMN_FAMILY_INDEX];
-    (void)_db->GetIntProperty(handle, "rocksdb.live-sst-files-size", size_before);
     rocksdb::CompactRangeOptions opts;
     auto st = _db->CompactRange(opts, handle, nullptr, nullptr);
-    (void)_db->GetIntProperty(handle, "rocksdb.live-sst-files-size", size_after);
     return to_status(st);
 }
 
@@ -275,6 +273,11 @@ std::string KVStore::get_stats() {
         LOG(WARNING) << "rocksdb get stats failed" << std::endl;
     }
     return stats;
+}
+
+bool KVStore::get_live_sst_files_size(uint64_t* live_sst_files_size) {
+    rocksdb::ColumnFamilyHandle* handle = _handles[META_COLUMN_FAMILY_INDEX];
+    return _db->GetIntProperty(handle, "rocksdb.live-sst-files-size", live_sst_files_size);
 }
 
 std::string KVStore::get_root_path() {

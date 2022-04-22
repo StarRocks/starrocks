@@ -131,7 +131,8 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
     } else if (!arg0_has_null && arg0_distinct_values.size() == 1) {
         // ConstColumn
         c0_const = true;
-        c0 = ConstColumn::create(arg0_data_column, arg0_data_column->size());
+        arg0_data_column->resize(1);
+        c0 = ConstColumn::create(arg0_data_column, arg0_values.size());
     } else {
         if (arg0_null_flags.empty()) {
             // normal Column
@@ -158,7 +159,8 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
     } else if (!arg1_has_null && arg1_distinct_values.size() == 1) {
         // ConstColumn
         c1_const = true;
-        c1 = ConstColumn::create(arg1_data_column, arg1_data_column->size());
+        arg1_data_column->resize(1);
+        c1 = ConstColumn::create(arg1_data_column, arg1_values.size());
     } else {
         if (arg1_null_flags.empty()) {
             // normal Column

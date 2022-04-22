@@ -71,7 +71,7 @@ bool SelectOperator::need_input() const {
 }
 
 Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get()));
     _curr_chunk = chunk;
     return Status::OK();
 }

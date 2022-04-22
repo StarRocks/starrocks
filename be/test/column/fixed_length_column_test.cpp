@@ -23,7 +23,6 @@
 
 #include <gtest/gtest.h>
 
-#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
@@ -574,6 +573,40 @@ TEST(FixedLengthColumnTest, test_compare_row) {
     EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
     EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
     EXPECT_EQ(1, std::count(cmp_vector.begin(), cmp_vector.end(), 0));
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_upgrade_if_overflow) {
+    auto column = FixedLengthColumn<uint32_t>::create();
+    for (int i = 0; i < 10; i++) {
+        column->append(i);
+    }
+
+    auto ret = column->upgrade_if_overflow();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_EQ(column->size(), 10);
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(column->get(i).get_uint32(), i);
+    }
+
+#ifdef NDEBUG
+    // This case will alloc a lot of memory and run slowly
+    auto large_column = FixedLengthColumn<uint8_t>::create();
+    large_column->resize(Column::MAX_CAPACITY_LIMIT + 5);
+    ret = large_column->upgrade_if_overflow();
+    ASSERT_FALSE(ret.ok());
+#endif
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_fixed_length_column_downgrade) {
+    auto column = FixedLengthColumn<uint32_t>::create();
+    column->append(1);
+    auto ret = column->downgrade();
+    ASSERT_TRUE(ret.ok());
+    ASSERT_TRUE(ret.value() == nullptr);
+    ASSERT_FALSE(column->has_large_column());
 }
 
 } // namespace starrocks::vectorized

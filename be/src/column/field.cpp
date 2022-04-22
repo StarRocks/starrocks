@@ -5,9 +5,9 @@
 #include <utility>
 
 #include "column/datum.h"
+#include "storage/chunk_helper.h"
 #include "storage/key_coder.h"
 #include "storage/types.h"
-#include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {
 

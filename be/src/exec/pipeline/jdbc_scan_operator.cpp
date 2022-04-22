@@ -163,7 +163,7 @@ void JDBCScanOperator::do_close(RuntimeState* state) {
     }
 }
 
-ChunkSourcePtr JDBCScanOperator::create_chunk_source(MorselPtr morsel) {
+ChunkSourcePtr JDBCScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     // this function is not be used in JDBCScanOperator, just ignore it
     return nullptr;
 }

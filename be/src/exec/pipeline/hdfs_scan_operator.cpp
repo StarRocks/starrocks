@@ -36,9 +36,10 @@ Status HdfsScanOperator::do_prepare(RuntimeState*) {
 
 void HdfsScanOperator::do_close(RuntimeState*) {}
 
-ChunkSourcePtr HdfsScanOperator::create_chunk_source(MorselPtr morsel) {
+ChunkSourcePtr HdfsScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     vectorized::HdfsScanNode* hdfs_scan_node = down_cast<vectorized::HdfsScanNode*>(_scan_node);
-    return std::make_shared<HdfsChunkSource>(std::move(morsel), this, hdfs_scan_node);
+    return std::make_shared<HdfsChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel), this,
+                                             hdfs_scan_node);
 }
 
 } // namespace starrocks::pipeline

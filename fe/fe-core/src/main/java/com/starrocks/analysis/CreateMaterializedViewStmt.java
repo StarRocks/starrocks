@@ -455,6 +455,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             default:
                 throw new AnalysisException("Unsupported function:" + functionName);
         }
+
+        // If isReplay, don't check compatibility because materialized view maybe already created before.
+        if (!isReplay && !mvAggregateType.checkCompatibility(type)) {
+            throw new AnalysisException(
+                    String.format("Invalid aggregate function '%s' for '%s'", mvAggregateType, type));
+        }
         return new MVColumnItem(mvColumnName, type, mvAggregateType, functionCallExpr.isNullable(), false, defineExpr,
                 baseColumnName);
     }

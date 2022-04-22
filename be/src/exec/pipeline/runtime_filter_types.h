@@ -315,9 +315,31 @@ public:
         }
 
         const auto& num_bloom_filters = _bloom_filter_descriptors.size();
+
+        // remove empty params that generated in two cases:
+        // 1. the corresponding HashJoinProbeOperator is finished in short-circuit style because HashJoinBuildOperator
+        // above this operator has constructed an empty hash table.
+        // 2. the HashJoinBuildOperator is finished in advance because the fragment instance is canceled
+        _partial_bloom_filter_build_params.erase(
+                std::remove_if(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
+                               [](auto& opt_params) { return opt_params.empty(); }),
+                _partial_bloom_filter_build_params.end());
+
+        // there is no non-empty params, set all runtime filter to nullptr
+        if (_partial_bloom_filter_build_params.empty()) {
+            for (auto& desc : _bloom_filter_descriptors) {
+                desc->set_runtime_filter(nullptr);
+            }
+            return Status::OK();
+        }
+
+        // all params must have the same size as num_bloom_filters
+        DCHECK(std::all_of(_partial_bloom_filter_build_params.begin(), _partial_bloom_filter_build_params.end(),
+                           [&num_bloom_filters](auto& opt_params) { return opt_params.size() == num_bloom_filters; }));
+
         for (auto i = 0; i < num_bloom_filters; ++i) {
             auto& desc = _bloom_filter_descriptors[i];
-            if (desc == nullptr) {
+            if (desc->runtime_filter() == nullptr) {
                 continue;
             }
             auto can_merge =

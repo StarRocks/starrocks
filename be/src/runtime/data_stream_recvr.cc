@@ -21,11 +21,8 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <google/protobuf/stubs/common.h>
-
 #include <condition_variable>
 #include <deque>
-#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,7 +33,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/vectorized/sorted_chunks_merger.h"
+#include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
@@ -448,10 +445,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
-            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
         }
@@ -576,10 +573,10 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
-            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
         }
@@ -695,7 +692,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+        SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
             StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
@@ -705,7 +702,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
     } else {
         size_t uncompressed_size = 0;
         {
-            SCOPED_TIMER(_recvr->_decompress_row_batch_timer);
+            SCOPED_TIMER(_recvr->_decompress_chunk_timer);
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
@@ -714,7 +711,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
         }
         {
-            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
+            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
@@ -889,8 +886,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
-    _deserialize_row_batch_timer = ADD_TIMER(_profile, "DeserializeRowBatchTime");
-    _decompress_row_batch_timer = ADD_TIMER(_profile, "DecompressRowBatchTime");
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
+    _decompress_chunk_timer = ADD_TIMER(_profile, "DecompressChunkTime");
     _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");
 
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
