@@ -1,12 +1,12 @@
 # ALTER ROUTINE LOAD
 
-## description
+## 功能
 
-该语法用于修改已经创建的例行导入作业。
+该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PASUME](../data-manipulation/PAUSE%20ROUTINE%20LOAD.md) 命令可以暂停导入的任务，进行`ALTER ROUTINE LOAD`操作。
 
-只能修改处于 PAUSED 状态的作业。
+## 语法
 
-语法：
+注：方括号 [] 中内容可省略不写。
 
 ```sql
 ALTER ROUTINE LOAD FOR [db.]job_name
@@ -16,7 +16,7 @@ FROM data_source
 [data_source_properties]
 ```
 
-1. **[db.]job_name**
+1. **[db.] job_name**
 
     指定要修改的作业名称。
 
@@ -36,7 +36,7 @@ FROM data_source
 
     1. 设置列分隔符
 
-        对于csv格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号(,)
+        对于 csv 格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号 ","
 
         ```sql
         COLUMNS TERMINATED BY ","
@@ -51,7 +51,7 @@ FROM data_source
         1. 映射列：
 
             按顺序指定，源数据中各个列，对应目的表中的哪些列。对于希望跳过的列，可以指定一个不存在的列名。
-            假设目的表有三列 k1, k2, v1。源数据有4列，其中第1、2、4列分别对应 k2, k1, v1。则书写如下：
+            假设目的表有三列 k1, k2, v1。源数据有 4 列，其中第 1、2、4 列分别对应 k2, k1, v1。则书写如下：
 
             ```SQL
             COLUMNS (k2, k1, xxx, v1)
@@ -63,13 +63,13 @@ FROM data_source
 
             以 col_name = expr 的形式表示的列，我们称为衍生列。即支持通过 expr 计算得出目的表中对应列的值。
             衍生列通常排列在映射列之后，虽然这不是强制的规定，但是 StarRocks 总是先解析映射列，再解析衍生列。
-            接上一个示例，假设目的表还有第4列 v2，v2 由 k1 和 k2 的和产生。则可以书写如下：
+            接上一个示例，假设目的表还有第 4 列 v2，v2 由 k1 和 k2 的和产生。则可以书写如下：
 
             ```plain text
             COLUMNS (k2, k1, xxx, v1, v2 = k1 + k2);
             ```
 
-        对于csv格式的数据，COLUMNS中的映射列的个数必须要与数据中的列个数一致
+        对于 csv 格式的数据，COLUMNS 中的映射列的个数必须要与数据中的列个数一致
 
     3. 指定过滤条件
 
@@ -82,7 +82,7 @@ FROM data_source
 
     4. 指定导入分区
 
-        指定导入目的表的哪些 partition 中。如果不指定，则会自动导入到对应的 partition 中。
+        指定 **导入目的表** 的哪些 partition 中。如果不指定，则会自动导入到对应的 partition 中。
         示例：
 
         ```plain text
@@ -91,7 +91,7 @@ FROM data_source
 
 3. **job_properties**
 
-    指定需要修改的作业参数。目前仅支持如下参数的修改：
+    指定需要修改的作业参数。目前仅支持以下参数的修改：
 
     1. `desired_concurrent_number`
     2. `max_error_number`
@@ -119,11 +119,11 @@ FROM data_source
 
 注：
 
-1. `kafka_partitions` 和 `kafka_offsets` 用于修改待消费的 kafka partition 的offset，仅能修改当前已经消费的 partition。不能新增 partition。
+1. `kafka_partitions` 和 `kafka_offsets` 用于修改待消费的 kafka partition 的 offset，仅能修改当前已经消费的 partition。不能新增 partition。
 
-## example
+## 示例
 
-1. 将 `desired_concurrent_number` 修改为 1
+1. 将 `desired_concurrent_number` 修改为 1，调整该参数可调整消费 kafka 并行度，详细调节方式请参考: [通过调整并行度增加 Routine load 消费 kafka 数据速率](https://forum.starrocks.com/t/topic/1675)
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
@@ -133,7 +133,7 @@ FROM data_source
     );
     ```
 
-2. 将 `desired_concurrent_number` 修改为 10，修改 partition 的offset，修改 group id.
+2. 将 `desired_concurrent_number` 修改为 10，修改 partition 的 offset，修改 group id.
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
@@ -149,7 +149,7 @@ FROM data_source
     );
     ```
 
-3. 更改导入的过滤条件为 `a > 0`，并且指定导入的partition为 `p1`
+3. 更改导入的过滤条件为 `a > 0`，并且指定导入的 partition 为 `p1`
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
@@ -157,6 +157,6 @@ FROM data_source
     PARTITION (p1)
     ```
 
-## keyword
+## 关键字(keywords)
 
-ALTER,ROUTINE,LOAD
+ALTER, ROUTINE, LOAD

@@ -1,15 +1,15 @@
 # SHOW TABLES
 
-## description
+## 功能
 
-该语句用于展示当前 db 下所有的 table
+该语句用于展示当前 db 下所有的 table。
 
-语法：
+## 语法
 
 ```sql
 SHOW TABLES;
 ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,TABLES
+SHOW, TABLES

@@ -1,6 +1,10 @@
 # SHOW ROUTINE LOAD
 
-## example
+## 功能
+
+查看 routine load 任务的信息。
+
+## 示例
 
 1. 展示名称为 test1 的所有例行导入作业（包括已停止或取消的作业）。结果为一行或多行。
 
@@ -40,6 +44,6 @@
     SHOW ALL ROUTINE LOAD FOR example_db.test1;
     ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,ROUTINE,LOAD
+SHOW, ROUTINE, LOAD

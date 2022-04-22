@@ -1,23 +1,25 @@
 # SHOW DYNAMIC PARTITION TABLES
 
-## description
+## 功能
 
-该语句用于展示当前db下所有的动态分区表状态
+该语句用于展示当前数据库 db 下所有的动态分区表状态。
 
-语法：
+## 语法
+
+注：方括号 [] 中内容可省略不写。
 
 ```sql
 SHOW DYNAMIC PARTITION TABLES [FROM db_name];
 ```
 
-## example
+## 示例
 
-1. 展示数据库 database 的所有动态分区表状态
+1. 展示数据库 database 的所有动态分区表状态。
 
 ```sql
 SHOW DYNAMIC PARTITION TABLES FROM database;
 ```
 
-## keyword
+## 关键字(keywords)
 
-SHOW,DYNAMIC,PARTITION,TABLES
+SHOW, DYNAMIC, PARTITION, TABLES

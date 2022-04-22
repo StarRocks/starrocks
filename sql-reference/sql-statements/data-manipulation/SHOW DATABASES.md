@@ -1,15 +1,15 @@
 # SHOW DATABASES
 
-## description
+## 功能
 
-该语句用于展示当前可见的 db
+该语句用于展示当前可见的数据库 db。
 
-语法：
+## 语法
 
 ```sql
 SHOW DATABASES;
 ```
 
-## keyword
+## 关键字(keywords)
 
 SHOW,DATABASES

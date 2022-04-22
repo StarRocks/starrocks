@@ -1,6 +1,6 @@
 # GROUP BY
 
-## description
+## 描述
 
   GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` 是对 GROUP BY 子句的扩展，它能够在一个 GROUP BY 子句中实现多个集合的分组的聚合。其结果等价于将多个相应 GROUP BY 子句进行 UNION 操作。
 
@@ -23,11 +23,13 @@
   SELECT null, null, SUM( c ) FROM tab1
   ```
 
-  `GROUPING(expr)` 指示一个列是否为聚合列，如果是聚合列为0，否则为1
+  `GROUPING(expr)` 指示一个列是否为聚合列，如果是聚合列为 0，否则为 1
 
-  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与GROUPING 类似，GROUPING_ID根据指定的column 顺序，计算出一个列列表的 bitmap 值，每一位为GROUPING的值. GROUPING_ID()函数返回位向量的十进制值。
+  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与 GROUPING 类似，GROUPING_ID 根据指定的 column 顺序，计算出一个列列表的 bitmap 值，每一位为 GROUPING 的值. GROUPING_ID()函数返回位向量的十进制值。
 
-### Syntax
+## 语法
+
+注：方括号 [] 中内容如无需指定可省略不写。
 
   ```sql
   SELECT ...
@@ -46,13 +48,13 @@
 
 ### Parameters
 
-  `groupSet` 表示 select list 中的列，别名或者表达式组成的集合 `groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`
+  `groupSet` 表示 select list 中的列，别名或者表达式组成的集合 `groupSet ::= { ( expr  [ , expr [ , ... ] ] )}`。
 
-  `expr`  表示 select list 中的列，别名或者表达式
+  `expr`  表示 select list 中的列，别名或者表达式。
 
 ### Note
 
-  starrocks 支持类似PostgreSQL 语法, 语法实例如下
+  starrocks 支持类似 PostgreSQL 语法, 语法实例如下：
 
   ```sql
   SELECT a, b, SUM( c ) FROM tab1 GROUP BY GROUPING SETS ( (a, b), (a), (b), ( ) );
@@ -60,23 +62,23 @@
   SELECT a, b,c, SUM( d ) FROM tab1 GROUP BY CUBE(a,b,c)
   ```
 
-  `ROLLUP(a,b,c)` 等价于如下`GROUPING SETS` 语句
+  `ROLLUP(a,b,c)` 等价于如下 `GROUPING SETS` 语句。
 
   ```sql
   GROUPING SETS (
   (a,b,c),
-  ( a, b ),
-  ( a),
-  ( )
+  (a,b  ),
+  (a    ),
+  (     )
   )
   ```
 
-  `CUBE ( a, b, c )` 等价于如下`GROUPING SETS` 语句
+  `CUBE ( a, b, c )` 等价于如下 `GROUPING SETS` 语句。
 
   ```sql
   GROUPING SETS (
   ( a, b, c ),
-  ( a, b ),
+  ( a, b    ),
   ( a,    c ),
   ( a       ),
   (    b, c ),
@@ -86,11 +88,11 @@
   )
   ```
 
-## example
+## 示例
 
-  下面是一个实际数据的例子
+  下面是一个实际数据的例子:
 
-  ```plain text
+  ```sql
   > SELECT * FROM t;
   +------+------+------+
   | k1   | k2   | k3   |
@@ -139,6 +141,6 @@
   9 rows in set (0.02 sec)
   ```
 
-## keyword
+## 关键字(keywords)
 
 GROUP, GROUPING, GROUPING_ID, GROUPING_SETS, GROUPING SETS, CUBE, ROLLUP

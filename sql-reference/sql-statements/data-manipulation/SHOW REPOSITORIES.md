@@ -1,10 +1,14 @@
 # SHOW REPOSITORIES
 
-## description
+## 功能
 
 该语句用于查看当前已创建的仓库。
 
-语法：
+备份数据需要创建仓库，详细的备份恢复操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
+
+## 语法
+
+注：方括号 [] 中内容可省略不写。
 
 ```sql
 SHOW REPOSITORIES;
@@ -22,7 +26,7 @@ Broker：     依赖的 Broker
 ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题，这里会显示错误信息
 ```
 
-## example
+## 示例
 
 1. 查看已创建的仓库：
 
@@ -30,6 +34,6 @@ ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题�
     SHOW REPOSITORIES;
     ```
 
-## keyword
+## 关键字(keywords)
 
 SHOW, REPOSITORY, REPOSITORIES

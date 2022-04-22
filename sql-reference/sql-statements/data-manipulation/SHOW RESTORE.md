@@ -2,12 +2,12 @@
 
 ## description
 
-该语句用于查看 RESTORE 任务
+该语句用于查看 RESTORE 任务。详细的Backup&restore操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
 
 语法：
 
 ```sql
-SHOW RESTORE [FROM db_name]
+SHOW RESTORE [FROM db_name];
 ```
 
 说明：
@@ -41,7 +41,7 @@ Status：                 如果作业失败，显示失败信息
 Timeout：                作业超时时间，单位秒
 ```
 
-## example
+## 示例
 
 1. 查看 example_db 下最近一次 RESTORE 任务。
 
@@ -49,6 +49,6 @@ Timeout：                作业超时时间，单位秒
 SHOW RESTORE FROM example_db;
 ```
 
-## keyword
+## 关键字(keywords)
 
 SHOW, RESTORE

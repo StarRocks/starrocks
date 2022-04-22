@@ -1,11 +1,16 @@
 # SHOW BACKUP
 
-## description
+## 功能
 
-该语句用于查看 BACKUP 任务
+该语句用于查看 BACKUP 任务。
 
-语法：
-SHOW BACKUP [FROM db_name]
+## 语法
+
+注：方括号 [] 中内容如无需指定可省略不写。
+
+```sql
+SHOW BACKUP [FROM db_name];
+```
 
 说明：
 
@@ -34,14 +39,14 @@ Status：                 如果作业失败，显示失败信息
 Timeout：                作业超时时间，单位秒
 ```
 
-## example
+## 示例
 
-1. 查看 example_db 下最后一次 BACKUP 任务。
+1. 查看数据库 example_db 下最后一次 BACKUP 任务。
 
 ```sql
 SHOW BACKUP FROM example_db;
 ```
 
-## keyword
+## 关键字(keywords)
 
 SHOW, BACKUP
