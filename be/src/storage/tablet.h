@@ -113,10 +113,10 @@ public:
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
-    const RowsetSharedPtr get_rowset_by_version(const Version& version) const;
-    const RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
+    RowsetSharedPtr get_rowset_by_version(const Version& version) const;
+    RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
 
-    const RowsetSharedPtr rowset_with_max_version() const;
+    RowsetSharedPtr rowset_with_max_version() const;
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset);
     void delete_expired_inc_rowsets();
