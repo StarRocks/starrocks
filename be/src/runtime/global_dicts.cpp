@@ -175,16 +175,18 @@ Status DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ct
 
 Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
                                            SlotId targetSlotId) {
-    DCHECK_NE(expr_ctx->root()->type().type, TYPE_VARCHAR);
+    // DCHECK_NE(expr_ctx->root()->type().type, TYPE_VARCHAR);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     SlotId expr_slot_id = need_decode_slot_id;
 
+    bool is_old_version = true;
     Expr* origin_expr = expr_ctx->root();
     if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
         origin_expr = f->get_child(1);
         std::vector<SlotId> slots;
         f->get_slot_ids(&slots);
         expr_slot_id = slots.back();
+        is_old_version = false;
     }
 
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
@@ -204,8 +206,11 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     for (int i = 0; i < codes.size(); ++i) {
         dict_opt_ctx->code_convert_map[codes[i]] = i;
     }
-    // insert dict result to
-    if (origin_expr->type().type == TYPE_VARCHAR) {
+    // insert dict result to global dicts
+
+    // old lowcardinality optimization origin_expr return type was TYPE_INT
+    // we want make old_version also generate new dict
+    if (origin_expr->type().type == TYPE_VARCHAR || is_old_version) {
         DCHECK_GE(targetSlotId, 0);
         ColumnViewer<TYPE_VARCHAR> viewer(result_column);
         int num_rows = codes.size();

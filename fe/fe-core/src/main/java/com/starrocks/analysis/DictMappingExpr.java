@@ -45,4 +45,9 @@ public class DictMappingExpr extends Expr {
     public Expr clone() {
         return new DictMappingExpr(this);
     }
+
+    public boolean isVectorized() {
+        return true;
+    }
+
 }

@@ -463,50 +463,13 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
-    public void testWithCaseWhen() throws Exception {
-        String sql;
-        String plan;
-        // test if
-        sql = "select case when S_ADDRESS = 'key' then 1 else 0 end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("9 <-> DictExpr(10: S_ADDRESS,[if(<place-holder> = 'key', 1, 0)])"));
-        Assert.assertTrue(plan.contains("dict_col=S_ADDRESS"));
-        // test case when result no-string
-        sql = "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 0 end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
-        // test case when output variable, shouldn't use low cardinality optimization
-        sql = "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertFalse(plan.contains("     dict_col=S_ADDRESS"));
-        // test case when with common expression 1
-        sql = "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  9 <-> DictExpr(11: S_ADDRESS,[<place-holder> = 'key'])\n" +
-                "  |  10 <-> DictExpr(11: S_ADDRESS,[CASE WHEN <place-holder> = 'key' THEN 1 WHEN <place-holder> = '2' THEN 2 ELSE 3 END])\n" +
-                "  |  cardinality: 1"));
-        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
-        // test case when result string
-        sql = "select case when S_ADDRESS = 'key' then 'key1' when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  2:Decode\n" +
-                "  |  <dict id 11> : <string id 9>"));
-        // test case when with unsupported function call
-        sql = "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertFalse(plan.contains("Decode"));
-    }
-
-    @Test
     public void testCastRewrite() throws Exception {
         String sql;
         String plan;
         // test cast low cardinality column as other type column
         sql = "select cast (S_ADDRESS as datetime)  from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
+        Assert.assertFalse(plan.contains("     dict_col=S_ADDRESS"));
     }
 
     @Test
@@ -605,19 +568,6 @@ public class DecodeRewriteTest extends PlanTestBase {
     }
 
     @Test
-    public void testJoinGlobalDict() throws Exception {
-        String sql =
-                "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
-        String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
-        Assert.assertTrue(plan.contains("DictExpr(28: P_MFGR,[<place-holder> IN ('MFGR#1', 'MFGR#2')])"));
-        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
-                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));
-    }
-
-    @Test
     public void testCountDistinctMultiColumns() throws Exception {
         String sql = "select count(distinct S_SUPPKEY, S_COMMENT) from supplier";
         String plan = getFragmentPlan(sql);
@@ -645,6 +595,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select substr(S_ADDRESS, 0, 1) from supplier group by substr(S_ADDRESS, 0, 1) " +
                 "order by substr(S_ADDRESS, 0, 1)";
         plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 11> : <string id 9>\n" +
                 "  |  string functions:\n" +
