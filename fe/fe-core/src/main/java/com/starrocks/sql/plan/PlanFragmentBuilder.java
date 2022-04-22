@@ -131,7 +131,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
+import static com.starrocks.sql.optimizer.JoinHelper.getEqualsPredicate;
 
 /**
  * PlanFragmentBuilder used to transform physical operator to exec plan fragment
@@ -1579,7 +1579,7 @@ public class PlanFragmentBuilder {
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
 
             // 2. Get eqJoinConjuncts
-            List<BinaryPredicateOperator> eqOnPredicates = getEqConj(
+            List<BinaryPredicateOperator> eqOnPredicates = getEqualsPredicate(
                     leftChildColumns,
                     rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
