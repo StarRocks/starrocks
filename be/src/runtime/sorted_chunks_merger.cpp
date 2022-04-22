@@ -5,8 +5,8 @@
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
-#include "runtime/vectorized/chunk_cursor.h"
 
 namespace starrocks::vectorized {
 
@@ -300,18 +300,7 @@ Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
         cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
     }
     _sort_exprs = sort_exprs;
-
-    size_t col_num = sort_orders->size();
-    _sort_desc.sort_orders.resize(col_num);
-    _sort_desc.null_firsts.resize(col_num);
-    for (size_t i = 0; i < col_num; ++i) {
-        _sort_desc.sort_orders[i] = (*sort_orders)[i] ? 1 : -1;
-        if ((*sort_orders)[i]) {
-            _sort_desc.null_firsts[i] = (*null_firsts)[i] ? -1 : 1;
-        } else {
-            _sort_desc.null_firsts[i] = (*null_firsts)[i] ? 1 : -1;
-        }
-    }
+    _sort_desc = SortDescs(*sort_orders, *null_firsts);
 
     _merger = std::make_unique<MergeCursorsCascade>();
     RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
