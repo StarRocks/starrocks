@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "bitmap_functions.h"
+#include "exprs/bitmap_functions.h"
 
 #include "column/array_column.h"
 #include "column/column_builder.h"

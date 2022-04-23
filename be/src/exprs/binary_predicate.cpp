@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "binary_predicate.h"
+#include "exprs/binary_predicate.h"
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"

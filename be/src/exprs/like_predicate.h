@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <hs/hs.h>
 #include <re2/re2.h>
 
 #include <memory>
@@ -12,7 +13,6 @@
 #include "column/column_viewer.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_helper.h"
-#include "hs/hs.h"
 
 namespace starrocks {
 namespace vectorized {
