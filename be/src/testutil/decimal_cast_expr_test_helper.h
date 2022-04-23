@@ -2,17 +2,16 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
-#include "testutil/mock_vectorized_expr.h"
+#include "gtest/gtest.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
+#include "testutil/mock_vectorized_expr.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
