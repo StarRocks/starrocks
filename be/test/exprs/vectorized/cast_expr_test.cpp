@@ -10,7 +10,7 @@
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"

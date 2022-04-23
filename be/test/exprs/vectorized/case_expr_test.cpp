@@ -12,7 +12,7 @@
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 

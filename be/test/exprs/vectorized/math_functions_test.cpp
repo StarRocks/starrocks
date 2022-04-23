@@ -5,7 +5,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "math.h"
 
 #define PI acos(-1)

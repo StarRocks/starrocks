@@ -5,7 +5,7 @@
 
 #include "butil/time.h"
 #include "exprs/like_predicate.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

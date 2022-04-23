@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"

@@ -2,8 +2,8 @@
 
 #include <gtest/gtest.h>
 
-#include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
+#include "vectorized/decimal_cast_expr_test_helper.h"
 
 namespace starrocks::vectorized {
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDecimal32p9s0ToFloatNormal) {

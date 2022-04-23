@@ -6,8 +6,8 @@
 #include <random>
 
 #include "butil/time.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "vectorized/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

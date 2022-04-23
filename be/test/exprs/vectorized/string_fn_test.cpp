@@ -7,7 +7,7 @@
 
 #include "column/array_column.h"
 #include "exprs/function_helper.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"

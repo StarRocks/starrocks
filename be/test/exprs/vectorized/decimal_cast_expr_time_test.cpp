@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include "exprs/vectorized/decimal_cast_expr_test_helper.h"
+#include "vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 namespace starrocks::vectorized {

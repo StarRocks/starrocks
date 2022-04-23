@@ -9,7 +9,7 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 
 namespace starrocks::vectorized {
 

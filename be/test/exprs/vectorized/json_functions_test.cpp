@@ -11,7 +11,7 @@
 
 #include "butil/time.h"
 #include "common/statusor.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"

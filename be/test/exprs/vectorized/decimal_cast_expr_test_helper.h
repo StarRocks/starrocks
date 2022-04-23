@@ -10,7 +10,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "vectorized/mock_vectorized_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "testutil/parallel_test.h"
