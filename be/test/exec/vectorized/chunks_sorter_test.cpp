@@ -199,7 +199,7 @@ static ChunkPtr consume_page_from_sorter(ChunksSorter& sorter) {
         sorter.get_next(&chunk, &eos);
         if (chunk) {
             if (!res) {
-                res = chunk;
+                res.reset(chunk->clone_unique().release());
             } else {
                 res->append(*chunk, 0, chunk->num_rows());
             }

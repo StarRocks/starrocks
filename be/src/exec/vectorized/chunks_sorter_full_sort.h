@@ -41,12 +41,14 @@ private:
     Status _partial_sort(RuntimeState* state, bool done);
     Status _merge_sorted(RuntimeState* state);
 
-    size_t _total_rows = 0;
+    size_t _total_rows = 0;               // Total rows of sorting data
+    Permutation _sort_permutation;        // Temp permutation for sorting
     ChunkPtr _unsorted_chunk;             // Unsorted chunk, accumulate it to a larger chunk
     std::vector<ChunkPtr> _sorted_chunks; // Partial sorted, but not merged
     SortedRuns _merged_runs;              // After merge
 
-    static constexpr size_t kBufferedChunkSize = 1024000;
+    // TODO: further tunning the buffer parameter
+    static constexpr size_t kMaxBufferedChunkSize = 1024000;
 };
 
 } // namespace vectorized

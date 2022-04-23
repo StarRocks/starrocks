@@ -19,12 +19,6 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
-    size_t target_rows = _total_rows + chunk->num_rows();
-    if (target_rows > Column::MAX_CAPACITY_LIMIT) {
-        LOG(WARNING) << "Full sort rows exceed limit " << target_rows;
-        return Status::InternalError(fmt::format("Full sort rows exceed limit: {}", target_rows));
-    }
-
     _merge_unsorted(state, chunk);
     _partial_sort(state, false);
 
@@ -36,8 +30,9 @@ Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr
     SCOPED_TIMER(_build_timer);
 
     if (_unsorted_chunk == nullptr) {
-        _unsorted_chunk = chunk;
-    } else if (_unsorted_chunk->num_rows() < kBufferedChunkSize) {
+        // TODO: optimize the copy
+        _unsorted_chunk.reset(chunk->clone_unique().release());
+    } else {
         _unsorted_chunk->append(*chunk);
     }
 
@@ -46,16 +41,21 @@ Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr
 
 // Sort the large chunk
 Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
-    // TODO: do partial sort when reach chunk limit
-    if (_unsorted_chunk && (done || _unsorted_chunk->num_rows() >= kBufferedChunkSize)) {
+    if (!_unsorted_chunk) {
+        return Status::OK();
+    }
+    // TODO: do partial sort before reach chunk limit
+    bool reach_limit = _unsorted_chunk->num_rows() >= kMaxBufferedChunkSize || _unsorted_chunk->reach_capacity_limit();
+    if (done || reach_limit) {
         SCOPED_TIMER(_sort_timer);
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
-        Permutation perm;
+        _sort_permutation.resize(0);
         sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_order_flag, _null_first_flag,
-                             &perm);
+                             &_sort_permutation);
         ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
-        append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, perm);
+        append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
+
         _sorted_chunks.push_back(sorted_chunk);
         _total_rows += _unsorted_chunk->num_rows();
         _unsorted_chunk.reset();
@@ -76,7 +76,6 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
 Status ChunksSorterFullSort::done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     RETURN_IF_ERROR(_merge_sorted(state));
-    DCHECK_EQ(_next_output_row, 0);
     return Status::OK();
 }
 

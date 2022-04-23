@@ -128,6 +128,7 @@ protected:
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
+    // TODO: refactor it with SortDesc
     std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
     std::vector<int> _null_first_flag; // 1 for greatest, -1 for least.
     const std::string _sort_keys;
