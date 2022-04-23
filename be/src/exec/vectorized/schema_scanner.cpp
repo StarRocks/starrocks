@@ -14,6 +14,7 @@
 #include "exec/vectorized/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_materialized_views_scanner.h"
 
 namespace starrocks::vectorized {
 
@@ -87,6 +88,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<vectorized::SchemaTablePrivilegesScanner>();
     case TSchemaTableType::SCH_VIEWS:
         return std::make_unique<vectorized::SchemaViewsScanner>();
+    case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
+        return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }

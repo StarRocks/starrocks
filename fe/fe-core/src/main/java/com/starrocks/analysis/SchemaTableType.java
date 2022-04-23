@@ -69,7 +69,8 @@ public enum SchemaTableType {
     SCH_VARIABLES("VARIABLES", "VARIABLES", TSchemaTableType.SCH_VARIABLES),
     SCH_VIEWS("VIEWS", "VIEWS", TSchemaTableType.SCH_VIEWS),
     SCH_CREATE_TABLE("CREATE_TABLE", "CREATE_TABLE", TSchemaTableType.SCH_CREATE_TABLE),
-    SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
+    SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID),
+    SCH_MATERIALIZED_VIEWS("MATERIALIZED_VIEWS","MATERIALIZED_VIEWS",TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     private static final String dbName = "INFORMATION_SCHEMA";
     private static SelectList fullSelectLists;
 

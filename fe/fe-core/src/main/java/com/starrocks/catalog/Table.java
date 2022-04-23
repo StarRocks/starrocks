@@ -63,6 +63,7 @@ public class Table extends MetaObject implements Writable {
         HUDI,
         ODBC,
         JDBC,
+        MATERIALIZEDVIEW
     }
 
     protected long id;

@@ -22,16 +22,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
 // Show rollup statement, used to show rollup information of one table.
 //
@@ -47,42 +46,62 @@ public class ShowMaterializedViewStmt extends ShowStmt {
                     .addColumn(new Column("rows", ScalarType.createVarchar(50)))
                     .build();
 
+    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "materialized_views");
+
     private String db;
+    private final String pattern;
+    private Expr where;
 
     public ShowMaterializedViewStmt(String db) {
         this.db = db;
+        this.pattern = null;
+        this.where = null;
+    }
+
+    public ShowMaterializedViewStmt(String db, String pattern, Expr where) {
+        this.db = db;
+        this.pattern = pattern;
+        this.where = where;
     }
 
     public String getDb() {
         return db;
     }
 
+    public void setDb(String db) {
+        this.db = db;
+    }
+
+    public String getPattern() {
+        return pattern;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(db)) {
-            db = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
-            }
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
-        }
+    }
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    db);
+    @Override
+    public QueryStatement toSelectStmt() throws AnalysisException {
+        if (where == null) {
+            return null;
         }
+        SelectList selectList = new SelectList();
+        SelectListItem item = new SelectListItem(TABLE_NAME);
+        selectList.addItem(item);
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
+                where, null, null));
     }
 
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("SHOW MATERIALIZED VIEW FROM ").append(db);
+        sb.append("SHOW MATERIALIZED VIEW");
+        if (!Strings.isNullOrEmpty(db)) {
+            sb.append(" FROM ").append(db);
+        }
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
         return sb.toString();
     }
 
@@ -99,5 +118,10 @@ public class ShowMaterializedViewStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowMaterializedViewStmt(this, context);
     }
 }

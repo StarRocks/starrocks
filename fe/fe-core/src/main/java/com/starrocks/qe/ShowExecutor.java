@@ -266,15 +266,27 @@ public class ShowExecutor {
     }
 
     private void handleShowMaterializedView() throws AnalysisException {
-        String dbName = ((ShowMaterializedViewStmt) stmt).getDb();
+        ShowMaterializedViewStmt showMaterializedViewStmt = (ShowMaterializedViewStmt) stmt;
+        String dbName = showMaterializedViewStmt.getDb();
         List<List<String>> rowSets = Lists.newArrayList();
 
         Database db = Catalog.getCurrentCatalog().getDb(dbName);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ctx, db.getFullName(), PrivPredicate.SHOW)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                    ConnectContext.get().getQualifiedUser(),
+                    ConnectContext.get().getRemoteIP(),
+                    db);
+        }
         db.readLock();
         try {
+            PatternMatcher matcher = null;
+            if (showMaterializedViewStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
             for (Table table : db.getTables()) {
                 if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
@@ -283,6 +295,9 @@ public class ShowExecutor {
 
                     for (MaterializedIndex mvIdx : visibleMaterializedViews) {
                         if (baseIdx == mvIdx.getId()) {
+                            continue;
+                        }
+                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
                             continue;
                         }
                         ArrayList<String> resultRow = new ArrayList<>();
@@ -324,7 +339,7 @@ public class ShowExecutor {
         } finally {
             db.readUnlock();
         }
-        resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
+        resultSet = new ShowResultSet(showMaterializedViewStmt.getMetaData(), rowSets);
     }
 
     // Handle show authors

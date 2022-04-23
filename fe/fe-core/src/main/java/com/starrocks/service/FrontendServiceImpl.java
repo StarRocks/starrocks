@@ -31,6 +31,8 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -275,6 +277,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             db.readLock();
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
+                boolean listingShowMaterializedViews =
+                        params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(currentUser, params.db,
@@ -306,10 +310,71 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
                         status.setDdl_sql(ddlSql);
                     }
-                    tablesResult.add(status);
-                    // if user set limit, then only return limit size result
-                    if (limit > 0 && tablesResult.size() >= limit) {
-                        break;
+                    if (listingShowMaterializedViews) {
+                        if (!(table instanceof OlapTable)) {
+                            continue;
+                        }
+                        if (limit > 0 && tablesResult.size() >= limit) {
+                            break;
+                        }
+                        OlapTable olapTable = (OlapTable) table;
+                        List<MaterializedIndex> visibleMaterializedViews = ((OlapTable) table).getVisibleIndex();
+                        long baseIdx = olapTable.getBaseIndexId();
+                        for (MaterializedIndex mvIdx : visibleMaterializedViews) {
+                            if (baseIdx == mvIdx.getId()) {
+                                continue;
+                            }
+                            if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
+                                continue;
+                            }
+                            MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+                            status = new TTableStatus();
+                            status.setType(table.getMysqlType());
+                            status.setComment(table.getComment());
+                            status.setCreate_time(table.getCreateTime());
+                            status.setLast_check_time(table.getLastCheckTime());
+                            status.setId(String.valueOf(mvIdx.getId()));
+                            status.setName(olapTable.getIndexNameById(mvIdx.getId()));
+                            status.setDatabase_name(params.getDb());
+                            if (mvMeta.getOriginStmt() == null) {
+                                StringBuilder originStmtBuilder = new StringBuilder(
+                                        "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
+                                                " as select ");
+                                String groupByString = "";
+                                for (Column column : mvMeta.getSchema()) {
+                                    if (column.isKey()) {
+                                        groupByString += column.getName() + ",";
+                                    }
+                                }
+                                originStmtBuilder.append(groupByString);
+                                for (Column column : mvMeta.getSchema()) {
+                                    if (!column.isKey()) {
+                                        originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                                                .append(column.getName()).append(")").append(",");
+                                    }
+                                }
+                                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                                originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                                        .append(groupByString);
+                                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                                status.setText(originStmtBuilder.toString());
+                            } else {
+                                status.setText(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
+                                        .replaceAll("[ ]+", " "));
+                            }
+                            status.setRows(String.valueOf(mvIdx.getRowCount()));
+                            tablesResult.add(status);
+                            if (limit > 0 && tablesResult.size() >= limit) {
+                                break;
+                            }
+                        }
+                    }
+                    if (!listingShowMaterializedViews) {
+                        tablesResult.add(status);
+                        // if user set limit, then only return limit size result
+                        if (limit > 0 && tablesResult.size() >= limit) {
+                            break;
+                        }
                     }
                 }
             } finally {

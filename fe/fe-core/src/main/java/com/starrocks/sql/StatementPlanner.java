@@ -15,6 +15,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -166,7 +167,8 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt;
+                || statement instanceof ShowTableStmt
+                || statement instanceof ShowMaterializedViewStmt;
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
@@ -185,6 +187,7 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || statement instanceof ShowMaterializedViewStmt;
     }
 }

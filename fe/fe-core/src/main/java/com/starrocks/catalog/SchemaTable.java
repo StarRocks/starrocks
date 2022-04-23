@@ -415,6 +415,19 @@ public class SchemaTable extends Table {
                                             .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
                                             .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
                                             .build()))
+                    .put("materialized_views",
+                            new SchemaTable(
+                                    SystemIdGenerator.getNextId(),
+                                    "materialized_views",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("id", ScalarType.createVarchar(50))
+                                            .column("name", ScalarType.createVarchar(50))
+                                            .column("database_name", ScalarType.createVarchar(20))
+                                            .column("text",
+                                                    ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("rows", ScalarType.createVarchar(50))
+                                            .build()))
                     .build();
 
     public static class Builder {

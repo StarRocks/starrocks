@@ -188,6 +188,7 @@ WHERE: 'WHERE';
 WITH: 'WITH';
 YEAR: 'YEAR';
 FORCE: 'FORCE';
+MATERIALIZED: 'MATERIALIZED';
 
 EQ  : '=';
 NEQ : '<>' | '!=';

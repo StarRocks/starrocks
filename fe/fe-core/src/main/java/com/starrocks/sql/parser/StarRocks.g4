@@ -38,6 +38,8 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
+    | SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?                                   #showMaterializedView
     ;
 
 explainDesc

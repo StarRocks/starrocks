@@ -63,6 +63,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -167,6 +168,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()));
         } else {
             return new ShowTableStmt(database, isVerbose, null);
+        }
+    }
+
+    @Override
+    public ParseNode visitShowMaterializedView(StarRocksParser.ShowMaterializedViewContext context) {
+        String database = context.db != null ? context.db.getText() : null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowMaterializedViewStmt(database, stringLiteral.getValue(), null);
+        } else if (context.expression() != null) {
+            return new ShowMaterializedViewStmt(database, null, (Expr) visit(context.expression()));
+        } else {
+            return new ShowMaterializedViewStmt(database, null, null);
         }
     }
 
