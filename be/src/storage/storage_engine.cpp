@@ -82,8 +82,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _is_all_cluster_id_exist(true),
 
           _file_cache(nullptr),
-          _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size,
-                                            MetaCache_Type::METACACHE_LRU, this)),
+          _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size, this)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
@@ -827,11 +826,11 @@ void StorageEngine::_clean_unused_rowset_metas() {
             return true;
         }
 
-        auto st = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
-        if (!st.ok()) {
+        auto res = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
+        if (!res.ok()) {
             return true;
         }
-        TabletSharedPtr tablet = st.value();
+        TabletSharedPtr tablet = res.value();
         if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE && (!tablet->rowset_meta_is_useful(rowset_meta))) {
             LOG(INFO) << "rowset meta is useless any more, remote it. rowset_id=" << rowset_meta->rowset_id();
             invalid_rowset_metas.push_back(rowset_meta);
@@ -854,10 +853,7 @@ void StorageEngine::_clean_unused_txns() {
     for (auto& tablet_info : tablet_infos) {
         auto st = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
         if (!st.ok()) {
-            continue;
-        }
-        TabletSharedPtr tablet = st.value();
-        if (tablet == nullptr) {
+            TabletSharedPtr tablet = st.value();
             // TODO(ygl) :  should check if tablet still in meta, it's a improvement
             // case 1: tablet still in meta, just remove from memory
             // case 2: tablet not in meta store, remove rowset from meta

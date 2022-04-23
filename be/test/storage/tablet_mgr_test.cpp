@@ -180,12 +180,11 @@ TEST_F(TabletMgrTest, DropTablet) {
 
     // reset tablet ptr
     tablet.reset();
+    st.value().reset();
     trash_st = _tablet_mgr->start_trash_sweep();
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
     st = _tablet_mgr->get_tablet(111, true);
-    ASSERT_TRUE(st.ok());
-    tablet = st.value();
-    ASSERT_TRUE(tablet == nullptr);
+    ASSERT_TRUE(!st.ok());
     dir_exist = FileUtils::check_exist(tablet_path);
     ASSERT_TRUE(!dir_exist);
 }

@@ -248,10 +248,9 @@ void TabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChu
         for (const auto tablet_id : tablet_ids) {
             auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
             if (!res.ok()) {
-                LOG(WARNING) << "failed to get tablet "<< tablet_id << res.status();
+                LOG(WARNING) << "failed to get tablet " << tablet_id << res.status();
                 continue;
             }
-            //TODO err handling
             TabletSharedPtr tablet = res.value();
             tablets.push_back(tablet);
         }

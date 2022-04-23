@@ -395,8 +395,8 @@ Status DataDir::load() {
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
                                                                     std::string_view value) -> bool {
-        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value,
-                                                                              false, false, false, false, true);
+        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false,
+                                                         false, true);
         if (!st.ok() && !to_status(st).is_not_found()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
@@ -436,17 +436,17 @@ Status DataDir::load() {
     // 2. add visible rowset to tablet
     // ignore any errors when load tablet or rowset, because fe will repair them after report
     for (const auto& rowset_meta : dir_rowset_metas) {
-        auto st = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
+        auto res = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
-        if (!st.ok() && to_status(st).is_not_found()) {
+        if (!res.ok() && to_status(res).is_not_found()) {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
             //              << ", schema hash: " << rowset_meta->tablet_schema_hash()
             //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
             continue;
-        }else if(!st.ok()){
-            return st;
+        } else if (!res.ok()) {
+            return to_status(res);
         }
-        TabletSharedPtr tablet = st.value();
+        TabletSharedPtr tablet = res.value();
         RowsetSharedPtr rowset;
         Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
                                                             rowset_meta, &rowset);
@@ -566,12 +566,12 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        auto st = _tablet_manager->get_tablet(tablet_id, true);
-        if (!st.ok()) {
+        auto res = _tablet_manager->get_tablet(tablet_id, true);
+        if (!res.ok()) {
             // could find the tablet, then skip check it
             continue;
         }
-        TabletSharedPtr tablet = st.value();
+        TabletSharedPtr tablet = res.value();
         std::filesystem::path schema_hash_path(path);
         std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
         std::filesystem::path data_dir_path = tablet_id_path.parent_path().parent_path().parent_path();
@@ -616,9 +616,9 @@ void DataDir::perform_path_gc_by_rowsetid() {
             RowsetId rowset_id;
             bool is_rowset_file = TabletManager::get_rowset_id_from_path(path, &rowset_id);
             if (is_rowset_file) {
-                auto st = _tablet_manager->get_tablet(tablet_id, false);
-                if (st.ok()) {
-                    TabletSharedPtr tablet = st.value();
+                auto res = _tablet_manager->get_tablet(tablet_id, false);
+                if (res.ok()) {
+                    TabletSharedPtr tablet = res.value();
                     if (!tablet->check_rowset_id(rowset_id) &&
                         !StorageEngine::instance()->check_rowset_id_in_unused_rowsets(rowset_id)) {
                         _process_garbage_path(path);

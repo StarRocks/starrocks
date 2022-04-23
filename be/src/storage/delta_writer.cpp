@@ -66,14 +66,15 @@ void DeltaWriter::_garbage_collection() {
 Status DeltaWriter::_init() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    ASSIGN_OR_RETURN(_tablet, tablet_mgr->get_tablet(_opt.tablet_id, false));
-    if (_tablet == nullptr) {
+    auto res = tablet_mgr->get_tablet(_opt.tablet_id, false);
+    if (!res.ok()) {
         _set_state(kUninitialized);
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
+    _tablet = res.value();
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
@@ -110,11 +111,12 @@ Status DeltaWriter::_init() {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            ASSIGN_OR_RETURN(new_tablet, tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash));
-            if (new_tablet == nullptr) {
+            auto res = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
+            if (!res.ok()) {
                 _set_state(kAborted);
-                return Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
+                return to_status(res);
             }
+            new_tablet = res.value();
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
                 continue;

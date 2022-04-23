@@ -99,13 +99,13 @@ AgentStatus EngineBatchLoadTask::_init() {
 
     // Check replica exist
     TabletSharedPtr tablet;
-    auto st = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
-    if (!st.ok()) {
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
+    if (!res.ok()) {
         LOG(WARNING) << "get tables failed. "
                      << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
         return STARROCKS_PUSH_INVALID_TABLE;
     }
-    tablet = st.value();
+    tablet = res.value();
 
     // check disk capacity
     if (tablet->data_dir()->reach_capacity_limit(_push_req.__isset.http_file_size)) {
@@ -150,13 +150,13 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
         return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
-    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
-    if (!res.ok()) {
-        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+    auto result = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
+    if (!result.ok()) {
+        LOG(WARNING) << "failed to get tablet: " << request.tablet_id << " " << to_status(result);
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
-        return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
+        return to_status(result);
     }
-
+    auto tablet = result.value();
     PushType type = PUSH_NORMAL_V2;
 
     int64_t duration_ns = 0;
@@ -198,7 +198,6 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
     // 1. Get all tablets with same tablet_id
     ASSIGN_OR_RETURN(TabletSharedPtr tablet,
                      StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id));
-
     // 2. Process delete data by push interface
     DCHECK(request.__isset.transaction_id);
     vectorized::PushHandler push_handler;

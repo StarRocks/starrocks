@@ -250,13 +250,14 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             return Status::InternalError(ss.str());
         }
 
-        ASSIGN_OR_RETURN(TabletSharedPtr tablet, _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id));
-        if (tablet == nullptr) {
+        auto res = _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id);
+        if (!res.ok()) {
             std::stringstream ss;
             ss << "failed to get local tablet: " << local_tablet_id;
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
+        TabletSharedPtr tablet = res.value();
         DataDir* data_dir = tablet->data_dir();
 
         for (auto& iter : remote_files) {

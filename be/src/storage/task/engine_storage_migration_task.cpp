@@ -36,10 +36,6 @@ Status EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
 
     ASSIGN_OR_RETURN(auto tablet, StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id));
-    if (tablet == nullptr) {
-        LOG(WARNING) << "Not found tablet: " << _tablet_id;
-        return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
-    }
     if (tablet->updates() != nullptr) {
         LOG(WARNING) << "Not support to migrate updatable tablet: " << _tablet_id;
         return Status::NotSupported(fmt::format("Not support to migrate updatable tablet: {}", _tablet_id));
@@ -280,15 +276,14 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
 
         // if old tablet finished schema change, then the schema change status of the new tablet is DONE
         // else the schema change status of the new tablet is FAILED
-        ASSIGN_OR_RETURN(auto new_tablet,
-                         StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id));
-        if (new_tablet == nullptr) {
+        auto res = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
+        if (!res.ok()) {
             // tablet already loaded success.
             // just log, and not set need_remove_new_path.
-            LOG(WARNING) << "Not found tablet: " << _tablet_id;
-            res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
+            LOG(WARNING) << "failed to get tablet: " << _tablet_id << " " << to_status(res);
             break;
         }
+        auto new_tablet = res.value();
         AlterTabletTaskSharedPtr alter_task = tablet->alter_task();
         if (alter_task != nullptr) {
             if (alter_task->alter_state() == ALTER_FINISHED) {

@@ -361,11 +361,11 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             ++_s_report_version;
             // get path hash of the created tablet
             auto res = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-            if(!res.ok()){
-                LOG(WARNING) << "get tablet failed after create. status: " <<res.to_string()
+            if (!res.ok()) {
+                LOG(WARNING) << "get tablet failed after create. status: " << to_status(res).to_string()
                              << ", tablet: " << create_tablet_req.tablet_id;
                 status_code = TStatusCode::RUNTIME_ERROR;
-            } else{
+            } else {
                 auto tablet = res.value();
                 TTabletInfo tablet_info;
                 tablet_info.tablet_id = tablet->tablet_id();
@@ -422,7 +422,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
 
         auto res = StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
         if (!res.ok()) {
-            LOG(WARNING) << "failed to get tablet!"<< drop_tablet_req.tablet_id << ": " << st.status();
+            LOG(WARNING) << "failed to get tablet!" << drop_tablet_req.tablet_id << ": " << to_status(res);
             error_msgs.emplace_back("get table failed!");
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
@@ -906,15 +906,11 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         tablets.reserve(tablet_ids.size());
         for (const auto tablet_id : tablet_ids) {
             auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-            if (!res.ok() && to_status(res).is_not_found()) {
-                LOG(WARNING) << "failed to get tablet" << tablet_id<<res.status();
+            if (!res.ok()) {
+                LOG(WARNING) << "failed to get tablet" << tablet_id << res.status();
                 continue;
-            }else if(!res.ok()){
-
             }
-            //TODO check
-            TabletSharedPtr tablet = res.value();
-            tablets.push_back(tablet);
+            tablets.push_back(std::move(res).value());
         }
 
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
@@ -1021,16 +1017,20 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         TStatus task_status;
 
         for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
-            auto st = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
-            if (!st.ok() && to_status(st).is_not_found()) {
+            auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
+            if (!res.ok() && to_status(res).is_not_found()) {
                 LOG(WARNING) << "could not find tablet when update partition id"
                              << " tablet_id=" << tablet_meta_info.tablet_id
                              << " schema_hash=" << tablet_meta_info.schema_hash;
                 continue;
-            }else if (!st.ok()){
-                //TODO ?
+            } else if (!res.ok()) {
+                LOG(WARNING) << "failed to get tablet" << tablet_meta_info.tablet_id
+                             << " schema_hash=" << tablet_meta_info.schema_hash << "due to " << to_status(res);
+                status_code = TStatusCode::RUNTIME_ERROR;
+                error_msgs.push_back(to_status(res).to_string());
+                break;
             }
-            TabletSharedPtr tablet = st.value();
+            TabletSharedPtr tablet = res.value();
             std::unique_lock wrlock(tablet->get_header_lock());
             // update tablet meta
             if (!tablet_meta_info.__isset.meta_type) {
@@ -1206,13 +1206,13 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             TSchemaHash schema_hash = storage_medium_migrate_req.schema_hash;
             TStorageMedium::type storage_medium = storage_medium_migrate_req.storage_medium;
 
-            auto st = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-            if (!st.ok()) {
+            auto result = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (!result.ok()) {
                 LOG(WARNING) << "can't find tablet. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
                 status_code = TStatusCode::RUNTIME_ERROR;
                 break;
             }
-            TabletSharedPtr tablet = st.value();
+            TabletSharedPtr tablet = result.value();
 
             TStorageMedium::type src_storage_medium = tablet->data_dir()->storage_medium();
             if (src_storage_medium == storage_medium) {
@@ -1812,13 +1812,13 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
 
 AgentStatus TaskWorkerPool::_move_dir(const TTabletId tablet_id, const TSchemaHash schema_hash, const std::string& src,
                                       int64_t job_id, bool overwrite, std::vector<std::string>* error_msgs) {
-    auto st = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-    if (!st.ok()) {
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+    if (!res.ok()) {
         LOG(INFO) << "Fail to get tablet_id=" << tablet_id << " schema hash=" << schema_hash;
         error_msgs->push_back("failed to get tablet");
         return STARROCKS_TASK_REQUEST_ERROR;
     }
-    TabletSharedPtr tablet = st.value();
+    TabletSharedPtr tablet = res.value();
     std::string dest_tablet_dir = tablet->schema_hash_path();
     SnapshotLoader loader(_env, job_id, tablet_id);
     Status status = loader.move(src, tablet, overwrite);

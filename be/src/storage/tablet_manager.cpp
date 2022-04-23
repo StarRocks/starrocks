@@ -62,15 +62,14 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size, MetaCache_Type type,
-                             StorageEngine* storage_engine)
+TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size, StorageEngine* storage_engine)
         : _mem_tracker(mem_tracker),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
           _last_update_stat_ms(0),
           _cur_shard(0),
           _storage_engine(storage_engine) {
     for (int i = 0; i < tablet_map_lock_shard_size; ++i) {
-        _tablets_shards.push_back(std::make_shared<TabletsShard>(MetaCache_Type::METACACHE_LRU));
+        _tablets_shards.push_back(std::make_shared<TabletsShard>());
     }
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
@@ -163,8 +162,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     // If the CreateTabletReq has base_tablet_id then it is a alter-tablet request
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
         is_schema_change = true;
-        ASSIGN_OR_RETURN(base_tablet, _get_tablet_unlocked(request.base_tablet_id, true));
-        if (base_tablet == nullptr) {
+        auto res = _get_tablet_unlocked(request.base_tablet_id, true);
+        if (!res.ok()) {
             LOG(WARNING) << "Fail to create tablet(change schema), base tablet does not exist. "
                          << "new_tablet_id=" << tablet_id << " new_schema_hash=" << schema_hash
                          << " base_tablet_id=" << request.base_tablet_id
@@ -172,6 +171,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
             StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("base tablet not exist");
         }
+        auto base_tablet = res.value();
         // If we are doing schema-change, we should use the same data dir
         // TODO(lingbin): A litter trick here, the directory should be determined before
         // entering this method
@@ -336,11 +336,12 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     // Fetch tablet which need to be dropped
-    ASSIGN_OR_RETURN(TabletSharedPtr tablet_to_drop, _get_tablet_unlocked(tablet_id, true));
-    if (tablet_to_drop == nullptr) {
+    auto result = _get_tablet_unlocked(tablet_id, true);
+    if (!result.ok()) {
         LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": not exist";
-        return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
+        return to_status(result);
     }
+    TabletSharedPtr tablet_to_drop = result.value();
     LOG(INFO) << "Dropping tablet " << tablet_id;
 
     // Try to get schema change info, we can drop tablet directly if it is not
@@ -353,13 +354,14 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     AlterTabletState alter_state = alter_task->alter_state();
     TTabletId related_tablet_id = alter_task->related_tablet_id();
 
-    ASSIGN_OR_RETURN(TabletSharedPtr related_tablet, _get_tablet_unlocked(related_tablet_id, true));
-    if (related_tablet == nullptr) {
+    result = _get_tablet_unlocked(related_tablet_id, true);
+    if (!result.ok()) {
         // TODO(lingbin): in what case, can this happen?
         LOG(WARNING) << "Dropping tablet directly when related tablet not found. "
                      << " tablet_id=" << related_tablet_id;
         return _drop_tablet_directly_unlocked(tablet_id, flag);
     }
+    TabletSharedPtr related_tablet = result.value();
 
     // Check whether the tablet we want to delete is in schema-change state
     bool is_schema_change_finished = alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED;
@@ -452,7 +454,7 @@ StatusOr<TabletSharedPtr> TabletManager::_load_tablet(TTabletId tablet_id) {
         }
     }
     if (tablet == nullptr) {
-        return Status::NotFound(fmt::format("Not found tablet: {}",tablet_id) );
+        return Status::NotFound(fmt::format("Not found tablet: {}", tablet_id));
     }
     return tablet;
 }
@@ -467,25 +469,20 @@ StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, bool in
             return tablet;
         }
     }
+    if (include_deleted) {
+        std::shared_lock rlock(_shutdown_tablets_lock);
+        if (auto it = _shutdown_tablets.find(tablet_id); it != _shutdown_tablets.end()) {
+            tablet = it->second.tablet;
+        }
+        if (tablet) {
+            return tablet;
+        }
+    }
     {
         ASSIGN_OR_RETURN(tablet, _load_tablet(tablet_id));
         std::unique_lock wlock(shard->lock);
         shard->id_set.insert(tablet_id);
         shard->tablet_cache->put(tablet);
-    }
-
-    if (tablet == nullptr && include_deleted) {
-        std::shared_lock rlock(_shutdown_tablets_lock);
-        if (auto it = _shutdown_tablets.find(tablet_id); it != _shutdown_tablets.end()) {
-            tablet = it->second.tablet;
-        }
-    }
-
-    if (tablet == nullptr) {
-        if (err != nullptr) {
-            *err = "tablet does not exist";
-        }
-        return Status::NotFound("tablet not found");
     }
 
     if (!tablet->is_used()) {
@@ -816,7 +813,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
 }
 
 StatusOr<TabletSharedPtr> TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id,
-                                                               TSchemaHash schema_hash,std::string_view meta_binary,
+                                                               TSchemaHash schema_hash, std::string_view meta_binary,
                                                                bool update_meta, bool force, bool restore,
                                                                bool check_path, bool add) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
@@ -949,12 +946,13 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
     StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
 
-    ASSIGN_OR_RETURN(TabletSharedPtr tablet, get_tablet(tablet_info->tablet_id, false));
-    if (tablet == nullptr) {
+    auto res = get_tablet(tablet_info->tablet_id, false);
+    if (!res.ok()) {
         LOG(WARNING) << "Fail to report tablet info: can't find tablet."
                      << " tablet=" << tablet_info->tablet_id;
-        return Status::NotFound("tablet not found");
+        return to_status(res);
     }
+    auto tablet = res.value();
     LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
 
     tablet->build_tablet_report_info(tablet_info);

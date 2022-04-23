@@ -61,9 +61,8 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
         // Get tablet.
         TTabletId tablet_id = scan_range->tablet_id;
         std::string err;
-        ASSIGN_OR_RETURN(TabletSharedPtr tablet,
-                         StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err));
-        if (!tablet) {
+        auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
+        if (!res.ok()) {
             std::stringstream ss;
             SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
             ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
@@ -71,6 +70,7 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
+        TabletSharedPtr tablet = res.value();
 
         // Capture row sets of this version tablet.
         {

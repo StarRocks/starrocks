@@ -61,7 +61,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size, MetaCache_Type type,
+    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size,
                            starrocks::StorageEngine* storage_engine);
     ~TabletManager() = default;
 
@@ -157,11 +157,7 @@ private:
     using TabletSet = std::unordered_set<int64_t>;
 
     struct TabletsShard {
-        TabletsShard(MetaCache_Type type) {
-            if (type == MetaCache_Type::METACACHE_LRU) {
-                tablet_cache = std::make_shared<LRUTabletMetaCache>();
-            }
-        }
+        TabletsShard() { tablet_cache = std::make_shared<LRUTabletMetaCache>(); }
         mutable std::shared_mutex lock;
         TabletSet id_set;
         std::shared_ptr<TabletMetaCache> tablet_cache;

@@ -20,15 +20,16 @@ public:
     virtual TabletSharedPtr get(int64_t tablet_id) = 0;
     virtual bool put(const TabletSharedPtr& tabletptr) = 0;
     virtual bool remove(int64_t tablet_id) = 0;
+    virtual ~TabletMetaCache() = default;
 };
 
 class LRUTabletMetaCache : public TabletMetaCache {
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
 
 public:
-    TabletSharedPtr get(int64_t tablet_id);
-    bool put(const TabletSharedPtr& tabletptr);
-    bool remove(int64_t tablet_id);
+    TabletSharedPtr get(int64_t tablet_id) override;
+    bool put(const TabletSharedPtr& tabletptr) override;
+    bool remove(int64_t tablet_id) override;
 
 private:
     TabletMap tabletmap;

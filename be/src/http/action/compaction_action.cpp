@@ -68,9 +68,6 @@ Status CompactionAction::_handle_show_compaction(HttpRequest* req, std::string* 
     }
 
     ASSIGN_OR_RETURN(TabletSharedPtr tablet, StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id));
-    if (tablet == nullptr) {
-        return Status::NotFound("Tablet not found");
-    }
 
     tablet->get_compaction_status(json_result);
     return Status::OK();
@@ -104,11 +101,11 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     uint32_t schema_hash;
     RETURN_IF_ERROR(get_params(req, &tablet_id, &schema_hash));
 
-    ASSIGN_OR_RETURN(TabletSharedPtr tablet,
-                     StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash));
-    RETURN_IF(tablet == nullptr,
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    RETURN_IF(res.ok(),
               Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id, schema_hash)));
 
+    TabletSharedPtr tablet = res.value();
     std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
     if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
         compaction_type != to_string(CompactionType::CUMULATIVE_COMPACTION)) {

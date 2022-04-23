@@ -42,15 +42,18 @@ Status EnginePublishVersionTask::finish() {
             << "tablet_id=" << _tablet_info.tablet_id << ", schema_hash=" << _tablet_info.schema_hash
             << ", version=" << _version << ", transaction_id=" << _transaction_id;
 
-    ASSIGN_OR_RETURN(TabletSharedPtr tablet, StorageEngine::instance()->tablet_manager()->get_tablet(
-                                                     _tablet_info.tablet_id, _tablet_info.tablet_uid));
-
-    if (tablet == nullptr) {
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
+    if (!res.ok() && to_status(res).is_not_found()) {
         LOG(WARNING) << "Not found tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
                      << ", txn_id: " << _transaction_id;
         return Status::NotFound(fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
                                             _tablet_info.tablet_id, _transaction_id));
+    } else {
+        LOG(WARNING) << "failed to get  tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
+                     << ", txn_id: " << _transaction_id << " " << to_status(res);
+        return to_status(res);
     }
+    TabletSharedPtr tablet = res.value();
 
     Status st = Status::OK();
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {

@@ -1241,11 +1241,22 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
 }
 
 Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2& request) {
-    ASSIGN_OR_RETURN(TabletSharedPtr base_tablet,
-                     StorageEngine::instance()->tablet_manager()->get_tablet(request.base_tablet_id));
+    auto res = StorageEngine::instance()->tablet_manager()->get_tablet(request.base_tablet_id);
+    if (!res.ok()) {
+        LOG(WARNING) << "fail to find base tablet. base_tablet=" << request.base_tablet_id
+                     << ", base_schema_hash=" << request.base_schema_hash;
+        return Status::InternalError("failed to find base tablet");
+    }
+    TabletSharedPtr base_tablet = res.value();
+
     // new tablet has to exist
-    ASSIGN_OR_RETURN(TabletSharedPtr new_tablet,
-                     StorageEngine::instance()->tablet_manager()->get_tablet(request.new_tablet_id));
+    res = StorageEngine::instance()->tablet_manager()->get_tablet(request.new_tablet_id);
+    if (!res.ok()) {
+        LOG(WARNING) << "fail to find new tablet."
+                     << " new_tablet=" << request.new_tablet_id << ", new_schema_hash=" << request.new_schema_hash;
+        return Status::InternalError("failed to find new tablet");
+    }
+    auto new_tablet = res.value();
 
     // check if tablet's state is not_ready, if it is ready, it means the tablet already finished
     // check whether the tablet's max continuous version == request.version

@@ -313,8 +313,11 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                           << "tablet=" << tablet->full_name() << ", related_tablet_id=" << related_tablet_id
                           << ", related_schema_hash=" << related_schema_hash
                           << ", transaction_id=" << request.transaction_id;
-                ASSIGN_OR_RETURN(TabletSharedPtr related_tablet,
-                                 StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id));
+                auto res = StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id);
+                TabletSharedPtr related_tablet = nullptr;
+                if (res.ok()) {
+                    related_tablet = res.value();
+                }
 
                 // if related tablet not exists, only push current tablet
                 if (related_tablet == nullptr) {

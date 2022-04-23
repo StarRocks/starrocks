@@ -31,10 +31,10 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "testutil/assert.h"
 #include "util/file_utils.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
-#include "testutil/assert.h"
 
 using namespace std;
 using namespace starrocks;
@@ -253,14 +253,14 @@ protected:
         set_default_create_tablet_request(&_create_tablet);
         auto res = k_engine->create_tablet(_create_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        ASSIGN_OR_ABORT(tablet ,k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id));
+        ASSIGN_OR_ABORT(tablet, k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id));
         ASSERT_TRUE(tablet.get() != nullptr);
         _schema_hash_path = tablet->schema_hash_path();
 
         set_create_duplicate_tablet_request(&_create_dup_tablet);
         res = k_engine->create_tablet(_create_dup_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        ASSIGN_OR_ABORT(dup_tablet ,k_engine->tablet_manager()->get_tablet(_create_dup_tablet.tablet_id));
+        ASSIGN_OR_ABORT(dup_tablet, k_engine->tablet_manager()->get_tablet(_create_dup_tablet.tablet_id));
         ASSERT_TRUE(dup_tablet.get() != nullptr);
         _dup_tablet_path = tablet->schema_hash_path();
     }

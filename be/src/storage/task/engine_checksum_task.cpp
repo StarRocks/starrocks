@@ -54,10 +54,6 @@ Status EngineChecksumTask::_compute_checksum() {
     }
 
     ASSIGN_OR_RETURN(TabletSharedPtr tablet, StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id));
-    if (tablet == nullptr) {
-        LOG(WARNING) << "Not found tablet: " << _tablet_id;
-        return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
-    }
 
     if (tablet->updates() != nullptr) {
         *_checksum = 0;
