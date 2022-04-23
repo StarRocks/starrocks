@@ -46,20 +46,10 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cfloat>
-#include <cmath>
-#include <iostream>
-#include <memory>
 #include <queue>
-#include <utility>
 #include <vector>
 
-#include "common/logging.h"
-#include "udf/udf.h"
-#include "util/debug_util.h"
 #include "util/radix_sort.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
