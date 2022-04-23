@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -65,6 +66,18 @@ public class DefaultPredicateSelectivityEstimatorTest {
     }
 
     @Test
+    public void testOtherPredicate() {
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
+        ConstantOperator constantOperatorInt1 = ConstantOperator.createInt(1);
+        ConstantOperator constantOperatorInt2 = ConstantOperator.createInt(15);
+        BetweenPredicateOperator betweenPredicateOperator =
+                new BetweenPredicateOperator(false, v1, constantOperatorInt1, constantOperatorInt2);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(betweenPredicateOperator, statistics), 0.25, 0.0);
+    }
+
+    @Test
     public void testEqualAndNotEqualBinaryPredicate() {
         DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
                 new DefaultPredicateSelectivityEstimator();
@@ -99,6 +112,62 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intNq3, statistics), 0.98, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intNq4, statistics), 1.0, 0.0);
 
+        //datetime
+        ConstantOperator constantOperatorDt0 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 10, 13, 15, 25));
+        ConstantOperator constantOperatorDt1 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 00, 00, 00));
+        ConstantOperator constantOperatorDt2 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 23, 56, 25));
+        ConstantOperator constantOperatorDt3 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 00, 00, 00));
+        ConstantOperator constantOperatorDt4 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 13, 15, 25));
+
+        BinaryPredicateOperator dtEq0 = BinaryPredicateOperator.eq(v7, constantOperatorDt0);
+        BinaryPredicateOperator dtEq1 = BinaryPredicateOperator.eq(v7, constantOperatorDt1);
+        BinaryPredicateOperator dtEq2 = BinaryPredicateOperator.eq(v7, constantOperatorDt2);
+        BinaryPredicateOperator dtEq3 = BinaryPredicateOperator.eq(v7, constantOperatorDt3);
+        BinaryPredicateOperator dtEq4 = BinaryPredicateOperator.eq(v7, constantOperatorDt4);
+
+        BinaryPredicateOperator dtNq0 = BinaryPredicateOperator.ne(v7, constantOperatorDt0);
+        BinaryPredicateOperator dtNq1 = BinaryPredicateOperator.ne(v7, constantOperatorDt1);
+        BinaryPredicateOperator dtNq2 = BinaryPredicateOperator.ne(v7, constantOperatorDt2);
+        BinaryPredicateOperator dtNq3 = BinaryPredicateOperator.ne(v7, constantOperatorDt3);
+        BinaryPredicateOperator dtNq4 = BinaryPredicateOperator.ne(v7, constantOperatorDt4);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEq0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEq1, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEq2, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEq3, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEq4, statistics), 0.0, 0.0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtNq0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtNq1, statistics), 0.995, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtNq2, statistics), 0.995, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtNq3, statistics), 0.995, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtNq4, statistics), 1.0, 0.0);
+
+        //boolean
+        ConstantOperator constantOperatorBool0 = ConstantOperator.createBoolean(false);
+        ConstantOperator constantOperatorBool1 = ConstantOperator.createBoolean(true);
+
+        BinaryPredicateOperator boolEq0 = BinaryPredicateOperator.eq(v4, constantOperatorBool0);
+        BinaryPredicateOperator boolEq1 = BinaryPredicateOperator.eq(v4, constantOperatorBool1);
+
+        BinaryPredicateOperator boolNq0 = BinaryPredicateOperator.ne(v4, constantOperatorBool0);
+        BinaryPredicateOperator boolNq1 = BinaryPredicateOperator.ne(v4, constantOperatorBool1);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolEq0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolEq1, statistics), 0.02, 0.0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolNq0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolNq1, statistics), 0.98, 0.0);
+
+        //expression
+        BinaryPredicateOperator expressionEq0 = BinaryPredicateOperator.eq(v1, v4);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionEq0, statistics), 0.33, 0.004);
+
     }
 
     @Test
@@ -131,10 +200,60 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn3, statistics), 0.02, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn4, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn5, statistics), 0.02, 0.0);
+
+        //datetime
+        ConstantOperator constantOperatorDt0 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 10, 13, 15, 25));
+        ConstantOperator constantOperatorDt1 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 00, 00, 00));
+        ConstantOperator constantOperatorDt2 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 23, 56, 25));
+        ConstantOperator constantOperatorDt3 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 00, 00, 00));
+        ConstantOperator constantOperatorDt4 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 13, 15, 25));
+
+        BinaryPredicateOperator dtEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, constantOperatorDt0);
+        BinaryPredicateOperator dtEfn1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, constantOperatorDt1);
+        BinaryPredicateOperator dtEfn2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, constantOperatorDt2);
+        BinaryPredicateOperator dtEfn3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, constantOperatorDt3);
+        BinaryPredicateOperator dtEfn4 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, constantOperatorDt4);
+        BinaryPredicateOperator dtEfn5 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v7, ConstantOperator.createNull(Type.NULL));
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn1, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn2, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn3, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn4, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn5, statistics), 0.005, 0.0);
+
+        //boolean
+        ConstantOperator constantOperatorBool0 = ConstantOperator.createBoolean(false);
+        ConstantOperator constantOperatorBool1 = ConstantOperator.createBoolean(true);
+        //e.g. v4 <=> false(0)
+        BinaryPredicateOperator boolEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v4, constantOperatorBool0);
+        BinaryPredicateOperator boolEfn1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v4, constantOperatorBool1);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolEfn0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolEfn1, statistics), 0.02, 0.0);
+
+        //expression
+        BinaryPredicateOperator expressionEfn0 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        v1, v4);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionEfn0, statistics), 0.33, 0.004);
     }
 
     @Test
-    public void testSimpleLessAndGreatBinaryPredicate() {
+    public void testLessAndGreatBinaryPredicate() {
         DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
                 new DefaultPredicateSelectivityEstimator();
 
@@ -150,6 +269,12 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator intLt2 = BinaryPredicateOperator.lt(v1, constantOperatorInt2);
         BinaryPredicateOperator intLt3 = BinaryPredicateOperator.lt(v1, constantOperatorInt3);
         BinaryPredicateOperator intLt4 = BinaryPredicateOperator.lt(v1, constantOperatorInt4);
+
+        BinaryPredicateOperator intLe0 = BinaryPredicateOperator.le(v1, constantOperatorInt0);
+        BinaryPredicateOperator intLe1 = BinaryPredicateOperator.le(v1, constantOperatorInt1);
+        BinaryPredicateOperator intLe2 = BinaryPredicateOperator.le(v1, constantOperatorInt2);
+        BinaryPredicateOperator intLe3 = BinaryPredicateOperator.le(v1, constantOperatorInt3);
+        BinaryPredicateOperator intLe4 = BinaryPredicateOperator.le(v1, constantOperatorInt4);
 
         BinaryPredicateOperator intGt0 = BinaryPredicateOperator.gt(v1, constantOperatorInt0);
         BinaryPredicateOperator intGt1 = BinaryPredicateOperator.gt(v1, constantOperatorInt1);
@@ -168,6 +293,12 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt2, statistics), 0.15, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt3, statistics), 0.02, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intLt4, statistics), 1.0, 0.0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLe0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLe1, statistics), 0.02, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLe2, statistics), 0.15, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLe3, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(intLe4, statistics), 1.0, 0.0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt0, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intGt1, statistics), 0.98, 0.0);
@@ -273,6 +404,9 @@ public class DefaultPredicateSelectivityEstimatorTest {
         //e.g. v4 < false(0)
         BinaryPredicateOperator boolLt0 = BinaryPredicateOperator.lt(v4, constantOperatorBool0);
         BinaryPredicateOperator boolLt1 = BinaryPredicateOperator.lt(v4, constantOperatorBool1);
+
+        BinaryPredicateOperator boolLe0 = BinaryPredicateOperator.le(v4, constantOperatorBool0);
+        BinaryPredicateOperator boolLe1 = BinaryPredicateOperator.le(v4, constantOperatorBool1);
         //e.g. v4 > false(0)
         BinaryPredicateOperator boolGt0 = BinaryPredicateOperator.gt(v4, constantOperatorBool0);
         BinaryPredicateOperator boolGt1 = BinaryPredicateOperator.gt(v4, constantOperatorBool1);
@@ -282,6 +416,9 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolLt0, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolLt1, statistics), 0.0, 0.0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolLe0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(boolLe1, statistics), 1.0, 0.0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolGt0, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolGt1, statistics), 0.0, 0.0);
@@ -344,6 +481,12 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator dtLt2 = BinaryPredicateOperator.lt(v7, constantOperatorDt2);
         BinaryPredicateOperator dtLt3 = BinaryPredicateOperator.lt(v7, constantOperatorDt3);
         BinaryPredicateOperator dtLt4 = BinaryPredicateOperator.lt(v7, constantOperatorDt4);
+        //e.g. v7 <= 2003-10-10 13:15:25
+        BinaryPredicateOperator dtLe0 = BinaryPredicateOperator.le(v7, constantOperatorDt0);
+        BinaryPredicateOperator dtLe1 = BinaryPredicateOperator.le(v7, constantOperatorDt1);
+        BinaryPredicateOperator dtLe2 = BinaryPredicateOperator.le(v7, constantOperatorDt2);
+        BinaryPredicateOperator dtLe3 = BinaryPredicateOperator.le(v7, constantOperatorDt3);
+        BinaryPredicateOperator dtLe4 = BinaryPredicateOperator.le(v7, constantOperatorDt4);
         //e.g. v7 > 2003-10-10 13:15:25
         BinaryPredicateOperator dtGt0 = BinaryPredicateOperator.gt(v7, constantOperatorDt0);
         BinaryPredicateOperator dtGt1 = BinaryPredicateOperator.gt(v7, constantOperatorDt1);
@@ -363,6 +506,12 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLt3, statistics), 0.005, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLt4, statistics), 1.0, 0.0);
 
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLe0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLe1, statistics), 0.005, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLe2, statistics), 0.998, 0.005);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLe3, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(dtLe4, statistics), 1.0, 0.0);
+
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGt0, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGt1, statistics), 0.995, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGt2, statistics), 0.002, 0.001);
@@ -374,6 +523,17 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe2, statistics), 0.002, 0.1);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe3, statistics), 0.005, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe4, statistics), 0.0, 0.0);
+
+        //expression
+        BinaryPredicateOperator expressionLt0 = BinaryPredicateOperator.lt(v1, v4);
+        BinaryPredicateOperator expressionLe0 = BinaryPredicateOperator.le(v1, v4);
+        BinaryPredicateOperator expressionGt0 = BinaryPredicateOperator.gt(v1, v4);
+        BinaryPredicateOperator expressionGe0 = BinaryPredicateOperator.ge(v1, v4);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionLt0, statistics), 0.33, 0.004);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionLe0, statistics), 0.33, 0.004);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionGt0, statistics), 0.33, 0.004);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionGe0, statistics), 0.33, 0.004);
     }
 
     @Test
@@ -430,8 +590,6 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(strGe0, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(strEfn0, statistics), 0.0, 0.0);
     }
-
-
 
     @Test
     public void testExpressionBinaryPredicate() {
