@@ -49,7 +49,9 @@
 #include <queue>
 #include <vector>
 
+#include "udf/udf.h"
 #include "util/radix_sort.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
