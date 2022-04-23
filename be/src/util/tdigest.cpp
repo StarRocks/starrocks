@@ -1,8 +1,82 @@
 // This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/util/tdigest.h
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+/*
+ * Licensed to Derrick R. Burns under one or more
+ * contributor license agreements.  See the NOTICES file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// T-Digest :  Percentile and Quantile Estimation of Big Data
+// A new data structure for accurate on-line accumulation of rank-based statistics
+// such as quantiles and trimmed means.
+// See original paper: "Computing extremely accurate quantiles using t-digest"
+// by Ted Dunning and Otmar Ertl for more details
+// https://github.com/tdunning/t-digest/blob/07b8f2ca2be8d0a9f04df2feadad5ddc1bb73c88/docs/t-digest-paper/histo.pdf.
+// https://github.com/derrickburns/tdigest
 
 #include "util/tdigest.h"
 
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "common/logging.h"
+#include "util/radix_sort.h"
+
 namespace starrocks {
+
+Centroid::Centroid() : Centroid(0.0, 0.0) {}
+
+Centroid::Centroid(Value mean, Weight weight) : _mean(mean), _weight(weight) {}
+
+Value Centroid::mean() const noexcept {
+    return _mean;
+}
+
+Weight Centroid::weight() const noexcept {
+    return _weight;
+}
+
+Value& Centroid::mean() noexcept {
+    return _mean;
+}
+
+Weight& Centroid::weight() noexcept {
+    return _weight;
+}
 
 void Centroid::add(const Centroid& c) {
     DCHECK_GT(c._weight, 0);

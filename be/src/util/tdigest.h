@@ -71,13 +71,13 @@ const size_t kHighWater = 40000;
 
 class Centroid {
 public:
-    Centroid() : Centroid(0.0, 0.0) {}
-    Centroid(Value mean, Weight weight) : _mean(mean), _weight(weight) {}
+    Centroid();
+    Centroid(Value mean, Weight weight);
 
-    Value mean() const noexcept { return _mean; }
-    Weight weight() const noexcept { return _weight; }
-    Value& mean() noexcept { return _mean; }
-    Weight& weight() noexcept { return _weight; }
+    Value mean() const noexcept;
+    Weight weight() const noexcept;
+    Value& mean() noexcept;
+    Weight& weight() noexcept;
     void add(const Centroid& c);
 
 private:
