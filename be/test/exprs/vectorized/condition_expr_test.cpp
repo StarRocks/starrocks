@@ -12,10 +12,10 @@
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "vectorized/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "vectorized/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

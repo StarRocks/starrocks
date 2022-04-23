@@ -4,11 +4,11 @@
 #include "storage/column_expr_predicate.h"
 
 #include "column/column_helper.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"

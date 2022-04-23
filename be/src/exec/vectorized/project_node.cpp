@@ -17,6 +17,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
@@ -24,7 +25,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "exprs/column_ref.h"
 
 namespace starrocks::vectorized {
 
