@@ -233,8 +233,8 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
 
     if (need_persist) {
-        Status res = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset->rowset_id(),
-                                             rowset->rowset_meta()->get_meta_pb());
+        Status res =
+                RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset->rowset_meta()->get_meta_pb());
         LOG_IF(FATAL, !res.ok()) << "failed to save rowset " << rowset->rowset_id() << " to local meta store: " << res;
     }
     ++_newly_created_rowset_num;
@@ -280,7 +280,7 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
 
 // snapshot manager may call this api to check if version exists, so that
 // the version maybe not exist
-const RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
+RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) const {
     auto iter = _rs_version_map.find(version);
     if (iter == _rs_version_map.end()) {
         VLOG(3) << "no rowset for version:" << version << ", tablet: " << full_name();
@@ -292,7 +292,7 @@ const RowsetSharedPtr Tablet::get_rowset_by_version(const Version& version) cons
 // This function only be called by SnapshotManager to perform incremental clone.
 // It will be called under protected of _meta_lock(SnapshotManager will fetch it manually),
 // so it is no need to lock here.
-const RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const {
+RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) const {
     if (_updates != nullptr) {
         DCHECK_EQ(version.first, version.second);
         return _updates->get_delta_rowset(version.second);
@@ -306,7 +306,7 @@ const RowsetSharedPtr Tablet::get_inc_rowset_by_version(const Version& version) 
 }
 
 // Already under _meta_lock
-const RowsetSharedPtr Tablet::rowset_with_max_version() const {
+RowsetSharedPtr Tablet::rowset_with_max_version() const {
     Version max_version = _tablet_meta->max_version();
     if (max_version.first == -1) {
         return nullptr;
@@ -431,7 +431,7 @@ void Tablet::delete_expired_stale_rowset() {
         return;
     }
 
-    const RowsetSharedPtr lastest_delta = rowset_with_max_version();
+    RowsetSharedPtr lastest_delta = rowset_with_max_version();
     if (lastest_delta == nullptr) {
         LOG(WARNING) << "lastest_delta is null " << tablet_id();
         return;
@@ -1120,31 +1120,6 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
 Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     CHECK(_updates) << "updates should exists";
     return _updates->rowset_commit(version, rowset);
-}
-
-StatusOr<Tablet::IteratorList> Tablet::capture_segment_iterators(const Version& spec_version,
-                                                                 const vectorized::Schema& schema,
-                                                                 const vectorized::RowsetReadOptions& options) const {
-    if (_updates) {
-        if (spec_version.first != 0) {
-            LOG(WARNING) << "cannot capture with version.first:" << spec_version.first;
-            return Status::InvalidArgument("cannot capture with version.first != 0");
-        }
-        return _updates->read(spec_version.second, schema, options);
-    }
-    std::shared_lock rdlock(_meta_lock);
-    std::vector<Version> version_path;
-    std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, &rowsets));
-    // Release lock before acquiring segment iterators.
-    rdlock.unlock();
-
-    IteratorList iterators;
-    for (auto& rowset : rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
-    }
-    return std::move(iterators);
 }
 
 void Tablet::on_shutdown() {

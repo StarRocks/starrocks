@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset_meta_manager.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/olap_common.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,32 +19,29 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+#include "storage/olap_common.h"
 
-#include <string>
-#include <string_view>
-
-#include "storage/rowset/rowset_meta.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks {
 
-class KVStore;
-
-// Helper class for managing rowset meta of one root path.
-class RowsetMetaManager {
-public:
-    static bool check_rowset_meta(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
-
-    static Status save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb);
-
-    static Status flush(KVStore* meta);
-
-    static Status remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
-
-    static std::string get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id);
-
-    static Status traverse_rowset_metas(
-            KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func);
-};
+void RowsetId::init(std::string_view rowset_id_str) {
+    // for new rowsetid its a 48 hex string
+    // if the len < 48, then it is an old format rowset id
+    if (rowset_id_str.length() < 48) {
+        StringParser::ParseResult result;
+        int64_t high = StringParser::string_to_int<int64_t>(rowset_id_str.data(), rowset_id_str.size(), &result);
+        DCHECK_EQ(StringParser::PARSE_SUCCESS, result);
+        init(1, high, 0, 0);
+    } else {
+        int64_t high = 0;
+        int64_t middle = 0;
+        int64_t low = 0;
+        from_hex(&high, rowset_id_str.substr(0, 16));
+        from_hex(&middle, rowset_id_str.substr(16, 16));
+        from_hex(&low, rowset_id_str.substr(32, 16));
+        init(high >> 56, high & LOW_56_BITS, middle, low);
+    }
+}
 
 } // namespace starrocks

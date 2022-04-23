@@ -113,10 +113,10 @@ public:
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
-    const RowsetSharedPtr get_rowset_by_version(const Version& version) const;
-    const RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
+    RowsetSharedPtr get_rowset_by_version(const Version& version) const;
+    RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
 
-    const RowsetSharedPtr rowset_with_max_version() const;
+    RowsetSharedPtr rowset_with_max_version() const;
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset);
     void delete_expired_inc_rowsets();
@@ -136,10 +136,6 @@ public:
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
-
-    // Get the segment iterators for the specified version |spec_version|.
-    StatusOr<IteratorList> capture_segment_iterators(const Version& spec_version, const vectorized::Schema& schema,
-                                                     const vectorized::RowsetReadOptions& options) const;
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);

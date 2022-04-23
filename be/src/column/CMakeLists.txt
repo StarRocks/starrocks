@@ -5,8 +5,9 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
 add_library(Column STATIC
         array_column.cpp
-        column_helper.cpp
         chunk.cpp
+        column.cpp
+        column_helper.cpp
         const_column.cpp
         datum_convert.cpp
         datum_tuple.cpp

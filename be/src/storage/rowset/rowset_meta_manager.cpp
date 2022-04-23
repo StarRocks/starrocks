@@ -21,12 +21,15 @@
 
 #include "storage/rowset/rowset_meta_manager.h"
 
+#include <fmt/format.h>
+
 #include <string>
 #include <vector>
 
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
+#include "storage/kv_store.h"
 
 namespace starrocks {
 
@@ -38,9 +41,8 @@ bool RowsetMetaManager::check_rowset_meta(KVStore* meta, const TabletUid& tablet
     return meta->get(META_COLUMN_FAMILY_INDEX, key, &value).ok();
 }
 
-Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
-                               const RowsetMetaPB& rowset_meta_pb) {
-    std::string key = get_rowset_meta_key(tablet_uid, rowset_id);
+Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb) {
+    std::string key = fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_meta_pb.rowset_id_v2());
     std::string value;
     bool ret = rowset_meta_pb.SerializeToString(&value);
     if (!ret) {
@@ -61,25 +63,25 @@ Status RowsetMetaManager::remove(KVStore* meta, const TabletUid& tablet_uid, con
 }
 
 string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id) {
-    return ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
+    return fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_id.to_string());
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
-        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func) {
+        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func) {
     auto traverse_rowset_meta_func = [&func](std::string_view key, std::string_view value) -> bool {
-        std::string key_str(key);
-        std::string value_str(value);
         // key format: rst_uuid_rowset_id
-        std::vector<std::string> parts = strings::Split(key_str, "_");
+        std::vector<StringPiece> parts = strings::Split(StringPiece(key.data(), static_cast<int>(key.size())), "_");
         if (parts.size() != 3) {
             LOG(WARNING) << "invalid rowset key:" << key << ", splitted size:" << parts.size();
             return true;
         }
         RowsetId rowset_id;
-        rowset_id.init(parts[2]);
-        std::vector<std::string> uid_parts = strings::Split(parts[1], "-");
-        TabletUid tablet_uid(uid_parts[0], uid_parts[1]);
-        return func(tablet_uid, rowset_id, value_str);
+        rowset_id.init(std::string_view(parts[2].data(), parts[2].size()));
+        std::vector<StringPiece> uid_parts = strings::Split(parts[1], "-");
+        std::string_view p1(uid_parts[0].data(), uid_parts[0].size());
+        std::string_view p2(uid_parts[1].data(), uid_parts[1].size());
+        TabletUid tablet_uid(p1, p2);
+        return func(tablet_uid, rowset_id, value);
     };
     return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
 }

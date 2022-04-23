@@ -12,6 +12,10 @@ import java.util.Map;
 
 public interface HiveMetaStoreTable {
 
+    String getTableName();
+
+    List<String> getPartitionColumnNames();
+
     HiveTableStats getTableStats() throws DdlException;
 
     Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException;
