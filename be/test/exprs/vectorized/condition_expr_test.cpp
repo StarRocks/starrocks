@@ -15,7 +15,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

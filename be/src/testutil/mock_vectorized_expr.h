@@ -1,9 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include <glog/logging.h>
-
 #include "butil/time.h"
 #include "exprs/expr.h"
+#include "glog/logging.h"
 
 #pragma once
 

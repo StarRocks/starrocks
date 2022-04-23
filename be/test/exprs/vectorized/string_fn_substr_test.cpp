@@ -5,7 +5,7 @@
 #include <random>
 
 #include "butil/time.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {

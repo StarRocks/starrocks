@@ -10,7 +10,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

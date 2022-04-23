@@ -6,7 +6,7 @@
 #include "butil/time.h"
 #include "exprs/geo_functions.h"
 #include "geo/geo_types.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

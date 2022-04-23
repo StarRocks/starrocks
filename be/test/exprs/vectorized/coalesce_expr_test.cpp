@@ -6,7 +6,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/condition_expr.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

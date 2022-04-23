@@ -15,7 +15,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "util/json.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

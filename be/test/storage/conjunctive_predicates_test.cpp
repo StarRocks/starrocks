@@ -10,7 +10,7 @@
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
-#include "vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
