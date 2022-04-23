@@ -87,9 +87,6 @@ void TDigest::add(const std::vector<const TDigest*>& digests) {
     add(digests.cbegin(), digests.cend());
 }
 
-// merge in a vector of tdigests in the most efficient manner possible
-// in constant space
-// works for any value of kHighWater
 void TDigest::add(std::vector<const TDigest*>::const_iterator iter, std::vector<const TDigest*>::const_iterator end) {
     if (iter != end) {
         auto size = std::distance(iter, end);
@@ -138,7 +135,6 @@ long TDigest::totalWeight() const {
     return static_cast<long>(_processed_weight + _unprocessed_weight);
 }
 
-// return the cdf on the t-digest
 Value TDigest::cdf(Value x) {
     if (haveUnprocessed() || isDirty()) process();
     return cdfProcessed(x);
@@ -148,7 +144,6 @@ bool TDigest::isDirty() {
     return _processed.size() > _max_processed || _unprocessed.size() > _max_unprocessed;
 }
 
-// return the cdf on the processed values
 Value TDigest::cdfProcessed(Value x) const {
     VLOG(1) << "cdf value " << x;
     VLOG(1) << "processed size " << _processed.size();
@@ -227,14 +222,11 @@ Value TDigest::cdfProcessed(Value x) const {
     }
 }
 
-// this returns a quantile on the t-digest
 Value TDigest::quantile(Value q) {
     if (haveUnprocessed() || isDirty()) process();
     return quantileProcessed(q);
 }
 
-// this returns a quantile on the currently processed values without changing the t-digest
-// the value will not represent the unprocessed values
 Value TDigest::quantileProcessed(Value q) const {
     if (q < 0 || q > 1) {
         VLOG(1) << "q should be in [0,1], got " << q;
@@ -292,8 +284,6 @@ void TDigest::compress() {
     process();
 }
 
-// add a single centroid to the unprocessed vector, processing previously unprocessed sorted if our limit has
-// been reached.
 bool TDigest::add(Value x, Weight w) {
     if (std::isnan(x)) {
         return false;
