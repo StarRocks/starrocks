@@ -9,7 +9,7 @@
 #include "common/logging.h"
 #include "env/env.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/binary_predicate.h"
+#include "exprs/binary_predicate.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"

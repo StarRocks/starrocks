@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/arithmetic_expr.h"
+#include "exprs/arithmetic_expr.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>

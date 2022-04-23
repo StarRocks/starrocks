@@ -16,7 +16,7 @@
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
 #include "exprs/anyval_util.h"
-#include "exprs/vectorized/arithmetic_operation.h"
+#include "exprs/arithmetic_operation.h"
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
 #include "runtime/time_types.h"

@@ -7,7 +7,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exprs/vectorized/in_predicate.h"
+#include "exprs/in_predicate.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
 namespace starrocks {

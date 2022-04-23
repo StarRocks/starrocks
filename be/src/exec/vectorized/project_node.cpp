@@ -19,12 +19,12 @@
 #include "exec/pipeline/project_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "exprs/column_ref.h"
 
 namespace starrocks::vectorized {
 

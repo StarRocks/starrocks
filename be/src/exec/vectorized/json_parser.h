@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "exprs/vectorized/json_functions.h"
+#include "exprs/json_functions.h"
 #include "simdjson.h"
 
 namespace starrocks::vectorized {

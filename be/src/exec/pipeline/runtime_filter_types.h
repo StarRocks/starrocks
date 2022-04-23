@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+
 #include <memory>
 #include <mutex>
 
@@ -8,7 +9,7 @@
 #include "exec/vectorized/hash_join_node.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 
 namespace starrocks {
 namespace pipeline {

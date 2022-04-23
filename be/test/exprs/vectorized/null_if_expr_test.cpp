@@ -5,8 +5,8 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exprs/vectorized/condition_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "exprs/condition_expr.h"
 
 namespace starrocks {
 namespace vectorized {

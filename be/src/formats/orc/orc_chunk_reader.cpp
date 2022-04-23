@@ -13,14 +13,14 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 
 namespace starrocks::vectorized {
 

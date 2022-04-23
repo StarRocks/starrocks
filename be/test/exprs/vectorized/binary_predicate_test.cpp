@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/binary_predicate.h"
+#include "exprs/binary_predicate.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>

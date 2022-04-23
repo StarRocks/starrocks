@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
-#include "exprs/vectorized/math_functions.h"
+#include "exprs/math_functions.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
 namespace starrocks {

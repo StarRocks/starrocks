@@ -1,13 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/encryption_functions.h"
+#include "exprs/encryption_functions.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
-#include "exprs/vectorized/string_functions.h"
+#include "exprs/string_functions.h"
 
 namespace starrocks {
 namespace vectorized {

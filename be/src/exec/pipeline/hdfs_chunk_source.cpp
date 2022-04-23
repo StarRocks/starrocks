@@ -9,7 +9,7 @@
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"

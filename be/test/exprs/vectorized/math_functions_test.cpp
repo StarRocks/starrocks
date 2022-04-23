@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/math_functions.h"
+#include "exprs/math_functions.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
