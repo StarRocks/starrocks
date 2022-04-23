@@ -95,7 +95,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 5: {
-            // row
+            // rows
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
                 const std::string* str = &tbl_status.rows;
