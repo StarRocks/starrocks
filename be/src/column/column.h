@@ -168,7 +168,7 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
-    virtual void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
+    void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
 
