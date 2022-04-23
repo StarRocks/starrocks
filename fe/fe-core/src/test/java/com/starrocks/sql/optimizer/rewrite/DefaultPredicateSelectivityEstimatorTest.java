@@ -24,7 +24,6 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
     private static ColumnRefFactory columnRefFactory;
 
-
     private static Statistics statistics;
 
     private static ColumnRefOperator v1;
@@ -34,6 +33,8 @@ public class DefaultPredicateSelectivityEstimatorTest {
     private static ColumnRefOperator v5;
     private static ColumnRefOperator v6;
     private static ColumnRefOperator v7;
+    private static ColumnRefOperator v8;
+    private static ColumnRefOperator v9;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -45,6 +46,8 @@ public class DefaultPredicateSelectivityEstimatorTest {
         v5 = columnRefFactory.create("v5", Type.BOOLEAN, false);
         v6 = columnRefFactory.create("v6", Type.BOOLEAN, false);
         v7 = columnRefFactory.create("v7", Type.DATETIME, false);
+        v8 = columnRefFactory.create("v8", Type.VARCHAR, false);
+        v9 = columnRefFactory.create("v8", Type.INT, false);
 
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(10000);
@@ -56,12 +59,15 @@ public class DefaultPredicateSelectivityEstimatorTest {
         builder.addColumnStatistics(ImmutableMap.of(v6, new ColumnStatistic(0, 1, 0, 10, 50)));
         //2003-10-11 - 2003-10-12
         builder.addColumnStatistics(ImmutableMap.of(v7, new ColumnStatistic(1065801600, 1065888000, 0, 10, 200)));
+        builder.addColumnStatistics(ImmutableMap.of(v8, ColumnStatistic.unknown()));
+        builder.addColumnStatistics(ImmutableMap.of(v9, new ColumnStatistic(Double.NaN, Double.NaN, 0, 0, 0)));
         statistics = builder.build();
     }
 
     @Test
     public void testEqualAndNotEqualBinaryPredicate() {
-        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator = new DefaultPredicateSelectivityEstimator();
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
         ConstantOperator constantOperatorInt1 = ConstantOperator.createInt(0);
@@ -95,17 +101,16 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
     }
 
-
     @Test
     public void testSimpleEqualForNullBinaryPredicate() {
-        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator = new DefaultPredicateSelectivityEstimator();
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
         ConstantOperator constantOperatorInt1 = ConstantOperator.createInt(0);
         ConstantOperator constantOperatorInt2 = ConstantOperator.createInt(15);
         ConstantOperator constantOperatorInt3 = ConstantOperator.createInt(100);
         ConstantOperator constantOperatorInt4 = ConstantOperator.createInt(101);
-
 
         BinaryPredicateOperator intEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt0);
@@ -130,7 +135,8 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
     @Test
     public void testSimpleLessAndGreatBinaryPredicate() {
-        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator = new DefaultPredicateSelectivityEstimator();
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
 
         //test ColumnRefOperator compare with ConstantOperator which type is Int
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
@@ -261,7 +267,6 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(decGe3, statistics), 0.005, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(decGe4, statistics), 0.0, 0.0);
 
-
         //test ColumnRefOperator compare with ConstantOperator which type is Boolean
         ConstantOperator constantOperatorBool0 = ConstantOperator.createBoolean(false);
         ConstantOperator constantOperatorBool1 = ConstantOperator.createBoolean(true);
@@ -323,11 +328,16 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolGe1, statistics), 0.02, 0.0);
 
         //test ColumnRefOperator compare with ConstantOperator which type is Datetime
-        ConstantOperator constantOperatorDt0 = ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 10, 13, 15, 25));
-        ConstantOperator constantOperatorDt1 = ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 00, 00, 00));
-        ConstantOperator constantOperatorDt2 = ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 23, 56, 25));
-        ConstantOperator constantOperatorDt3 = ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 00, 00, 00));
-        ConstantOperator constantOperatorDt4 = ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 13, 15, 25));
+        ConstantOperator constantOperatorDt0 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 10, 13, 15, 25));
+        ConstantOperator constantOperatorDt1 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 00, 00, 00));
+        ConstantOperator constantOperatorDt2 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 11, 23, 56, 25));
+        ConstantOperator constantOperatorDt3 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 00, 00, 00));
+        ConstantOperator constantOperatorDt4 =
+                ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 13, 15, 25));
         //e.g. v7 < 2003-10-10 13:15:25
         BinaryPredicateOperator dtLt0 = BinaryPredicateOperator.lt(v7, constantOperatorDt0);
         BinaryPredicateOperator dtLt1 = BinaryPredicateOperator.lt(v7, constantOperatorDt1);
@@ -364,14 +374,70 @@ public class DefaultPredicateSelectivityEstimatorTest {
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe2, statistics), 0.002, 0.1);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe3, statistics), 0.005, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtGe4, statistics), 0.0, 0.0);
+    }
+
+    @Test
+    public void testStatisticsUnknown() {
+        //v8 varchar
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
+
+        //test ColumnRefOperator compare with ConstantOperator which type is Int
+        ConstantOperator constantOperatorStr0 = ConstantOperator.createVarchar("me");
+
+        BinaryPredicateOperator strEq0 = BinaryPredicateOperator.eq(v8, constantOperatorStr0);
+        BinaryPredicateOperator strNe0 = BinaryPredicateOperator.ne(v8, constantOperatorStr0);
+        BinaryPredicateOperator strLt0 = BinaryPredicateOperator.lt(v8, constantOperatorStr0);
+        BinaryPredicateOperator strLg0 = BinaryPredicateOperator.le(v8, constantOperatorStr0);
+        BinaryPredicateOperator strGt0 = BinaryPredicateOperator.gt(v8, constantOperatorStr0);
+        BinaryPredicateOperator strGe0 = BinaryPredicateOperator.ge(v8, constantOperatorStr0);
+        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v8, constantOperatorStr0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strEq0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strNe0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strLt0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strLg0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strGt0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strGe0, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strEfn0, statistics), 1.0, 0.0);
 
     }
+
+    @Test
+    public void testStatisticsNaN() {
+        //v9 int
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
+
+        //test ColumnRefOperator compare with ConstantOperator which type is Int
+        ConstantOperator constantOperatorStr0 = ConstantOperator.createInt(5);
+
+        BinaryPredicateOperator strEq0 = BinaryPredicateOperator.eq(v9, constantOperatorStr0);
+        BinaryPredicateOperator strNe0 = BinaryPredicateOperator.ne(v9, constantOperatorStr0);
+        BinaryPredicateOperator strLt0 = BinaryPredicateOperator.lt(v9, constantOperatorStr0);
+        BinaryPredicateOperator strLg0 = BinaryPredicateOperator.le(v9, constantOperatorStr0);
+        BinaryPredicateOperator strGt0 = BinaryPredicateOperator.gt(v9, constantOperatorStr0);
+        BinaryPredicateOperator strGe0 = BinaryPredicateOperator.ge(v9, constantOperatorStr0);
+        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                v9, constantOperatorStr0);
+
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strEq0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strNe0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strLt0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strLg0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strGt0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strGe0, statistics), 0.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(strEfn0, statistics), 0.0, 0.0);
+    }
+
 
 
     @Test
     public void testExpressionBinaryPredicate() {
 
-        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator = new DefaultPredicateSelectivityEstimator();
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
         CallOperator callOperator = new CallOperator("max", Type.INT, Lists.newArrayList(v1));
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
@@ -419,7 +485,8 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
     @Test
     public void testCompoundPredicate() {
-        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator = new DefaultPredicateSelectivityEstimator();
+        DefaultPredicateSelectivityEstimator defaultPredicateSelectivityEstimator =
+                new DefaultPredicateSelectivityEstimator();
 
         ConstantOperator constantOperatorInt0 = ConstantOperator.createInt(-1);
         ConstantOperator constantOperatorDouble0 = ConstantOperator.createDouble(9.0);
