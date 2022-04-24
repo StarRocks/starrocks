@@ -69,15 +69,6 @@ struct SortDescs {
 
     SortDescs() = default;
     ~SortDescs() = default;
-
-    SortDescs(const std::vector<bool>& orders, const std::vector<bool>& null_firsts) {
-        descs.resize(orders.size());
-        for (size_t i = 0; i < orders.size(); ++i) {
-            descs[i].sort_order = orders.at(i) ? 1 : -1;
-            descs[i].null_first = (null_firsts.at(i) ? -1 : 1) * descs[i].sort_order;
-        }
-    }
-
     SortDescs(const std::vector<int>& orders, const std::vector<int>& nulls) {
         DCHECK_EQ(orders.size(), nulls.size());
         descs.reserve(orders.size());
@@ -88,7 +79,10 @@ struct SortDescs {
 
     size_t num_columns() const { return descs.size(); }
 
-    SortDesc get_column_desc(int col) const { return descs[col]; }
+    SortDesc get_column_desc(int col) const {
+        DCHECK_LT(col, descs.size());
+        return descs[col];
+    }
 };
 
 } // namespace starrocks::vectorized
