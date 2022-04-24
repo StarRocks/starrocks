@@ -571,6 +571,12 @@ public class Tablet extends MetaObject implements Writable {
 
         // 2. check version completeness
         for (Replica replica : replicas) {
+            // do not check the replica that is not in the colocate backend set,
+            // this kind of replica should be drooped.
+            if (!backendsSet.contains(replica.getBackendId())) {
+                continue;
+            }
+
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
                 // this replica is alive but version incomplete
                 return TabletStatus.VERSION_INCOMPLETE;
