@@ -68,7 +68,7 @@ Status OlapScanNode::open(RuntimeState* state) {
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_query_global_dict_map());
+    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
@@ -467,7 +467,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    _dict_optimize_parser.rewrite_conjuncts<true>(&conjunct_ctxs, state);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {
