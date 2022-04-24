@@ -198,6 +198,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
+    public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -504,6 +505,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
+
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "hash"; // auto, merge, hash
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
@@ -919,6 +923,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSQLDigest() {
         return enableSQLDigest;
+    }
+
+    public String getJoinImplementationMode() {
+        return joinImplementationMode;
+    }
+
+    public void setJoinImplementationMode(String joinImplementationMode) {
+        this.joinImplementationMode = joinImplementationMode;
     }
 
     public boolean isEnableOptimizerTraceLog() {

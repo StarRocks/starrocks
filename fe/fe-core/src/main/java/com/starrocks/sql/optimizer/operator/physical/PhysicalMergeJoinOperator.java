@@ -12,30 +12,31 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
-public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
+public class PhysicalMergeJoinOperator extends PhysicalJoinOperator {
 
-    public PhysicalHashJoinOperator(JoinOperator joinType,
-                                    ScalarOperator onPredicate,
-                                    String joinHint,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
-        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+    public PhysicalMergeJoinOperator(JoinOperator joinType,
+                                     ScalarOperator onPredicate,
+                                     String joinHint,
+                                     long limit,
+                                     ScalarOperator predicate,
+                                     Projection projection) {
+        super(OperatorType.PHYSICAL_MERGE_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
     }
+
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalHashJoin(this, context);
+        return visitor.visitPhysicalMergeJoin(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalHashJoin(optExpression, context);
+        return visitor.visitPhysicalMergeJoin(optExpression, context);
     }
 
     @Override
     public String toString() {
-        return "PhysicalHashJoinOperator{" +
+        return "PhysicalMergeJoinOperator{" +
                 "joinType=" + joinType +
                 ", joinPredicate=" + onPredicate +
                 ", limit=" + limit +
@@ -54,7 +55,7 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
         if (!super.equals(o)) {
             return false;
         }
-        PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
+        PhysicalMergeJoinOperator that = (PhysicalMergeJoinOperator) o;
         return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }
 
@@ -62,6 +63,5 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
-
 
 }

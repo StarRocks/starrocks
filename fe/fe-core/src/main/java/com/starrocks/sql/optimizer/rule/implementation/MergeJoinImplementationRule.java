@@ -6,19 +6,19 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class HashJoinImplementationRule extends JoinImplementationRule {
-    private HashJoinImplementationRule() {
-        super(RuleType.IMP_EQ_JOIN_TO_HASH_JOIN);
+public class MergeJoinImplementationRule extends JoinImplementationRule {
+    private MergeJoinImplementationRule() {
+        super(RuleType.IMP_EQ_JOIN_TO_MERGE_JOIN);
     }
 
-    private static final HashJoinImplementationRule instance = new HashJoinImplementationRule();
+    private static final MergeJoinImplementationRule instance = new MergeJoinImplementationRule();
 
-    public static HashJoinImplementationRule getInstance() {
+    public static MergeJoinImplementationRule getInstance() {
         return instance;
     }
 
@@ -26,14 +26,14 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        PhysicalHashJoinOperator physicalHashJoin = new PhysicalHashJoinOperator(
+        PhysicalMergeJoinOperator physicalMergeJoin = new PhysicalMergeJoinOperator(
                 joinOperator.getJoinType(),
                 joinOperator.getOnPredicate(),
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
                 joinOperator.getProjection());
-        OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
+        OptExpression result = OptExpression.create(physicalMergeJoin, input.getInputs());
         return Lists.newArrayList(result);
     }
 }
