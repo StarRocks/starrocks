@@ -207,6 +207,7 @@ struct FunnelState {
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const {
         if (time_event_list.empty()) {
+            down_cast<Int64Column*>(to)->append(0);
             return;
         }
 
@@ -266,7 +267,11 @@ struct FunnelState {
             }
         }
 
-        down_cast<Int64Column*>(to)->append((prev_event_idx > max_level) ? prev_event_idx + 1 : max_level + 1);
+        if (prev_event_idx < 0) {
+            down_cast<Int64Column*>(to)->append(0);
+        } else {
+            down_cast<Int64Column*>(to)->append((prev_event_idx > max_level) ? prev_event_idx + 1 : max_level + 1);
+        }
     }
 
     static void reset_event_timestamp_list_and_change_prev_event_idx(
