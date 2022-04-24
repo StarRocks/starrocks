@@ -8,10 +8,10 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -28,42 +28,54 @@ public class BackupAnalyzer {
 
     private static BackupStmt.BackupType type = BackupStmt.BackupType.FULL;
 
-    public static void analyze(BackupStmt backupStmt, ConnectContext session) throws AnalysisException {
-        String db = backupStmt.getDbName();
-        backupStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
-        backupStmt.setClusterName(session.getClusterName());
-        List<TableRef> tblRefs = backupStmt.getTblRefs();
-        for (TableRef tableRef : tblRefs) {
-            TableName tableName = tableRef.getName();
-            MetaUtils.normalizationTableName(session, tableName);
-            MetaUtils.getStarRocks(session, tableName);
-            Table table = MetaUtils.getStarRocksTable(session, tableName);
+    public static void analyze(BackupStmt backupStmt, ConnectContext session) {
+        new BackupStmtAnalyzerVisitor().visit(backupStmt, session);
+    }
 
-            if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
-                throw unsupportedException("only support updating primary key table");
-            }
-            // tbl refs can not set alias in backup
-            if (tableRef.hasExplicitAlias()) {
-                throw new AnalysisException("Can not set alias for table in Backup Stmt: " + tableRef);
-            }
+    static class BackupStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        public void analyze(BackupStmt stmt, ConnectContext session) {
+            visit(stmt, session);
         }
 
-        Map<String, String> copiedProperties = Maps.newHashMap(backupStmt.getProperties());
-        // type
-        if (copiedProperties.containsKey(PROP_TYPE)) {
-            try {
-                type = BackupStmt.BackupType.valueOf(copiedProperties.get(PROP_TYPE).toUpperCase());
-            } catch (Exception e) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                        "Invalid backup job type: "
-                                + copiedProperties.get(PROP_TYPE));
-            }
-            copiedProperties.remove(PROP_TYPE);
-        }
+        @Override
+        public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext session) {
+            String db = backupStmt.getDbName();
+            backupStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
+            backupStmt.setClusterName(session.getClusterName());
+            List<TableRef> tblRefs = backupStmt.getTblRefs();
+            for (TableRef tableRef : tblRefs) {
+                TableName tableName = tableRef.getName();
+                MetaUtils.normalizationTableName(session, tableName);
+                MetaUtils.getStarRocks(session, tableName);
+                Table table = MetaUtils.getStarRocksTable(session, tableName);
 
-        if (!copiedProperties.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                    "Unknown backup job properties: " + copiedProperties.keySet());
+                if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
+                    throw unsupportedException("only support updating primary key table");
+                }
+                // tbl refs can not set alias in backup
+                if (tableRef.hasExplicitAlias()) {
+                    throw new SemanticException("Can not set alias for table in Backup Stmt: " + tableRef);
+                }
+            }
+
+            Map<String, String> copiedProperties = Maps.newHashMap(backupStmt.getProperties());
+            // type
+            if (copiedProperties.containsKey(PROP_TYPE)) {
+                try {
+                    type = BackupStmt.BackupType.valueOf(copiedProperties.get(PROP_TYPE).toUpperCase());
+                } catch (Exception e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid backup job type: "
+                                    + copiedProperties.get(PROP_TYPE));
+                }
+                copiedProperties.remove(PROP_TYPE);
+            }
+
+            if (!copiedProperties.isEmpty()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unknown backup job properties: " + copiedProperties.keySet());
+            }
+            return null;
         }
     }
 }

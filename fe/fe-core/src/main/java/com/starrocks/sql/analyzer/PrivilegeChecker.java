@@ -63,9 +63,15 @@ public class PrivilegeChecker {
             for (TableRef tableRef : tblRefs) {
                 String tableName = tableRef.getName().getTbl();
                 if (!Catalog.getCurrentCatalog().getAuth()
-                        .checkTblPriv(session, dbName, tableName, PrivPredicate.ADMIN)) {
+                        .checkTblPriv(session, dbName, tableName, PrivPredicate.SELECT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BACKUP");
                 }
+            }
+            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
@@ -140,6 +146,9 @@ public class PrivilegeChecker {
             String db = statement.getDbName();
             if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(session, db, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }

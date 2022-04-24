@@ -5,11 +5,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -29,84 +29,96 @@ public class RestoreAnalyzer {
     private static int metaVersion = -1;
     private static int starrocksMetaVersion = -1;
 
-    public static void analyze(RestoreStmt restoreStmt, ConnectContext session) throws AnalysisException {
-        String db = restoreStmt.getDbName();
-        restoreStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
-        restoreStmt.setClusterName(session.getClusterName());
-        List<TableRef> tblRefs = restoreStmt.getTableRefs();
-        // check if alias is duplicated
-        Set<String> aliasSet = Sets.newHashSet();
-        for (TableRef tblRef : tblRefs) {
-            aliasSet.add(tblRef.getName().getTbl());
+    public static void analyze(RestoreStmt restoreStmt, ConnectContext session) {
+        new RestoreStmtAnalyzerVisitor().visit(restoreStmt, session);
+    }
+
+    static class RestoreStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        public void analyze(RestoreStmt stmt, ConnectContext session) {
+            visit(stmt, session);
         }
 
-        for (TableRef tblRef : tblRefs) {
-            if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
-                throw new AnalysisException("Duplicated alias name: " + tblRef.getExplicitAlias());
+        @Override
+        public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext session) {
+            String db = restoreStmt.getDbName();
+            restoreStmt.setDb(MetaUtils.getFullDatabaseName(db, session));
+            restoreStmt.setClusterName(session.getClusterName());
+            List<TableRef> tblRefs = restoreStmt.getTableRefs();
+            // check if alias is duplicated
+            Set<String> aliasSet = Sets.newHashSet();
+            for (TableRef tblRef : tblRefs) {
+                aliasSet.add(tblRef.getName().getTbl());
             }
-        }
 
-        Map<String, String> copiedProperties = Maps.newHashMap(restoreStmt.getProperties());
-        // allow load
-        if (copiedProperties.containsKey(PROP_ALLOW_LOAD)) {
-            if (copiedProperties.get(PROP_ALLOW_LOAD).equalsIgnoreCase("true")) {
-                allowLoad = true;
-            } else if (copiedProperties.get(PROP_ALLOW_LOAD).equalsIgnoreCase("false")) {
-                allowLoad = false;
+            for (TableRef tblRef : tblRefs) {
+                if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
+                    throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias());
+                }
+            }
+
+            Map<String, String> copiedProperties = Maps.newHashMap(restoreStmt.getProperties());
+            // allow load
+            if (copiedProperties.containsKey(PROP_ALLOW_LOAD)) {
+                if (copiedProperties.get(PROP_ALLOW_LOAD).equalsIgnoreCase("true")) {
+                    allowLoad = true;
+                } else if (copiedProperties.get(PROP_ALLOW_LOAD).equalsIgnoreCase("false")) {
+                    allowLoad = false;
+                } else {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid allow load value: "
+                                    + copiedProperties.get(PROP_ALLOW_LOAD));
+                }
+                copiedProperties.remove(PROP_ALLOW_LOAD);
+            }
+
+            // replication num
+            if (copiedProperties.containsKey(PROP_REPLICATION_NUM)) {
+                try {
+                    replicationNum = Integer.parseInt(copiedProperties.get(PROP_REPLICATION_NUM));
+                } catch (NumberFormatException e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid replication num format: "
+                                    + copiedProperties.get(PROP_REPLICATION_NUM));
+                }
+                copiedProperties.remove(PROP_REPLICATION_NUM);
+            }
+
+            // backup timestamp
+            if (copiedProperties.containsKey(PROP_BACKUP_TIMESTAMP)) {
+                backupTimestamp = copiedProperties.get(PROP_BACKUP_TIMESTAMP);
+                copiedProperties.remove(PROP_BACKUP_TIMESTAMP);
             } else {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                        "Invalid allow load value: "
-                                + copiedProperties.get(PROP_ALLOW_LOAD));
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Missing " + PROP_BACKUP_TIMESTAMP + " property");
             }
-            copiedProperties.remove(PROP_ALLOW_LOAD);
-        }
 
-        // replication num
-        if (copiedProperties.containsKey(PROP_REPLICATION_NUM)) {
-            try {
-                replicationNum = Integer.parseInt(copiedProperties.get(PROP_REPLICATION_NUM));
-            } catch (NumberFormatException e) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                        "Invalid replication num format: "
-                                + copiedProperties.get(PROP_REPLICATION_NUM));
+            // meta version
+            if (copiedProperties.containsKey(PROP_META_VERSION)) {
+                try {
+                    metaVersion = Integer.parseInt(copiedProperties.get(PROP_META_VERSION));
+                } catch (NumberFormatException e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid meta version format: "
+                                    + copiedProperties.get(PROP_META_VERSION));
+                }
+                copiedProperties.remove(PROP_META_VERSION);
             }
-            copiedProperties.remove(PROP_REPLICATION_NUM);
-        }
-
-        // backup timestamp
-        if (copiedProperties.containsKey(PROP_BACKUP_TIMESTAMP)) {
-            backupTimestamp = copiedProperties.get(PROP_BACKUP_TIMESTAMP);
-            copiedProperties.remove(PROP_BACKUP_TIMESTAMP);
-        } else {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                    "Missing " + PROP_BACKUP_TIMESTAMP + " property");
-        }
-
-        // meta version
-        if (copiedProperties.containsKey(PROP_META_VERSION)) {
-            try {
-                metaVersion = Integer.parseInt(copiedProperties.get(PROP_META_VERSION));
-            } catch (NumberFormatException e) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                        "Invalid meta version format: "
-                                + copiedProperties.get(PROP_META_VERSION));
+            if (copiedProperties.containsKey(PROP_STARROCKS_META_VERSION)) {
+                try {
+                    starrocksMetaVersion = Integer.parseInt(copiedProperties.get(PROP_STARROCKS_META_VERSION));
+                } catch (NumberFormatException e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid meta version format: "
+                                    + copiedProperties.get(PROP_STARROCKS_META_VERSION));
+                }
+                copiedProperties.remove(PROP_STARROCKS_META_VERSION);
             }
-            copiedProperties.remove(PROP_META_VERSION);
-        }
-        if (copiedProperties.containsKey(PROP_STARROCKS_META_VERSION)) {
-            try {
-                starrocksMetaVersion = Integer.parseInt(copiedProperties.get(PROP_STARROCKS_META_VERSION));
-            } catch (NumberFormatException e) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                        "Invalid meta version format: "
-                                + copiedProperties.get(PROP_STARROCKS_META_VERSION));
-            }
-            copiedProperties.remove(PROP_STARROCKS_META_VERSION);
-        }
 
-        if (!copiedProperties.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
-                    "Unknown restore job properties: " + copiedProperties.keySet());
+            if (!copiedProperties.isEmpty()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unknown restore job properties: " + copiedProperties.keySet());
+            }
+            return null;
         }
     }
 }

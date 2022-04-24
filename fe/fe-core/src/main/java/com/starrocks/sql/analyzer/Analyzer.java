@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -13,6 +14,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -67,6 +69,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitBackupStatement(BackupStmt statement, ConnectContext session) {
+            BackupAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             analyzeCreateAnalyzeStmt(statement, session);
             return null;
@@ -113,6 +121,12 @@ public class Analyzer {
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 queryRelation.setLimit(new LimitElement(selectLimit));
             }
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStatement(RestoreStmt statement, ConnectContext session) {
+            RestoreAnalyzer.analyze(statement, session);
             return null;
         }
 

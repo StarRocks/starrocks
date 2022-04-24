@@ -95,7 +95,7 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitBackupStatement(BackupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
+        return visitStatement(statement, context);
     }
 
     public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
@@ -135,7 +135,7 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRestoreStatement(RestoreStmt statement, C context) {
-        return visitDDLStatement(statement, context);
+        return visitStatement(statement, context);
     }
 
     public R visitShowStatement(ShowStmt statement, C context) {

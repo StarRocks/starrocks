@@ -30,6 +30,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -89,7 +90,7 @@ public class RestoreStmt extends AbstractBackupStmt {
 
         for (TableRef tblRef : tblRefs) {
             if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
-                throw new AnalysisException("Duplicated alias name: " + tblRef.getExplicitAlias());
+                throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias());
             }
         }
     }
