@@ -6,17 +6,17 @@
 
 #include "column/schema.h"
 #include "runtime/current_thread.h"
+#include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
+#include "storage/row_source_mask.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/row_source_mask.h"
-#include "storage/vectorized/tablet_reader.h"
-#include "storage/vectorized/tablet_reader_params.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "util/time.h"
 #include "util/trace.h"
 
@@ -110,6 +110,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
             vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema, is_key, mask_buffer);
+    RETURN_IF_ERROR(reader.prepare());
     vectorized::TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =
@@ -124,7 +125,6 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
     VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", column group=" << column_group_index << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
-    RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
 
     StatusOr<size_t> rows_st = _compact_data(is_key, chunk_size, column_group, schema, &reader, output_rs_writer,

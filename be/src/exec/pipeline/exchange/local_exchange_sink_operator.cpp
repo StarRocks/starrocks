@@ -7,7 +7,7 @@
 
 namespace starrocks::pipeline {
 Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->increment_sink_number();
     return Status::OK();
 }
@@ -27,8 +27,7 @@ Status LocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    _exchanger->accept(chunk, _driver_sequence);
-    return Status::OK();
+    return _exchanger->accept(chunk, _driver_sequence);
 }
 
 } // namespace starrocks::pipeline

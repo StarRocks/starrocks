@@ -23,7 +23,7 @@ Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
-        _evaluate_const_columns(i);
+        RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
@@ -407,14 +407,16 @@ void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
     }
 }
 
-void Aggregator::_evaluate_const_columns(int i) {
+Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     std::vector<ColumnPtr> const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (int j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-        const_columns.emplace_back(_agg_expr_ctxs[i][j]->root()->evaluate_const(_agg_expr_ctxs[i][j]));
+        ASSIGN_OR_RETURN(auto col, _agg_expr_ctxs[i][j]->root()->evaluate_const(_agg_expr_ctxs[i][j]));
+        const_columns.emplace_back(std::move(col));
     }
     _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
+    return Status::OK();
 }
 
 void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
@@ -464,9 +466,10 @@ void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
     }
 }
 
-void Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
+Status Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
     _evaluate_group_by_exprs(chunk);
-    _evaluate_agg_fn_exprs(chunk);
+    RETURN_IF_ERROR(_evaluate_agg_fn_exprs(chunk));
+    return Status::OK();
 }
 
 void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
@@ -630,11 +633,12 @@ void Aggregator::_evaluate_group_by_exprs(vectorized::Chunk* chunk) {
         }
     }
 }
-void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
+
+Status Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
-        _group_by_columns[i] = _group_by_expr_ctxs[i]->evaluate(chunk);
+        ASSIGN_OR_RETURN(_group_by_columns[i], _group_by_expr_ctxs[i]->evaluate(chunk));
         DCHECK(_group_by_columns[i] != nullptr);
         if (_group_by_columns[i]->is_constant()) {
             // If group by column is constant, we disable streaming aggregate.
@@ -665,14 +669,18 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
             // We handle const column as normal data column
             // TODO(kks): improve const column aggregate later
             if (j == 0) {
-                _agg_intput_columns[i][j] = vectorized::ColumnHelper::unpack_and_duplicate_const_column(
-                        chunk->num_rows(), _agg_expr_ctxs[i][j]->evaluate(chunk));
+                ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
+                _agg_intput_columns[i][j] =
+                        vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
             } else {
-                _agg_intput_columns[i][j] = _agg_expr_ctxs[i][j]->evaluate(chunk);
+                ASSIGN_OR_RETURN(auto&& col, _agg_expr_ctxs[i][j]->evaluate(chunk));
+                _agg_intput_columns[i][j] = std::move(col);
             }
             _agg_input_raw_columns[i][j] = _agg_intput_columns[i][j].get();
         }
     }
+
+    return Status::OK();
 }
 
 // note(yan): in types.h and primitive_type.h there are similiar functions,

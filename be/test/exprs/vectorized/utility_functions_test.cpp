@@ -8,6 +8,7 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "runtime/primitive_type.h"
 #include "util/random.h"
 #include "util/time.h"
 
@@ -83,21 +84,25 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         ASSERT_EQ(column_viewer.size(), column_size);
 
         for (int column_idx = 0; column_idx < column_viewer.size(); column_idx++) {
-            auto& column = column_viewer.value(column_idx);
-            ASSERT_EQ(36, column.get_size());
-            deduplication.insert(column.to_string());
-
-            for (int i = 0; i < column.get_size(); i++) {
-                if (hyphens_position.count(i)) {
-                    ASSERT_EQ(column.get_data()[i], '-');
-                } else {
-                    ASSERT_GE(column.get_data()[i], '0');
-                    ASSERT_LE(column.get_data()[i], 'f');
-                }
-            }
+            auto& uuid = column_viewer.value(column_idx);
+            ASSERT_EQ(33, uuid.get_size());
+            deduplication.insert(uuid.to_string());
+            ASSERT_EQ(uuid.data[16], '-');
         }
 
         ASSERT_EQ(deduplication.size(), column_size);
+    }
+
+    {
+        int32_t chunk_size = 4096;
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(chunk_size, 1);
+        Columns columns;
+        columns.emplace_back(var1_col);
+        ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns);
+        Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
+        std::set<int128_t> vals;
+        vals.insert(col->get_data().begin(), col->get_data().end());
+        ASSERT_EQ(vals.size(), chunk_size);
     }
 }
 

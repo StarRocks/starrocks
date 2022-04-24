@@ -105,9 +105,8 @@ public:
     //   where we should change tablet status from shutdown back to running
     //
     // return NotFound if the tablet path has been deleted or the tablet statue is SHUTDOWN.
-    Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
-                                 const std::string& header, bool update_meta, bool force = false, bool restore = false,
-                                 bool check_path = true);
+    Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash, std::string_view meta,
+                                 bool update_meta, bool force = false, bool restore = false, bool check_path = true);
 
     Status load_tablet_from_dir(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
@@ -143,7 +142,12 @@ public:
         return _shutdown_tablets.size();
     }
 
+    Status delete_shutdown_tablet(int64_t tablet_id);
+
     MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
+
+    // return true if all tablets visited
+    bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
@@ -238,6 +242,10 @@ private:
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
     // last update time of tablet stat cache
     int64_t _last_update_stat_ms;
+
+    // context for compaction checker
+    size_t _cur_shard = 0;
+    std::unordered_set<int64_t> _shard_visited_tablet_ids;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {

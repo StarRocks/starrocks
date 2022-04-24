@@ -182,6 +182,17 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
+void RuntimeState::init_mem_trackers(int64_t instance_mem_limit, const std::shared_ptr<MemTracker>& query_mem_tracker) {
+    DCHECK(query_mem_tracker != nullptr);
+    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+    mem_tracker_counter->set(instance_mem_limit);
+    // all fragment instances in a BE shared a common query_mem_tracker.
+    _query_mem_tracker = query_mem_tracker;
+    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), instance_mem_limit, runtime_profile()->name(),
+                                                         _query_mem_tracker.get());
+    _instance_mem_pool = std::make_unique<MemPool>();
+}
+
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
@@ -286,6 +297,14 @@ Status RuntimeState::create_error_log_file() {
         return Status::InternalError(error_msg.str());
     }
     return Status::OK();
+}
+
+bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
+    if (_num_print_error_rows.load(std::memory_order_relaxed) > MAX_ERROR_NUM && !is_summary) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {

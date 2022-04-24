@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -24,6 +25,7 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -84,6 +86,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -142,6 +148,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowWorkGroupStmt(ShowWorkGroupStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitDropTableStmt(DropTableStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {

@@ -4,6 +4,7 @@
 
 #include "column/bytes.h"
 #include "column/column.h"
+#include "column/datum.h"
 #include "util/slice.h"
 
 namespace starrocks::vectorized {
@@ -49,6 +50,12 @@ public:
         this->swap_column(tmp);
         return *this;
     }
+
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override;
 
     ~BinaryColumnBase<T>() override {
         if (!_offsets.empty()) {
@@ -285,14 +292,12 @@ public:
             // The size limit of a single element is 2^32.
             // The size limit of all elements is 2^32.
             // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
-                   _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
         } else {
             // The size limit of a single element is 2^32.
             // The size limit of all elements is 2^64.
             // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
-                   _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+            return _bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
         }
     }
 

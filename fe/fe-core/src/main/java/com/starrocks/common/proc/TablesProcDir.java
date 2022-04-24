@@ -70,7 +70,7 @@ public class TablesProcDir implements ProcDirInterface {
 
         long tableId = -1L;
         try {
-            tableId = Long.valueOf(tableIdStr);
+            tableId = Long.parseLong(tableIdStr);
         } catch (NumberFormatException e) {
             throw new AnalysisException("Invalid table id format: " + tableIdStr);
         }

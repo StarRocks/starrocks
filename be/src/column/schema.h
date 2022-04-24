@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "column/field.h"
+#include "gen_cpp/olap_file.pb.h"
 
 namespace starrocks::vectorized {
 
@@ -13,7 +14,11 @@ class Schema {
 public:
     Schema() = default;
 
+#ifdef BE_TEST
     explicit Schema(Fields fields);
+#endif
+
+    explicit Schema(Fields fields, KeysType keys_type);
 
     size_t num_fields() const { return _fields.size(); }
 
@@ -61,12 +66,15 @@ public:
         new_schema->_name_to_index = _name_to_index;
     }
 
+    KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
+
 private:
     void _build_index_map(const Fields& fields);
 
     Fields _fields;
     size_t _num_keys = 0;
     std::unordered_map<std::string_view, size_t> _name_to_index;
+    uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Schema& schema) {

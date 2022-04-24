@@ -30,8 +30,6 @@
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exprs/anyval_util.h"
-#include "exprs/slot_ref.h"
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
@@ -53,7 +51,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/user_function_cache.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -589,12 +586,12 @@ void Expr::close(const std::vector<Expr*>& exprs) {
     for (Expr* expr : exprs) expr->close();
 }
 
-ColumnPtr Expr::evaluate_const(ExprContext* context) {
+StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     if (!is_constant()) {
         return nullptr;
     }
 
-    if (_constant_column) {
+    if (_constant_column.ok() && _constant_column.value()) {
         return _constant_column;
     }
 

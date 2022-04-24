@@ -44,6 +44,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
@@ -168,7 +169,8 @@ public class ReportHandler extends Daemon {
         if (request.isSetActive_workgroups()) {
             activeWorkGroups = request.active_workgroups;
         }
-        List<TWorkGroupOp> workGroupOps = Catalog.getCurrentCatalog().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
+        List<TWorkGroupOp> workGroupOps =
+                Catalog.getCurrentCatalog().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask = new ReportTask(beId, tasks, disks, tablets, reportVersion, activeWorkGroups);
@@ -316,6 +318,9 @@ public class ReportHandler extends Daemon {
 
         // 10. send set tablet in memory to be
         handleSetTabletInMemory(backendId, backendTablets);
+
+        // 11. send set tablet enable persistent index to be
+        handleSetTabletEnablePersistentIndex(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = Catalog.getCurrentSystemInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
@@ -625,6 +630,7 @@ public class ReportHandler extends Daemon {
                                             TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),
+                                            olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId));
                                     createReplicaTask.setIsRecoverTask(true);
                                     createReplicaBatchTask.addTask(createReplicaTask);
@@ -693,7 +699,13 @@ public class ReportHandler extends Daemon {
         int addToMetaCounter = 0;
         int maxTaskSendPerBe = Config.max_agent_tasks_send_per_be;
         AgentBatchTask batchTask = new AgentBatchTask();
+        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null || tabletMeta.isUseStarOS()) {
+                continue;
+            }
+
             TTablet backendTablet = backendTablets.get(tabletId);
             for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
                 boolean needDelete = false;
@@ -717,10 +729,11 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
-                    DropReplicaTask task = new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
+                    DropReplicaTask task =
+                            new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
                     batchTask.addTask(task);
-                    LOG.warn("delete tablet[" + tabletId + " - " + backendTabletInfo.getSchema_hash()
-                            + "] from backend[" + backendId + "] because not found in meta");
+                    LOG.warn("delete tablet[" + tabletId + "] from backend[" + backendId +
+                            "] because not found in meta");
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }
@@ -957,9 +970,62 @@ public class ReportHandler extends Daemon {
         // When report, needn't synchronous
         if (!tabletToInMemory.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory);
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory, 
+                                                                         TTabletMetaType.INMEMORY);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
+        }
+    }
+
+    public static void testHandleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
+    private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetEnable_persistent_index()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                boolean beEnablePersistentIndex = tabletInfo.enable_persistent_index;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = Catalog.getCurrentCatalog().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
+                    if (beEnablePersistentIndex != feEnablePersistentIndex) {
+                        tabletToEnablePersistentIndex.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
+                                                                                feEnablePersistentIndex));
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        }
+        
+        LOG.info("find [{}] tablets need set enable persistent index meta", tabletToEnablePersistentIndex.size());
+        if (!tabletToEnablePersistentIndex.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
+                                                                         TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+            batchTask.addTask(task);
+            if (FeConstants.runningUnitTest) {
+                AgentTaskExecutor.submit(batchTask);
+            }
         }
     }
 
@@ -1026,8 +1092,9 @@ public class ReportHandler extends Daemon {
 
             // check replica version
             if (version < visibleVersion) {
-                throw new MetaNotFoundException("version is invalid. tablet[" + version + "]"
-                        + ", visible[" + visibleVersion + "]");
+                throw new MetaNotFoundException(
+                        String.format("version is invalid. tablet:%d < partitionVisible:%d replicas:%s", version,
+                                visibleVersion, tablet.getReplicaInfos()));
             }
 
             // check schema hash
@@ -1094,7 +1161,8 @@ public class ReportHandler extends Daemon {
 
                 Catalog.getCurrentCatalog().getEditLog().logAddReplica(info);
 
-                LOG.info("add replica[{}-{}] to catalog. backend[{}]", tabletId, replicaId, backendId);
+                LOG.info("add replica[{}-{}] to catalog. backend:[{}] replicas:", tabletId, replicaId, backendId,
+                        tablet.getReplicaInfos());
             } else {
                 // replica is enough. check if this tablet is already in meta
                 // (status changed between 'tabletReport()' and 'addReplica()')

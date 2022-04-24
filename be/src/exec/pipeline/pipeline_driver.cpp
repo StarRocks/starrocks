@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/pipeline/olap_scan_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
@@ -49,13 +50,15 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
         const auto* global_rf_collector = op->runtime_bloom_filters();
+        auto is_scan_operator = dynamic_cast<ScanOperator*>(op.get()) != nullptr;
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 _global_rf_descriptors.emplace_back(desc);
             }
 
-            _global_rf_wait_timeout_ns =
-                    std::max(_global_rf_wait_timeout_ns, global_rf_collector->wait_timeout_ms() * 1000L * 1000L);
+            auto wait_time_ns = 1000'000L * (is_scan_operator ? global_rf_collector->scan_wait_timeout_ms()
+                                                              : global_rf_collector->wait_timeout_ms());
+            _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, wait_time_ns);
         }
     }
     if (!all_local_rf_set.empty()) {
@@ -174,6 +177,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // Check curr_op finished again
                 if (curr_op->is_finished()) {
+                    // TODO: need add control flag
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(_mark_operator_finishing(curr_op, runtime_state));
@@ -302,28 +306,23 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     _update_overhead_timer();
 
-    // last root driver cancel the all drivers' execution and notify FE the
-    // fragment's completion but do not unregister the FragmentContext because
-    // some non-root drivers maybe has pending io io tasks hold the reference to
-    // object owned by FragmentContext.
-    if (is_root()) {
-        if (_fragment_ctx->count_down_root_drivers()) {
-            _fragment_ctx->finish();
-            auto status = _fragment_ctx->final_status();
-            _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status,
-                                                                                             true);
-        }
-    }
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
-        _fragment_ctx->destroy_pass_through_chunk_buffer();
+        _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-            QueryContextManager::instance()->remove(query_id);
+            if (_fragment_ctx->enable_resource_group()) {
+                if (_workgroup) {
+                    _workgroup->decr_num_queries();
+                }
+            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

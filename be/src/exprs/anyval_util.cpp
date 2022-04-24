@@ -25,7 +25,6 @@
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
-using starrocks_udf::AnyVal;
 
 FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescriptor& type) {
     FunctionContext::TypeDesc out;

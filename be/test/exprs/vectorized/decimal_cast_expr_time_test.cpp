@@ -4,7 +4,7 @@
 
 #include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
-#include "runtime/vectorized/time_types.h"
+#include "runtime/time_types.h"
 namespace starrocks::vectorized {
 class VectorizedDecimalCastExprTimeTest : public ::testing::Test {
 public:

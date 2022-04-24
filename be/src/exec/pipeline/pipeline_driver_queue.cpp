@@ -251,6 +251,29 @@ void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     wg->driver_queue()->update_statistics(driver);
     wg->increment_real_runtime_ns(runtime_ns);
+
+    // for big query check cpu
+    if (wg->big_query_cpu_core_second_limit()) {
+        wg->incr_total_cpu_cost(runtime_ns);
+        auto* query_ctx = driver->query_ctx();
+        query_ctx->incr_cpu_cost(runtime_ns);
+
+        // Increase the overhead of the source operator alone
+        auto* source_operator = driver->source_operator();
+        int64_t source_operator_last_cpu_time_ns = source_operator->get_last_growth_cpu_time_ns();
+
+        wg->incr_total_cpu_cost(source_operator_last_cpu_time_ns);
+        query_ctx->incr_cpu_cost(source_operator_last_cpu_time_ns);
+        query_ctx->incr_cur_scan_rows_num(source_operator->get_last_scan_rows_num());
+
+        // Increase the overhead of the sink operator alone
+        auto* sink_operator = driver->sink_operator();
+        int64_t sink_operator_last_cpu_time_ns = sink_operator->get_last_growth_cpu_time_ns();
+
+        wg->incr_total_cpu_cost(sink_operator_last_cpu_time_ns);
+        query_ctx->incr_cpu_cost(sink_operator_last_cpu_time_ns);
+    }
+
     workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
 }
 
@@ -288,6 +311,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
 
                 int64_t diff_real_runtime_ns = wg->real_runtime_ns() - origin_real_runtime_ns;
                 workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
+                wg->incr_total_cpu_cost(diff_real_runtime_ns);
             }
         }
         _ready_wgs.emplace(wg);

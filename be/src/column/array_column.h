@@ -149,9 +149,16 @@ public:
         return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
 
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+
+    StatusOr<ColumnPtr> downgrade() override;
+
+    bool has_large_column() const override { return _elements->has_large_column(); }
+
     void check_or_die() const override;
 
 private:
+    // _elements must be NullableColumn
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.

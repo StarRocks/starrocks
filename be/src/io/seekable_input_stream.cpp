@@ -2,18 +2,23 @@
 
 #include "io/seekable_input_stream.h"
 
+#include <fmt/format.h>
+
 namespace starrocks::io {
 
+StatusOr<int64_t> SeekableInputStream::read_at(int64_t offset, void* data, int64_t count) {
+    RETURN_IF_ERROR(seek(offset));
+    return read(data, count);
+}
+
 Status SeekableInputStream::read_at_fully(int64_t offset, void* data, int64_t count) {
-    int64_t nread = 0;
-    while (nread < count) {
-        ASSIGN_OR_RETURN(auto n, read_at(offset + nread, static_cast<uint8_t*>(data) + nread, count - nread));
-        nread += n;
-        if (n == 0) {
-            return Status::IOError("cannot read fully");
-        }
-    }
-    return Status::OK();
+    RETURN_IF_ERROR(seek(offset));
+    return read_fully(data, count);
+}
+
+Status SeekableInputStream::skip(int64_t count) {
+    ASSIGN_OR_RETURN(auto pos, position());
+    return seek(pos + count);
 }
 
 } // namespace starrocks::io

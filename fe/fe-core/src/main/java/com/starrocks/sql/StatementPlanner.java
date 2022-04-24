@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -9,6 +10,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
@@ -33,6 +35,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -46,9 +49,16 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatementPlanner {
+
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
+        }
         Analyzer.analyze(stmt, session);
         PrivilegeChecker.check(stmt, session);
+        if (stmt instanceof QueryStatement) {
+            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+        }
 
         if (stmt instanceof QueryStatement) {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
@@ -149,9 +159,11 @@ public class StatementPlanner {
 
     public static boolean supportedByNewParser(StatementBase statement) {
         return statement instanceof AlterViewStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
@@ -160,11 +172,13 @@ public class StatementPlanner {
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return statement instanceof AlterViewStmt
+                || statement instanceof AdminSetConfigStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
                 || statement instanceof CreateWorkGroupStmt
                 || statement instanceof DmlStmt
+                || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowColumnStmt

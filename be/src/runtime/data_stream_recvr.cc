@@ -21,11 +21,8 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <google/protobuf/stubs/common.h>
-
 #include <condition_variable>
 #include <deque>
-#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,7 +33,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/vectorized/sorted_chunks_merger.h"
+#include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
@@ -448,7 +445,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
@@ -576,7 +573,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
             return Status::OK();
         }
         // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are trasmitted in shared memory without ser/deser
+        // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
         if (_chunk_meta.types.empty() && !use_pass_through) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);

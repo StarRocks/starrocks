@@ -42,6 +42,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
+import java.time.temporal.ChronoField;
 import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
@@ -67,11 +69,16 @@ public class DateLiteral extends LiteralExpr {
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s").toFormatter();
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e").toFormatter();
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s").toFormatter();
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e").toFormatter();
-        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e").toFormatter();
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s")
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e")
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s")
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e")
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e")
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
     }
 
     //Date Literal persist type in meta

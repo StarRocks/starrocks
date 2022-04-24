@@ -36,14 +36,15 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     return status;
 }
 
-void HdfsScanner::_build_file_read_param() {
+Status HdfsScanner::_build_file_read_param() {
     HdfsFileReaderParam& param = _file_read_param;
     std::vector<ColumnPtr>& partition_values = param.partition_values;
 
     // evaluate partition values.
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
         int part_col_idx = _scanner_params._partition_index_in_hdfs_partition_columns[i];
-        auto partition_value_column = _scanner_params.partition_values[part_col_idx]->evaluate(nullptr);
+        ASSIGN_OR_RETURN(auto partition_value_column,
+                         _scanner_params.partition_values[part_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_column->is_constant());
         partition_values.emplace_back(std::move(partition_value_column));
     }
@@ -81,6 +82,8 @@ void HdfsScanner::_build_file_read_param() {
     param.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     param.timezone = _runtime_state->timezone();
     param.stats = &_stats;
+
+    return Status::OK();
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
@@ -90,7 +93,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     if (status.ok()) {
         if (!_conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-            ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -159,7 +162,7 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     auto res = _file->get_numeric_statistics();
     if (!res.ok()) return;
 
-    std::unique_ptr<NumericStatistics> statistics = std::move(res).value();
+    std::unique_ptr<io::NumericStatistics> statistics = std::move(res).value();
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
@@ -223,7 +226,7 @@ void HdfsFileReaderParam::append_not_exised_columns_to_chunk(vectorized::ChunkPt
     }
 }
 
-bool HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
+StatusOr<bool> HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
     // build chunk for evaluation.
@@ -232,7 +235,7 @@ bool HdfsFileReaderParam::should_skip_by_evaluating_not_existed_slots() {
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
-        ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
     }
     return !(chunk->has_rows());
 }

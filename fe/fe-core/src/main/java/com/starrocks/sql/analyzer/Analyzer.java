@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseViewStmt;
@@ -11,6 +12,7 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
@@ -95,6 +97,18 @@ public class Analyzer {
         @Override
         public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt adminSetConfigStmt, ConnectContext session) {
+            AdminSetStmtAnalyzer.analyze(adminSetConfigStmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
+            DropStmtAnalyzer.analyze(statement, session);
             return null;
         }
 

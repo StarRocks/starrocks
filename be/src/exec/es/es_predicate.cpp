@@ -186,7 +186,8 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
         }
 
         // how to process literal
-        auto literal = _pool->add(new VExtLiteral(expr->type().type, _context->evaluate(expr, nullptr)));
+        ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
+        auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value)));
         std::string col = slot_desc->col_name();
 
         // ES does not support non-bool literal pushdown for bool type
@@ -217,7 +218,8 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 return Status::InternalError("build disjuncts failed: number of childs is not 2");
             }
             Expr* expr = conjunct->get_child(1);
-            auto literal = _pool->add(new VExtLiteral(expr->type().type, _context->evaluate(expr, nullptr)));
+            ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
+            auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value)));
             std::vector<ExtLiteral*> query_conditions;
             query_conditions.emplace_back(literal);
             std::vector<ExtColumnDesc> cols;
@@ -284,7 +286,8 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 col = _field_context[col];
             }
 
-            auto literal = _pool->add(new VExtLiteral(type, _context->evaluate(expr, nullptr)));
+            ASSIGN_OR_RETURN(auto expr_col, _context->evaluate(expr, nullptr));
+            auto literal = _pool->add(new VExtLiteral(type, std::move(expr_col)));
             ExtPredicate* predicate = new ExtLikePredicate(TExprNodeType::LIKE_PRED, col, slot_desc->type(), literal);
 
             _disjuncts.push_back(predicate);

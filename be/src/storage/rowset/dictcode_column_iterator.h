@@ -7,9 +7,9 @@
 #include "column/column.h"
 #include "runtime/global_dicts.h"
 #include "simd/gather.h"
+#include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "storage/vectorized/range.h"
 
 namespace starrocks {
 // DictCodeColumnIterator is a wrapper/proxy on another column iterator that will

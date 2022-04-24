@@ -45,13 +45,12 @@ import java.util.UUID;
 
 public class BatchRollupJobTest {
 
-    private static String runningDir = "fe/mocked/BatchRollupJobTest/" + UUID.randomUUID().toString() + "/";
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void setup() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");

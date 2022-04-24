@@ -219,7 +219,8 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
-            const_columns.emplace_back(child->evaluate_const(context));
+            ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
+            const_columns.emplace_back(std::move(child_col));
         }
     }
     auto open_state = [this, scope]() {
@@ -280,16 +281,17 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
 }
 
 void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    if (_func_desc && _func_desc->close) {
-        // Now we only support FRAGMENT LOCAL scope close
+    auto function_close = [this, scope]() {
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
-            _call_udf_close();
+            if (_func_desc && _func_desc->close) {
+                _call_udf_close();
+            }
+            _func_desc.reset();
+            _call_helper.reset();
         }
-    }
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        _func_desc.reset();
-        _call_helper.reset();
-    }
+        return Status::OK();
+    };
+    call_function_in_pthread(state, function_close);
     Expr::close(state, context, scope);
 }
 

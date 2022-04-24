@@ -2,31 +2,18 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeInsertTest {
-    // use a unique dir so that it won't be conflict with other unit test which
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeInsertTest/" + UUID.randomUUID().toString() + "/";
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(runningDir);
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -48,5 +35,7 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into tall(ta) values(min('x'))", "Values clause cannot contain aggregations");
         analyzeFail("insert into tall(ta) values(case min('x') when 'x' then 'x' end)", "Values clause cannot contain aggregations");
         analyzeFail("insert into tall(ta) values(min('x') over())", "Values clause cannot contain window function");
+
+        analyzeSuccess("INSERT INTO tp  PARTITION(p1) VALUES(1,2,3)");
     }
 }

@@ -847,6 +847,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
+            if (tabletMeta.isUseStarOS()) {
+                // replicas are managed by StarOS and cloud storage.
+                continue;
+            }
+
             if (pathHash != -1) {
                 Replica replica = invertedIndex.getReplica(tabletId, beId);
                 if (replica.getPathHash() != pathHash) {
@@ -1215,6 +1220,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (partition == null) {
                 return result;
             }
+            if (partition.isUseStarOS()) {
+                // replicas are managed by StarOS and cloud storage.
+                return result;
+            }
 
             MaterializedIndex index = partition.getIndex(indexId);
             if (index == null) {
@@ -1380,6 +1389,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        if (partition.isUseStarOS()) {
+                            // replicas are managed by StarOS and cloud storage.
+                            continue;
+                        }
+
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.

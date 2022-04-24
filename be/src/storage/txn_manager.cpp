@@ -183,7 +183,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     if (!is_recovery) {
         RowsetMetaPB rowset_meta_pb;
         rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -200,8 +200,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         txn_tablet_map[key][tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
-                  << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " version: " << rowset_ptr->version().first;
+                  << " tablet: " << tablet_id << ", txn_id: " << key.second
+                  << ", rowsetid: " << rowset_ptr->rowset_id();
     }
     return Status::OK();
 }
@@ -235,7 +235,7 @@ Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransa
         // it maybe a fatal error
         rowset_ptr->make_visible(version);
         auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_ptr->rowset_id(), rowset_meta_pb);
+        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -322,21 +322,21 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     int64_t duration_ns = 0;
     SCOPED_RAW_TIMER(&duration_ns);
 
-    std::unordered_set<std::string> persited;
+    std::unordered_set<std::string> persisted;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {
             continue;
         }
         auto path = tablet->data_dir()->path();
         // skip persisted meta.
-        if (persited.find(path) != persited.end()) continue;
+        if (persisted.find(path) != persisted.end()) continue;
 
         auto st = tablet->data_dir()->get_meta()->flush();
         if (!st.ok()) {
             LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
             return st;
         }
-        persited.insert(path);
+        persisted.insert(path);
     }
 
     StarRocksMetrics::instance()->txn_persist_total.increment(1);

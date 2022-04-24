@@ -73,4 +73,16 @@ void ConstColumn::check_or_die() const {
     _data->check_or_die();
 }
 
+StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
+    if (_size > Column::MAX_CAPACITY_LIMIT) {
+        return Status::InternalError("Size of ConstColumn exceed the limit");
+    }
+
+    return upgrade_helper_func(&_data);
+}
+
+StatusOr<ColumnPtr> ConstColumn::downgrade() {
+    return downgrade_helper_func(&_data);
+}
+
 } // namespace starrocks::vectorized

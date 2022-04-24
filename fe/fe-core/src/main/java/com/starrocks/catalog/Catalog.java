@@ -233,6 +233,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -953,11 +954,6 @@ public class Catalog {
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
                 role = storage.getRole();
-                if (role == FrontendNodeType.REPLICA) {
-                    // for compatibility
-                    role = FrontendNodeType.FOLLOWER;
-                }
-
                 nodeName = storage.getNodeName();
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // In normal case, if ROLE file exist, role and nodeName should both exist.
@@ -1015,10 +1011,6 @@ public class Catalog {
                     }
                 }
 
-                if (role == FrontendNodeType.REPLICA) {
-                    // for compatibility
-                    role = FrontendNodeType.FOLLOWER;
-                }
                 break;
             }
 
@@ -1409,8 +1401,10 @@ public class Catalog {
         // add helper sockets
         if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
             for (Frontend fe : frontends.values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
-                    ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                    if (getHaProtocol() instanceof BDBHA) {
+                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                    }
                 }
             }
         }
@@ -1737,7 +1731,7 @@ public class Catalog {
         // load jobs
         int jobSize = dis.readInt();
         long newChecksum = checksum ^ jobSize;
-        Preconditions.checkArgument(jobSize == 0, "Number of job jobs must be 0");
+        Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
 
         // delete jobs
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
@@ -2576,18 +2570,23 @@ public class Catalog {
 
             fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
-            BDBHA bdbha = (BDBHA) haProtocol;
-            if (role == FrontendNodeType.FOLLOWER || role == FrontendNodeType.REPLICA) {
-                bdbha.addHelperSocket(host, editLogPort);
+            if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
             }
+            if (haProtocol instanceof BDBHA) {
+                BDBHA bdbha = (BDBHA) haProtocol;
+                if (role == FrontendNodeType.FOLLOWER) {
+                    bdbha.addHelperSocket(host, editLogPort);
+                    bdbha.addUnstableNode(host, getFollowerCnt());
+                }
 
-            // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
-            // will remain in bdb.
-            // So we should remove those nodes before joining the group,
-            // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
-            // xxx. It conflicts with the socket already used by the member: xxxx)
-            bdbha.removeNodeIfExist(host, editLogPort);
+                // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
+                // will remain in bdb.
+                // So we should remove those nodes before joining the group,
+                // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
+                // xxx. It conflicts with the socket already used by the member: xxxx)
+                bdbha.removeNodeIfExist(host, editLogPort);
+            }
 
             editLog.logAddFrontend(fe);
         } finally {
@@ -2613,9 +2612,12 @@ public class Catalog {
             frontends.remove(fe.getNodeName());
             removedFrontends.add(fe.getNodeName());
 
-            if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 haProtocol.removeElectableNode(fe.getNodeName());
                 helperNodes.remove(Pair.create(host, port));
+
+                BDBHA ha = (BDBHA) haProtocol;
+                ha.removeUnstableNode(host, getFollowerCnt());
             }
             editLog.logRemoveFrontend(fe);
         } finally {
@@ -2648,6 +2650,16 @@ public class Catalog {
             }
         }
         return null;
+    }
+
+    public int getFollowerCnt() {
+        int cnt = 0;
+        for (Frontend fe : frontends.values()) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                cnt++;
+            }
+        }
+        return cnt;
     }
 
     // The interface which DdlExecutor needs.
@@ -3837,6 +3849,7 @@ public class Catalog {
                         null,
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
+                        table.enablePersistentIndex(),
                         table.getPartitionInfo().getTabletType(partition.getId()));
                 tasks.add(task);
             } else {
@@ -3860,6 +3873,7 @@ public class Catalog {
                             null,
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
+                            table.enablePersistentIndex(),
                             table.getPartitionInfo().getTabletType(partition.getId()));
                     tasks.add(task);
                 }
@@ -4038,6 +4052,10 @@ public class Catalog {
         boolean isInMemory =
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         olapTable.setIsInMemory(isInMemory);
+
+        boolean enablePersistentIndex =
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+        olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -4650,6 +4668,10 @@ public class Catalog {
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
+            // enable_persistent_index
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).append("\" = \"");
+            sb.append(olapTable.enablePersistentIndex()).append("\"");            
+
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
@@ -4747,7 +4769,7 @@ public class Catalog {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
@@ -5230,7 +5252,7 @@ public class Catalog {
                 return;
             }
             frontends.put(fe.getNodeName(), fe);
-            if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 // DO NOT add helper sockets here, cause BDBHA is not instantiated yet.
                 // helper sockets will be added after start BDBHA
                 // But add to helperNodes, just for show
@@ -5249,8 +5271,7 @@ public class Catalog {
                 LOG.error(frontend.toString() + " does not exist.");
                 return;
             }
-            if (removedFe.getRole() == FrontendNodeType.FOLLOWER
-                    || removedFe.getRole() == FrontendNodeType.REPLICA) {
+            if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
             }
 
@@ -5470,7 +5491,8 @@ public class Catalog {
                         if (dataProperty.getStorageMedium() == TStorageMedium.SSD
                                 && dataProperty.getCooldownTimeMs() < currentTimeMs) {
                             // expire. change to HDD.
-                            partitionInfo.setDataProperty(partition.getId(), new DataProperty(TStorageMedium.HDD));
+                            DataProperty hdd = new DataProperty(TStorageMedium.HDD);
+                            partitionInfo.setDataProperty(partition.getId(), hdd);
                             storageMediumMap.put(partitionId, TStorageMedium.HDD);
                             LOG.debug("partition[{}-{}-{}] storage medium changed from SSD to HDD",
                                     dbId, tableId, partitionId);
@@ -5479,7 +5501,7 @@ public class Catalog {
                             ModifyPartitionInfo info =
                                     new ModifyPartitionInfo(db.getId(), olapTable.getId(),
                                             partition.getId(),
-                                            DataProperty.DEFAULT_DATA_PROPERTY,
+                                            hdd,
                                             (short) -1,
                                             partitionInfo.getIsInMemory(partition.getId()));
                             editLog.logModifyPartition(info);
@@ -6188,6 +6210,23 @@ public class Catalog {
                 properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
     }
 
+    public void modifyTableEnablePersistentIndexMeta(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildEnablePersistentIndex();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyEnablePersistentIndex(info);
+
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
@@ -6208,6 +6247,14 @@ public class Catalog {
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         editLog.logModifyInMemory(info);
+    }
+
+    public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties, TTabletMetaType metaType) {
+        if (metaType == TTabletMetaType.INMEMORY) {
+            modifyTableInMemoryMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            modifyTableEnablePersistentIndexMeta(db, table, properties);
+        }
     }
 
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
@@ -6280,6 +6327,8 @@ public class Catalog {
                             partitionInfo.setReplicationNum(partition.getId(), tableProperty.getReplicationNum());
                         }
                     }
+                } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
+                    olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 }
             }
         } finally {
@@ -6672,7 +6721,7 @@ public class Catalog {
         db.readLock();
         try {
             Table tbl = db.getTable(tableName);
-            if (!(tbl instanceof HiveMetaStoreTable)) {
+            if (tbl == null || !(tbl instanceof HiveMetaStoreTable)) {
                 throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
             table = (HiveMetaStoreTable) tbl;

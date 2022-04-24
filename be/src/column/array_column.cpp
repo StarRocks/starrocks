@@ -15,6 +15,7 @@ namespace starrocks::vectorized {
 
 void ArrayColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _elements->size());
+    DCHECK(_elements->is_nullable());
     _offsets->check_or_die();
     _elements->check_or_die();
 }
@@ -490,6 +491,18 @@ std::string ArrayColumn::debug_string() const {
         ss << debug_item(i);
     }
     return ss.str();
+}
+
+StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
+    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::InternalError("Size of ArrayColumn exceed the limit");
+    }
+
+    return upgrade_helper_func(&_elements);
+}
+
+StatusOr<ColumnPtr> ArrayColumn::downgrade() {
+    return downgrade_helper_func(&_elements);
 }
 
 } // namespace starrocks::vectorized

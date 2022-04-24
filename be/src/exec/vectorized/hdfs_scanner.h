@@ -161,7 +161,7 @@ struct HdfsFileReaderParam {
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
     void append_not_exised_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
-    bool should_skip_by_evaluating_not_existed_slots();
+    StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
@@ -230,7 +230,7 @@ private:
     bool _is_open = false;
     bool _is_closed = false;
     bool _keep_priority = false;
-    void _build_file_read_param();
+    Status _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
 

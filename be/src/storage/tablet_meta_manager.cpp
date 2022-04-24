@@ -420,18 +420,17 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
     return store->get_meta()->write_batch(&wb);
 }
 
-Status TabletMetaManager::traverse_headers(KVStore* meta,
-                                           std::function<bool(long, long, const std::string&)> const& func) {
+Status TabletMetaManager::walk(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
-        // TODO: avoid converting to std::string
-        std::string value_str(value);
         TTabletId tablet_id;
         TSchemaHash schema_hash;
         if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
             LOG(WARNING) << "invalid tablet_meta key:" << key;
             return true;
         }
-        return func(tablet_id, schema_hash, value_str);
+        return func(tablet_id, schema_hash, value);
     };
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
 }
@@ -801,7 +800,8 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
-                                              vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
+                                              vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -824,6 +824,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
         auto dv_value = rssid_delvec.second->save();
         st = batch.Put(handle, dv_key, dv_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    if (enable_persistent_index) {
+        auto meta_key = encode_persistent_index_key(tsid.tablet_id);
+        auto meta_value = index_meta.SerializeAsString();
+        st = batch.Put(handle, meta_key, meta_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);

@@ -471,6 +471,7 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
 
     RuntimeProfile* _parent;
 
@@ -491,9 +492,9 @@ private:
     /// All counters in this profile must be of unit AveragedCounter.
     bool _is_averaged_profile;
 
-    // Map from counter names to counters.  The profile owns the memory for the
-    // counters.
-    typedef std::map<std::string, Counter*> CounterMap;
+    // Map from counter names to counters and parent counter names.
+    // The profile owns the memory for the counters.
+    typedef std::map<std::string, std::pair<Counter*, std::string>> CounterMap;
     CounterMap _counter_map;
 
     // Map from parent counter name to a set of child counter name.

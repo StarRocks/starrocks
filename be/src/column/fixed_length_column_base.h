@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
@@ -130,6 +131,14 @@ public:
 
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
+    // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
+    // access the item, so we should use 2^32 as the limit
+    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+
+    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+
+    bool has_large_column() const override { return false; }
+
     uint32_t serialize(size_t idx, uint8_t* pos) override;
 
     uint32_t serialize_default(uint8_t* pos) override;
@@ -190,7 +199,9 @@ public:
         _data.clear();
     }
 
-    bool reach_capacity_limit() const override { return _data.size() >= Column::MAX_CAPACITY_LIMIT; }
+    // The `_data` support one size(> 2^32), but some interface such as update_rows() will use index of uint32_t to
+    // access the item, so we should use 2^32 as the limit
+    bool reach_capacity_limit() const override { return _data.size() > Column::MAX_CAPACITY_LIMIT; }
 
     void check_or_die() const override {}
 

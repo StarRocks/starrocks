@@ -28,7 +28,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/tablet_schema_map.h"
-#include "storage/vectorized/type_utils.h"
+#include "storage/type_utils.h"
 
 namespace starrocks {
 

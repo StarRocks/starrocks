@@ -11,11 +11,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/vectorized/olap_scan_node.h"
+#include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
+#include "storage/predicate_parser.h"
+#include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/column_predicate_rewriter.h"
-#include "storage/vectorized/predicate_parser.h"
-#include "storage/vectorized/projection_iterator.h"
 
 namespace starrocks::vectorized {
 
@@ -267,7 +267,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()

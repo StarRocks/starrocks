@@ -95,7 +95,7 @@ public:
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
-    static Status traverse_headers(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func);
+    static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
@@ -143,7 +143,8 @@ public:
 
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
-                                      std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
+                                      std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
