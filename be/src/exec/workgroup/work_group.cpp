@@ -18,6 +18,7 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
           _version(version),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
+          _mem_limit(-1),
           _concurrency(concurrency),
           _type(type) {}
 
@@ -32,6 +33,7 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     } else {
         _memory_limit = -1;
     }
+    _mem_limit = -1;
     if (twg.__isset.concurrency_limit) {
         _concurrency = twg.concurrency_limit;
     } else {
@@ -69,8 +71,8 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 
 void WorkGroup::init() {
     _mem_limit = ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
-    _mem_tracker =
-            std::make_shared<starrocks::MemTracker>(_mem_limit, _name, ExecEnv::GetInstance()->query_pool_mem_tracker());
+    _mem_tracker = std::make_shared<starrocks::MemTracker>(_mem_limit, _name,
+                                                           ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_queue = std::make_unique<pipeline::QuerySharedDriverQueueWithoutLock>();
     _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
 }
@@ -118,29 +120,36 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
-    if(!_init_metrics) {
-        _init_metrics=true;
-        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook", [this] {update_metrics();});
-    }
-    if(_wg_metrics.count(wg->name())==0) {
+    std::call_once(StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
+                                                                          [this] { update_metrics(); }));
+
+    if (_wg_metrics.count(wg->name()) == 0) {
         //cpu limit
-        DoubleGauge* resource_group_cpu_limit_ratio = new DoubleGauge(MetricUnit::PERCENT);
+        std::unique_ptr<starrocks::DoubleGauge> resource_group_cpu_limit_ratio(new DoubleGauge(MetricUnit::PERCENT));
         //cpu concurrent
-        DoubleGauge* resource_group_cpu_use_ratio = new DoubleGauge(MetricUnit::PERCENT);
+        std::unique_ptr<starrocks::DoubleGauge> resource_group_cpu_use_ratio(new DoubleGauge(MetricUnit::PERCENT));
         //mem limit
-        IntGauge* resource_group_mem_limit_bytes= new IntGauge(MetricUnit::BYTES);
+        std::unique_ptr<starrocks::IntGauge> resource_group_mem_limit_bytes(new IntGauge(MetricUnit::BYTES));
         //mem concurrent
-        IntGauge* resource_group_mem_allocated_bytes = new IntGauge(MetricUnit::BYTES);
+        std::unique_ptr<starrocks::IntGauge> resource_group_mem_allocated_bytes(new IntGauge(MetricUnit::BYTES));
 
-        _wg_cpu_limit_metrics.emplace(wg->name(), resource_group_cpu_limit_ratio);
-        _wg_cpu_metrics.emplace(wg->name(), resource_group_cpu_use_ratio);
-        _wg_mem_limit_metrics.emplace(wg->name(), resource_group_mem_limit_bytes);
-        _wg_mem_metrics.emplace(wg->name(), resource_group_mem_allocated_bytes);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_cpu_limit_ratio.get());
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_use_ratio",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_cpu_use_ratio.get());
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_limit_bytes",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_mem_limit_bytes.get());
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_mem_allocated_bytes.get());
 
-        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()), resource_group_cpu_limit_ratio);
-        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()), resource_group_cpu_use_ratio);
-        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_limit_bytes", MetricLabels().add("name", wg->name()), resource_group_mem_limit_bytes);
-        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes", MetricLabels().add("name", wg->name()), resource_group_mem_allocated_bytes);
+        _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
+        _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
+        _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
+        _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
     }
     _wg_metrics.emplace(wg->name(), wg->unique_id());
 }
@@ -148,7 +157,7 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
 void WorkGroupManager::update_metrics() {
     for (auto& wg_metric : _wg_metrics) {
         WorkGroupPtr wg = _workgroups[wg_metric.second];
-        if(wg != nullptr) {
+        if (wg != nullptr) {
             _wg_cpu_limit_metrics[wg_metric.first]->set_value(wg->get_cpu_expected_use_ratio());
             _wg_cpu_metrics[wg_metric.first]->set_value(wg->get_cpu_actual_use_ratio());
             _wg_mem_limit_metrics[wg_metric.first]->set_value(wg->mem_limit());
@@ -423,4 +432,3 @@ bool WorkerOwnerManager::should_yield(int worker_id, const WorkGroupPtr& running
 
 } // namespace workgroup
 } // namespace starrocks
-    

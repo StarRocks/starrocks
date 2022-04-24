@@ -12,8 +12,8 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
-#include "util/priority_thread_pool.hpp"
 #include "util/metrics.h"
+#include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -130,7 +130,7 @@ public:
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
 
-    double mem_limit() const ;
+    double mem_limit() const;
 
 private:
     std::string _name;
@@ -253,13 +253,13 @@ private:
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
 
-    bool _init_metrics = false;
+    std::once_flag _init_metrics;
     std::unordered_map<std::string, int128_t> _wg_metrics;
 
-    std::unordered_map<std::string, starrocks::DoubleGauge*> _wg_cpu_limit_metrics;
-    std::unordered_map<std::string, starrocks::DoubleGauge*> _wg_cpu_metrics;
-    std::unordered_map<std::string, starrocks::IntGauge*> _wg_mem_limit_metrics;
-    std::unordered_map<std::string, starrocks::IntGauge*> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
 };
 
 class DefaultWorkGroupInitialization {
