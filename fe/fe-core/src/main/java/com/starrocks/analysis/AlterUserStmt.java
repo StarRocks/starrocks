@@ -19,6 +19,7 @@ import org.apache.logging.log4j.Logger;
 public class AlterUserStmt extends DdlStmt {
     private static final Logger LOG = LogManager.getLogger(AlterUserStmt.class);
 
+    private boolean ifExists;
     private UserIdentity userIdent;
     private String password;
     private byte[] scramblePassword;
@@ -37,6 +38,17 @@ public class AlterUserStmt extends DdlStmt {
         authPlugin = userDesc.getAuthPlugin();
         authString = userDesc.getAuthString();
     }
+
+    public AlterUserStmt(boolean ifExists, UserDesc userDesc) {
+        this.ifExists = ifExists;
+        userIdent = userDesc.getUserIdent();
+        password = userDesc.getPassword();
+        isPasswordPlain = userDesc.isPasswordPlain();
+        authPlugin = userDesc.getAuthPlugin();
+        authString = userDesc.getAuthString();
+    }
+
+    public boolean isSetIfExists() { return ifExists; }
 
     public byte[] getPassword() {
         return scramblePassword;

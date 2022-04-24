@@ -512,7 +512,7 @@ public class Auth implements Writable {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
-                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), false);
+                new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), stmt.isIfNotExist(), false);
     }
 
     // alter user
@@ -521,6 +521,18 @@ public class Auth implements Writable {
         if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
+
+        // TODO: move into setPasswordInternal?
+        writeLock();
+        try {
+            if (stmt.isSetIfExists() && !doesUserExist(stmt.getUserIdent())) {
+                LOG.info("user non exists, ignored to alter user: {}", stmt.getUserIdent().getQualifiedUser());
+                return;
+            }
+        } finally {
+            writeUnlock();
+        }
+
         // alter user only support change password till now
         setPasswordInternal(stmt.getUserIdent(),
                 new Password(stmt.getPassword(), authPlugin, stmt.getUserForAuthPlugin()), null, true, false, false);
@@ -528,7 +540,7 @@ public class Auth implements Writable {
 
     public void replayCreateUser(PrivInfo privInfo) {
         try {
-            createUserInternal(privInfo.getUserIdent(), privInfo.getRole(), privInfo.getPasswd(), true);
+            createUserInternal(privInfo.getUserIdent(), privInfo.getRole(), privInfo.getPasswd(), false, true);
         } catch (DdlException e) {
             LOG.error("should not happen", e);
         }
@@ -537,12 +549,12 @@ public class Auth implements Writable {
     /*
      * Do following steps:
      * 1. Check does specified role exist. If not, throw exception.
-     * 2. Check does user already exist. If yes, throw exception.
+     * 2. Check does user already exist. If yes && ignoreIfExists, just return. Otherwise, throw exception.
      * 3. set password for specified user.
      * 4. grant privs of role to user, if role is specified.
      */
     private void createUserInternal(UserIdentity userIdent, String roleName, Password password,
-                                    boolean isReplay) throws DdlException {
+                                    boolean ignoreIfExists, boolean isReplay) throws DdlException {
         writeLock();
         try {
             // 1. check if role exist
@@ -556,6 +568,10 @@ public class Auth implements Writable {
 
             // 2. check if user already exist
             if (userPrivTable.doesUserExist(userIdent)) {
+                if (ignoreIfExists) {
+                    LOG.debug("user exists, ignored to create user: {}, is replay: {}", userIdent, isReplay);
+                    return;
+                }
                 throw new DdlException("User " + userIdent + " already exist");
             }
 
@@ -623,24 +639,27 @@ public class Auth implements Writable {
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 
-        writeLock(); 
-        try {
-            if (!doesUserExist(stmt.getUserIdentity())) {
-                throw new DdlException(String.format("User `%s`@`%s` does not exist.", user, host));
-            }
-            dropUserInternal(stmt.getUserIdentity(), false);
-        } finally {
-            writeUnlock();
-        }
+        dropUserInternal(stmt.getUserIdentity(), stmt.isSetIfExists(), false);
     }
 
-    public void replayDropUser(UserIdentity userIdent) {
-        dropUserInternal(userIdent, true);
+    public void replayDropUser(UserIdentity userIdent) throws DdlException {
+        dropUserInternal(userIdent, false, true);
     }
 
-    private void dropUserInternal(UserIdentity userIdent, boolean isReplay) {
+    private void dropUserInternal(UserIdentity userIdent, boolean ignoreIfNonExists, boolean isReplay) throws DdlException {
         writeLock();
         try {
+            // check if user exists
+            if (!doesUserExist(userIdent)) {
+                if (ignoreIfNonExists) {
+                    LOG.info("user non exists, ignored to drop user: {}, is replay: {}",
+                            userIdent.getQualifiedUser(), isReplay);
+                    return;
+                }
+                throw new DdlException(String.format("User `%s`@`%s` does not exist.",
+                        userIdent.getQualifiedUser(), userIdent.getHost()));
+            }
+
             // we don't check if user exists
             userPrivTable.dropUser(userIdent);
             dbPrivTable.dropUser(userIdent);
@@ -1014,21 +1033,26 @@ public class Auth implements Writable {
 
     // create role
     public void createRole(CreateRoleStmt stmt) throws DdlException {
-        createRoleInternal(stmt.getQualifiedRole(), false);
+        createRoleInternal(stmt.getQualifiedRole(), stmt.isSetIfNotExists(), false);
     }
 
     public void replayCreateRole(PrivInfo info) {
         try {
-            createRoleInternal(info.getRole(), true);
+            createRoleInternal(info.getRole(), false, true);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
     }
 
-    private void createRoleInternal(String role, boolean isReplay) throws DdlException {
+    private void createRoleInternal(String role, boolean ignoreIfExists, boolean isReplay) throws DdlException {
         Role emptyPrivsRole = new Role(role);
         writeLock();
         try {
+            if (ignoreIfExists && roleManager.getRole(role) != null) {
+                LOG.info("role exists, ignored to create role: {}, is replay: {}", role, isReplay);
+                return;
+            }
+
             roleManager.addRole(emptyPrivsRole, true /* err on exist */);
 
             if (!isReplay) {
@@ -1043,20 +1067,25 @@ public class Auth implements Writable {
 
     // drop role
     public void dropRole(DropRoleStmt stmt) throws DdlException {
-        dropRoleInternal(stmt.getQualifiedRole(), false);
+        dropRoleInternal(stmt.getQualifiedRole(), stmt.isSetIfExists(), false);
     }
 
     public void replayDropRole(PrivInfo info) {
         try {
-            dropRoleInternal(info.getRole(), true);
+            dropRoleInternal(info.getRole(), false, true);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
     }
 
-    private void dropRoleInternal(String role, boolean isReplay) throws DdlException {
+    private void dropRoleInternal(String role, boolean ignoreIfNonExists, boolean isReplay) throws DdlException {
         writeLock();
         try {
+            if (ignoreIfNonExists && roleManager.getRole(role) == null) {
+                LOG.info("role non exists, ignored to drop role: {}, is replay: {}", role, isReplay);
+                return;
+            }
+
             roleManager.dropRole(role, true /* err on non exist */);
 
             if (!isReplay) {
@@ -1336,13 +1365,13 @@ public class Auth implements Writable {
         }
     }
 
-    public void dropUserOfCluster(String clusterName, boolean isReplay) {
+    public void dropUserOfCluster(String clusterName, boolean isReplay) throws DdlException {
         writeLock();
         try {
             Set<UserIdentity> allUserIdents = getAllUserIdents(true);
             for (UserIdentity userIdent : allUserIdents) {
                 if (userIdent.getQualifiedUser().startsWith(clusterName)) {
-                    dropUserInternal(userIdent, isReplay);
+                    dropUserInternal(userIdent, false, isReplay);
                 }
             }
         } finally {
@@ -1376,7 +1405,7 @@ public class Auth implements Writable {
         try {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");
             rootUser.setIsAnalyzed();
-            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */);
+            createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), false /* ignore if exists */, true /* is replay */);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
