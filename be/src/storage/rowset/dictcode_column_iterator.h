@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "runtime/global_dicts.h"
+#include "simd/gather.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized/range.h"
@@ -137,14 +138,18 @@ public:
 
         auto& res_data = *container;
         res_data.resize(size);
-        for (size_t i = 0; i < size; ++i) {
 #ifndef NDEBUG
+        for (size_t i = 0; i < size; ++i) {
             DCHECK(codes[i] <= vectorized::DICT_DECODE_MAX_SIZE);
             if (codes[i] < 0) {
                 DCHECK(output_nullable);
             }
+        }
 #endif
-            res_data[i] = _local_to_global[codes[i]];
+        {
+            using namespace vectorized;
+            // res_data[i] = _local_to_global[codes[i]];
+            SIMDGather::gather(res_data.data(), _local_to_global, codes, DICT_DECODE_MAX_SIZE, size);
         }
 
         if (output_nullable) {

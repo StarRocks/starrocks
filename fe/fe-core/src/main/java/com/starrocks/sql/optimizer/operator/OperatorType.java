@@ -82,6 +82,7 @@ public enum OperatorType {
     IN,
     IS_NULL,
     LIKE,
+    DICT_MAPPING,
 
     /**
      * PATTERN
