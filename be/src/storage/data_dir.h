@@ -40,7 +40,6 @@ namespace starrocks {
 
 class Tablet;
 class TabletManager;
-class TabletMeta;
 class TxnManager;
 
 // A DataDir used to manage data in same path.
