@@ -28,9 +28,11 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.RevokeStmt;
+import com.starrocks.analysis.RevokeRoleStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
@@ -1191,6 +1193,82 @@ public class AuthTest {
         }
         Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
     }
+
+    @Test
+    public void testGrantRevokeRole() throws Exception {
+        // 1. create user with no role specified
+        UserIdentity userIdentity = new UserIdentity("test_user", "%");
+        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
+        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserStmt.analyze(analyzer);
+        auth.createUser(createUserStmt);
+
+        // check if select & load privilege both not granted
+        String dbName = "default_cluster:db1";
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(0, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 2. add a role with select privilege
+        String selectRoleName = new String("select_role");
+        CreateRoleStmt createRoleStmt = new CreateRoleStmt(selectRoleName);
+        createRoleStmt.analyze(analyzer);
+        Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+        auth.createRole(createRoleStmt);
+        Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
+
+        // 3. grant select privilege to role
+        TablePattern tablePattern = new TablePattern("db1", "*");
+        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
+        GrantStmt grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+
+        // 4. grant role to user
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
+        grantRoleStmt.analyze(analyzer);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+
+
+        // 5. add a new role with load privilege
+        String loadRoleName = "load_role";
+        createRoleStmt = new CreateRoleStmt(loadRoleName);
+        createRoleStmt.analyze(analyzer);
+        auth.createRole(createRoleStmt);
+
+        // 6. grant load privilege to role
+        privileges = Lists.newArrayList(AccessPrivilege.LOAD_PRIV);
+        grantStmt = new GrantStmt(null, loadRoleName, tablePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
+        // 7. grant role to user
+        grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
+        grantRoleStmt.analyze(analyzer);
+        auth.grantRole(grantRoleStmt);
+
+        // check if select & load privilege both granted
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
+
+
+        // 8. revoke load from user
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
+        revokeRoleStmt.analyze(analyzer);
+        auth.revokeRole(revokeRoleStmt);
+
+        // check if select privilege granted, load privilege not granted
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+        Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
+        Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+     }
 
     @Test
     public void testResource() {

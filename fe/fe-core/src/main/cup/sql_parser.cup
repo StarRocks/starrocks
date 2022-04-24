@@ -1726,6 +1726,10 @@ grant_stmt ::=
     {:
         RESULT = new GrantStmt(null, role, resourcePattern, privs);
     :}
+    | KW_GRANT KW_ROLE ident_or_text:role KW_TO user_identity:userId
+    {:
+        RESULT = new GrantRoleStmt(role, userId);
+    :}
     ;
 
 tbl_pattern ::=
@@ -1778,6 +1782,10 @@ revoke_stmt ::=
     | KW_REVOKE privilege_list:privs KW_ON KW_RESOURCE resource_pattern:resourcePattern KW_FROM KW_ROLE STRING_LITERAL:role
     {:
         RESULT = new RevokeStmt(null, role, resourcePattern, privs);
+    :}
+    | KW_REVOKE KW_ROLE STRING_LITERAL:role KW_FROM user_identity:userId
+    {:
+        RESULT = new RevokeRoleStmt(role, userId);
     :}
     ;
 

@@ -67,6 +67,7 @@ import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
@@ -77,6 +78,7 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.RevokeRoleStmt;
 import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -147,6 +149,13 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropUserStmt) {
             DropUserStmt stmt = (DropUserStmt) ddlStmt;
             catalog.getAuth().dropUser(stmt);
+        } else if (ddlStmt instanceof RevokeRoleStmt) {
+            // this condition must go first because RevokeRoleStmt is a subclass of GrantRoleStmt
+            RevokeRoleStmt stmt = (RevokeRoleStmt) ddlStmt;
+            catalog.getAuth().revokeRole(stmt);
+        } else if (ddlStmt instanceof GrantRoleStmt) {
+            GrantRoleStmt stmt = (GrantRoleStmt) ddlStmt;
+            catalog.getAuth().grantRole(stmt);
         } else if (ddlStmt instanceof GrantStmt) {
             GrantStmt stmt = (GrantStmt) ddlStmt;
             catalog.getAuth().grant(stmt);
