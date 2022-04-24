@@ -26,7 +26,9 @@
 #include <roaring/roaring.hh>
 #include <utility>
 
+#include "column/column_hash.h"
 #include "env/env.h"
+#include "exec/vectorized/aggregate/agg_hash_map.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
@@ -40,14 +42,64 @@ namespace starrocks {
 
 namespace {
 
+static const size_t roaring_get_size_fastpath_threshold = 1024;
+
+class RoaringWrapper {
+public:
+    explicit RoaringWrapper(rowid_t rid)
+            : _roaring(std::move(Roaring::bitmapOf(1, rid))),
+              _old_size(1),
+              _size_changed(true),
+              _enable_get_size_in_Bytes(false){};
+    Roaring& roaring() { return _roaring; }
+    uint64_t roaring_size() const { return _roaring.getSizeInBytes(false); }
+    uint64_t old_size() const { return _old_size; }
+    void set_old_size(uint64_t size) const { _old_size = size; }
+    bool size_changed() const { return _size_changed; }
+    void set_size_changed() const { _size_changed = true; }
+    void unset_size_changed() const { _size_changed = false; }
+
+    void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>& size_changed_roaring_vec) {
+        _roaring.add(rid);
+        if (_enable_get_size_in_Bytes) {
+            if (_size_changed == false) {
+                size_changed_roaring_vec.push_back(this);
+            }
+            _size_changed = true;
+        } else {
+            // roaring_get_size fastpath:
+            // If _old_size is less than roaring_get_size_fastpath_threshold, _old_size represents the cardinality of
+            // roaring bitmap, and we use _old_size * (sizeof(uint32_t) + 1) to approximate estimated true size of roaring bitmap.
+            // The reason for this optimization here is that the getSizeInBytes function in roaring bitmap is very costly, when
+            // the cardinality of the bitmap index is relatively large, most of the bitmap keys can take this fastpath.
+            _old_size++;
+            if (LIKELY(_old_size < roaring_get_size_fastpath_threshold)) {
+                reverted_index_size += sizeof(uint32_t);
+            } else {
+                reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
+                _old_size = 0;
+                _size_changed = true;
+                _enable_get_size_in_Bytes = true;
+                size_changed_roaring_vec.push_back(this);
+            }
+        }
+    }
+
+private:
+    Roaring _roaring;
+    mutable uint64_t _old_size;
+    mutable bool _size_changed;
+    bool _enable_get_size_in_Bytes;
+};
+
 template <typename CppType>
 struct BitmapIndexTraits {
-    using MemoryIndexType = std::map<CppType, Roaring>;
+    using MemoryIndexType = std::map<CppType, RoaringWrapper>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
-    using MemoryIndexType = std::map<Slice, Roaring, Slice::Comparator>;
+    using MemoryIndexType = std::map<Slice, RoaringWrapper, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -69,32 +121,27 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info)
-            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _size_changed(false) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)), _reverted_index_size(0) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);
         for (size_t i = 0; i < count; ++i) {
-            add_value(unaligned_load<CppType>(p));
+            const CppType& value = unaligned_load<CppType>(p);
+            auto it = _mem_index.find(value);
+            if (it != _mem_index.end()) {
+                it->second.add_rid(_rid, _reverted_index_size, _size_changed_roaring_vec);
+            } else {
+                // new value, copy value and insert new key->bitmap pair
+                CppType new_value;
+                _typeinfo->deep_copy(&new_value, &value, &_pool);
+                _mem_index.emplace(new_value, RoaringWrapper(_rid));
+                _reverted_index_size += sizeof(uint32_t) * 2 + 1;
+            }
+            _rid++;
             p++;
         }
-    }
-
-    void add_value(const CppType& value) {
-        auto it = _mem_index.find(value);
-        if (it != _mem_index.end()) {
-            // exiting value, update bitmap
-            it->second.add(_rid);
-        } else {
-            // new value, copy value and insert new key->bitmap pair
-            CppType new_value;
-            _typeinfo->deep_copy(&new_value, &value, &_pool);
-            _mem_index.insert({new_value, Roaring::bitmapOf(1, _rid)});
-        }
-        _size_changed = true;
-        _rid++;
     }
 
     void add_nulls(uint32_t count) override {
@@ -126,7 +173,7 @@ public:
         { // write bitmaps
             std::vector<Roaring*> bitmaps;
             for (auto& it : _mem_index) {
-                bitmaps.push_back(&(it.second));
+                bitmaps.push_back(&(it.second.roaring()));
             }
             if (!_null_bitmap.isEmpty()) {
                 bitmaps.push_back(&_null_bitmap);
@@ -171,13 +218,13 @@ public:
     uint64_t size() const override {
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
-        if (_size_changed) {
-            _reverted_index_size = 0;
-            for (const auto& it : _mem_index) {
-                _reverted_index_size += it.second.getSizeInBytes(false);
-            }
-            _size_changed = false;
+        for (RoaringWrapper* roaring_wrapper : _size_changed_roaring_vec) {
+            uint64_t new_size = roaring_wrapper->roaring_size();
+            _reverted_index_size += (new_size - roaring_wrapper->old_size());
+            roaring_wrapper->set_old_size(new_size);
+            roaring_wrapper->unset_size_changed();
         }
+        _size_changed_roaring_vec.clear();
         size += _reverted_index_size;
         size += _mem_index.size() * sizeof(CppType);
         size += _pool.total_allocated_bytes();
@@ -186,14 +233,18 @@ public:
 
 private:
     TypeInfoPtr _typeinfo;
-    mutable uint64_t _reverted_index_size;
     rowid_t _rid = 0;
+
     // row id list for null value
     Roaring _null_bitmap;
     // unique value to its row id list
     MemoryIndexType _mem_index;
     MemPool _pool;
-    mutable bool _size_changed;
+
+    // roaring bitmap size
+    mutable uint64_t _reverted_index_size = 0;
+    // size changed roaring bitmap in current block
+    mutable vector<RoaringWrapper*> _size_changed_roaring_vec;
 };
 
 } // namespace
