@@ -24,13 +24,13 @@ public class AdminSetReplicaStatusStmtAnalyzer {
                                                         ConnectContext session) {
             try {
                 checkProperties(adminSetReplicaStatusStmt);
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage(), e);
+            } catch (SemanticException e) {
+                throw e;
             }
             return null;
         }
 
-        private void checkProperties(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt) throws AnalysisException {
+        private void checkProperties(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt) {
             long tabletId = -1;
             long backendId = -1;
             ReplicaStatus status = null;
@@ -43,26 +43,26 @@ public class AdminSetReplicaStatusStmtAnalyzer {
                     try {
                         tabletId = Long.valueOf(val);
                     } catch (NumberFormatException e) {
-                        throw new AnalysisException("Invalid tablet id format: " + val);
+                        throw new SemanticException("Invalid tablet id format: " + val);
                     }
                 } else if (key.equalsIgnoreCase("backend_id")) {
                     try {
                         backendId = Long.valueOf(val);
                     } catch (NumberFormatException e) {
-                        throw new AnalysisException("Invalid backend id format: " + val);
+                        throw new SemanticException("Invalid backend id format: " + val);
                     }
                 } else if (key.equalsIgnoreCase("status")) {
                     status = ReplicaStatus.valueOf(val.toUpperCase());
                     if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
-                        throw new AnalysisException("Do not support setting replica status as " + val);
+                        throw new SemanticException("Do not support setting replica status as " + val);
                     }
                 } else {
-                    throw new AnalysisException("Unknown property: " + key);
+                    throw new SemanticException("Unknown property: " + key);
                 }
             }
 
             if (tabletId == -1 || backendId == -1 || status == null) {
-                throw new AnalysisException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
+                throw new SemanticException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
             }
         }
     }
