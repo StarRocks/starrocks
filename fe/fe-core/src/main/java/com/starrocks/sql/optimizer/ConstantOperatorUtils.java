@@ -2,10 +2,12 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.util.OptionalDouble;
+
+import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 /**
  * TYPE            |  JAVA_TYPE
@@ -33,28 +35,40 @@ import java.time.LocalDateTime;
 public class ConstantOperatorUtils {
 
     public static double getDoubleValue(ConstantOperator constantOperator) {
-        if (constantOperator.getType().isInt()) {
-            return (int) constantOperator.getValue();
-        } else if (constantOperator.getType().isTinyint()) {
-            return (byte) constantOperator.getValue();
-        } else if (constantOperator.getType().isSmallint()) {
-            return (short) constantOperator.getValue();
-        } else if (constantOperator.getType().isBigint()) {
-            return (long) constantOperator.getValue();
-        } else if (constantOperator.getType().isBoolean()) {
-            return ((boolean) constantOperator.getValue()) == true ? 1 : 0;
-        } else if (constantOperator.getType().isDecimalOfAnyVersion()) {
-            BigDecimal value = (BigDecimal) constantOperator.getValue();
-            return value.doubleValue();
-        } else if (constantOperator.getType().isFloatingPointType()) {
-            return (double) constantOperator.getValue();
-        } else if (constantOperator.getType().isDateType()) {
-            return Utils.getLongFromDateTime((LocalDateTime) constantOperator.getValue());
-        } else if (constantOperator.getType().isTime()) {
-            return (double) constantOperator.getValue();
+        OptionalDouble optionalDouble = doubleValueFromConstant(constantOperator);
+        if (optionalDouble.isPresent()) {
+            return optionalDouble.getAsDouble();
         } else {
             return Double.NaN;
         }
+    }
 
+    public static OptionalDouble doubleValueFromConstant(ConstantOperator constantOperator) {
+        if (Type.BOOLEAN.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getBoolean() ? 1.0 : 0.0);
+        } else if (Type.TINYINT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getTinyInt());
+        } else if (Type.SMALLINT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getSmallint());
+        } else if (Type.INT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getInt());
+        } else if (Type.BIGINT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getBigint());
+        } else if (Type.LARGEINT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getLargeInt().doubleValue());
+        } else if (Type.FLOAT.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getFloat());
+        } else if (Type.DOUBLE.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getDouble());
+        } else if (Type.DATE.equals(constantOperator.getType())) {
+            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDate()));
+        } else if (Type.DATETIME.equals(constantOperator.getType())) {
+            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDatetime()));
+        } else if (Type.TIME.equals(constantOperator.getType())) {
+            return OptionalDouble.of(constantOperator.getTime());
+        } else if (constantOperator.getType().isDecimalOfAnyVersion()) {
+            return OptionalDouble.of(constantOperator.getDecimal().doubleValue());
+        }
+        return OptionalDouble.empty();
     }
 }
