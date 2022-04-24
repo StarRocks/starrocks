@@ -26,7 +26,7 @@ public:
     CString() {}
     ~CString() { _dealloc_if_needed(); }
 
-    explicit CString(const std::string_view& v) {
+    explicit CString(std::string_view v) {
         assert(v.size() == ::strnlen(v.data(), v.size()));
         assign(v.data(), v.size());
     }
@@ -53,7 +53,7 @@ public:
 
     // NOTE: it's caller's duty to ensure that the no zero character exist in |s|, otherwize
     // size() may return a value different from |s.size()|.
-    CString& assign(const std::string_view& s) {
+    CString& assign(std::string_view s) {
         assert(s.size() == ::strnlen(s.data(), s.size()));
         return assign(s.data(), s.size());
     }

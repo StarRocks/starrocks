@@ -138,8 +138,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     // Load pending rowsets
     RETURN_IF_ERROR(TabletMetaManager::pending_rowset_iterate(
-            _tablet.data_dir(), _tablet.tablet_id(),
-            [&](int64_t version, const std::string_view& rowset_meta_data) -> bool {
+            _tablet.data_dir(), _tablet.tablet_id(), [&](int64_t version, std::string_view rowset_meta_data) -> bool {
                 RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
                 CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
                 RowsetSharedPtr rowset;
