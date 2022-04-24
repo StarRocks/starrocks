@@ -9,6 +9,7 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.InlineViewRef;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SelectStmt;
@@ -59,26 +60,7 @@ public class CTASAnalyzer {
         Map<String, Table> tableRefToTable = Maps.newHashMap();
 
         // For replication_num, we select the maximum value of all tables replication_num
-        int defaultReplicationNum = 1;
-        List<TableRef> tableRefs = ((SelectStmt) queryStmt).getTableRefs();
-        for (TableRef tableRef : tableRefs) {
-            String[] aliases = tableRef.getAliases();
-            Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                Short replicationNum = olapTable.getDefaultReplicationNum();
-                if (replicationNum > defaultReplicationNum) {
-                    defaultReplicationNum = replicationNum;
-                }
-            }
-            if (aliases != null) {
-                for (String alias : aliases) {
-                    tableRefToTable.put(alias, table);
-                }
-            } else {
-                tableRefToTable.put(table.getName(), table);
-            }
-        }
+        int defaultReplicationNum = getReplicationNumAndGenTableRef((SelectStmt) queryStmt, tableRefToTable);
 
         List<Field> allFields = queryRelation.getRelationFields().getAllFields();
         List<String> finalColumnNames = Lists.newArrayList();
@@ -105,8 +87,11 @@ public class CTASAnalyzer {
                 SlotRef slotRef = (SlotRef) originExpression;
                 String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
                 Table table = tableRefToTable.get(tableName);
-                columnNameToTable.put(new Pair<>(tableName,
-                        new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
+                // may get inlineView
+                if (table != null) {
+                    columnNameToTable.put(new Pair<>(tableName,
+                            new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
+                }
             }
         }
 
@@ -149,6 +134,39 @@ public class CTASAnalyzer {
         insertStmt.setQueryStmt(queryStmt);
 
         return relation;
+    }
+
+    private int getReplicationNumAndGenTableRef(SelectStmt queryStmt, Map<String, Table> tableRefToTable) {
+        int defaultReplicationNum = 1;
+        List<TableRef> tableRefs = queryStmt.getTableRefs();
+        for (TableRef tableRef : tableRefs) {
+            String[] aliases = tableRef.getAliases();
+            if (tableRef instanceof InlineViewRef) {
+                InlineViewRef inlineViewRef = (InlineViewRef) tableRef;
+                int detectReplicateNum = getReplicationNumAndGenTableRef((SelectStmt) inlineViewRef.getViewStmt(),
+                        tableRefToTable);
+                if (detectReplicateNum > defaultReplicationNum) {
+                    defaultReplicationNum = detectReplicateNum;
+                }
+            } else {
+                Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
+                if (table instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) table;
+                    Short replicationNum = olapTable.getDefaultReplicationNum();
+                    if (replicationNum > defaultReplicationNum) {
+                        defaultReplicationNum = replicationNum;
+                    }
+                }
+                if (aliases != null) {
+                    for (String alias : aliases) {
+                        tableRefToTable.put(alias, table);
+                    }
+                } else {
+                    tableRefToTable.put(table.getName(), table);
+                }
+            }
+        }
+        return defaultReplicationNum;
     }
 
     // For char and varchar types, use the inferred length if the length can be inferred,

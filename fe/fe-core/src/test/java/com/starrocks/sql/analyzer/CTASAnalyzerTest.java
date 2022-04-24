@@ -200,6 +200,37 @@ public class CTASAnalyzerTest {
     }
 
     @Test
+    public void testInlineViewCase() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        StatisticStorage storage = new CachedStatisticStorage();
+        Table table = ctx.getCatalog().getDb("default_cluster:ctas")
+                .getTable("duplicate_table_with_null");
+        ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
+                1.5256461111280627E-4, 4.0, 64.0);
+        ColumnStatistic k2cs = new ColumnStatistic(1.5928416E9, 1.598350335E9,
+                1.5256461111280627E-4, 8.0, 66109.0);
+        storage.addColumnStatistic(table, "k1", k1cs);
+        storage.addColumnStatistic(table, "k2", k2cs);
+
+        ctx.getCatalog().setStatisticStorage(storage);
+
+        String inlineSQL = "create table inline as select aa.k1, aa.k2\n" +
+                "from (\n" +
+                "select k1,k2 from duplicate_table_with_null\n" +
+                ") aa\n" +
+                "left join (\n" +
+                "select a.k1,b.k2 from \n" +
+                "\t(select k1,k2 from duplicate_table_with_null) a\n" +
+                "\tleft join \n" +
+                "\t(select k1,k2 from duplicate_table_with_null) b\n" +
+                "\ton a.k1=b.k1\n" +
+                ") cc on aa.k1=cc.k1;";
+
+        UtFrameUtils.parseStmtWithNewAnalyzer(inlineSQL, ctx);
+    }
+
+    @Test
     public void testSelectColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
