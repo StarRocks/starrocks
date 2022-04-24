@@ -351,4 +351,3 @@ public class OlapTableSink extends DataSink {
 
 }
 
-
