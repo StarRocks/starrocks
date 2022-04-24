@@ -19,6 +19,7 @@ add_library(Formats STATIC
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        orc/orc_chunk_reader.cpp
         )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
