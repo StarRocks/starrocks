@@ -5,33 +5,62 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
+#include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "runtime/types.h"
+#include "testutil/assert.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
-class MergeTestFixture : public testing::TestWithParam<std::vector<std::vector<int32_t>>> {};
+static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
+                                     int32_t step) {
+    DCHECK_EQ(TYPE_INT, type_desc.type);
+
+    ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+    for (int i = 0; i < count; i++) {
+        column->append_datum(Datum(start + step * i));
+    }
+    return column;
+}
+
+static void clear_exprs(std::vector<ExprContext*>& exprs) {
+    for (ExprContext* ctx : exprs) {
+        delete ctx;
+    }
+    exprs.clear();
+}
+
+using MergeParamType = std::tuple<std::vector<int>, std::vector<std::vector<int32_t>>>;
+class MergeTestFixture : public testing::TestWithParam<MergeParamType> {};
 
 TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    std::vector<std::vector<int32_t>> params = GetParam();
-    int total_columns = params.size();
+    std::vector<int> sort_slots = std::get<0>(GetParam());
+    std::vector<std::vector<int32_t>> sorting_data = std::get<1>(GetParam());
+    int total_columns = sorting_data.size();
     ASSERT_TRUE(total_columns % 2 == 0);
     Columns left_columns;
     Columns right_columns;
 
     Chunk::SlotHashMap map;
     int left_rows = 0, right_rows = 0;
-    int num_columns = total_columns / 2;
+    int num_columns = sort_slots.empty() ? total_columns / 2 : sort_slots.size();
+    if (sort_slots.empty()) {
+        sort_slots.resize(num_columns);
+        std::iota(sort_slots.begin(), sort_slots.end(), 0);
+    }
+
     for (int i = 0; i < total_columns; i++) {
         ColumnPtr col = ColumnHelper::create_column(type_desc, false);
-        auto& data = params[i];
+        auto& data = sorting_data[i];
         for (int j = 0; j < data.size(); j++) {
             col->append_datum(Datum(data[j]));
         }
@@ -48,19 +77,27 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     ChunkPtr right_chunk = std::make_shared<Chunk>(right_columns, map);
     Permutation perm;
     SortDescs sort_desc(std::vector<int>(num_columns, 1), std::vector<int>(num_columns, -1));
-    merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_chunk->columns()}, {right_chunk, right_chunk->columns()},
-                                &perm);
+
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
+    for (int slot_index : sort_slots) {
+        auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
+        exprs.push_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+    }
 
     size_t expected_size = left_rows + right_rows;
-    std::unique_ptr<Chunk> output = left_chunk->clone_empty();
-    append_by_permutation(output.get(), std::vector<ChunkPtr>{left_chunk, right_chunk}, perm);
-    ASSERT_EQ(expected_size, perm.size());
+    ChunkPtr output;
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output, 0));
+    ASSERT_EQ(expected_size, output->num_rows());
+    ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
 
     std::vector<std::vector<int>> output_data;
     for (int i = 0; i < output->num_rows(); i++) {
         std::vector<int> row;
-        for (int j = 0; j < num_columns; j++) {
-            Column* output_col = output->get_column_by_index(j).get();
+        for (int slot_index : sort_slots) {
+            Column* output_col = output->get_column_by_index(slot_index).get();
             row.push_back(output_col->get(i).get_int32());
         }
         output_data.emplace_back(row);
@@ -86,66 +123,35 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     ASSERT_TRUE(std::is_sorted(output_data.begin(), output_data.end(), row_less)) << "merged data: " << output_string();
 }
 
-// clang-format off
 INSTANTIATE_TEST_SUITE_P(
         MergeTest, MergeTestFixture,
         testing::Values(
-        std::vector<std::vector<int32_t>>{
-            {1, 2, 3},
-            {1, 2, 3}
-        },
-        std::vector<std::vector<int32_t>>{
-            {1, 2, 3},
-            {4, 5, 6}
-        },
-        std::vector<std::vector<int32_t>>{
-            {4, 5, 6},
-            {1, 2, 3}
-        },
-        std::vector<std::vector<int32_t>>{
-            {},
-            {1, 2, 3}
-        },
-        std::vector<std::vector<int32_t>>{
-            {1, 2, 3},
-            {}
-        },
-        std::vector<std::vector<int32_t>>{
-            {1, 3, 5},
-            {2, 4}
-        },
-        std::vector<std::vector<int32_t>>{
-            {1, 3, 5},
-            {3, 4, 5}
-        },
-        std::vector<std::vector<int32_t>>{
-            {1, 2, 2},
-            {2, 2, 3}
-        },
-        std::vector<std::vector<int32_t>>{
-            {2, 2, 2},
-            {2, 2, 3}
-        },
-        std::vector<std::vector<int32_t>>{
-                std::vector<int32_t>{1, 1, 1, 2, 2, 3, 4, 5, 6}, 
-                std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8},
-                std::vector<int32_t>{1, 2, 2, 2, 3, 3, 6, 7, 8}, 
-                std::vector<int32_t>{2, 3, 4, 4, 4, 8, 9, 7, 11}
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 2, 3}, {1, 2, 3}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 2, 3}, {4, 5, 6}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{4, 5, 6}, {1, 2, 3}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{}, {1, 2, 3}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 2, 3}, {}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 3, 5}, {2, 4}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 3, 5}, {3, 4, 5}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 2, 2}, {2, 2, 3}}),
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{2, 2, 2}, {2, 2, 3}}),
 
-        }
-));
-// clang-format on
+                std::make_tuple(std::vector<int>(), std::vector<std::vector<int32_t>>{{1, 1, 1, 2, 2, 3, 4, 5, 6},
+                                                                                      {1, 2, 2, 2, 3, 3, 6, 7, 8},
+                                                                                      {1, 2, 2, 2, 3, 3, 6, 7, 8},
+                                                                                      {2, 3, 4, 4, 4, 8, 9, 7, 11}}),
 
-static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
-                                     int32_t step) {
-    DCHECK_EQ(TYPE_INT, type_desc.type);
+                std::make_tuple(std::vector<int>{0}, std::vector<std::vector<int32_t>>{{1, 1, 1, 2, 2, 3, 4, 5, 6},
+                                                                                       {1, 2, 2, 2, 3, 3, 6, 7, 8},
+                                                                                       {1, 2, 2, 2, 3, 3, 6, 7, 8},
+                                                                                       {2, 3, 4, 4, 4, 7, 8, 9, 11}}),
 
-    ColumnPtr column = ColumnHelper::create_column(type_desc, false);
-    for (int i = 0; i < count; i++) {
-        column->append_datum(Datum(start + step * i));
-    }
-    return column;
-}
+                std::make_tuple(std::vector<int>{1}, std::vector<std::vector<int32_t>>{{9, 8, 7, 6, 2, 3, 4, 5, 6},
+                                                                                       {1, 2, 2, 2, 3, 3, 6, 7, 8},
+                                                                                       {10, 20, 9, 7, 3, 3, 6, 7, 8},
+                                                                                       {2, 3, 4, 4, 4, 7, 8, 9, 11}})
+
+                        ));
 
 TEST(SortingTest, append_by_permutation_binary) {
     BinaryColumn::Ptr input1 = BinaryColumn::create();
@@ -175,14 +181,38 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2048, merged->get(1).get_int32());
 }
 
-static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
-    for (ExprContext* ctx : exprs) {
-        delete ctx;
-    }
-    exprs.clear();
+TEST(SortingTest, sorted_runs) {
+    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
+    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+
+    SortedRuns runs;
+    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+
+    ASSERT_EQ(2, runs.num_chunks());
+    ASSERT_EQ(200, runs.num_rows());
+
+    runs.resize(199);
+    ASSERT_EQ(199, runs.num_rows());
+
+    runs.resize(99);
+    ASSERT_EQ(99, runs.num_rows());
+    ASSERT_EQ(1, runs.num_chunks());
+
+    ChunkPtr slice = runs.assemble();
+    ASSERT_EQ(99, slice->num_rows());
 }
 
-TEST(MergeTest, merge_sorted_stream) {
+TEST(SortingTest, merge_sorted_chunks) {
+    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
+    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+}
+
+TEST(SortingTest, merge_sorted_stream) {
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
     constexpr int num_chunks_per_run = 4;
@@ -192,7 +222,7 @@ TEST(MergeTest, merge_sorted_stream) {
     std::vector<bool> null_first;
     Chunk::SlotHashMap map;
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
+    SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
 
     for (int i = 0; i < num_columns; i++) {
         auto expr = std::make_unique<ColumnRef>(type_desc, i);
@@ -202,7 +232,7 @@ TEST(MergeTest, merge_sorted_stream) {
         null_first.push_back(true);
         map[i] = i;
     }
-    DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     std::vector<ChunkProvider> chunk_providers;
     std::vector<int> chunk_probe_index(num_runs, 0);
