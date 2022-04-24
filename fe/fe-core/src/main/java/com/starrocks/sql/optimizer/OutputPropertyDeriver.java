@@ -25,7 +25,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -105,7 +107,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     }
 
     // compute the distribution property info, just compute the nullable columns now
-    private PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalHashJoinOperator node,
+    private PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalJoinOperator node,
                                                                         PhysicalPropertySet physicalPropertySet,
                                                                         List<Integer> leftOnPredicateColumns,
                                                                         List<Integer> rightOnPredicateColumns,
@@ -137,6 +139,15 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    public PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
