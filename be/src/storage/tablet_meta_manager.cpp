@@ -57,11 +57,9 @@ static bool decode_meta_log_key(std::string_view key, TTabletId* id, uint64_t* l
 static string encode_meta_rowset_key(TTabletId id, uint32_t rowsetid);
 [[maybe_unused]] static bool decode_meta_rowset_key(std::string_view key, TTabletId* id, uint32_t* rowsetid);
 static string encode_meta_pending_rowset_key(TTabletId id, int64_t version);
-[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id,
-                                                            int64_t* version);
+[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id, int64_t* version);
 std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int64_t version);
-void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id,
-                           int64_t* version);
+void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id, int64_t* version);
 std::string encode_persistent_index_key(TTabletId tablet_id);
 void decode_persistent_index_key(std::string_view enc_key, TTabletId* tablet_id);
 
@@ -640,8 +638,7 @@ static string encode_meta_pending_rowset_key(TTabletId id, int64_t version) {
     return ret;
 }
 
-[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id,
-                                                            int64_t* version) {
+[[maybe_unused]] static bool decode_meta_pending_rowset_key(std::string_view key, TTabletId* id, int64_t* version) {
     if (key.length() != TABLET_META_PENDING_ROWSET_PREFIX.length() + sizeof(uint64_t) + sizeof(uint64_t)) {
         return false;
     }
@@ -664,8 +661,7 @@ std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int6
     return key;
 }
 
-void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id,
-                           int64_t* version) {
+void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id, int64_t* version) {
     DCHECK_EQ(4 + sizeof(TTabletId) + sizeof(uint32_t) + sizeof(int64_t), enc_key.size());
     *tablet_id = BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 4));
     *segment_id = BigEndian::ToHost32(UNALIGNED_LOAD32(enc_key.data() + 12));
