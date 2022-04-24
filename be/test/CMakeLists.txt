@@ -272,6 +272,7 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
+        ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./gutil/sysinfo-test.cc
         ./exec/vectorized/hdfs_scan_node_test.cpp
         )
@@ -318,11 +319,3 @@ TARGET_LINK_LIBRARIES(bytes_test
         gtest
         tcmalloc
         )
-
-add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
-TARGET_LINK_LIBRARIES(starrocks_column_to_arrow_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(starrocks_column_to_arrow_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-add_executable(engine_storage_migration_task_test ./storage/task/engine_storage_migration_task_test.cpp)
-TARGET_LINK_LIBRARIES(engine_storage_migration_task_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(engine_storage_migration_task_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
