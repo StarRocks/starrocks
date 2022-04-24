@@ -25,7 +25,6 @@ set(EXEC_FILES
         ./env/env_memory_test.cpp
         ./env/env_s3_test.cpp
         ./env/output_stream_wrapper_test.cpp
-        ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
