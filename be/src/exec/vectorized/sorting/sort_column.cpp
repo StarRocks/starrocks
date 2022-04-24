@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include <algorithm>
-
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -465,10 +463,6 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
     for (auto& chunk : chunks) {
         src.push_back(chunk.get());
     }
-    DCHECK_LT(std::max_element(perm.begin(), perm.end(),
-                               [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
-                      ->chunk_index,
-              chunks.size());
     append_by_permutation(dst, src, perm);
 }
 

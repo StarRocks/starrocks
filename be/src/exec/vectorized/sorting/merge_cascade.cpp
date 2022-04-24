@@ -18,9 +18,6 @@ struct CursorAlgo {
     }
 
     static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
-        if (perm.size() <= left.num_rows() + right.num_rows()) {
-            return;
-        }
         size_t start = left.range.first + right.range.first;
         size_t end = left.range.second + right.range.second;
         std::copy(perm.begin() + start, perm.begin() + end, perm.begin());
@@ -157,8 +154,8 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             // Cutoff right by left tail
             size_t right_cut =
                     CursorAlgo::cutoff_run(sort_desc, _right_run, std::make_pair(_left_run, _left_run.num_rows() - 1));
-            SortedRun right_1(_right_run, _right_run.start_index(), right_cut);
-            SortedRun right_2(_right_run, right_cut, _right_run.end_index());
+            SortedRun right_1(_right_run.chunk, 0, right_cut);
+            SortedRun right_2(_right_run.chunk, right_cut, _right_run.num_rows());
 
             // Merge partial chunk
             Permutation perm;
@@ -175,21 +172,27 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             // Cutoff left by right tail
             size_t left_cut =
                     CursorAlgo::cutoff_run(sort_desc, _left_run, std::make_pair(_right_run, _right_run.num_rows() - 1));
-            SortedRun left_1(_left_run, _left_run.start_index(), left_cut);
-            SortedRun left_2(_left_run, left_cut, _left_run.end_index());
+            SortedRun left_1(_left_run.chunk, 0, left_cut);
+            SortedRun left_2(_left_run.chunk, left_cut, _left_run.num_rows());
 
             // Merge partial chunk
             Permutation perm;
             RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, _right_run, left_1, &perm));
             CursorAlgo::trim_permutation(left_1, _right_run, perm);
             DCHECK_EQ(_right_run.num_rows() + left_1.num_rows(), perm.size());
-            ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
+            std::unique_ptr<Chunk> merged = _left_run.chunk->clone_empty(perm.size());
             append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
             _left_run = left_2;
             _right_run.reset();
             result = std::move(merged);
         }
+
+#ifndef NDEBUG
+        for (int i = 0; i < result->num_rows(); i++) {
+            fmt::print("merge row: {}\n", result->debug_row(i));
+        }
+#endif
     }
 
     return result;
