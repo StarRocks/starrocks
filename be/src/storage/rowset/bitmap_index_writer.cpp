@@ -42,54 +42,80 @@ namespace starrocks {
 
 namespace {
 
-static const size_t roaring_get_size_fastpath_threshold = 1024;
+static constexpr size_t enable_roaring_threshold = 1024;
+static constexpr size_t croaring_serialization_array_uint32 = 1;
 
+// RoaringWrapper is a wrapper for roaring bitmap.
+// When the cardinality is less than enable_roaring_threshold, we use _rowid_array to save the bitmap.
+// When the BitmapIndexWriter is finished, _rowid_array will be flushed in the form of CROARING_SERIALIZATION_ARRAY_UINT32 in roaring bitmap.
+// The form of CROARING_SERIALIZATION_ARRAY_UINT32:
+// one bit    4 bytes         4 bytes * cardinality
+// [ 1       cardinality      data ....]
+// When the cardinality is higher than enable_roaring_threshold, we will transform _rowid_array to `roaring bitmap` _roaring and
+// subsequent operations are performed via _roaring.
 class RoaringWrapper {
 public:
     explicit RoaringWrapper(rowid_t rid)
-            : _roaring(std::move(Roaring::bitmapOf(1, rid))),
-              _old_size(1),
-              _size_changed(true),
-              _enable_get_size_in_Bytes(false){};
-    Roaring& roaring() { return _roaring; }
-    uint64_t roaring_size() const { return _roaring.getSizeInBytes(false); }
+            : _roaring(nullptr), _old_size(1), _size_changed(true), _enable_roaring(false) {
+        _rowid_array.push_back(rid);
+    };
+    Roaring* roaring() { return _roaring.get(); }
+    uint64_t roaring_size() const { return _roaring->getSizeInBytes(false); }
     uint64_t old_size() const { return _old_size; }
     void set_old_size(uint64_t size) const { _old_size = size; }
     bool size_changed() const { return _size_changed; }
     void set_size_changed() const { _size_changed = true; }
     void unset_size_changed() const { _size_changed = false; }
+    bool enable_roaring() const { return _enable_roaring; }
+    uint32_t rowid_array_size_in_bytes() const {
+        DCHECK(_enable_roaring == false);
+        return (_rowid_array.size() + 1) * sizeof(uint32_t) + 1;
+    }
 
     void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>& size_changed_roaring_vec) {
-        _roaring.add(rid);
-        if (_enable_get_size_in_Bytes) {
+        if (_enable_roaring) {
             if (_size_changed == false) {
                 size_changed_roaring_vec.push_back(this);
             }
             _size_changed = true;
+            _roaring->add(rid);
         } else {
-            // roaring_get_size fastpath:
-            // If _old_size is less than roaring_get_size_fastpath_threshold, _old_size represents the cardinality of
-            // roaring bitmap, and we use _old_size * (sizeof(uint32_t) + 1) to approximate estimated true size of roaring bitmap.
-            // The reason for this optimization here is that the getSizeInBytes function in roaring bitmap is very costly, when
-            // the cardinality of the bitmap index is relatively large, most of the bitmap keys can take this fastpath.
             _old_size++;
-            if (LIKELY(_old_size < roaring_get_size_fastpath_threshold)) {
+            if (LIKELY(_old_size < enable_roaring_threshold)) {
                 reverted_index_size += sizeof(uint32_t);
+                _rowid_array.push_back(rid);
             } else {
-                reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
+                reverted_index_size -= (enable_roaring_threshold * sizeof(uint32_t) + 1);
                 _old_size = 0;
                 _size_changed = true;
-                _enable_get_size_in_Bytes = true;
+                _enable_roaring = true;
                 size_changed_roaring_vec.push_back(this);
+                _roaring = std::make_unique<Roaring>(_rowid_array.size(), _rowid_array.data());
             }
         }
     }
 
+    void flush_rowid_array(char* buf) {
+        buf[0] = croaring_serialization_array_uint32;
+        int cardinality = _rowid_array.size();
+        memcpy(buf + 1, &cardinality, sizeof(uint32_t));
+
+        uint32_t* data = reinterpret_cast<uint32_t*>(buf + 1 + sizeof(uint32_t));
+        int outpos = 0;
+        for (int i = 0; i < cardinality; ++i) {
+            const uint32_t val = _rowid_array[i];
+            memcpy(data + outpos, &val, sizeof(uint32_t));
+            outpos++;
+        }
+    }
+
 private:
-    Roaring _roaring;
+    std::unique_ptr<Roaring> _roaring;
+    vector<rowid_t> _rowid_array;
+
     mutable uint64_t _old_size;
     mutable bool _size_changed;
-    bool _enable_get_size_in_Bytes;
+    bool _enable_roaring;
 };
 
 template <typename CppType>
@@ -171,23 +197,43 @@ public:
             RETURN_IF_ERROR(dict_column_writer.finish(meta->mutable_dict_column()));
         }
         { // write bitmaps
-            std::vector<Roaring*> bitmaps;
+            std::vector<RoaringWrapper*> wrappers;
+            std::vector<uint32_t> bitmap_sizes;
+            bitmap_sizes.resize(_mem_index.size());
+            uint32_t max_bitmap_size = 0;
+
+            uint32_t i = 0;
             for (auto& it : _mem_index) {
-                bitmaps.push_back(&(it.second.roaring()));
-            }
-            if (!_null_bitmap.isEmpty()) {
-                bitmaps.push_back(&_null_bitmap);
+                if (it.second.enable_roaring() == false) {
+                    uint32_t rowid_array_size_in_bytes = it.second.rowid_array_size_in_bytes();
+                    if (max_bitmap_size < rowid_array_size_in_bytes) {
+                        max_bitmap_size = rowid_array_size_in_bytes;
+                    }
+                    bitmap_sizes[i] = rowid_array_size_in_bytes;
+                }
+                wrappers.push_back(&it.second);
+                i++;
             }
 
-            uint32_t max_bitmap_size = 0;
-            std::vector<uint32_t> bitmap_sizes;
-            for (auto& bitmap : bitmaps) {
-                bitmap->runOptimize();
-                uint32_t bitmap_size = bitmap->getSizeInBytes(false);
-                if (max_bitmap_size < bitmap_size) {
-                    max_bitmap_size = bitmap_size;
+            for (size_t i = 0; i < wrappers.size(); ++i) {
+                if (wrappers[i]->enable_roaring()) {
+                    Roaring* roaring = wrappers[i]->roaring();
+                    roaring->runOptimize();
+                    uint32_t bitmap_size = roaring->getSizeInBytes(false);
+                    if (max_bitmap_size < bitmap_size) {
+                        max_bitmap_size = bitmap_size;
+                    }
+                    bitmap_sizes[i] = bitmap_size;
                 }
-                bitmap_sizes.push_back(bitmap_size);
+            }
+
+            uint32_t null_bitmap_size = 0;
+            if (!_null_bitmap.isEmpty()) {
+                _null_bitmap.runOptimize();
+                null_bitmap_size = _null_bitmap.getSizeInBytes(false);
+                if (max_bitmap_size < null_bitmap_size) {
+                    max_bitmap_size = null_bitmap_size;
+                }
             }
 
             TypeInfoPtr bitmap_typeinfo = get_type_info(OLAP_FIELD_TYPE_OBJECT);
@@ -204,9 +250,19 @@ public:
 
             faststring buf;
             buf.reserve(max_bitmap_size);
-            for (size_t i = 0; i < bitmaps.size(); ++i) {
+            for (size_t i = 0; i < wrappers.size(); ++i) {
                 buf.resize(bitmap_sizes[i]); // so that buf[0..size) can be read and written
-                bitmaps[i]->write(reinterpret_cast<char*>(buf.data()), false);
+                if (wrappers[i]->enable_roaring()) {
+                    wrappers[i]->roaring()->write(reinterpret_cast<char*>(buf.data()), false);
+                } else {
+                    wrappers[i]->flush_rowid_array(reinterpret_cast<char*>(buf.data()));
+                }
+                Slice buf_slice(buf);
+                RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
+            }
+            if (!_null_bitmap.isEmpty()) {
+                buf.resize(null_bitmap_size);
+                _null_bitmap.write(reinterpret_cast<char*>(buf.data()), false);
                 Slice buf_slice(buf);
                 RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
             }
