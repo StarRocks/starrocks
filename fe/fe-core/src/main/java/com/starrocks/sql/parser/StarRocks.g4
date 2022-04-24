@@ -31,7 +31,7 @@ statement
     | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
     | CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
         comment?
-        partitionExpDesc
+        PARTITION BY primaryExpression
         distributionDesc?
         refreshSchemeDesc
         AS queryStatement
@@ -42,10 +42,6 @@ statement
     | ALTER VIEW qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         AS queryStatement                                                               #alterView
-    ;
-
-partitionExpDesc
-    : PARTITION BY primaryExpression
     ;
 
 refreshSchemeDesc

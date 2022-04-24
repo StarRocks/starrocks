@@ -163,6 +163,48 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testFullDescPartitionNoDataBase() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withoutUseDatabase();
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from test.tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            assertEquals(e.getMessage(), "No database selected");
+        } finally {
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
+    public void testFullDescPartitionHasDataBase() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withoutUseDatabase();
+        String sql = "create materialized view test.mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "as select date_format(tbl1.k1,'ym') ss, k2 from test.tbl1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
     public void testPartitionKeyNoBaseTablePartitionKey(){
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create materialized view mv1 " +
@@ -416,8 +458,8 @@ public class CreateMaterializedViewTest {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
             assertNotNull(asyncRefreshSchemeDesc.getStartTime());
-            assertEquals(asyncRefreshSchemeDesc.getStep(), 1);
-            assertEquals(asyncRefreshSchemeDesc.getTimeUnit(), "HOUR");
+            assertEquals(((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue(), 1);
+            assertEquals(asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription(), "HOUR");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -443,8 +485,8 @@ public class CreateMaterializedViewTest {
             String dateTime = "2016-12-31";
             LocalDateTime startTime = DateUtils.parseStringWithDefaultHSM(dateTime, DateUtils.probeFormat(dateTime));
             assertEquals(asyncRefreshSchemeDesc.getStartTime(), startTime);
-            assertEquals(asyncRefreshSchemeDesc.getStep(), 1);
-            assertEquals(asyncRefreshSchemeDesc.getTimeUnit(), "HOUR");
+            assertEquals(((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue(), 1);
+            assertEquals(asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription(), "HOUR");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -468,8 +510,8 @@ public class CreateMaterializedViewTest {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             assertEquals(refreshSchemeDesc.getType(), RefreshType.ASYNC);
             assertNotNull(asyncRefreshSchemeDesc.getStartTime());
-            assertEquals(asyncRefreshSchemeDesc.getStep(), 2);
-            assertEquals(asyncRefreshSchemeDesc.getTimeUnit(), "MINUTE");
+            assertEquals(((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue(), 2);
+            assertEquals(asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription(), "MINUTE");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

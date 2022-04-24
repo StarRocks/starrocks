@@ -159,9 +159,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateMaterializedView(StarRocksParser.CreateMaterializedViewContext context) {
         boolean ifNotExist = context.IF() != null;
-        String mvName = context.mvName.getText();
-        String comment = context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
-        PartitionExpDesc partitionExpDesc = (PartitionExpDesc) visit(context.partitionExpDesc());
+        QualifiedName qualifiedName = getQualifiedName(context.mvName);
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        String comment =
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
+        Expr expr = (Expr) visit(context.primaryExpression());
+        if (!(expr instanceof SlotRef)) {
+            throw new IllegalArgumentException("Partition exp must be alias of select item");
+        }
+        PartitionExpDesc partitionExpDesc = new PartitionExpDesc((SlotRef) expr);
 
         RefreshSchemeDesc refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         // get query statement
@@ -176,23 +182,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         DistributionDesc distributionDesc =
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc());
-        return new CreateMaterializedViewStatement(mvName, ifNotExist, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
                 refreshSchemeDesc, partitionExpDesc, distributionDesc, properties, queryStatement);
-    }
-
-    public ParseNode visitPartitionExpDesc(StarRocksParser.PartitionExpDescContext context) {
-        ParseNode parseNode = visit(context.primaryExpression());
-        if (!(parseNode instanceof SlotRef)) {
-            throw new IllegalArgumentException("Partition exp must be alias of select item");
-        }
-        return new PartitionExpDesc((SlotRef) parseNode);
     }
 
     @Override
     public ParseNode visitRefreshSchemeDesc(StarRocksParser.RefreshSchemeDescContext context) {
         LocalDateTime startTime = LocalDateTime.now();
-        long step = 1;
-        String timeUnit = "HOUR";
+        IntervalLiteral intervalLiteral = new IntervalLiteral(new IntLiteral(1), new UnitIdentifier("HOUR"));
         if (context.ASYNC() != null) {
             if (context.string() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
@@ -201,18 +198,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                     startTime = DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
                 } catch (AnalysisException e) {
-                    throw new IllegalArgumentException("Refresh type: " + context.SYNC().getText() + " start is incorrect");
+                    throw new IllegalArgumentException(
+                            "Refresh type: " + context.SYNC().getText() + " start is incorrect");
                 }
             }
             if (context.interval() != null) {
-                IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+                intervalLiteral = (IntervalLiteral) visit(context.interval());
                 if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                    throw new IllegalArgumentException("Refresh interval step must be int ");
+                    throw new IllegalArgumentException("Refresh interval step must be int");
                 }
-                step = ((IntLiteral) intervalLiteral.getValue()).getValue();
-                timeUnit = intervalLiteral.getUnitIdentifier().getDescription();
             }
-            return new AsyncRefreshSchemeDesc(startTime, step, timeUnit);
+            return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
             throw new IllegalArgumentException("Unsupported refresh type: " + context.SYNC().getText());
         } else if (context.MANUAL() != null) {

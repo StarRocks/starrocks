@@ -60,6 +60,7 @@ public class MaterializedViewAnalyzer {
 
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+            statement.getTableName().normalization(context);
             QueryStatement queryStatement = statement.getQueryStatement();
             PartitionExpDesc partitionExpDesc = statement.getPartitionExpDesc();
             //check query relation is select relation
@@ -83,8 +84,8 @@ public class MaterializedViewAnalyzer {
             // check table is in this database and is OlapTable
             Map<String, TableRelation> tableRelationHashMap = new HashMap<>();
             extractTableRelation(selectRelation.getRelation(), tableRelationHashMap);
-            tableRelationHashMap.forEach((tableName, tableRelation) -> {
-                if (!tableRelation.getName().getDb().equals(context.getDatabase())) {
+            tableRelationHashMap.forEach((tbl, tableRelation) -> {
+                if (!tableRelation.getName().getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException("Materialized view not support table which in other database");
                 }
                 if (!(tableRelation.getTable() instanceof OlapTable)) {
@@ -101,7 +102,9 @@ public class MaterializedViewAnalyzer {
             checkPartitionKey(partitionExpDesc, tableRelationHashMap);
             // check distribution
             checkDistribution(statement);
-            statement.setDbName(context.getDatabase());
+            //set view def
+            String viewSql = ViewDefBuilder.build(queryStatement);
+            statement.setInlineViewDef(viewSql);
             return null;
         }
 
