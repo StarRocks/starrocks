@@ -95,8 +95,6 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
-        String hint = node.getJoinHint();
-
         //prepare sort property
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
