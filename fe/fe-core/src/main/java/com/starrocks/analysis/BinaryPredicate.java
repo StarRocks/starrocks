@@ -589,7 +589,7 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     public boolean isNullable() {
-        return op != Operator.EQ_FOR_NULL;
+        return !Operator.EQ_FOR_NULL.equals(op) && hasNullableChild();
     }
 
     /**
