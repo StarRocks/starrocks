@@ -89,7 +89,11 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
 
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
-    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output, 0));
+    SortedRuns output_run;
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs,
+                                  {SortedRun(left_chunk, &sort_exprs), SortedRun(right_chunk, &sort_exprs)},
+                                  &output_run, 0));
+    output = output_run.assemble();
     ASSERT_EQ(expected_size, output->num_rows());
     ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
 

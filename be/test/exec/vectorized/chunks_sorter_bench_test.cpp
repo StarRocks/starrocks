@@ -382,7 +382,6 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
     int64_t num_rows = 0;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
     for (auto _ : state) {
-        ChunkPtr merged;
         std::vector<ChunkPtr> inputs;
         size_t input_rows = num_runs * chunk1->num_rows();
         for (int i = 0; i < num_runs; i++) {
@@ -392,10 +391,11 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
                 inputs.push_back(chunk2);
             }
         }
+        SortedRuns merged;
         merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
-        ASSERT_EQ(input_rows, merged->num_rows());
+        ASSERT_EQ(input_rows, merged.num_rows());
 
-        num_rows += merged->num_rows();
+        num_rows += merged.num_rows();
     }
 
     state.SetItemsProcessed(num_rows);
