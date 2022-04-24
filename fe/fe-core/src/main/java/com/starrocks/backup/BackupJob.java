@@ -33,7 +33,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;

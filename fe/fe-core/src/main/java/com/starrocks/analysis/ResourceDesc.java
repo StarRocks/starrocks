@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;

@@ -27,7 +27,7 @@ import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;

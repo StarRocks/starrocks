@@ -28,6 +28,7 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;

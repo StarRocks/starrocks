@@ -41,7 +41,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;

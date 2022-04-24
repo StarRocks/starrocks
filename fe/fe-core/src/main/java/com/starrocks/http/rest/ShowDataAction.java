@@ -22,7 +22,7 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;

@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

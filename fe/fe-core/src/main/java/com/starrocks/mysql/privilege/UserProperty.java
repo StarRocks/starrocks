@@ -28,7 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceType;
 import com.starrocks.cluster.ClusterNamespace;

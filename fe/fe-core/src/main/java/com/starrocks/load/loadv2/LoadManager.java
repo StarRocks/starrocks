@@ -28,7 +28,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;

@@ -25,7 +25,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;

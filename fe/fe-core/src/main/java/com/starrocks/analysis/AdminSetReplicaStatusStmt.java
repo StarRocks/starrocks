@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;

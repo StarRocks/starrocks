@@ -27,7 +27,7 @@ import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;

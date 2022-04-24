@@ -21,7 +21,7 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;

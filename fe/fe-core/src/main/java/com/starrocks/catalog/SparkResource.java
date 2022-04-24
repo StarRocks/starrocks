@@ -34,6 +34,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.load.loadv2.SparkRepository;
 import com.starrocks.load.loadv2.SparkYarnConfigFiles;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.File;
 import java.util.Map;

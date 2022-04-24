@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -5,7 +5,7 @@ package com.starrocks.external.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaCache;

@@ -23,7 +23,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;

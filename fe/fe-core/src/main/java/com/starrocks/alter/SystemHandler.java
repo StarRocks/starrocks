@@ -38,7 +38,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.ModifyBrokerClause;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;

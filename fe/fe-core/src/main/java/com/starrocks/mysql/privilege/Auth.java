@@ -40,7 +40,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;

@@ -21,7 +21,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;

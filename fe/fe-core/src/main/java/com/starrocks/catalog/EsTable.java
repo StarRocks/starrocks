@@ -30,6 +30,7 @@ import com.starrocks.external.elasticsearch.EsMajorVersion;
 import com.starrocks.external.elasticsearch.EsMetaStateTracker;
 import com.starrocks.external.elasticsearch.EsRestClient;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;

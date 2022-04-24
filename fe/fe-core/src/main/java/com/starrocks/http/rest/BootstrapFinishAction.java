@@ -23,7 +23,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;

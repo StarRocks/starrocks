@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;

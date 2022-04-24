@@ -26,7 +26,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DynamicPartitionProperty;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;

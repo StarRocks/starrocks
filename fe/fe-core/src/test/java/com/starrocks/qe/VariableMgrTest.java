@@ -26,7 +26,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SysVariableDesc;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;

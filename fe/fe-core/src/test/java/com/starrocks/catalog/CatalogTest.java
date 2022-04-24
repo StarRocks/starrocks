@@ -29,6 +29,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;

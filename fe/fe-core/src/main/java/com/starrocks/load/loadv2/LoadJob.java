@@ -32,7 +32,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;

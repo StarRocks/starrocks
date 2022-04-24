@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;

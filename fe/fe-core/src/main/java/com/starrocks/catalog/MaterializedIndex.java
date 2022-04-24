@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
 import java.io.DataInput;

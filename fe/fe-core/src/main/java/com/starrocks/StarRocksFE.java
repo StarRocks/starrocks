@@ -23,7 +23,7 @@ package com.starrocks;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.CommandLineOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;

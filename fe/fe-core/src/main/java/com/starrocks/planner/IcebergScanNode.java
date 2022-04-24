@@ -8,7 +8,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;

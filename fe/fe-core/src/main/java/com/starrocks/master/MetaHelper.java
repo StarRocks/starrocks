@@ -21,7 +21,7 @@
 
 package com.starrocks.master;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.io.IOUtils;
 
 import java.io.BufferedInputStream;

@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;

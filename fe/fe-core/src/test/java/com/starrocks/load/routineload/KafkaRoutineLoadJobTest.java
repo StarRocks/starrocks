@@ -31,7 +31,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.LoadException;

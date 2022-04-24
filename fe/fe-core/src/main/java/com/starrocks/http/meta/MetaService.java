@@ -23,7 +23,7 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;

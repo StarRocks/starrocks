@@ -26,7 +26,7 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;

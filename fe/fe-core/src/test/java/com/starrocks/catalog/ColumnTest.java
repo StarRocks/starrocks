@@ -26,6 +26,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

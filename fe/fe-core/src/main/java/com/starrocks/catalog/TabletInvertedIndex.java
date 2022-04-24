@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;

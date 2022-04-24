@@ -41,7 +41,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;

@@ -28,7 +28,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;

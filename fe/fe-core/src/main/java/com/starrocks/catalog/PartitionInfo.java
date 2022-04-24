@@ -26,6 +26,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;

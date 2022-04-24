@@ -8,6 +8,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCustomCatalogTest;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

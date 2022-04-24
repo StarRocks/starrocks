@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;

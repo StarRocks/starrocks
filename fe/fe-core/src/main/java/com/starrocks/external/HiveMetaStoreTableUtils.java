@@ -5,7 +5,7 @@ package com.starrocks.external;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.DdlException;

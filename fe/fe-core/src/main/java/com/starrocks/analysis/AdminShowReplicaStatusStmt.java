@@ -27,7 +27,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;

@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 
 import java.util.List;

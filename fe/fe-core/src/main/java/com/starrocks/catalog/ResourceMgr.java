@@ -36,6 +36,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

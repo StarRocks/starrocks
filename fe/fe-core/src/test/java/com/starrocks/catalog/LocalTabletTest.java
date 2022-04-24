@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;

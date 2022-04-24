@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.thrift.TPartitionVersionInfo;

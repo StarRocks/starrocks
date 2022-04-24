@@ -21,7 +21,7 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;

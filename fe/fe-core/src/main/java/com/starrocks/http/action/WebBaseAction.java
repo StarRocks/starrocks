@@ -24,7 +24,7 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;

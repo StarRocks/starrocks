@@ -22,7 +22,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.load.ExportJob.JobState;

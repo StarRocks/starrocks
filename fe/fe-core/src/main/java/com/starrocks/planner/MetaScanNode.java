@@ -4,7 +4,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;

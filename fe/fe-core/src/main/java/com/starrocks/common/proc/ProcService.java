@@ -22,7 +22,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

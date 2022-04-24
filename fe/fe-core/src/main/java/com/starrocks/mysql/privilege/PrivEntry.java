@@ -22,7 +22,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeMetaVersion;

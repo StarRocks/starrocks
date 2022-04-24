@@ -27,6 +27,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mocked;

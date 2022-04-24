@@ -22,7 +22,7 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;

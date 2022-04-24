@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.system.Backend;

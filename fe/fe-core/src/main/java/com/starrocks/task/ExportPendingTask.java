@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.load.ExportFailMsg;

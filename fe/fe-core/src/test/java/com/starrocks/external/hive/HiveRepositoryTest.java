@@ -6,7 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;

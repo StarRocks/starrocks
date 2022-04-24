@@ -3,7 +3,7 @@
 package com.starrocks.analysis;
 
 import com.clearspring.analytics.util.Lists;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;

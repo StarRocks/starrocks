@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;

@@ -22,7 +22,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;

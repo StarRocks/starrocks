@@ -14,6 +14,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.WorkGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;

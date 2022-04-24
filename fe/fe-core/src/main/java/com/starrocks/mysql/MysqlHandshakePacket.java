@@ -22,7 +22,7 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.system.SystemInfoService;

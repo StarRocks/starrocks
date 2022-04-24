@@ -14,6 +14,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;

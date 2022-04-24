@@ -36,7 +36,7 @@ import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;

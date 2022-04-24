@@ -24,7 +24,7 @@ package com.starrocks.load.routineload;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;

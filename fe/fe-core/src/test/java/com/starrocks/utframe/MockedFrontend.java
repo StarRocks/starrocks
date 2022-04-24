@@ -23,7 +23,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;

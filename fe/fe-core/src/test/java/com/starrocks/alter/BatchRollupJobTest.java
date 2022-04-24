@@ -26,7 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;

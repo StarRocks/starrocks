@@ -27,6 +27,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;

@@ -35,7 +35,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;

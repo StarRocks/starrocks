@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;

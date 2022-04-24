@@ -32,7 +32,7 @@ import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ResolvedField;

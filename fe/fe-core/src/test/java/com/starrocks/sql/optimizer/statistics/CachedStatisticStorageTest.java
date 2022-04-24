@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.statistics;
 import avro.shaded.com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;

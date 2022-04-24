@@ -25,7 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;

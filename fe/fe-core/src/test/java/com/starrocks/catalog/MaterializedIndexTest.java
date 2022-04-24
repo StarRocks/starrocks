@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;

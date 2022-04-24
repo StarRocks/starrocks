@@ -25,7 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;

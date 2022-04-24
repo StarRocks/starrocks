@@ -23,7 +23,7 @@ package com.starrocks.mysql;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;

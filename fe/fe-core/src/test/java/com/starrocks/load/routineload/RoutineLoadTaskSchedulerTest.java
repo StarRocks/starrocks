@@ -23,7 +23,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Injectable;

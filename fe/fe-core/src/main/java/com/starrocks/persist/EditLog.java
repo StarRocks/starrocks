@@ -35,7 +35,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.BaseParam;

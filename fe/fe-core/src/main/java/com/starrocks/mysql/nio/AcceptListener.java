@@ -20,7 +20,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;

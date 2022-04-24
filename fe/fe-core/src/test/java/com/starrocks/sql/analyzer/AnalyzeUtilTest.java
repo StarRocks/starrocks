@@ -5,7 +5,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;

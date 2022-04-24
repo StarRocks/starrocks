@@ -22,7 +22,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;

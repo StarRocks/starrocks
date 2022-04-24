@@ -28,7 +28,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;

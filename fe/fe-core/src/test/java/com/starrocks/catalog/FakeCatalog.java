@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;

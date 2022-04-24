@@ -40,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;

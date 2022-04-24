@@ -25,7 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;

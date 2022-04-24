@@ -3,7 +3,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionalExprProvider;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.LogBuilder;

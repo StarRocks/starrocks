@@ -16,6 +16,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;

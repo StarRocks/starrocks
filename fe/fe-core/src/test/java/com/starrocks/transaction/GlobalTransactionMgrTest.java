@@ -27,7 +27,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;

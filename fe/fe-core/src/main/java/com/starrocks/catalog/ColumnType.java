@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;

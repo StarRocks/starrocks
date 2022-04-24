@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
 import org.junit.Assert;
 import org.junit.Before;

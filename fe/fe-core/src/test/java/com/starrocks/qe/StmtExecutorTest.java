@@ -32,7 +32,7 @@ import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.UseStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;

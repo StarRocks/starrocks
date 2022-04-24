@@ -5,7 +5,7 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;

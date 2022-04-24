@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;

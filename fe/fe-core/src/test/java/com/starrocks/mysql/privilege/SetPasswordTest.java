@@ -26,7 +26,7 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;

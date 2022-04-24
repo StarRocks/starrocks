@@ -7,7 +7,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;

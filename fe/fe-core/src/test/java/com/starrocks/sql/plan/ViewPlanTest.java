@@ -3,7 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;

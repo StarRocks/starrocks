@@ -27,6 +27,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 

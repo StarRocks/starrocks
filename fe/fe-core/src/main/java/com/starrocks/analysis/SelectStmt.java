@@ -33,7 +33,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;

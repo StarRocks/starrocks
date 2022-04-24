@@ -29,7 +29,7 @@ import com.google.common.collect.Table;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;

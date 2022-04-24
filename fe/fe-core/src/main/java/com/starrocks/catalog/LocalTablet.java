@@ -31,6 +31,7 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;

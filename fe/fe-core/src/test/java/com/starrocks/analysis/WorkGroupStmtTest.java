@@ -1,6 +1,6 @@
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.FeConstants;

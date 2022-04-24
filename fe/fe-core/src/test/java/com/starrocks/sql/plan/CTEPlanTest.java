@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;

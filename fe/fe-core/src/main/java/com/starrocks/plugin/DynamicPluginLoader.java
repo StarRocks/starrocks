@@ -21,7 +21,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.UserException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;

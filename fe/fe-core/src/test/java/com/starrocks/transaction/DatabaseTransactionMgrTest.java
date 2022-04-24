@@ -26,7 +26,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;

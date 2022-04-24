@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;

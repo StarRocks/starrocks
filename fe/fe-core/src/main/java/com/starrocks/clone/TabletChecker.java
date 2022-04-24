@@ -29,7 +29,7 @@ import com.google.common.collect.Table.Cell;
 import com.starrocks.analysis.AdminCancelRepairTableStmt;
 import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;

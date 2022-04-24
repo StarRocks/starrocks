@@ -3,7 +3,7 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 import java.util.Objects;

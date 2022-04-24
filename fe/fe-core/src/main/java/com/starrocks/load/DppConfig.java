@@ -24,7 +24,7 @@ package com.starrocks.load;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;

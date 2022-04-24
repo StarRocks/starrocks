@@ -22,7 +22,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCapability;

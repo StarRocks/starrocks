@@ -3,7 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;

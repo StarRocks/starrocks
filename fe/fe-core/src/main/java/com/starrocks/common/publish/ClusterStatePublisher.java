@@ -21,7 +21,7 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.system.Backend;

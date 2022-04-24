@@ -23,7 +23,7 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.FeMetaVersion;

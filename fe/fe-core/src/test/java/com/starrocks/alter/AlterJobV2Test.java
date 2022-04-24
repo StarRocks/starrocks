@@ -24,7 +24,7 @@ package com.starrocks.alter;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;

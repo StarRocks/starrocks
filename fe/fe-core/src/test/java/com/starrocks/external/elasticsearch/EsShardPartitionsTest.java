@@ -23,7 +23,7 @@ package com.starrocks.external.elasticsearch;
 
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

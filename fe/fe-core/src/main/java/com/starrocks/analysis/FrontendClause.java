@@ -24,7 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;

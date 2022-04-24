@@ -2,6 +2,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;

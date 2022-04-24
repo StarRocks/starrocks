@@ -5,7 +5,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;

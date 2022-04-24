@@ -23,7 +23,7 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 

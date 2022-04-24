@@ -22,7 +22,7 @@
 package com.starrocks.plugin;
 
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.jmockit.Deencapsulation;
