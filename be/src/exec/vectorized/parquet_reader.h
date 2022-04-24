@@ -20,7 +20,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "env/env.h"
-#include "exec/file_reader.h"
 #include "exprs/expr.h"
 #include "runtime/types.h"
 
@@ -48,8 +47,6 @@ private:
 
 class ParquetReaderWrap {
 public:
-    ParquetReaderWrap(FileReader* file_reader, int32_t num_of_columns_from_file, int64_t read_offset,
-                      int64_t read_size);
     ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file,
                       int64_t read_offset, int64_t read_size);
     virtual ~ParquetReaderWrap();
