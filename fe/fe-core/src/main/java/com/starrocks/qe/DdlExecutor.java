@@ -42,6 +42,7 @@ import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
+import com.starrocks.analysis.CreateCatalogStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -84,37 +85,38 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.SyncStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.server.GlobalStateMgr;
 
 public class DdlExecutor {
-    public static void execute(Catalog catalog, DdlStmt ddlStmt) throws Exception {
+    public static void execute(GlobalStateMgr catalog, DdlStmt ddlStmt) throws Exception {
         if (ddlStmt instanceof CreateDbStmt) {
-            catalog.createDb((CreateDbStmt) ddlStmt);
+            catalog.getLocalMetastore().createDb((CreateDbStmt) ddlStmt);
         } else if (ddlStmt instanceof DropDbStmt) {
-            catalog.dropDb((DropDbStmt) ddlStmt);
+            catalog.getLocalMetastore().dropDb((DropDbStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateFunctionStmt) {
-            catalog.createFunction((CreateFunctionStmt) ddlStmt);
+            catalog.getLocalMetastore().createFunction((CreateFunctionStmt) ddlStmt);
         } else if (ddlStmt instanceof DropFunctionStmt) {
             catalog.dropFunction((DropFunctionStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateTableStmt) {
-            catalog.createTable((CreateTableStmt) ddlStmt);
+            catalog.getLocalMetastore().createTable((CreateTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateTableLikeStmt) {
-            catalog.createTableLike((CreateTableLikeStmt) ddlStmt);
+            catalog.getLocalMetastore().createTableLike((CreateTableLikeStmt) ddlStmt);
         } else if (ddlStmt instanceof DropTableStmt) {
-            catalog.dropTable((DropTableStmt) ddlStmt);
+            catalog.getLocalMetastore().dropTable((DropTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
-            catalog.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+            catalog.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
-            catalog.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
+            catalog.getLocalMetastore().dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterTableStmt) {
-            catalog.alterTable((AlterTableStmt) ddlStmt);
+            catalog.getLocalMetastore().alterTable((AlterTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterViewStmt) {
-            catalog.alterView((AlterViewStmt) ddlStmt);
+            catalog.getLocalMetastore().alterView((AlterViewStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelAlterTableStmt) {
-            catalog.cancelAlter((CancelAlterTableStmt) ddlStmt);
+            catalog.getLocalMetastore().cancelAlter((CancelAlterTableStmt) ddlStmt);
         } else if (ddlStmt instanceof LoadStmt) {
             LoadStmt loadStmt = (LoadStmt) ddlStmt;
             EtlJobType jobType = loadStmt.getEtlJobType();
@@ -164,22 +166,22 @@ public class DdlExecutor {
             catalog.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterSystemStmt) {
             AlterSystemStmt stmt = (AlterSystemStmt) ddlStmt;
-            catalog.alterCluster(stmt);
+            catalog.getLocalMetastore().alterCluster(stmt);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
-            catalog.cancelAlterCluster(stmt);
+            catalog.getLocalMetastore().cancelAlterCluster(stmt);
         } else if (ddlStmt instanceof AlterDatabaseQuotaStmt) {
-            catalog.alterDatabaseQuota((AlterDatabaseQuotaStmt) ddlStmt);
+            catalog.getLocalMetastore().alterDatabaseQuota((AlterDatabaseQuotaStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterDatabaseRename) {
-            catalog.renameDatabase((AlterDatabaseRename) ddlStmt);
+            catalog.getLocalMetastore().renameDatabase((AlterDatabaseRename) ddlStmt);
         } else if (ddlStmt instanceof RecoverDbStmt) {
-            catalog.recoverDatabase((RecoverDbStmt) ddlStmt);
+            catalog.getLocalMetastore().recoverDatabase((RecoverDbStmt) ddlStmt);
         } else if (ddlStmt instanceof RecoverTableStmt) {
-            catalog.recoverTable((RecoverTableStmt) ddlStmt);
+            catalog.getLocalMetastore().recoverTable((RecoverTableStmt) ddlStmt);
         } else if (ddlStmt instanceof RecoverPartitionStmt) {
-            catalog.recoverPartition((RecoverPartitionStmt) ddlStmt);
+            catalog.getLocalMetastore().recoverPartition((RecoverPartitionStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateViewStmt) {
-            catalog.createView((CreateViewStmt) ddlStmt);
+            catalog.getLocalMetastore().createView((CreateViewStmt) ddlStmt);
         } else if (ddlStmt instanceof BackupStmt) {
             catalog.backup((BackupStmt) ddlStmt);
         } else if (ddlStmt instanceof RestoreStmt) {
@@ -193,13 +195,13 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof SyncStmt) {
             return;
         } else if (ddlStmt instanceof TruncateTableStmt) {
-            catalog.truncateTable((TruncateTableStmt) ddlStmt);
+            catalog.getLocalMetastore().truncateTable((TruncateTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminRepairTableStmt) {
             catalog.getTabletChecker().repairTable((AdminRepairTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminCancelRepairTableStmt) {
             catalog.getTabletChecker().cancelRepairTable((AdminCancelRepairTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminSetConfigStmt) {
-            catalog.setConfig((AdminSetConfigStmt) ddlStmt);
+            catalog.getNodeMgr().setConfig((AdminSetConfigStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateFileStmt) {
             catalog.getSmallFileMgr().createFile((CreateFileStmt) ddlStmt);
         } else if (ddlStmt instanceof DropFileStmt) {
@@ -211,13 +213,15 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof AdminCheckTabletsStmt) {
             catalog.checkTablets((AdminCheckTabletsStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminSetReplicaStatusStmt) {
-            catalog.setReplicaStatus((AdminSetReplicaStatusStmt) ddlStmt);
+            catalog.getLocalMetastore().setReplicaStatus((AdminSetReplicaStatusStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateResourceStmt) {
             catalog.getResourceMgr().createResource((CreateResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof DropResourceStmt) {
             catalog.getResourceMgr().dropResource((DropResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterResourceStmt) {
             catalog.getResourceMgr().alterResource((AlterResourceStmt) ddlStmt);
+        } else if (ddlStmt instanceof CreateCatalogStmt) {
+            catalog.getCatalogManager().addCatalog((CreateCatalogStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelExportStmt) {
             catalog.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateAnalyzeJobStmt) {
@@ -225,7 +229,7 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
             catalog.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
         } else if (ddlStmt instanceof RefreshExternalTableStmt) {
-            catalog.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
+            catalog.getLocalMetastore().refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
             catalog.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof DropWorkGroupStmt) {

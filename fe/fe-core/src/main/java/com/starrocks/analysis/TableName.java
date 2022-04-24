@@ -36,6 +36,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TableName implements Writable {
+    private String catalog;
     private String tbl;
     private String db;
 
@@ -44,6 +45,11 @@ public class TableName implements Writable {
     }
 
     public TableName(String db, String tbl) {
+        this(null, db, tbl);
+    }
+
+    public TableName(String catalog, String db, String tbl) {
+        this.catalog = catalog;
         this.db = db;
         this.tbl = tbl;
     }
@@ -102,6 +108,14 @@ public class TableName implements Writable {
 
     public boolean isEmpty() {
         return tbl.isEmpty();
+    }
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
     }
 
     /**

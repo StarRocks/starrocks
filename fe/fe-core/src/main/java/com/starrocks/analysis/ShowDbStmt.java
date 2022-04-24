@@ -40,6 +40,7 @@ public class ShowDbStmt extends ShowStmt {
                     .build();
     private final String pattern;
     private Expr where;
+    private String catalog;
 
     public ShowDbStmt(String pattern) {
         this.pattern = pattern;
@@ -48,6 +49,17 @@ public class ShowDbStmt extends ShowStmt {
     public ShowDbStmt(String pattern, Expr where) {
         this.pattern = pattern;
         this.where = where;
+        this.catalog = null;
+    }
+
+    public ShowDbStmt(String pattern, Expr where, String catalog) {
+        this.pattern = pattern;
+        this.where = where;
+        this.catalog = catalog;
+    }
+
+    public String getCatalog() {
+        return catalog;
     }
 
     public String getPattern() {

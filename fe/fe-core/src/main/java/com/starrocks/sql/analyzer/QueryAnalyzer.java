@@ -29,6 +29,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataManager;
+import com.starrocks.spi.TableIdentifier;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -60,9 +63,11 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class QueryAnalyzer {
     private final ConnectContext session;
+    private final MetadataManager metadata;
 
     public QueryAnalyzer(ConnectContext session) {
         this.session = session;
+        this.metadata = GlobalStateMgr.getCurrentState().getMetadataManager();
     }
 
     public void analyze(StatementBase node) {
@@ -256,7 +261,7 @@ public class QueryAnalyzer {
             }
 
             node.setColumns(columns.build());
-            session.getDumpInfo().addTable(node.getName().getDb().split(":")[1], table);
+            session.getDumpInfo().addTable(node.getName().getDb(), table);
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
@@ -621,17 +626,14 @@ public class QueryAnalyzer {
     private Table resolveTable(TableName tableName) {
         try {
             MetaUtils.normalizationTableName(session, tableName);
+            String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tbName = tableName.getTbl();
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
 
-            Database database = session.getCatalog().getDb(dbName);
-            if (database == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
-            Table table = database.getTable(tbName);
+            Table table = metadata.getTable(new TableIdentifier(catalogName, dbName, tbName));
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
             }

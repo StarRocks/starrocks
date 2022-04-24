@@ -40,7 +40,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -52,12 +52,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TFetchResourceResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
@@ -67,6 +69,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class Auth implements Writable {
     private static final Logger LOG = LogManager.getLogger(Auth.class);
@@ -401,7 +405,7 @@ public class Auth implements Writable {
             return checkDbPriv(ctx, authInfo.getDbName(), wanted);
         }
         for (String tblName : authInfo.getTableNameList()) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), authInfo.getDbName(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), authInfo.getDbName(),
                     tblName, wanted)) {
                 return false;
             }
@@ -599,7 +603,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo privInfo = new PrivInfo(userIdent, null, password, roleName);
-                Catalog.getCurrentCatalog().getEditLog().logCreateUser(privInfo);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateUser(privInfo);
             }
             LOG.debug("finished to create user: {}, is replay: {}", userIdent, isReplay);
         } finally {
@@ -660,7 +664,7 @@ public class Auth implements Writable {
             }
 
             if (!isReplay) {
-                Catalog.getCurrentCatalog().getEditLog().logNewDropUser(userIdent);
+                GlobalStateMgr.getCurrentState().getEditLog().logNewDropUser(userIdent);
             }
             LOG.info("finished to drop user: {}, is replay: {}", userIdent.getQualifiedUser(), isReplay);
         } finally {
@@ -719,7 +723,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, tblPattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logGrantPriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantPriv(info);
             }
             LOG.debug("finished to grant privilege. is replay: {}", isReplay);
         } finally {
@@ -750,7 +754,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, resourcePattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logGrantPriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantPriv(info);
             }
             LOG.debug("finished to grant resource privilege. is replay: {}", isReplay);
         } finally {
@@ -880,7 +884,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, tblPattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logRevokePriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokePriv(info);
             }
             LOG.info("finished to revoke privilege. is replay: {}", isReplay);
         } finally {
@@ -907,7 +911,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, resourcePattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logRevokePriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokePriv(info);
             }
             LOG.info("finished to revoke privilege. is replay: {}", isReplay);
         } finally {
@@ -1004,7 +1008,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, null, password, null);
-                Catalog.getCurrentCatalog().getEditLog().logSetPassword(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetPassword(info);
             }
         } finally {
             writeUnlock();
@@ -1033,7 +1037,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(null, null, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logCreateRole(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateRole(info);
             }
         } finally {
             writeUnlock();
@@ -1061,7 +1065,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(null, null, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logDropRole(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropRole(info);
             }
         } finally {
             writeUnlock();
@@ -1086,7 +1090,7 @@ public class Auth implements Writable {
             propertyMgr.updateUserProperty(user, properties);
             if (!isReplay) {
                 UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
-                Catalog.getCurrentCatalog().getEditLog().logUpdateUserProperty(propertyInfo);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserProperty(propertyInfo);
             }
             LOG.info("finished to set properties for user: {}", user);
         } finally {
@@ -1466,7 +1470,7 @@ public class Auth implements Writable {
         userPrivTable = (UserPrivTable) PrivTable.read(in);
         dbPrivTable = (DbPrivTable) PrivTable.read(in);
         tablePrivTable = (TablePrivTable) PrivTable.read(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourcePrivTable = (ResourcePrivTable) PrivTable.read(in);
         }
         propertyMgr = UserPropertyMgr.read(in);
@@ -1487,6 +1491,15 @@ public class Auth implements Writable {
         sb.append(roleManager).append("\n");
         sb.append(propertyMgr).append("\n");
         return sb.toString();
+    }
+
+    public long loadAuth(DataInputStream dis, long checksum) throws IOException {
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+            // CAN NOT use Auth.read(), cause this auth instance is already passed to DomainResolver
+            readFields(dis);
+        }
+        LOG.info("finished replay auth from image");
+        return checksum;
     }
 }
 

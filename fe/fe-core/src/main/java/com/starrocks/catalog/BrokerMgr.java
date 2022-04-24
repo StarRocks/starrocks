@@ -28,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.ModifyBrokerClause;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -35,8 +36,13 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collection;
@@ -49,6 +55,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Broker manager
  */
 public class BrokerMgr {
+    private static final Logger LOG = LogManager.getLogger(BrokerMgr.class);
     public static final ImmutableList<String> BROKER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("Port").add("Alive")
             .add("LastStartTime").add("LastUpdateTime").add("ErrMsg")
@@ -201,7 +208,7 @@ public class BrokerMgr {
                 }
                 addedBrokerAddress.add(new FsBroker(pair.first, pair.second));
             }
-            Catalog.getCurrentCatalog().getEditLog().logAddBroker(new ModifyBrokerInfo(name, addedBrokerAddress));
+            GlobalStateMgr.getCurrentState().getEditLog().logAddBroker(new ModifyBrokerInfo(name, addedBrokerAddress));
             for (FsBroker address : addedBrokerAddress) {
                 brokerAddrsMap.put(address.ip, address);
             }
@@ -253,7 +260,7 @@ public class BrokerMgr {
                     throw new DdlException("Broker(" + pair.first + ":" + pair.second + ") has not in brokers.");
                 }
             }
-            Catalog.getCurrentCatalog().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));
+            GlobalStateMgr.getCurrentState().getEditLog().logDropBroker(new ModifyBrokerInfo(name, dropedAddressList));
             for (FsBroker address : dropedAddressList) {
                 brokerAddrsMap.remove(address.ip, address);
             }
@@ -284,7 +291,7 @@ public class BrokerMgr {
             if (!brokersMap.containsKey(name)) {
                 throw new DdlException("Unknown broker name(" + name + ")");
             }
-            Catalog.getCurrentCatalog().getEditLog().logDropAllBroker(name);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropAllBroker(name);
             brokersMap.remove(name);
             brokerListMap.remove(name);
         } finally {
@@ -390,6 +397,26 @@ public class BrokerMgr {
             info.readFields(in);
             return info;
         }
+    }
+
+    public long loadBrokers(DataInputStream dis, long checksum) throws IOException, DdlException {
+        if (MetaContext.get().getMetaVersion() >= FeMetaVersion.VERSION_31) {
+            int count = dis.readInt();
+            checksum ^= count;
+            for (long i = 0; i < count; ++i) {
+                String brokerName = Text.readString(dis);
+                int size = dis.readInt();
+                checksum ^= size;
+                List<FsBroker> addrs = Lists.newArrayList();
+                for (int j = 0; j < size; j++) {
+                    FsBroker addr = FsBroker.readIn(dis);
+                    addrs.add(addr);
+                }
+                replayAddBrokers(brokerName, addrs);
+            }
+            LOG.info("finished replay brokerMgr from image");
+        }
+        return checksum;
     }
 }
 

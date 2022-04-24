@@ -21,6 +21,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -46,7 +47,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -57,21 +58,28 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.GlobalStateMgr.getCurrentCatalogJournalVersion;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -822,7 +830,7 @@ public class Load {
             }
             properties.remove("name");
 
-            if (!Catalog.getCurrentCatalog().getBrokerMgr().containsBroker(brokerName)) {
+            if (!GlobalStateMgr.getCurrentState().getBrokerMgr().containsBroker(brokerName)) {
                 throw new DdlException("broker does not exist: " + brokerName);
             }
 
@@ -845,7 +853,7 @@ public class Load {
             loadErrorHubParam = LoadErrorHub.Param.createNullParam();
         }
 
-        Catalog.getCurrentCatalog().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
+        GlobalStateMgr.getCurrentState().getEditLog().logSetLoadErrorHub(loadErrorHubParam);
 
         LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
@@ -866,7 +874,7 @@ public class Load {
         }
     }
 
-    public static void replayClearRollupInfo(ReplicaPersistInfo info, Catalog catalog) {
+    public static void replayClearRollupInfo(ReplicaPersistInfo info, GlobalStateMgr catalog) {
         Database db = catalog.getDb(info.getDbId());
         db.writeLock();
         try {
@@ -877,6 +885,60 @@ public class Load {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    public long loadJob(DataInputStream dis, long checksum) throws IOException, DdlException {
+        // load jobs
+        int jobSize = dis.readInt();
+        long newChecksum = checksum ^ jobSize;
+        Preconditions.checkArgument(jobSize == 0, "Number of job jobs must be 0");
+
+        // delete jobs
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
+            jobSize = dis.readInt();
+            newChecksum ^= jobSize;
+            Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
+        }
+
+        // load error hub info
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_24) {
+            LoadErrorHub.Param param = new LoadErrorHub.Param();
+            param.readFields(dis);
+            setLoadErrorHubInfo(param);
+        }
+
+        if (getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+            // 4. load delete jobs
+            int deleteJobSize = dis.readInt();
+            newChecksum ^= deleteJobSize;
+            Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
+        }
+
+        LOG.info("finished replay loadJob from image");
+        return newChecksum;
+    }
+
+    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
+        // 1. save load.dbToLoadJob
+        int jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 2. save delete jobs
+        jobSize = 0;
+        checksum ^= jobSize;
+        dos.writeInt(jobSize);
+
+        // 3. load error hub info
+        LoadErrorHub.Param param = getLoadErrorHubInfo();
+        param.write(dos);
+
+        // 4. save delete load job info
+        int deleteJobSize = 0;
+        checksum ^= deleteJobSize;
+        dos.writeInt(deleteJobSize);
+
+        return checksum;
     }
 
 }

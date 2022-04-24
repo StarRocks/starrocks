@@ -27,7 +27,7 @@ statement
     | USE schema=identifier                                                             #use
     | SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?                                   #showTables
-    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression))?                      #showDatabases
+    | SHOW DATABASES ((LIKE pattern=string) | (WHERE expression) | (FROM catalog=string)?)?          #showDatabases
     | CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement                               #createView
@@ -39,6 +39,8 @@ statement
 explainDesc
     : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
     ;
+
+
 
 
 partitionDesc

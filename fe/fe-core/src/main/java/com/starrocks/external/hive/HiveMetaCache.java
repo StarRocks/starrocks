@@ -7,24 +7,36 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.spi.Metadata;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static com.google.common.cache.CacheLoader.asyncReloading;
+import static com.starrocks.analysis.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class HiveMetaCache {
@@ -33,6 +45,7 @@ public class HiveMetaCache {
     private static final long MAX_PARTITION_CACHE_SIZE = MAX_TABLE_CACHE_SIZE * 1000L;
 
     private final HiveMetaClient client;
+    private String resourceName;
 
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>
     // for unPartitioned table, partition map is: ImmutableMap<>.of(new PartitionKey(), PartitionId)
@@ -49,8 +62,21 @@ public class HiveMetaCache {
     // HiveTableColumnsKey => ImmutableMap<ColumnName -> HiveColumnStats>
     LoadingCache<HiveTableColumnsKey, ImmutableMap<String, HiveColumnStats>> tableColumnStatsCache;
 
+    LoadingCache<String, List<String>> databaseNamesCache;
+
+    LoadingCache<String, Database> databaseCache;
+
+    LoadingCache<HiveTableName, Table> tableCache;
+
+    LoadingCache<String, List<String>> tableNamesCache;
+
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
+        this(hiveMetaClient, executor, null);
+    }
+
+    public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor, String resourceName) {
         this.client = hiveMetaClient;
+        this.resourceName = resourceName;
         init(executor);
     }
 
@@ -92,6 +118,37 @@ public class HiveMetaCache {
                     @Override
                     public ImmutableMap<String, HiveColumnStats> load(HiveTableColumnsKey key) throws Exception {
                         return loadTableColumnStats(key);
+                    }
+                }, executor));
+        databaseNamesCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<String, List<String>>() {
+                    @Override
+                    public List<String> load(String key) throws Exception {
+                        return loadAllDatabases(key);
+                    }
+                }, executor));
+
+        databaseCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<String, Database>() {
+                    @Override
+                    public Database load(String key) throws Exception {
+                        return loadDatabase(key);
+                    }
+                }, executor));
+
+        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<HiveTableName, Table>() {
+                    @Override
+                    public Table load(HiveTableName name) throws Exception {
+                        return loadTable(name);
+                    }
+                }, executor));
+
+        tableNamesCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE)
+                .build(asyncReloading(new CacheLoader<String, List<String>>() {
+                    @Override
+                    public List<String> load(String key) throws Exception {
+                        return loadTableNames(key);
                     }
                 }, executor));
     }
@@ -159,6 +216,127 @@ public class HiveMetaCache {
         }
     }
 
+    public Table getTable(String db, String table) throws DdlException {
+        try {
+            return tableCache.get(new HiveTableName(db, table));
+        } catch (ExecutionException e) {
+            LOG.warn("get table failed", e);
+            throw new DdlException("get table failed: " + e.getMessage());
+        }
+    }
+
+    private Table loadTable(HiveTableName hiveTableName) throws Exception {
+        String dbName = hiveTableName.getDatabaseName();
+        String tblName = hiveTableName.getTableName();
+        long tableId;
+        Table oldTable = tableCache.getIfPresent(hiveTableName);
+        if (oldTable != null) {
+            tableId = oldTable.getId();
+        } else {
+            tableId = GlobalStateMgr.getCurrentState().getNextId();
+        }
+
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(dbName, tblName);
+        List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
+        List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+
+        List<Column> fullSchema = Lists.newArrayList();
+        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
+            FieldSchema fieldSchema = entry.getValue();
+            PrimitiveType type = toPrimitiveType(fieldSchema.getType());
+            Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, true,
+                    NULL_DEFAULT_VALUE, fieldSchema.getComment());
+            fullSchema.add(column);
+        }
+
+
+        return new HiveTable(tableId, tblName, fullSchema, new HashMap<>(), hiveTable, resourceName);
+    }
+
+    private PrimitiveType toPrimitiveType(String hiveType) throws DdlException {
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        switch (typeUpperCase) {
+            case "TINYINT":
+                return PrimitiveType.TINYINT;
+            case "SMALLINT":
+                return PrimitiveType.SMALLINT;
+            case "INT":
+            case "INTEGER":
+                return PrimitiveType.INT;
+            case "BIGINT":
+                return PrimitiveType.BIGINT;
+            case "FLOAT":
+                return PrimitiveType.FLOAT;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                return PrimitiveType.DOUBLE;
+            case "DECIMAL":
+            case "NUMERIC":
+                return PrimitiveType.DECIMAL32;
+            case "TIMESTAMP":
+                return PrimitiveType.DATETIME;
+            case "DATE":
+                return PrimitiveType.DATE;
+            case "STRING":
+            case "VARCHAR":
+            case "BINARY":
+                return PrimitiveType.VARCHAR;
+            case "CHAR":
+                return PrimitiveType.CHAR;
+            case "BOOLEAN":
+                return PrimitiveType.BOOLEAN;
+            default:
+                throw new DdlException("hive table column type [" + typeUpperCase + "] cast failed.");
+        }
+    }
+
+    private List<String> loadAllDatabases(String dbName) throws DdlException {
+        return client.getAllDatabaseNames();
+    }
+
+    public Database getDatabase(String databaseName) throws DdlException {
+        try {
+            return databaseCache.get(databaseName);
+        } catch (ExecutionException e) {
+            LOG.warn("get database failed", e);
+            throw new DdlException("get partition keys failed: " + e.getMessage());
+        }
+    }
+
+    public List<String> getTableNames(String databaseName) throws DdlException{
+        try {
+            return tableNamesCache.get(databaseName);
+        } catch (ExecutionException e) {
+            LOG.warn("get table names failed", e);
+            throw new DdlException("get partition keys failed: " + e.getMessage());
+        }
+    }
+
+    private List<String> loadTableNames(String dbName) throws DdlException {
+        return client.getAllTableNames(dbName);
+    }
+
+    private Database loadDatabase(String databaseName) throws DdlException {
+        long dbId;
+        Database oldDb = databaseCache.getIfPresent(databaseName);
+        if (oldDb != null) {
+            dbId = oldDb.getId();
+        } else {
+            dbId = GlobalStateMgr.getCurrentState().getNextId();
+        }
+
+        org.apache.hadoop.hive.metastore.api.Database hiveDb = client.getDatabase(databaseName);
+        if (hiveDb != null) {
+            return new Database(dbId, databaseName);
+        }
+        throw new DdlException("aaaaaa");
+    }
+
     public ImmutableMap<PartitionKey, Long> getPartitionKeys(String dbName, String tableName,
                                                              List<Column> partColumns) throws DdlException {
         try {
@@ -218,6 +396,14 @@ public class HiveMetaCache {
             return tableColumnStatsCache.get(key);
         } catch (ExecutionException e) {
             throw new DdlException("get table level column stats failed: " + e.getMessage());
+        }
+    }
+
+    public List<String> getAllDatabaseNames() throws DdlException {
+        try {
+            return databaseNamesCache.get("default");
+        } catch (ExecutionException e) {
+            throw new DdlException("get all database names failed: " + e.getMessage());
         }
     }
 
@@ -291,7 +477,7 @@ public class HiveMetaCache {
         HivePartitionKeysKey hivePartitionKeysKey = HivePartitionKeysKey.gen(dbName, tableName, partColumns);
         HiveTableKey hiveTableKey = HiveTableKey.gen(dbName, tableName);
         HiveTableColumnsKey hiveTableColumnsKey = HiveTableColumnsKey.gen(dbName, tableName, partColumns, columnNames);
-        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             ImmutableMap<PartitionKey, Long> partitionKeys = loadPartitionKeys(hivePartitionKeysKey);
             partitionKeysCache.put(hivePartitionKeysKey, partitionKeys);
@@ -308,12 +494,12 @@ public class HiveMetaCache {
             LOG.warn("refresh table cache failed", e);
             throw new DdlException("refresh table cache failed: " + e.getMessage());
         } finally {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
     }
 
     public void refreshPartition(String dbName, String tableName, List<String> partNames) throws DdlException {
-        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
@@ -325,7 +511,7 @@ public class HiveMetaCache {
             LOG.warn("refresh partition cache failed", e);
             throw new DdlException("refresh partition cached failed: " + e.getMessage());
         } finally {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
     }
 

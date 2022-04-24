@@ -23,7 +23,6 @@ package com.starrocks;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.CommandLineOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
@@ -37,6 +36,7 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.qe.QeService;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
@@ -107,8 +107,8 @@ public class StarRocksFE {
             ExecuteEnv.setup();
 
             // init catalog and wait it be ready
-            Catalog.getCurrentCatalog().initialize(args);
-            Catalog.getCurrentCatalog().waitForReady();
+            GlobalStateMgr.getCurrentState().initialize(args);
+            GlobalStateMgr.getCurrentState().waitForReady();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -151,7 +151,7 @@ public class StarRocksFE {
                         //      If there is a synchronized function funA of EditLog calls System.exit(), the System.exit() will wait shutdown hook complete,
                         //      because EditLog.close is a synchronized function too, and it cannot be executed unless funA returns.
                         //      In this case, system will fall into deadlock.
-                        Journal journal = Catalog.getCurrentCatalog().getEditLog().getJournal();
+                        Journal journal = GlobalStateMgr.getCurrentState().getEditLog().getJournal();
                         if (journal instanceof BDBJEJournal) {
                             BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
                             if (bdbEnvironment != null) {
@@ -309,7 +309,7 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            BDBTool bdbTool = new BDBTool(Catalog.getCurrentCatalog().getBdbDir(), cmdLineOpts.getBdbToolOpts());
+            BDBTool bdbTool = new BDBTool(GlobalStateMgr.getCurrentState().getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);
             } else {

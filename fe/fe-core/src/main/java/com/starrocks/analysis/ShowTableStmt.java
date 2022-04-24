@@ -38,6 +38,7 @@ public class ShowTableStmt extends ShowStmt {
     private static final String TYPE_COL = "Table_type";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
     private String db;
+    private String catalog;
     private final boolean isVerbose;
     private final String pattern;
     private Expr where;
@@ -54,6 +55,14 @@ public class ShowTableStmt extends ShowStmt {
         this.isVerbose = isVerbose;
         this.pattern = pattern;
         this.where = where;
+    }
+
+    public String getCatalog() {
+        return catalog;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
     }
 
     public String getDb() {

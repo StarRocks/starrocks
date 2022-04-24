@@ -140,6 +140,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowDbStmt(stringLiteral.getValue());
         } else if (context.expression() != null) {
             return new ShowDbStmt(null, (Expr) visit(context.expression()));
+        } else if (context.catalog != null) {
+            return new ShowDbStmt(null, null, context.catalog.getText());
         } else {
             return new ShowDbStmt(null, null);
         }
@@ -1591,10 +1593,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
-        if (qualifiedName.getParts().size() == 2) {
-            return new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
+        if (qualifiedName.getParts().size() == 3) {
+            return new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
+        } else if (qualifiedName.getParts().size() == 2) {
+            return new TableName(null, qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
         } else if (qualifiedName.getParts().size() == 1) {
-            return new TableName(null, qualifiedName.getParts().get(0));
+            return new TableName(null, null, qualifiedName.getParts().get(0));
         } else {
             throw new ParsingException("error table name ");
         }

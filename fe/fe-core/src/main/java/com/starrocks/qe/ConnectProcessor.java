@@ -28,7 +28,7 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -51,6 +51,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -87,15 +88,40 @@ public class ConnectProcessor {
 
     // COM_INIT_DB: change current database of this session.
     private void handleInitDb() {
-        String dbName = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
+        String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         if (Strings.isNullOrEmpty(ctx.getClusterName())) {
             ctx.getState().setError("Please enter cluster");
             return;
         }
-        dbName = ClusterNamespace.getFullName(ctx.getClusterName(), dbName);
+
+        String catalogName = ctx.getCurrentCatalog();
+        String dbName = "";
+        String[] arr;
+
+        if (identifier.contains(".")) {
+            arr = identifier.split("\\.");
+            catalogName = arr[0];
+            if (arr[0].equals("default_catalog")) {
+                dbName = ClusterNamespace.getFullName(ctx.getClusterName(), arr[1]);
+            } else {
+                if (GlobalStateMgr.getCurrentState().getCatalogManager().catalogExist(catalogName)) {
+                    dbName = arr[1];
+                } else {
+                    ctx.getState().setError("catalog not exist");
+                }
+            }
+        } else {
+            if (catalogName.equals("default_catalog")) {
+                dbName = ClusterNamespace.getFullName(ctx.getClusterName(), identifier);
+            } else {
+                dbName = identifier;
+            }
+        }
+
         try {
-            ctx.getCatalog().changeDb(ctx, dbName);
-        } catch (DdlException e) {
+            ctx.setCurrentCatalog(catalogName);
+            ctx.setDatabase(dbName);
+        } catch (Exception e) {
             ctx.getState().setError(e.getMessage());
             return;
         }
@@ -181,7 +207,7 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
         }
 
-        Catalog.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
+        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
@@ -522,7 +548,7 @@ public class ConnectProcessor {
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
-        ctx.setCatalog(Catalog.getCurrentCatalog());
+        ctx.setCatalog(GlobalStateMgr.getCurrentState());
         ctx.getState().reset();
         if (request.isSetCluster()) {
             ctx.setCluster(request.cluster);
@@ -602,7 +628,7 @@ public class ConnectProcessor {
             TMasterOpResult result = new TMasterOpResult();
             ctx.getState().setError(
                     "Missing current user identity. You need to upgrade this Frontend to the same version as Master Frontend.");
-            result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId());
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
             result.setPacket(getResultPacket());
             return result;
         }
@@ -626,7 +652,7 @@ public class ConnectProcessor {
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current jounalID.
         TMasterOpResult result = new TMasterOpResult();
-        result.setMaxJournalId(Catalog.getCurrentCatalog().getMaxJournalId());
+        result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
         // following stmt will not be executed, when current stmt is failed,
         // so only set SERVER_MORE_RESULTS_EXISTS Flag when stmt executed successfully
         if (!ctx.getIsLastStmt()

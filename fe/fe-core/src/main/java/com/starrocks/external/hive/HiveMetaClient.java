@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
+import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -189,6 +190,15 @@ public class HiveMetaClient {
     public List<String> partitionNameToVals(String partName) throws DdlException {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.partitionNameToVals(partName);
+        } catch (Exception e) {
+            LOG.warn("convert partitionName to vals failed", e);
+            throw new DdlException("convert partition name to vals failed: " + e.getMessage());
+        }
+    }
+
+    public Database getDatabase(String dbName) throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getDatabase(dbName);
         } catch (Exception e) {
             LOG.warn("convert partitionName to vals failed", e);
             throw new DdlException("convert partition name to vals failed: " + e.getMessage());
@@ -492,6 +502,24 @@ public class HiveMetaClient {
         }
 
         return result;
+    }
+
+    public List<String> getAllDatabaseNames() throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getAllDatabases();
+        } catch (Exception e) {
+            LOG.warn("get all database names failed", e);
+            throw new DdlException("get all database names from meta store failed: " + e.getMessage());
+        }
+    }
+
+    public List<String> getAllTableNames(String dbName) throws DdlException {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getAllTables(dbName);
+        } catch (Exception e) {
+            LOG.warn("get all database names failed", e);
+            throw new DdlException("get all database names from meta store failed: " + e.getMessage());
+        }
     }
 
     private boolean isStringType(String hiveType) {

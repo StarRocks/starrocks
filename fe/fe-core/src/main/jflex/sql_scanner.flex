@@ -408,6 +408,8 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("sqlblacklist", new Integer(SqlParserSymbols.KW_SQLBLACKLIST));
         keywordMap.put("||", new Integer(SqlParserSymbols.KW_PIPE));
         keywordMap.put("every", new Integer(SqlParserSymbols.KW_EVERY));
+        keywordMap.put("catalog", new Integer(SqlParserSymbols.KW_CATALOG));
+        keywordMap.put("catalogs", new Integer(SqlParserSymbols.KW_CATALOGS));
    }
     
   // map from token id to token description

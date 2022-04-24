@@ -27,8 +27,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowTableStmt(ShowTableStmt node, ConnectContext context) {
+            node.setCatalog(context.getCurrentCatalog());
+            String catalog = node.getCatalog();
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            if (catalog.equals("default_catalog")) {
+                db = getFullDatabaseName(db, context);
+            } else {
+                db = context.getDatabase();
+            }
             node.setDb(db);
             return null;
         }

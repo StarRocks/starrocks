@@ -24,13 +24,14 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TResourceInfo;
@@ -85,6 +86,9 @@ public class ConnectContext {
     protected volatile boolean isKilled;
     // Db
     protected volatile String currentDb = "";
+    // catalog
+    protected volatile String currentCatalog = "default_catalog";
+
     // cluster name
     protected volatile String clusterName = "";
     // username@host of current login user
@@ -111,7 +115,7 @@ public class ConnectContext {
 
     // Catalog: put catalog here is convenient for unit test,
     // because catalog is singleton, hard to mock
-    protected Catalog catalog;
+    protected GlobalStateMgr catalog;
     protected boolean isSend;
 
     protected AuditEventBuilder auditEventBuilder = new AuditEventBuilder();
@@ -223,11 +227,11 @@ public class ConnectContext {
         return new TResourceInfo(qualifiedUser, sessionVariable.getResourceGroup());
     }
 
-    public void setCatalog(Catalog catalog) {
+    public void setCatalog(GlobalStateMgr catalog) {
         this.catalog = catalog;
     }
 
-    public Catalog getCatalog() {
+    public GlobalStateMgr getCatalog() {
         return catalog;
     }
 
@@ -346,6 +350,14 @@ public class ConnectContext {
 
     public void setDatabase(String db) {
         currentDb = db;
+    }
+
+    public String getCurrentCatalog() {
+        return currentCatalog;
+    }
+
+    public void setCurrentCatalog(String currentCatalog) {
+        this.currentCatalog = currentCatalog;
     }
 
     public void setExecutor(StmtExecutor executor) {
@@ -503,6 +515,7 @@ public class ConnectContext {
             row.add(getMysqlChannel().getRemoteHostPortString());
             row.add(clusterName);
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentCatalog);
             // Command
             row.add(command.toString());
             // Time

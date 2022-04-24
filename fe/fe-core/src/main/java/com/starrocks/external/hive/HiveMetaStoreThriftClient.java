@@ -752,7 +752,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public List<String> getAllDatabases() throws MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_all_databases();
     }
 
     @Override
@@ -810,7 +810,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public List<String> getAllTables(String dbName) throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return client.get_all_tables(dbName);
     }
 
     @Override
@@ -906,7 +906,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     @Override
     public Database getDatabase(String databaseName) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_database(databaseName);
     }
 
     @Override

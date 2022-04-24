@@ -38,6 +38,7 @@ import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
+import com.starrocks.analysis.ShowCatalogsStmt;
 import com.starrocks.analysis.ShowClusterStmt;
 import com.starrocks.analysis.ShowCollationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
@@ -81,7 +82,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -129,6 +130,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
@@ -222,6 +224,8 @@ public class ShowExecutor {
             handleShowBroker();
         } else if (stmt instanceof ShowResourcesStmt) {
             handleShowResources();
+        } else if (stmt instanceof ShowCatalogsStmt) {
+            handleShowCatalogs();
         } else if (stmt instanceof ShowExportStmt) {
             handleShowExport();
         } else if (stmt instanceof ShowBackendsStmt) {
@@ -269,7 +273,7 @@ public class ShowExecutor {
         String dbName = ((ShowMaterializedViewStmt) stmt).getDb();
         List<List<String>> rowSets = Lists.newArrayList();
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -424,7 +428,7 @@ public class ShowExecutor {
         List<List<String>> finalRows = procNode.fetchResult().getRows();
         // if this is superuser, hide ip and host info form backends info proc
         if (procNode instanceof BackendsProcDir) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
                 // hide host info
                 for (List<String> row : finalRows) {
@@ -461,7 +465,7 @@ public class ShowExecutor {
     private void handleShowMigrations() throws AnalysisException {
         final ShowMigrationsStmt showStmt = (ShowMigrationsStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
-        final Set<BaseParam> infos = ctx.getCatalog().getMigrations();
+        final Set<BaseParam> infos = ctx.getCatalog().getLocalMetastore().getMigrations();
 
         for (BaseParam param : infos) {
             final int percent = (int) (param.getFloatParam(0) * 100f);
@@ -476,31 +480,42 @@ public class ShowExecutor {
     private void handleShowDb() throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = ctx.getCatalog().getClusterDbNames(ctx.getClusterName());
+        String catalog = showDbStmt.getCatalog();
+        List<String> dbNames = null;
+        if (catalog != null) {
+            try {
+                dbNames = GlobalStateMgr.getCurrentState().getMetadataManager().listDatabaseNames("hive");
+            } catch (Exception e) {
+                throw new AnalysisException(e.getMessage());
+            }
+        } else {
+            dbNames = ctx.getCatalog().getLocalMetastore().getClusterDbNames(ctx.getClusterName());
+        }
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
             matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
                     CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            // Filter dbname
-            if (matcher != null && !matcher.match(db)) {
-                continue;
-            }
+//        for (String fullName : dbNames) {
+//            final String db = ClusterNamespace.getNameFromFullName(fullName);
+//            // Filter dbname
+//            if (matcher != null && !matcher.match(db)) {
+//                continue;
+//            }
+//
+//            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), fullName,
+//                    PrivPredicate.SHOW)) {
+//                continue;
+//            }
+//
+//            dbNameSet.add(db);
+//        }
 
-            if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), fullName,
-                    PrivPredicate.SHOW)) {
-                continue;
-            }
-
-            dbNameSet.add(db);
-        }
-
-        for (String dbName : dbNameSet) {
+        for (String dbName : dbNames) {
             rows.add(Lists.newArrayList(dbName));
         }
+//        rows.add(Lists.newArrayList(dbNames));
 
         resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
@@ -509,41 +524,49 @@ public class ShowExecutor {
     private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showTableStmt.getDb());
-        if (db != null) {
-            Map<String, String> tableMap = Maps.newTreeMap();
-            db.readLock();
-            try {
-                PatternMatcher matcher = null;
-                if (showTableStmt.getPattern() != null) {
-                    matcher = PatternMatcher.createMysqlPattern(showTableStmt.getPattern(),
-                            CaseSensibility.TABLE.getCaseSensibility());
-                }
-                for (Table tbl : db.getTables()) {
-                    if (matcher != null && !matcher.match(tbl.getName())) {
-                        continue;
-                    }
-                    // check tbl privs
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), tbl.getName(),
-                            PrivPredicate.SHOW)) {
-                        continue;
-                    }
-                    tableMap.put(tbl.getName(), tbl.getMysqlType());
-                }
-            } finally {
-                db.readUnlock();
+        List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataManager().listTableNames(((ShowTableStmt) stmt).getCatalog(), ((ShowTableStmt) stmt).getDb());
+//        Database db = ctx.getCatalog().getDb(showTableStmt.getDb());
+//        if (db != null) {
+//            Map<String, String> tableMap = Maps.newTreeMap();
+//            db.readLock();
+//            try {
+//                PatternMatcher matcher = null;
+//                if (showTableStmt.getPattern() != null) {
+//                    matcher = PatternMatcher.createMysqlPattern(showTableStmt.getPattern(),
+//                            CaseSensibility.TABLE.getCaseSensibility());
+//                }
+//                for (Table tbl : db.getTables()) {
+//                    if (matcher != null && !matcher.match(tbl.getName())) {
+//                        continue;
+//                    }
+//                    // check tbl privs
+//                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+//                            db.getFullName(), tbl.getName(),
+//                            PrivPredicate.SHOW)) {
+//                        continue;
+//                    }
+//                    tableMap.put(tbl.getName(), tbl.getMysqlType());
+//                }
+//            } finally {
+//                db.readUnlock();
+//            }
+//
+//            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
+//                if (showTableStmt.isVerbose()) {
+//                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+//                } else {
+//                    rows.add(Lists.newArrayList(entry.getKey()));
+//                }
+//            }
+//        } else {
+//            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showTableStmt.getDb());
+//        }
+        for (String tableName : tableNames) {
+            if (showTableStmt.isVerbose()) {
+                rows.add(Lists.newArrayList(tableName));
+            } else {
+                rows.add(Lists.newArrayList(tableName));
             }
-
-            for (Map.Entry<String, String> entry : tableMap.entrySet()) {
-                if (showTableStmt.isVerbose()) {
-                    rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
-                } else {
-                    rows.add(Lists.newArrayList(entry.getKey()));
-                }
-            }
-        } else {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showTableStmt.getDb());
         }
         resultSet = new ShowResultSet(showTableStmt.getMetaData(), rows);
     }
@@ -567,7 +590,7 @@ public class ShowExecutor {
                     }
 
                     // check tbl privs
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                             db.getFullName(), table.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
@@ -634,7 +657,7 @@ public class ShowExecutor {
             }
 
             List<String> createTableStmt = Lists.newArrayList();
-            Catalog.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
             if (createTableStmt.isEmpty()) {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
                 return;
@@ -821,7 +844,7 @@ public class ShowExecutor {
     private void handleShowLoad() throws AnalysisException {
         ShowLoadStmt showStmt = (ShowLoadStmt) stmt;
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
@@ -880,7 +903,7 @@ public class ShowExecutor {
         // if job exists
         List<RoutineLoadJob> routineLoadJobList;
         try {
-            routineLoadJobList = Catalog.getCurrentCatalog().getRoutineLoadManager()
+            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadManager()
                     .getJob(showRoutineLoadStmt.getDbFullName(),
                             showRoutineLoadStmt.getName(),
                             showRoutineLoadStmt.isIncludeHistory());
@@ -916,7 +939,7 @@ public class ShowExecutor {
         RoutineLoadJob routineLoadJob;
         try {
             routineLoadJob =
-                    Catalog.getCurrentCatalog().getRoutineLoadManager().getJob(showRoutineLoadTaskStmt.getDbFullName(),
+                    GlobalStateMgr.getCurrentState().getRoutineLoadManager().getJob(showRoutineLoadTaskStmt.getDbFullName(),
                             showRoutineLoadTaskStmt.getJobName());
         } catch (MetaNotFoundException e) {
             LOG.warn(e.getMessage(), e);
@@ -936,7 +959,7 @@ public class ShowExecutor {
             throw new AnalysisException(
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                 dbFullName,
                 tableName,
                 PrivPredicate.LOAD)) {
@@ -961,7 +984,7 @@ public class ShowExecutor {
     private void handleShowDelete() throws AnalysisException {
         ShowDeleteStmt showStmt = (ShowDeleteStmt) stmt;
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
@@ -1042,10 +1065,10 @@ public class ShowExecutor {
         ShowTabletStmt showStmt = (ShowTabletStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         if (showStmt.isShowSingleTablet()) {
             long tabletId = showStmt.getTabletId();
-            TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
             Long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String dbName = null;
@@ -1226,7 +1249,7 @@ public class ShowExecutor {
     // Handle show brokers
     private void handleShowBroker() {
         ShowBrokerStmt showStmt = (ShowBrokerStmt) stmt;
-        List<List<String>> rowSet = Catalog.getCurrentCatalog().getBrokerMgr().getBrokersInfo();
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getBrokerMgr().getBrokersInfo();
 
         // Only success
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
@@ -1235,7 +1258,16 @@ public class ShowExecutor {
     // Handle show resources
     private void handleShowResources() {
         ShowResourcesStmt showStmt = (ShowResourcesStmt) stmt;
-        List<List<String>> rowSet = Catalog.getCurrentCatalog().getResourceMgr().getResourcesInfo();
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getResourceMgr().getResourcesInfo();
+
+        // Only success
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
+    // Handle show resources
+    private void handleShowCatalogs() {
+        ShowCatalogsStmt showStmt = (ShowCatalogsStmt) stmt;
+        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogManager().getCatalogInfo();
 
         // Only success
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
@@ -1243,7 +1275,7 @@ public class ShowExecutor {
 
     private void handleShowExport() throws AnalysisException {
         ShowExportStmt showExportStmt = (ShowExportStmt) stmt;
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         Database db = catalog.getDb(showExportStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showExportStmt.getDbName());
@@ -1278,7 +1310,7 @@ public class ShowExecutor {
     private void handleShowFrontends() {
         final ShowFrontendsStmt showStmt = (ShowFrontendsStmt) stmt;
         List<List<String>> infos = Lists.newArrayList();
-        FrontendsProcNode.getFrontendsInfo(Catalog.getCurrentCatalog(), infos);
+        FrontendsProcNode.getFrontendsInfo(GlobalStateMgr.getCurrentState(), infos);
 
         for (List<String> row : infos) {
             row.remove(FrontendsProcNode.HOSTNAME_INDEX);
@@ -1289,13 +1321,13 @@ public class ShowExecutor {
 
     private void handleShowRepositories() {
         final ShowRepositoriesStmt showStmt = (ShowRepositoriesStmt) stmt;
-        List<List<String>> repoInfos = Catalog.getCurrentCatalog().getBackupHandler().getRepoMgr().getReposInfo();
+        List<List<String>> repoInfos = GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getReposInfo();
         resultSet = new ShowResultSet(showStmt.getMetaData(), repoInfos);
     }
 
     private void handleShowSnapshot() throws AnalysisException {
         final ShowSnapshotStmt showStmt = (ShowSnapshotStmt) stmt;
-        Repository repo = Catalog.getCurrentCatalog().getBackupHandler().getRepoMgr().getRepo(showStmt.getRepoName());
+        Repository repo = GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getRepo(showStmt.getRepoName());
         if (repo == null) {
             throw new AnalysisException("Repository " + showStmt.getRepoName() + " does not exist");
         }
@@ -1306,12 +1338,12 @@ public class ShowExecutor {
 
     private void handleShowBackup() throws AnalysisException {
         ShowBackupStmt showStmt = (ShowBackupStmt) stmt;
-        Database db = Catalog.getCurrentCatalog().getDb(showStmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
 
-        AbstractJob jobI = Catalog.getCurrentCatalog().getBackupHandler().getJob(db.getId());
+        AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
         if (!(jobI instanceof BackupJob)) {
             resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
             return;
@@ -1326,12 +1358,12 @@ public class ShowExecutor {
 
     private void handleShowRestore() throws AnalysisException {
         ShowRestoreStmt showStmt = (ShowRestoreStmt) stmt;
-        Database db = Catalog.getCurrentCatalog().getDb(showStmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
 
-        AbstractJob jobI = Catalog.getCurrentCatalog().getBackupHandler().getJob(db.getId());
+        AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
         if (!(jobI instanceof RestoreJob)) {
             resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
             return;
@@ -1346,13 +1378,13 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
-        List<List<String>> infos = Catalog.getCurrentCatalog().getAuth().getAuthInfo(showStmt.getUserIdent());
+        List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getAuthInfo(showStmt.getUserIdent());
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
-        List<List<String>> infos = Catalog.getCurrentCatalog().getAuth().getRoleInfo();
+        List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
@@ -1405,7 +1437,7 @@ public class ShowExecutor {
         ShowSmallFilesStmt showStmt = (ShowSmallFilesStmt) stmt;
         List<List<String>> results;
         try {
-            results = Catalog.getCurrentCatalog().getSmallFileMgr().getInfo(showStmt.getDbName());
+            results = GlobalStateMgr.getCurrentState().getSmallFileMgr().getInfo(showStmt.getDbName());
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -1425,14 +1457,14 @@ public class ShowExecutor {
                     }
 
                     DynamicPartitionScheduler dynamicPartitionScheduler =
-                            Catalog.getCurrentCatalog().getDynamicPartitionScheduler();
+                            GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
                     OlapTable olapTable = (OlapTable) tbl;
                     if (!olapTable.dynamicPartitionExists()) {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
                     // check tbl privs
-                    if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(),
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                             db.getFullName(), olapTable.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
@@ -1480,13 +1512,13 @@ public class ShowExecutor {
         }
 
         long txnId = showStmt.getTxnId();
-        GlobalTransactionMgr transactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         resultSet = new ShowResultSet(showStmt.getMetaData(), transactionMgr.getSingleTranInfo(db.getId(), txnId));
     }
 
     private void handleShowPlugins() throws AnalysisException {
         ShowPluginsStmt pluginsStmt = (ShowPluginsStmt) stmt;
-        List<List<String>> rows = Catalog.getCurrentPluginMgr().getPluginShowInfos();
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getPluginMgr().getPluginShowInfos();
         resultSet = new ShowResultSet(pluginsStmt.getMetaData(), rows);
     }
 
@@ -1520,7 +1552,7 @@ public class ShowExecutor {
 
     private void handleShowWorkGroup() {
         ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        List<List<String>> rows = Catalog.getCurrentCatalog().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
         resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
     }
 }
