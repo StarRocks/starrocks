@@ -6,6 +6,7 @@
 
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks::vectorized {
 
@@ -188,12 +189,14 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
         return {nullptr, {}};
     }
     DCHECK(!!chunk);
+    if (chunk->is_empty()) {
+        return {nullptr, {}};
+    }
 
     Columns sort_columns;
     for (ExprContext* expr : *_sort_exprs) {
-        auto column = expr->evaluate(chunk);
-        CHECK(column.ok());
-        sort_columns.push_back(column.value());
+        auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk);
+        sort_columns.push_back(column);
     }
     return {ChunkUniquePtr(chunk), sort_columns};
 }

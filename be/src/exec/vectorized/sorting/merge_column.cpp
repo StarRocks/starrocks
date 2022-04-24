@@ -367,7 +367,12 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     if (chunks.empty()) {
         return Status::OK();
     }
-    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
+    std::deque<SortedRuns> queue;
+    for (auto& chunk : chunks) {
+        if (chunk.num_chunks() > 0) {
+            queue.push_back(chunk);
+        }
+    }
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();
