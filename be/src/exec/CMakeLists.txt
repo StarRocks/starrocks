@@ -28,14 +28,11 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
-    broker_reader.cpp
-    buffered_reader.cpp
     data_sink.cpp
     decompressor.cpp
     empty_set_node.cpp
     exec_node.cpp
     exchange_node.cpp
-    local_file_reader.cpp
     scan_node.cpp
     select_node.cpp
     sort_exec_exprs.cpp
