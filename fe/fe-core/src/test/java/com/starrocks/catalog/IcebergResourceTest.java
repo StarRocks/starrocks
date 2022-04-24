@@ -58,6 +58,34 @@ public class IcebergResourceTest {
     }
 
     @Test
+    public void testCustomStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+        new Expectations() {
+            {
+                catalog.getAuth();
+                result = auth;
+                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                result = true;
+            }
+        };
+
+        String name = "iceberg1";
+        String type = "iceberg";
+        String catalogType = "CUSTOM";
+        String catalogImpl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("type", type);
+        properties.put("starrocks.catalog-type", catalogType);
+        properties.put("iceberg.catalog-impl", catalogImpl);
+        CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+        stmt.analyze(analyzer);
+        IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
+        Assert.assertEquals("iceberg1", resource.getName());
+        Assert.assertEquals(type, resource.getType().name().toLowerCase());
+        Assert.assertEquals(IcebergCatalogType.fromString(catalogType), resource.getCatalogType());
+        Assert.assertEquals(catalogImpl, resource.getIcebergImpl());
+    }
+
+    @Test
     public void testSerialization() throws Exception {
         Resource resource = new IcebergResource("iceberg0");
         String metastoreURIs = "thrift://127.0.0.1:9380";
