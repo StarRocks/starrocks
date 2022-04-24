@@ -35,7 +35,6 @@ set(EXEC_FILES
         ./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
-        ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
@@ -111,6 +110,7 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/orc/orc_chunk_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp

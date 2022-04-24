@@ -25,13 +25,13 @@ namespace starrocks::vectorized {
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                     const TypeDescriptor& type_desc, void* ctx);
 
-// OrcScannerAdapter is a bridge between apache/orc and Column
+// OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
 // 1. create chunk according to schema
 // 2. read orc data and convert to chunk
 // 3. do some conversion on chunk according to schema
 // 4. passing predicate down to apache/orc
-class OrcScannerAdapter {
+class OrcChunkReader {
 public:
     struct LazyLoadContext {
         std::vector<SlotDescriptor*> active_load_slots;
@@ -43,8 +43,8 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
-    ~OrcScannerAdapter();
+    explicit OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
