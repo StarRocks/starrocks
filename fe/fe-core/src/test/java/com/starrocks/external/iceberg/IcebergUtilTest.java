@@ -26,9 +26,8 @@ public class IcebergUtilTest {
     }
 
     @Test
-    public void testGetIcebergCatalog() {
-        IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(
-                IcebergCatalogType.HIVE_CATALOG, "thrift://test:9030");
+    public void testGetIcebergHiveCatalog() {
+        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030");
         Assert.assertTrue(catalog instanceof IcebergHiveCatalog);
     }
 }
