@@ -48,7 +48,6 @@ set(EXEC_FILES
     es/es_query_builder.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_reader.cpp
     parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
