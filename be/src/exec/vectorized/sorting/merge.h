@@ -18,12 +18,25 @@ struct SortedRun {
 
     SortedRun() = default;
     ~SortedRun() = default;
-    explicit SortedRun(ChunkPtr ichunk) : chunk(ichunk), orderby(ichunk->columns()), range(0, ichunk->num_rows()) {}
+
     SortedRun(ChunkPtr ichunk, const Columns& columns)
             : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
-    SortedRun(ChunkPtr ichunk, size_t start, size_t end)
-            : chunk(ichunk), orderby(ichunk->columns()), range(start, end) {}
+
+    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
+        DCHECK_LE(start, end);
+        DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
+    }
+
     SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
+
+    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs) : chunk(ichunk), range(0, ichunk->num_rows()) {
+        for (auto& expr : *exprs) {
+            auto maybe_column = expr->evaluate(ichunk.get());
+            CHECK(maybe_column.ok());
+            orderby.push_back(maybe_column.value());
+        }
+    }
+
     SortedRun& operator=(const SortedRun& rhs) {
         if (&rhs == this) return *this;
         chunk = rhs.chunk;
@@ -33,14 +46,17 @@ struct SortedRun {
     }
 
     size_t num_columns() const { return orderby.size(); }
-    size_t num_rows() const { return range.second - range.first; }
+    size_t start_index() const { return range.first; }
+    size_t end_index() const { return range.second; }
+    size_t num_rows() const {
+        DCHECK_LE(range.first, range.second);
+        DCHECK_LT(range.second - range.first, Column::MAX_CAPACITY_LIMIT);
+        return range.second - range.first;
+    }
     const Column* get_column(int index) const { return orderby[index].get(); }
     bool empty() const { return range.second == range.first; }
-    void reset() {
-        chunk->reset();
-        orderby.clear();
-        range = {};
-    }
+    void reset();
+    void resize(size_t size);
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
     ChunkUniquePtr clone_slice() const {
@@ -48,6 +64,7 @@ struct SortedRun {
             return chunk->clone_unique();
         } else {
             size_t slice_rows = num_rows();
+            DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
             ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
             cloned->append(*chunk, range.first, slice_rows);
             return cloned;
@@ -73,14 +90,18 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
-    SortedRuns(ChunkPtr chunk) : chunks{SortedRun(chunk)} {}
     SortedRuns(SortedRun run) : chunks{run} {}
 
     SortedRun& get_run(int i) { return chunks[i]; }
     ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }
     size_t num_chunks() const { return chunks.size(); }
+    size_t num_rows() const;
+    void resize(size_t size);
 
     ChunkPtr assemble() const {
+        if (chunks.empty()) {
+            return {};
+        }
         ChunkPtr result(chunks.front().clone_slice().release());
         for (int i = 1; i < chunks.size(); i++) {
             auto& run = chunks[i];
@@ -139,14 +160,14 @@ private:
 class SimpleChunkSortCursor;
 
 // ColumnWise Merge algorithms
-Status merge_sorted_chunks_two_way(const SortDescs& descs, const ChunkPtr left, const ChunkPtr right,
-                                   Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
                                    SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output);
+                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit);
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit);
 
 // ColumnWise merge streaming merge
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
