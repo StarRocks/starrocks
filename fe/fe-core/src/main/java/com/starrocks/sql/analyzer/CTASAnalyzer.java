@@ -147,7 +147,7 @@ public class CTASAnalyzer {
                         tableRefToTable);
                 if (detectReplicateNum > defaultReplicationNum) {
                     defaultReplicationNum = detectReplicateNum;
-
+                }
             } else {
                 Table table = catalog.getDb(tableRef.getName().getDb()).getTable(tableRef.getName().getTbl());
                 if (table instanceof OlapTable) {
