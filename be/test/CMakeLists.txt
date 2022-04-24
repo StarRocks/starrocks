@@ -40,12 +40,6 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
-        ./exec/parquet/parquet_schema_test.cpp
-        ./exec/parquet/encoding_test.cpp
-        ./exec/parquet/page_reader_test.cpp
-        ./exec/parquet/metadata_test.cpp
-        ./exec/parquet/group_reader_test.cpp
-        ./exec/parquet/file_reader_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -110,6 +104,12 @@ set(EXEC_FILES
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
+        ./formats/parquet/parquet_schema_test.cpp
+        ./formats/parquet/encoding_test.cpp
+        ./formats/parquet/page_reader_test.cpp
+        ./formats/parquet/metadata_test.cpp
+        ./formats/parquet/group_reader_test.cpp
+        ./formats/parquet/file_reader_test.cpp        
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp

@@ -7,9 +7,9 @@
 #include <memory>
 
 #include "common/status.h"
-#include "exec/parquet/column_chunk_reader.h"
-#include "exec/parquet/schema.h"
-#include "exec/parquet/types.h"
+#include "formats/parquet/column_chunk_reader.h"
+#include "formats/parquet/schema.h"
+#include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace starrocks {

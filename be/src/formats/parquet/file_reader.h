@@ -7,7 +7,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "exec/parquet/group_reader.h"
+#include "formats/parquet/group_reader.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"

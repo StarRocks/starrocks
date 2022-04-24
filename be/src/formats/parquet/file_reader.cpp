@@ -1,14 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/file_reader.h"
+#include "formats/parquet/file_reader.h"
 
 #include "column/column_helper.h"
 #include "env/env.h"
 #include "exec/exec_node.h"
-#include "exec/parquet/encoding_plain.h"
-#include "exec/parquet/metadata.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/parquet/encoding_plain.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"

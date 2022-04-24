@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/metadata.h"
+#include "formats/parquet/metadata.h"
 
 #include <sstream>
 
-#include "exec/parquet/schema.h"
+#include "formats/parquet/schema.h"
 
 namespace starrocks::parquet {
 

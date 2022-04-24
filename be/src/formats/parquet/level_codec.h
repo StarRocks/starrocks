@@ -5,7 +5,7 @@
 #include <cstdint>
 
 #include "common/status.h"
-#include "exec/parquet/types.h"
+#include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/bit_stream_utils.h"
 #include "util/rle_encoding.h"
