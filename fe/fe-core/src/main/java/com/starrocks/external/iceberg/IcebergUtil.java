@@ -5,6 +5,7 @@ package com.starrocks.external.iceberg;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.hive.HdfsFileFormat;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionField;
@@ -42,20 +43,32 @@ public class IcebergUtil {
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
         IcebergCatalogType catalogType = table.getCatalogType();
-        return getIcebergCatalog(catalogType, table.getIcebergHiveMetastoreUris());
-    }
-
-    /**
-     * Returns the corresponding catalog implementation.
-     */
-    public static IcebergCatalog getIcebergCatalog(IcebergCatalogType catalogType, String metastoreUris)
-            throws StarRocksIcebergException {
         switch (catalogType) {
-            case HIVE_CATALOG: return IcebergHiveCatalog.getInstance(metastoreUris);
+            case HIVE_CATALOG:
+                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris());
+            case CUSTOM_CATALOG:
+                return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
                 throw new StarRocksIcebergException(
                         "Unexpected catalog type: " + catalogType.toString());
         }
+    }
+
+    /**
+     * Returns the corresponding hive catalog implementation.
+     */
+    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
+            throws StarRocksIcebergException {
+        return IcebergHiveCatalog.getInstance(metastoreUris);
+    }
+
+    /**
+     * Returns the corresponding custom catalog implementation.
+     */
+    public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
+            throws StarRocksIcebergException {
+        return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", catalogImpl),
+                new Configuration(), icebergProperties, catalogImpl).loadCatalog();
     }
 
     /**
