@@ -1,28 +1,41 @@
 [sql]
-select cntrycode,
-       count(*)       as numcust,
-       sum(c_acctbal) as totacctbal
-from (
-         select substring(c_phone, 1, 2) as cntrycode,
-                c_acctbal
-         from customer
-         where substring(c_phone, 1, 2) in
-               ('21', '28', '24', '32', '35', '34', '37')
-           and c_acctbal > (
-             select avg(c_acctbal)
-             from customer
-             where c_acctbal > 0.00
-               and substring(c_phone, 1, 2) in
-                   ('21', '28', '24', '32', '35', '34', '37')
-         )
-           and not exists(
-                 select *
-                 from orders
-                 where o_custkey = c_custkey
-             )
-     ) as custsale
-group by cntrycode
-order by cntrycode;
+select
+    cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from
+    (
+        select
+            substring(c_phone , 1  ,2) as cntrycode,
+            c_acctbal
+        from
+            customer
+        where
+                substring(c_phone , 1  ,2)  in
+                ('21', '28', '24', '32', '35', '34', '37')
+          and c_acctbal > (
+            select
+                avg(c_acctbal)
+            from
+                customer
+            where
+                    c_acctbal > 0.00
+              and substring(c_phone , 1  ,2)  in
+                  ('21', '28', '24', '32', '35', '34', '37')
+        )
+          and not exists (
+                select
+                    *
+                from
+                    orders
+                where
+                        o_custkey = c_custkey
+            )
+    ) as custsale
+group by
+    cntrycode
+order by
+    cntrycode ;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:32: substring | 33: count | 34: sum
@@ -161,6 +174,5 @@ tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 cardinality=6818187
 avgRowSize=23.0
 numNodes=0
-[
-end]
+[end]
 

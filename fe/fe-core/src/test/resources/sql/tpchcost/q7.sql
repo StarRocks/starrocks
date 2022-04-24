@@ -1,36 +1,43 @@
 [sql]
-select supp_nation,
-       cust_nation,
-       l_year,
-       sum(volume) as revenue
-from (
-         select n1.n_name                          as supp_nation,
-                n2.n_name                          as cust_nation,
-                extract(year from l_shipdate)      as l_year,
-                l_extendedprice * (1 - l_discount) as volume
-         from supplier,
-              lineitem,
-              orders,
-              customer,
-              nation n1,
-              nation n2
-         where s_suppkey = l_suppkey
-           and o_orderkey = l_orderkey
-           and c_custkey = o_custkey
-           and s_nationkey = n1.n_nationkey
-           and c_nationkey = n2.n_nationkey
-           and (
-                 (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')
-                 or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')
-             )
-           and l_shipdate between date '1995-01-01' and date '1996-12-31'
-     ) as shipping
-group by supp_nation,
-         cust_nation,
-         l_year
-order by supp_nation,
-         cust_nation,
-         l_year;
+select
+    supp_nation,
+    cust_nation,
+    l_year,
+    sum(volume) as revenue
+from
+    (
+        select
+            n1.n_name as supp_nation,
+            n2.n_name as cust_nation,
+            extract(year from l_shipdate) as l_year,
+            l_extendedprice * (1 - l_discount) as volume
+        from
+            supplier,
+            lineitem,
+            orders,
+            customer,
+            nation n1,
+            nation n2
+        where
+                s_suppkey = l_suppkey
+          and o_orderkey = l_orderkey
+          and c_custkey = o_custkey
+          and s_nationkey = n1.n_nationkey
+          and c_nationkey = n2.n_nationkey
+          and (
+                (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')
+                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')
+            )
+          and l_shipdate between date '1995-01-01' and date '1996-12-31'
+    ) as shipping
+group by
+    supp_nation,
+    cust_nation,
+    l_year
+order by
+    supp_nation,
+    cust_nation,
+    l_year ;
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:46: N_NAME | 51: N_NAME | 55: year | 57: sum
@@ -62,11 +69,7 @@ OutPut Exchange Id: 25
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
-|  aggregate: sum[([57: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
 |  cardinality: 250
 |  column statistics:
@@ -86,11 +89,7 @@ OutPut Exchange Id: 22
 
 21:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([56: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
 |  cardinality: 297
 |  column statistics:
@@ -103,11 +102,7 @@ nullable: true]
 |  output columns:
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  51 <-> [51: N_NAME, CHAR, false]
-|  55 <-> year[([19: L_SHIPDATE, DATE, false]); args
-: DATE; result
-: SMALLINT; args
-nullable: false; result
-nullable: false]
+|  55 <-> year[([19: L_SHIPDATE, DATE, false]); args: DATE; result: SMALLINT; args nullable: false; result nullable: false]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 554645
 |  column statistics:
@@ -420,6 +415,5 @@ column statistics:
   "be_number": 3,
   "exception": []
 }
-[
-end]
+[end]
 

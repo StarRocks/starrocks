@@ -1,20 +1,25 @@
 [sql]
-select l_returnflag,
-       l_linestatus,
-       sum(l_quantity)                                       as sum_qty,
-       sum(l_extendedprice)                                  as sum_base_price,
-       sum(l_extendedprice * (1 - l_discount))               as sum_disc_price,
-       sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
-       avg(l_quantity)                                       as avg_qty,
-       avg(l_extendedprice)                                  as avg_price,
-       avg(l_discount)                                       as avg_disc,
-       count(*)                                              as count_order
-from lineitem
-where l_shipdate <= date '1998-12-01'
-group by l_returnflag,
-         l_linestatus
-order by l_returnflag,
-         l_linestatus;
+select
+    l_returnflag,
+    l_linestatus,
+    sum(l_quantity) as sum_qty,
+    sum(l_extendedprice) as sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+    avg(l_quantity) as avg_qty,
+    avg(l_extendedprice) as avg_price,
+    avg(l_discount) as avg_disc,
+    count(*) as count_order
+from
+    lineitem
+where
+    l_shipdate <= date '1998-12-01'
+group by
+    l_returnflag,
+    l_linestatus
+order by
+    l_returnflag,
+    l_linestatus ;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count
@@ -121,39 +126,7 @@ OutPut Exchange Id: 06
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
-|  aggregate: sum[([20: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], sum[([21: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], sum[([22: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], sum[([23: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], avg[([24: avg, VARCHAR, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], avg[([25: avg, VARCHAR, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], avg[([26: avg, VARCHAR, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true], count[([27: count, BIGINT, false]); args
-: ; result
-: BIGINT; args
-nullable: true; result
-nullable: false]
+|  aggregate: sum[([20: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([21: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([22: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([23: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([26: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], count[([27: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
 |  group by: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 |  cardinality: 3
 |  column statistics:
@@ -179,39 +152,7 @@ OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([5: L_QUANTITY, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true], sum[([6: L_EXTENDEDPRICE, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true], sum[([18: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true], sum[([19: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true], avg[([5: L_QUANTITY, DOUBLE, false]); args
-: DOUBLE; result
-: VARCHAR; args
-nullable: false; result
-nullable: true], avg[([6: L_EXTENDEDPRICE, DOUBLE, false]); args
-: DOUBLE; result
-: VARCHAR; args
-nullable: false; result
-nullable: true], avg[([7: L_DISCOUNT, DOUBLE, false]); args
-: DOUBLE; result
-: VARCHAR; args
-nullable: false; result
-nullable: true], count[(*); args
-: ; result
-: BIGINT; args
-nullable: false; result
-nullable: false]
+|  aggregate: sum[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], sum[([6: L_EXTENDEDPRICE, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], sum[([18: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], sum[([19: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: VARCHAR; args nullable: false; result nullable: true], avg[([6: L_EXTENDEDPRICE, DOUBLE, false]); args: DOUBLE; result: VARCHAR; args nullable: false; result nullable: true], avg[([7: L_DISCOUNT, DOUBLE, false]); args: DOUBLE; result: VARCHAR; args nullable: false; result nullable: true], count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]
 |  group by: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 |  cardinality: 3
 |  column statistics:
@@ -291,5 +232,4 @@ column statistics:
   "be_number": 3,
   "exception": []
 }
-[
-end]
+[end]

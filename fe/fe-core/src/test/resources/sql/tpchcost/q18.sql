@@ -1,28 +1,36 @@
 [sql]
-select c_name,
-       c_custkey,
-       o_orderkey,
-       o_orderdate,
-       o_totalprice,
-       sum(l_quantity)
-from customer,
-     orders,
-     lineitem
-where o_orderkey in (
-    select l_orderkey
-    from lineitem
-    group by l_orderkey
-    having sum(l_quantity) > 315
-)
+select
+    c_name,
+    c_custkey,
+    o_orderkey,
+    o_orderdate,
+    o_totalprice,
+    sum(l_quantity)
+from
+    customer,
+    orders,
+    lineitem
+where
+        o_orderkey in (
+        select
+            l_orderkey
+        from
+            lineitem
+        group by
+            l_orderkey having
+                sum(l_quantity) > 315
+    )
   and c_custkey = o_custkey
   and o_orderkey = l_orderkey
-group by c_name,
-         c_custkey,
-         o_orderkey,
-         o_orderdate,
-         o_totalprice
-order by o_totalprice desc,
-         o_orderdate limit 100;
+group by
+    c_name,
+    c_custkey,
+    o_orderkey,
+    o_orderdate,
+    o_totalprice
+order by
+    o_totalprice desc,
+    o_orderdate limit 100;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum
@@ -170,6 +178,5 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=16.0
 numNodes=0
-[
-end]
+[end]
 

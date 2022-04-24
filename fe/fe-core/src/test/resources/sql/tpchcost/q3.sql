@@ -1,21 +1,26 @@
 [sql]
-select l_orderkey,
-       sum(l_extendedprice * (1 - l_discount)) as revenue,
-       o_orderdate,
-       o_shippriority
-from customer,
-     orders,
-     lineitem
-where c_mktsegment = 'HOUSEHOLD'
+select
+    l_orderkey,
+    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    o_orderdate,
+    o_shippriority
+from
+    customer,
+    orders,
+    lineitem
+where
+  c_mktsegment = 'HOUSEHOLD'
   and c_custkey = o_custkey
   and l_orderkey = o_orderkey
   and o_orderdate < date '1995-03-11'
   and l_shipdate > date '1995-03-11'
-group by l_orderkey,
-         o_orderdate,
-         o_shippriority
-order by revenue desc,
-         o_orderdate limit 10;
+group by
+    l_orderkey,
+    o_orderdate,
+    o_shippriority
+order by
+    revenue desc,
+    o_orderdate limit 10;
 
 [fragment statistics]
 PLAN FRAGMENT 0(F05)
@@ -50,11 +55,7 @@ OutPut Exchange Id: 13
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 11:AGGREGATE (update finalize)
-|  aggregate: sum[([37: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: sum[([37: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [20: L_ORDERKEY, INT, false], [14: O_ORDERDATE, DATE, false], [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 19828107
 |  column statistics:
@@ -196,5 +197,4 @@ cardinality: 3000000
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
 * C_MKTSEGMENT-->[-Infinity, Infinity, 0.0, 10.0, 5.0] ESTIMATE
-[
-end]
+[end]

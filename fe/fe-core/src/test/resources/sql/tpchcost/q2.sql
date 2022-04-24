@@ -1,18 +1,21 @@
 [sql]
-select s_acctbal,
-       s_name,
-       n_name,
-       p_partkey,
-       p_mfgr,
-       s_address,
-       s_phone,
-       s_comment
-from part,
-     supplier,
-     partsupp,
-     nation,
-     region
-where p_partkey = ps_partkey
+select
+    s_acctbal,
+    s_name,
+    n_name,
+    p_partkey,
+    p_mfgr,
+    s_address,
+    s_phone,
+    s_comment
+from
+    part,
+    supplier,
+    partsupp,
+    nation,
+    region
+where
+        p_partkey = ps_partkey
   and s_suppkey = ps_suppkey
   and p_size = 12
   and p_type like '%COPPER'
@@ -20,21 +23,25 @@ where p_partkey = ps_partkey
   and n_regionkey = r_regionkey
   and r_name = 'AMERICA'
   and ps_supplycost = (
-    select min(ps_supplycost)
-    from partsupp,
-         supplier,
-         nation,
-         region
-    where p_partkey = ps_partkey
+    select
+        min(ps_supplycost)
+    from
+        partsupp,
+        supplier,
+        nation,
+        region
+    where
+            p_partkey = ps_partkey
       and s_suppkey = ps_suppkey
       and s_nationkey = n_nationkey
       and n_regionkey = r_regionkey
       and r_name = 'AMERICA'
 )
-order by s_acctbal desc,
-         n_name,
-         s_name,
-         p_partkey limit 100;
+order by
+    s_acctbal desc,
+    n_name,
+    s_name,
+    p_partkey limit 100;
 [fragment statistics]
 PLAN FRAGMENT 0(F17)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
@@ -267,11 +274,7 @@ OutPut Exchange Id: 31
 |       cardinality: 100000
 |
 25:AGGREGATE (update finalize)
-|  aggregate: min[([37: PS_SUPPLYCOST, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: min[([37: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [34: PS_PARTKEY, INT, false]
 |  cardinality: 16000000
 |  column statistics:
@@ -523,6 +526,5 @@ cardinality: 1
 column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-[
-end]
+[end]
 

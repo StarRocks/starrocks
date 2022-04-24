@@ -1,28 +1,41 @@
 [sql]
-select s_name,
-       s_address
-from supplier,
-     nation
-where s_suppkey in (
-    select ps_suppkey
-    from partsupp
-    where ps_partkey in (
-        select p_partkey
-        from part
-        where p_name like 'sienna%'
+select
+    s_name,
+    s_address
+from
+    supplier,
+    nation
+where
+        s_suppkey in (
+        select
+            ps_suppkey
+        from
+            partsupp
+        where
+                ps_partkey in (
+                select
+                    p_partkey
+                from
+                    part
+                where
+                        p_name like 'sienna%'
+            )
+          and ps_availqty > (
+            select
+                    0.5 * sum(l_quantity)
+            from
+                lineitem
+            where
+                    l_partkey = ps_partkey
+              and l_suppkey = ps_suppkey
+              and l_shipdate >= date '1993-01-01'
+              and l_shipdate < date '1994-01-01'
+        )
     )
-      and ps_availqty > (
-        select 0.5 * sum(l_quantity)
-        from lineitem
-        where l_partkey = ps_partkey
-          and l_suppkey = ps_suppkey
-          and l_shipdate >= date '1993-01-01'
-          and l_shipdate < date '1994-01-01'
-    )
-)
   and s_nationkey = n_nationkey
   and n_name = 'ARGENTINA'
-order by s_name;
+order by
+    s_name ;
 [fragment statistics]
 PLAN FRAGMENT 0(F14)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -269,11 +282,7 @@ OutPut Partition: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
 OutPut Exchange Id: 05
 
 4:AGGREGATE (merge finalize)
-|  aggregate: sum[([48: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: sum[([48: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [33: L_SUPPKEY, INT, false], [32: L_PARTKEY, INT, false]
 |  cardinality: 86732673
 |  column statistics:
@@ -292,11 +301,7 @@ OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([35: L_QUANTITY, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: sum[([35: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [33: L_SUPPKEY, INT, false], [32: L_PARTKEY, INT, false]
 |  cardinality: 86732673
 |  column statistics:
@@ -385,5 +390,4 @@ column statistics:
   "be_number": 3,
   "exception": []
 }
-[
-end]
+[end]

@@ -1,12 +1,15 @@
 [sql]
-select 100.00 * sum(case
-                        when p_type like 'PROMO%'
-                            then l_extendedprice * (1 - l_discount)
-                        else 0
-    end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
-from lineitem,
-     part
-where l_partkey = p_partkey
+select
+            100.00 * sum(case
+                             when p_type like 'PROMO%'
+                                 then l_extendedprice * (1 - l_discount)
+                             else 0
+            end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+from
+    lineitem,
+    part
+where
+        l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
 [fragment]
@@ -87,6 +90,5 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=6653465
 avgRowSize=28.0
 numNodes=0
-[
-end]
+[end]
 

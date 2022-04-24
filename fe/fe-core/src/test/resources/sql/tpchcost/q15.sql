@@ -1,27 +1,41 @@
 [sql]
-select s_suppkey,
-       s_name,
-       s_address,
-       s_phone,
-       total_revenue
-from supplier,
-     (select l_suppkey                               as supplier_no,
+select
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+from
+    supplier,
+    (	select
+             l_suppkey as supplier_no,
              sum(l_extendedprice * (1 - l_discount)) as total_revenue
-      from lineitem
-      where l_shipdate >= date '1995-07-01'
-        and l_shipdate < date '1995-10-01'
-      group by l_suppkey) a
-where s_suppkey = supplier_no
+         from
+             lineitem
+         where
+                 l_shipdate >= date '1995-07-01'
+           and l_shipdate < date '1995-10-01'
+         group by
+             l_suppkey) a
+where
+        s_suppkey = supplier_no
   and total_revenue = (
-    select max(total_revenue)
-    from (select l_suppkey                               as supplier_no,
+    select
+        max(total_revenue)
+    from
+        (	select
+                 l_suppkey as supplier_no,
                  sum(l_extendedprice * (1 - l_discount)) as total_revenue
-          from lineitem
-          where l_shipdate >= date '1995-07-01'
-            and l_shipdate < date '1995-10-01'
-          group by l_suppkey) b
+             from
+                 lineitem
+             where
+                     l_shipdate >= date '1995-07-01'
+               and l_shipdate < date '1995-10-01'
+             group by
+                 l_suppkey) b
 )
-order by s_suppkey;
+order by
+    s_suppkey;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
@@ -300,11 +314,7 @@ OutPut Exchange Id: 18
 |       cardinality: 1
 |
 5:AGGREGATE (merge finalize)
-|  aggregate: sum[([27: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: sum[([27: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [11: L_SUPPKEY, INT, false]
 |  cardinality: 1000000
 |  probe runtime filters:
@@ -323,11 +333,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 15
 
 14:AGGREGATE (merge finalize)
-|  aggregate: max[([47: max, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
@@ -342,11 +348,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 13
 
 12:AGGREGATE (update serialize)
-|  aggregate: max[([46: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: max[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * max-->[104949.5, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
@@ -359,11 +361,7 @@ nullable: true]
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
-|  aggregate: sum[([46: sum, DOUBLE, true]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: true; result
-nullable: true]
+|  aggregate: sum[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [30: L_SUPPKEY, INT, false]
 |  cardinality: 1000000
 |  column statistics:
@@ -381,11 +379,7 @@ OutPut Exchange Id: 09
 
 8:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([45: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: sum[([45: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [30: L_SUPPKEY, INT, false]
 |  cardinality: 1000000
 |  column statistics:
@@ -424,11 +418,7 @@ OutPut Exchange Id: 04
 
 3:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([26: expr, DOUBLE, false]); args
-: DOUBLE; result
-: DOUBLE; args
-nullable: false; result
-nullable: true]
+|  aggregate: sum[([26: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [11: L_SUPPKEY, INT, false]
 |  cardinality: 1000000
 |  column statistics:
@@ -458,5 +448,4 @@ column statistics:
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 * L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0] ESTIMATE
 * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
-[
-end]
+[end]

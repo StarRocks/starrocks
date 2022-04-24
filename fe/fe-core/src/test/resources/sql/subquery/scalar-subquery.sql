@@ -1,7 +1,6 @@
 [sql]
-select t0.v1
-from t0
-where t0.v2 = (select t3.v11 from t3) [result]
+select t0.v1 from t0 where t0.v2 = (select t3.v11 from t3)
+[result]
 INNER JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
@@ -38,61 +37,62 @@ UNPARTITIONED
 |
 0:OlapScanNode
 TABLE: t0
-PREAGGREGATION:
-ON
-    partitions=1/1
-    rollup : t0
-    tabletRatio=3/3
-    tabletList=10006,10008,10010
-    cardinality =1
-    avgRowSize=2.0
-    numNodes=0
-    PLAN FRAGMENT 2
-    OUTPUT EXPRS:
-    PARTITION : UNPARTITIONED
-    STREAM DATA SINK
-    EXCHANGE ID: 04
-    UNPARTITIONED
-    3:ASSERT NUMBER OF ROWS
-    | assert number of rows : LE 1
-    |
-    2:EXCHANGE
-    PLAN FRAGMENT 3
-    OUTPUT EXPRS:
-    PARTITION : RANDOM
-    STREAM DATA SINK
-    EXCHANGE ID: 02
-    UNPARTITIONED
-    1:OlapScanNode
-    TABLE : t3
-    PREAGGREGATION: ON
-    partitions=1/1
-    rollup : t3
-    tabletRatio=3/3
-    tabletList=10033,10035,10037
-    cardinality =1
-    avgRowSize=1.0
-    numNodes=0
-    [
-end]
+PREAGGREGATION: ON
+partitions=1/1
+rollup: t0
+tabletRatio=3/3
+tabletList=10006,10008,10010
+cardinality=1
+avgRowSize=2.0
+numNodes=0
+
+PLAN FRAGMENT 2
+OUTPUT EXPRS:
+PARTITION: UNPARTITIONED
+
+STREAM DATA SINK
+EXCHANGE ID: 04
+UNPARTITIONED
+
+3:ASSERT NUMBER OF ROWS
+|  assert number of rows: LE 1
+|
+2:EXCHANGE
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 02
+UNPARTITIONED
+
+1:OlapScanNode
+TABLE: t3
+PREAGGREGATION: ON
+partitions=1/1
+rollup: t3
+tabletRatio=3/3
+tabletList=10033,10035,10037
+cardinality=1
+avgRowSize=1.0
+numNodes=0
+[end]
 
 [sql]
-select t0.v1
-from t0
-where t0.v2 < (select t3.v11 from t3 where t3.v12 > 3) [result]
+select t0.v1 from t0 where t0.v2 < (select t3.v11 from t3 where t3.v12 > 3)
+[result]
 CROSS JOIN (join-predicate [null] post-join-predicate [2: v2 < 5: v11])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
             EXCHANGE GATHER
                 SCAN (columns[5: v11, 6: v12] predicate[6: v12 > 3])
-[
-end]
+[end]
 
 [sql]
-select t0.v1
-from t0
-where t0.v2 < (select SUM(t3.v11) from t3 where t0.v3 = t3.v12) [result]
+select t0.v1 from t0 where t0.v2 < (select SUM(t3.v11) from t3 where t0.v3 = t3.v12)
+[result]
 INNER JOIN (join-predicate [3: v3 = 6: v12 AND 2: v2 < 7: sum] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
