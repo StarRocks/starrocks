@@ -349,4 +349,3 @@ public class OlapTableSinkTest {
         Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
     }
 }
-
