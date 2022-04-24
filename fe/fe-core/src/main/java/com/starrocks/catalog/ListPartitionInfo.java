@@ -3,7 +3,6 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
