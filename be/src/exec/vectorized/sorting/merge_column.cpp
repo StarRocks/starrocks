@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <numeric>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_visitor_adapter.h"
@@ -210,6 +212,7 @@ public:
             if (intersect != 0) {
                 size_t left_rows = left_run.num_rows();
                 size_t right_rows = right_run.num_rows();
+                DCHECK_LT(left_rows + right_rows, Column::MAX_CAPACITY_LIMIT);
                 output->resize(0);
                 output->reserve(left_rows + right_rows);
 
@@ -233,6 +236,7 @@ public:
                 std::vector<EqualRange> equal_ranges;
                 equal_ranges.emplace_back(left_run.range, right_run.range);
                 size_t count = left_run.range.second + right_run.range.second;
+                DCHECK_LT(count, Column::MAX_CAPACITY_LIMIT);
                 output->resize(count);
                 equal_ranges.reserve(std::max((size_t)1, count / 4));
 
@@ -273,14 +277,43 @@ private:
     }
 };
 
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const ChunkPtr left, const ChunkPtr right,
-                                   Permutation* output) {
-    DCHECK_LE(sort_desc.num_columns(), left->num_columns());
-    DCHECK_LE(sort_desc.num_columns(), right->num_columns());
+void SortedRun::reset() {
+    chunk->reset();
+    orderby.clear();
+    range = {};
+}
 
-    SortedRun left_run(left, 0, left->num_rows());
-    SortedRun right_run(right, 0, right->num_rows());
-    return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left_run, right_run, output);
+void SortedRun::resize(size_t size) {
+    if (num_rows() <= size) {
+        return;
+    }
+    // Only resize the range but not clone chunk
+    range.second = range.first + (uint32_t)size;
+}
+
+size_t SortedRuns::num_rows() const {
+    size_t res = 0;
+    for (auto& run : chunks) {
+        res += run.num_rows();
+    }
+    return res;
+}
+
+void SortedRuns::resize(size_t size) {
+    // Do not expand if prodive a larger size
+    if (num_rows() <= size) {
+        return;
+    }
+    size_t accumulate = 0;
+    for (int i = 0; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        if (accumulate + run.num_rows() >= size) {
+            run.resize(size - accumulate);
+            chunks.resize(i + 1);
+            break;
+        }
+        accumulate += run.num_rows();
+    }
 }
 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
@@ -323,16 +356,23 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             sort_exprs);
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release())));
+        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release()), sort_exprs));
         return Status::OK();
     };
     return merger.consume_all(consumer);
 }
 
-// Merge multiple chunks in two-way merge
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output) {
-    std::deque<SortedRuns> queue(chunks.begin(), chunks.end());
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
+    if (chunks.empty()) {
+        return Status::OK();
+    }
+    std::deque<SortedRuns> queue;
+    for (auto& chunk : chunks) {
+        if (!chunk->is_empty()) {
+            queue.push_back(SortedRun(chunk, sort_exprs));
+        }
+    }
     while (queue.size() > 1) {
         SortedRuns left = queue.front();
         queue.pop_front();
@@ -340,12 +380,25 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         queue.pop_front();
 
         SortedRuns merged;
+        // TODO: push the limit to merge procedure
         RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, sort_exprs, left, right, &merged));
+        if (limit > 0) {
+            merged.resize(limit);
+        }
 
         queue.push_back(merged);
     }
+    *output = queue.front();
 
-    *output = queue.front().assemble();
+    return Status::OK();
+}
+
+// Merge multiple chunks in two-way merge
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit) {
+    SortedRuns merged;
+    merge_sorted_chunks(descs, sort_exprs, chunks, &merged, limit);
+    *output = merged.assemble();
 
     return Status::OK();
 }
