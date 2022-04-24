@@ -3,7 +3,7 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/parquet/schema.h"
+#include "formats/parquet/schema.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace starrocks::parquet {

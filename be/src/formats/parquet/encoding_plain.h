@@ -4,7 +4,7 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "exec/parquet/encoding.h"
+#include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
 #include "util/bit_stream_utils.h"
 #include "util/coding.h"

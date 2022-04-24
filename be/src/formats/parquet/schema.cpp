@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/schema.h"
+#include "formats/parquet/schema.h"
 
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"

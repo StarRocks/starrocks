@@ -4,9 +4,9 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "exec/parquet/column_reader.h"
-#include "exec/parquet/metadata.h"
 #include "exec/vectorized/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
