@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/utils.h"
+#include "formats/parquet/utils.h"
 
 namespace starrocks::parquet {
 

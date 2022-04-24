@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/encoding.h"
+#include "formats/parquet/encoding.h"
 
 #include <memory>
 
-#include "exec/parquet/encoding_dict.h"
-#include "exec/parquet/encoding_plain.h"
-#include "exec/parquet/types.h"
+#include "formats/parquet/encoding_dict.h"
+#include "formats/parquet/encoding_plain.h"
+#include "formats/parquet/types.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::parquet {

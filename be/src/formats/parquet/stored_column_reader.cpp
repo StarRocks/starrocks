@@ -1,11 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/stored_column_reader.h"
+#include "formats/parquet/stored_column_reader.h"
 
 #include <memory>
 
 #include "column/column.h"
-#include "exec/parquet/types.h"
+#include "formats/parquet/types.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {

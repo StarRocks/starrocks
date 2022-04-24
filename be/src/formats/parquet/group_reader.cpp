@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 //
 
-#include "exec/parquet/group_reader.h"
+#include "formats/parquet/group_reader.h"
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"

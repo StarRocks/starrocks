@@ -7,7 +7,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
-#include "exec/parquet/encoding.h"
+#include "formats/parquet/encoding.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
