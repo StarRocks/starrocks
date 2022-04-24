@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/file_reader.h"
+#include "formats/parquet/file_reader.h"
 
 #include <gtest/gtest.h>
 
@@ -8,11 +8,11 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "env/env.h"
-#include "exec/parquet/column_chunk_reader.h"
-#include "exec/parquet/metadata.h"
-#include "exec/parquet/page_reader.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/binary_predicate.h"
+#include "formats/parquet/column_chunk_reader.h"
+#include "formats/parquet/metadata.h"
+#include "formats/parquet/page_reader.h"
 #include "runtime/descriptor_helper.h"
 
 namespace starrocks::parquet {

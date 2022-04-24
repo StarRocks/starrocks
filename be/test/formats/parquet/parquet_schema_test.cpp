@@ -5,7 +5,7 @@
 #include <iostream>
 #include <vector>
 
-#include "exec/parquet/schema.h"
+#include "formats/parquet/schema.h"
 
 namespace starrocks::parquet {
 

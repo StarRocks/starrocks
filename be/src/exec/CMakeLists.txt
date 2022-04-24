@@ -124,18 +124,6 @@ set(EXEC_FILES
     vectorized/sorting/merge_cascade.cpp
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
-    parquet/column_chunk_reader.cpp
-    parquet/column_converter.cpp
-    parquet/column_reader.cpp
-    parquet/encoding.cpp
-    parquet/level_codec.cpp
-    parquet/page_reader.cpp
-    parquet/schema.cpp
-    parquet/stored_column_reader.cpp
-    parquet/utils.cpp
-    parquet/metadata.cpp
-    parquet/group_reader.cpp
-    parquet/file_reader.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp

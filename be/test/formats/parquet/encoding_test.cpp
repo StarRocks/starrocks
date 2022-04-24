@@ -1,13 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/encoding.h"
+#include "formats/parquet/encoding.h"
 
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "exec/parquet/encoding_dict.h"
-#include "exec/parquet/encoding_plain.h"
+#include "formats/parquet/encoding_dict.h"
+#include "formats/parquet/encoding_plain.h"
 
 namespace starrocks::parquet {
 class ParquetEncodingTest : public testing::Test {

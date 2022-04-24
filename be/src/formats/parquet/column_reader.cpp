@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/column_reader.h"
+#include "formats/parquet/column_reader.h"
 
 #include "column/array_column.h"
-#include "exec/parquet/stored_column_reader.h"
+#include "formats/parquet/stored_column_reader.h"
 
 namespace starrocks {
 class RandomAccessFile;
