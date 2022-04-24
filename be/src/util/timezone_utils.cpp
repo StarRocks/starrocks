@@ -78,7 +78,7 @@ void TimezoneUtils::init_time_zones() {
     }
 }
 
-bool TimezoneUtils::find_cctz_time_zone(const std::string_view& timezone, cctz::time_zone& ctz) {
+bool TimezoneUtils::find_cctz_time_zone(std::string_view timezone, cctz::time_zone& ctz) {
     re2::StringPiece value;
     if (auto iter = _s_cached_timezone.find(timezone); iter != _s_cached_timezone.end()) {
         ctz = iter->second;
@@ -110,7 +110,7 @@ bool TimezoneUtils::find_cctz_time_zone(const std::string_view& timezone, cctz::
     }
 }
 
-bool TimezoneUtils::timezone_offsets(const std::string_view& src, const std::string_view& dst, int64_t* offset) {
+bool TimezoneUtils::timezone_offsets(std::string_view src, std::string_view dst, int64_t* offset) {
     if (const auto iter = _s_cached_offsets.find(std::make_pair(src, dst)); iter != _s_cached_offsets.end()) {
         *offset = iter->second;
         return true;
@@ -118,7 +118,7 @@ bool TimezoneUtils::timezone_offsets(const std::string_view& src, const std::str
     return false;
 }
 
-bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, const std::string_view& timezone,
+bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, std::string_view timezone,
                                         cctz::time_zone& ctz) {
     // find time_zone by cache
     if (auto iter = _s_cached_timezone.find(timezone); iter != _s_cached_timezone.end()) {

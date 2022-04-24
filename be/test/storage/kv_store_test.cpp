@@ -103,7 +103,7 @@ TEST_F(KVStoreTest, TestIterate) {
     bool error_flag = false;
     ASSERT_TRUE(_kv_store
                         ->iterate(META_COLUMN_FAMILY_INDEX, "hdr_",
-                                  [&error_flag](const std::string_view& key, const std::string_view& value) -> bool {
+                                  [&error_flag](std::string_view key, std::string_view value) -> bool {
                                       size_t pos = key.find_first_of("hdr_");
                                       if (pos != 0) {
                                           error_flag = true;

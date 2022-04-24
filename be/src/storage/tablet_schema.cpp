@@ -524,7 +524,7 @@ size_t TabletSchema::row_size() const {
     return size;
 }
 
-size_t TabletSchema::field_index(const std::string_view& field_name) const {
+size_t TabletSchema::field_index(std::string_view field_name) const {
     int ordinal = -1;
     for (auto& column : _cols) {
         ordinal++;
