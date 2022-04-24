@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -86,7 +87,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -578,7 +578,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
 
-            List<BinaryPredicateOperator> eqPredicate = JoinPredicateUtils.getEqConj(
+            List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
 

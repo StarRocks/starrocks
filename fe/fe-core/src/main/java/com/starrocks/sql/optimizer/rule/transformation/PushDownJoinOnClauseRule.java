@@ -15,9 +15,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.pushDownOnPredicate;
-
-public class PushDownJoinOnClauseRule extends TransformationRule {
+public class PushDownJoinOnClauseRule extends PushDownJoinPredicateBase {
     public PushDownJoinOnClauseRule() {
         super(RuleType.TF_PUSH_DOWN_JOIN_CLAUSE, Pattern.create(OperatorType.LOGICAL_JOIN).
                 addChildren(Pattern.create(OperatorType.PATTERN_LEAF), Pattern.create(OperatorType.PATTERN_LEAF)));
@@ -39,7 +37,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
 
         ScalarOperator on = join.getOnPredicate();
 
-        on = JoinPredicateUtils.rangePredicateDerive(on);
+        on = rangePredicateDerive(on);
         on = equivalenceDeriveOnPredicate(on, input, join);
 
         OptExpression root = pushDownOnPredicate(input, on);
@@ -62,7 +60,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         ColumnRefSet leftOutputColumns = joinOpt.getInputs().get(0).getOutputColumns();
         ColumnRefSet rightOutputColumns = joinOpt.getInputs().get(1).getOutputColumns();
 
-        ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(on, false);
+        ScalarOperator derivedPredicate = equivalenceDerive(on, false);
         List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
 
         if (join.getJoinType().isInnerJoin() || join.getJoinType().isSemiJoin()) {
