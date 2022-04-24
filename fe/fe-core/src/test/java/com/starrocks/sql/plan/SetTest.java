@@ -482,7 +482,8 @@ public class SetTest extends PlanTestBase {
 
     @Test
     public void testUnionWithOrderBy() throws Exception {
-        String sql = "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
+        String sql =
+                "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  7:TOP-N\n" +
                 "  |  order by: <slot 12> 12: v3 ASC\n" +

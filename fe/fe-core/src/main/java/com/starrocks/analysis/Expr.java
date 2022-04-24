@@ -270,6 +270,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         children = Expr.cloneList(other.children);
     }
 
+    @SuppressWarnings("unchecked")
+    public <T> T cast() {
+        return (T) this;
+    }
+
     public boolean isAnalyzed() {
         return isAnalyzed;
     }

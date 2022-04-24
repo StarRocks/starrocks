@@ -138,6 +138,27 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `test_all_type_not_null` (\n" +
+                "  `t1a` varchar(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NOT NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1e` float NOT NULL COMMENT \"\",\n" +
+                "  `t1f` double NOT NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
+                "  `id_date` date NOT NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NOT NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_object` (\n" +
                 "  `v1` int(11) NULL,\n" +
                 "  `v2` int(11) NULL,\n" +
