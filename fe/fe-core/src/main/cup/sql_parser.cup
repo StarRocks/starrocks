@@ -1783,7 +1783,7 @@ revoke_stmt ::=
     {:
         RESULT = new RevokeStmt(null, role, resourcePattern, privs);
     :}
-    | KW_REVOKE KW_ROLE STRING_LITERAL:role KW_FROM user_identity:userId
+    | KW_REVOKE KW_ROLE ident_or_text:role KW_FROM user_identity:userId
     {:
         RESULT = new RevokeRoleStmt(role, userId);
     :}

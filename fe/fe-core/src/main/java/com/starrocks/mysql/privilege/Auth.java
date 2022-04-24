@@ -586,7 +586,7 @@ public class Auth implements Writable {
 
             // 4. grant privs of role to user
             if (role != null) {
-                grantRoleInternal(role, userIdent);
+                grantRoleInternal(role, userIdent, false);
             }
 
             // other user properties
@@ -678,7 +678,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent());
+            grantRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent(), true);
         } finally {
             writeUnlock();
         }
@@ -693,17 +693,16 @@ public class Auth implements Writable {
      * @param userIdent
      * @throws DdlException
      */
-    private void grantRoleInternal(Role role, UserIdentity userIdent) throws DdlException {
+    private void grantRoleInternal(Role role, UserIdentity userIdent, boolean errOnNonExist) throws DdlException {
         for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
             // use PrivBitSet copy to avoid same object being changed synchronously
             grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                    false /* err on non exist */, true /* is replay */);
+                    errOnNonExist /* err on non exist */, true /* is replay */);
         }
         for (Map.Entry<ResourcePattern, PrivBitSet> entry : role.getResourcePatternToPrivs().entrySet()) {
             // use PrivBitSet copy to avoid same object being changed synchronously
-            // use PrivBitSet copy to avoid same object being changed synchronously
             grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                    false /* err on non exist */, true /* is replay */);
+                    errOnNonExist /* err on non exist */, true /* is replay */);
         }
         role.addUser(userIdent);
     }

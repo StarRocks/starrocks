@@ -1203,10 +1203,12 @@ public class AuthTest {
         createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
 
-        // check if select & load privilege both not granted
+        // check if select & load & spark resource usage privilege all not granted
         String dbName = "default_cluster:db1";
+        String resouceName = "test_spark";
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(0, auth.getRoleNamesByUser(userIdentity).size());
 
         // 2. add a role with select privilege
@@ -1224,7 +1226,6 @@ public class AuthTest {
         grantStmt.analyze(analyzer);
         auth.grant(grantStmt);
 
-
         // 4. grant role to user
         GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
         grantRoleStmt.analyze(analyzer);
@@ -1233,10 +1234,10 @@ public class AuthTest {
         // check if select privilege granted, load privilege not granted
         Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
 
-
-        // 5. add a new role with load privilege
+        // 5. add a new role with load privilege & spark resource usage
         String loadRoleName = "load_role";
         createRoleStmt = new CreateRoleStmt(loadRoleName);
         createRoleStmt.analyze(analyzer);
@@ -1248,26 +1249,34 @@ public class AuthTest {
         grantStmt.analyze(analyzer);
         auth.grant(grantStmt);
 
+        // 8. grant resource to role
+        privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+        ResourcePattern resourcePattern = new ResourcePattern(resouceName);
+        grantStmt = new GrantStmt(null, loadRoleName, resourcePattern, privileges);
+        grantStmt.analyze(analyzer);
+        auth.grant(grantStmt);
+
         // 7. grant role to user
         grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
         grantRoleStmt.analyze(analyzer);
         auth.grantRole(grantRoleStmt);
 
-        // check if select & load privilege both granted
+        // check if select & load privilege & spark resource usage all granted
         Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
         Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(true, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(2, auth.getRoleNamesByUser(userIdentity).size());
 
-
-        // 8. revoke load from user
+        // 8. revoke load & spark resource usage from user
         RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
         revokeRoleStmt.analyze(analyzer);
         auth.revokeRole(revokeRoleStmt);
 
         // check if select privilege granted, load privilege not granted
-        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
         Assert.assertEquals(true, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.SELECT));
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
+        Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
+        Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
      }
 
     @Test

@@ -16,9 +16,4 @@ public class RevokeRoleStmt extends GrantRoleStmt {
         sb.append("REVOKE ROLE ").append(role).append(" FROM ").append(userIdent);
         return sb.toString();
     }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
 }

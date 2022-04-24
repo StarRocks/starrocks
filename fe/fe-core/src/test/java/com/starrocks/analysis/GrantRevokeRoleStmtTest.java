@@ -87,9 +87,11 @@ public class GrantRevokeRoleStmtTest {
         // grant
         GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
         stmt.analyze(analyzer);
+        Assert.assertEquals(stmt.toSql(), "GRANT ROLE test_role TO 'test_cluster:test_user'@'localhost'");
         // revoke
         RevokeRoleStmt stmt2 = new RevokeRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
-        stmt.analyze(analyzer);
+        stmt2.analyze(analyzer);
+        Assert.assertEquals(stmt2.toSql(), "REVOKE ROLE test_role FROM 'test_cluster:test_user'@'localhost'");
     }
 
     @Test(expected = AnalysisException.class)
