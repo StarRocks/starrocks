@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Column;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -31,6 +30,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 public class ShowBrokerStmt extends ShowStmt {
     public ShowBrokerStmt() {

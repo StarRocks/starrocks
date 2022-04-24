@@ -22,13 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserProperty;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

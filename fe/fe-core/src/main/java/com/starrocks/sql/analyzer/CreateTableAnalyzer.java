@@ -14,7 +14,6 @@ import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
@@ -29,6 +28,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.Relation;
 import org.apache.commons.collections.CollectionUtils;
 

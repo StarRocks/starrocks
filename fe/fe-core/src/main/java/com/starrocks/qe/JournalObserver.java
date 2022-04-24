@@ -21,8 +21,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

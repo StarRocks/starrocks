@@ -23,8 +23,8 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;

@@ -22,11 +22,11 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TInternalScanRange;

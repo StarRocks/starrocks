@@ -21,9 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;

@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.plan;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

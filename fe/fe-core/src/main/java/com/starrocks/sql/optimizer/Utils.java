@@ -19,6 +19,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;

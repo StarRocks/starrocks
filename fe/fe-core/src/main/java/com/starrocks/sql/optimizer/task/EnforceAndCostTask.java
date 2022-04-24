@@ -3,9 +3,9 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;

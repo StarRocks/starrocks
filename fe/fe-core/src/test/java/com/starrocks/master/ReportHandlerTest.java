@@ -4,10 +4,10 @@ package com.starrocks.master;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.utframe.StarRocksAssert;

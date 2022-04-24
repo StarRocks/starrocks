@@ -21,7 +21,6 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
@@ -29,6 +28,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.Storage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 

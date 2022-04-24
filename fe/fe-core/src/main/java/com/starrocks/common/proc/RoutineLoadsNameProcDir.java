@@ -23,10 +23,10 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 

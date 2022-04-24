@@ -23,10 +23,10 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerErrorHubInfo;
 import com.starrocks.thrift.TNetworkAddress;
 

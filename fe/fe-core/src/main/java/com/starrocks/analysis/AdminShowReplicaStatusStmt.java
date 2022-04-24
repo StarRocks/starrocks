@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -38,6 +37,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 

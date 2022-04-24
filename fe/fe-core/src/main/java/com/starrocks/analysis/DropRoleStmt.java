@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -29,6 +28,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 public class DropRoleStmt extends DdlStmt {
 

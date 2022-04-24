@@ -21,7 +21,6 @@
 
 package com.starrocks.master;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
@@ -29,6 +28,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.logging.log4j.LogManager;

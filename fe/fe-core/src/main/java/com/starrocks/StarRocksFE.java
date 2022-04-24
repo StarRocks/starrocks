@@ -23,7 +23,6 @@ package com.starrocks;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.CommandLineOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
@@ -34,6 +33,7 @@ import com.starrocks.http.HttpServer;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.qe.QeService;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;

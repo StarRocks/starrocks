@@ -23,8 +23,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 
 import java.util.List;

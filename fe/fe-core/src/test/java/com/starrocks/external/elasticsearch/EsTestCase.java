@@ -26,10 +26,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 
 import java.io.BufferedReader;

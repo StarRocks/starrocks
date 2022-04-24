@@ -22,9 +22,9 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

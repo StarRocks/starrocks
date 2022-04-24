@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,6 +29,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.plugin.DynamicPluginLoader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
 

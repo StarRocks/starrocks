@@ -23,10 +23,10 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;

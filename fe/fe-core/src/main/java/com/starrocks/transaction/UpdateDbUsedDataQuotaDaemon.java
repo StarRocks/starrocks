@@ -22,10 +22,10 @@
 package com.starrocks.transaction;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

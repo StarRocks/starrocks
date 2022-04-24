@@ -22,12 +22,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;

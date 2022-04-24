@@ -31,7 +31,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -52,6 +51,7 @@ import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
 import com.starrocks.rewrite.ReplaceDateFormatRule;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

@@ -22,12 +22,12 @@
 package com.starrocks.plugin;
 
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
 

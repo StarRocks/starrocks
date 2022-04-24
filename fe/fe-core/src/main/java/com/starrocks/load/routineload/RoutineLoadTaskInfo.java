@@ -22,12 +22,12 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.transaction.TransactionState;

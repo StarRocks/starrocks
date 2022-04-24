@@ -23,9 +23,9 @@ package com.starrocks.analysis;
 
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import org.junit.Assert;

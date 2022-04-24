@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

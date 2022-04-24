@@ -4,12 +4,12 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.net.InetSocketAddress;
 import java.util.List;

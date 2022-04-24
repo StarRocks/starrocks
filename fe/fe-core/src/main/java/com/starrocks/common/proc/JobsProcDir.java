@@ -28,11 +28,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.server.GlobalStateMgr;
 
 /*
  * SHOW PROC '/jobs/dbId/'

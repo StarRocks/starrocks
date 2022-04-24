@@ -21,12 +21,12 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.MasterTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

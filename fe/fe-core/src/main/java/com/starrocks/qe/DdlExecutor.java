@@ -83,10 +83,10 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.SyncStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.server.GlobalStateMgr;
 
 public class DdlExecutor {
     public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {

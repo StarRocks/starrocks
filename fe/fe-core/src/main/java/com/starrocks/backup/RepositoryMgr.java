@@ -24,9 +24,9 @@ package com.starrocks.backup;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

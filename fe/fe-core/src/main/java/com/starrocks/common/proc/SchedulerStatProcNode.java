@@ -22,9 +22,9 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 public class SchedulerStatProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()

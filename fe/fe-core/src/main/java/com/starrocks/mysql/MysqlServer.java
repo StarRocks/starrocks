@@ -21,10 +21,10 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

@@ -2,9 +2,9 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

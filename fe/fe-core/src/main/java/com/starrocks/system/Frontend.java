@@ -21,13 +21,13 @@
 
 package com.starrocks.system;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
 import java.io.DataInput;

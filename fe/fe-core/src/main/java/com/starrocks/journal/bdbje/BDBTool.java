@@ -33,9 +33,9 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.json.JSONArray;
 import org.json.JSONObject;
 

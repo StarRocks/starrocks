@@ -21,11 +21,11 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class HealthAction extends RestBaseAction {

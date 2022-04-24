@@ -23,7 +23,6 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
@@ -34,6 +33,7 @@ import com.starrocks.master.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;

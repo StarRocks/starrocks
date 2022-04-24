@@ -23,12 +23,12 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;

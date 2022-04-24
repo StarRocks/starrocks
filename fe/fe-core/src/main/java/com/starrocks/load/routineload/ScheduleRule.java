@@ -20,9 +20,9 @@
 // under the License.
 package com.starrocks.load.routineload;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 
 /**

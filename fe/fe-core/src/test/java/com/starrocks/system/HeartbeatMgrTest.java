@@ -22,11 +22,11 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatMgr.BrokerHeartbeatHandler;
 import com.starrocks.system.HeartbeatMgr.FrontendHeartbeatHandler;
 import com.starrocks.system.HeartbeatResponse.HbStatus;

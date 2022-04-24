@@ -5,7 +5,6 @@ package com.starrocks.external.starrocks;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
@@ -13,6 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

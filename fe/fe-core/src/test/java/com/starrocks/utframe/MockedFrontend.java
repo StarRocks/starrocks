@@ -23,7 +23,6 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
@@ -31,6 +30,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import mockit.Mock;

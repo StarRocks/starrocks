@@ -22,9 +22,9 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 // show proc "/cluster_balance/priority_repair";
 public class PriorityRepairProcNode implements ProcNodeInterface {

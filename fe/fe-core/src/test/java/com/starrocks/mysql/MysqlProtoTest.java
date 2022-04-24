@@ -23,11 +23,11 @@ package com.starrocks.mysql;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;

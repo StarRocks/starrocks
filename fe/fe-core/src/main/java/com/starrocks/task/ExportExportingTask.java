@@ -23,7 +23,6 @@ package com.starrocks.task;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -38,6 +37,7 @@ import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;

@@ -21,9 +21,9 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

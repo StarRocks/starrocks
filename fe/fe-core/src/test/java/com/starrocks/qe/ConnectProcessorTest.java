@@ -22,7 +22,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCapability;
@@ -34,6 +33,7 @@ import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;

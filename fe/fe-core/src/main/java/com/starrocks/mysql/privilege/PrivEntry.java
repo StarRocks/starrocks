@@ -22,13 +22,13 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.io.DataInput;

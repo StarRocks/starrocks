@@ -2,8 +2,8 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Test;
 
 public class StatisticProcDirTest {

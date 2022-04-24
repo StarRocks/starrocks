@@ -22,12 +22,12 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;

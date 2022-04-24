@@ -22,9 +22,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.FakeCatalog;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

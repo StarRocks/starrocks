@@ -1,8 +1,8 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Maps;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.LoadException;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
