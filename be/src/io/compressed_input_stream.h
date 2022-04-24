@@ -25,7 +25,7 @@ public:
 
     Status skip(int64_t n) override;
 
-    // TODO: support peak
+    // TODO: support peek
     bool allows_peek() const override { return false; }
 
     // TODO: add custom statistics

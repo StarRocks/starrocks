@@ -330,29 +330,26 @@ Status RoutineLoadTaskExecutor::_execute_plan_for_test(StreamLoadContext* ctx) {
     ctx->ref();
     auto mock_consumer = [this, ctx]() {
         std::shared_ptr<StreamLoadPipe> pipe = _exec_env->load_stream_mgr()->get(ctx->id);
-        bool eof = false;
+        std::shared_ptr<io::InputStream> stream = new_pipe_read_stream(pipe);
         std::stringstream ss;
         while (true) {
-            char one;
-            size_t len = 1;
-            Status st = pipe->read((uint8_t*)&one, &len, &eof);
-            if (!st.ok()) {
+            char c;
+            StatusOr<int64_t> result = stream->read(&c, 1);
+            if (!result.ok()) {
                 LOG(WARNING) << "read failed";
-                ctx->promise.set_value(st);
+                ctx->promise.set_value(result.status());
                 break;
             }
-
-            if (eof) {
+            if (result.value() == 0) {
                 ctx->promise.set_value(Status::OK());
                 break;
             }
-
-            if (one == '\n') {
+            if (c == '\n') {
                 LOG(INFO) << "get line: " << ss.str();
                 ss.str("");
                 ctx->number_loaded_rows++;
             } else {
-                ss << one;
+                ss << c;
             }
         }
         if (ctx->unref()) {

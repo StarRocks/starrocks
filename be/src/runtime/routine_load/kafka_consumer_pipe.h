@@ -40,14 +40,8 @@ public:
     ~KafkaConsumerPipe() override = default;
 
     Status append_with_row_delimiter(const char* data, size_t size, char row_delimiter) {
-        Status st = append(data, size);
-        if (!st.ok()) {
-            return st;
-        }
-
-        // append the row delimiter
-        st = append(&row_delimiter, 1);
-        return st;
+        RETURN_IF_ERROR(append(data, size));
+        return append(&row_delimiter, 1);
     }
 
     Status append_json(const char* data, size_t size, char row_delimiter) { return append_and_flush(data, size); }

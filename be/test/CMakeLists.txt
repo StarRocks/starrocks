@@ -211,7 +211,6 @@ set(EXEC_FILES
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
-        ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/large_int_value_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp

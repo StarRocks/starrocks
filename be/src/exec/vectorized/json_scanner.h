@@ -5,7 +5,6 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "env/env.h"
-#include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
 #include "exprs/vectorized/json_functions.h"
@@ -100,30 +99,21 @@ private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
-    bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
-    bool _closed;
     std::vector<SlotDescriptor*> _slot_descs;
     std::unordered_map<std::string, SlotDescriptor*> _slot_desc_dict;
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
     simdjson::ondemand::parser _simdjson_parser;
-    std::unique_ptr<uint8_t[]> _parser_buf;
-    size_t _parser_buf_sz = 0;
-    size_t _parser_buf_cap = 0;
-    bool _is_ndjson = false;
-
     std::unique_ptr<JsonParser> _parser;
-    bool _empty_parser = true;
-    // only used in unit test.
-    // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
-    //       Import a json library supporting streaming parse.
-#if BE_TEST
-    size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
     raw::RawVector<char> _buf;
-#endif
+
+    bool _strict_mode = false;
+    bool _closed;
+    bool _is_ndjson = false;
+    bool _empty_parser = true;
 };
 
 } // namespace starrocks::vectorized

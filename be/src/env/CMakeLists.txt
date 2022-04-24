@@ -29,7 +29,6 @@ set(EXEC_FILES
     env.cpp
     env_posix.cpp
     env_util.cpp
-    env_stream_pipe.cpp
     env_broker.cpp
     env_memory.cpp
     env_s3.cpp

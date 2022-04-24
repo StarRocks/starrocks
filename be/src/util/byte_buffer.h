@@ -56,6 +56,12 @@ struct ByteBuffer {
         pos = 0;
     }
 
+    const char* data() const { return ptr + pos; }
+
+    char* data() { return ptr + pos; }
+
+    void skip(size_t n) { pos += n; }
+
     size_t remaining() const { return limit - pos; }
     bool has_remaining() const { return limit > pos; }
 

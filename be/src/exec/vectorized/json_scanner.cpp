@@ -298,14 +298,9 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
         : _state(state),
           _counter(counter),
           _scanner(scanner),
-          _strict_mode(strict_mode),
           _file(std::move(file)),
-          _slot_descs(slot_descs) {
-#if BE_TEST
-    raw::RawVector<char> buf(_buf_size);
-    std::swap(buf, _buf);
-#endif
-}
+          _slot_descs(slot_descs),
+          _strict_mode(strict_mode) {}
 
 Status JsonReader::open() {
     RETURN_IF_ERROR(_read_and_parse_json());
@@ -678,37 +673,36 @@ void JsonReader::_build_slot_descs() {
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
-    uint8_t* data{};
+    const uint8_t* data;
     size_t length = 0;
+    bool need_skip = false;
 
-#ifdef BE_TEST
-
-    [[maybe_unused]] size_t message_size = 0;
-    ASSIGN_OR_RETURN(auto nread, _file->read(_buf.data(), _buf_size));
-    if (nread == 0) {
-        return Status::EndOfFile("EOF of reading file");
-    }
-
-    data = reinterpret_cast<uint8_t*>(_buf.data());
-    length = nread;
-
-#else
-    // TODO: Remove the down_cast, should not rely on the specific implementation.
-    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-    {
-        SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-        RETURN_IF_ERROR(stream_file->read_one_message(&_parser_buf, &_parser_buf_cap, &_parser_buf_sz,
-                                                      simdjson::SIMDJSON_PADDING));
-        if (_parser_buf_sz == 0) {
-            return Status::EndOfFile("EOF of reading file");
+    if (_file->allows_peek()) {
+        // FIXME: Assume the buffer returned by `peek()` is at least `simdjson::SIMDJSON_PADDING` bytes padded at tail.
+        // FIXME: Assume the returned buffer contains a complete json object.
+        // The above two assumptions will be true if the underlying data source of |_file| is `StreamLoadPipe`.
+        // See 'StreamLoadAction::_process_put()` on how the second assumption achieved by setting the min chunk size
+        // of StreamLoadPipe to the length of HTTP body.
+        ASSIGN_OR_RETURN(auto buff, _file->peek(INT_MAX));
+        data = reinterpret_cast<const uint8_t*>(buff.data());
+        length = buff.size();
+        need_skip = true;
+    } else {
+        _buf.clear();
+        // Read until EOF
+        while (true) {
+            _buf.resize(std::max<size_t>(64 * 1024 /*64KB*/, _buf.size() * 2));
+            ASSIGN_OR_RETURN(auto nread,
+                             _file->read(_buf.data() + length, _buf.size() - length - simdjson::SIMDJSON_PADDING));
+            if (nread == 0) break;
+            length += nread;
         }
+        data = reinterpret_cast<const uint8_t*>(_buf.data());
     }
 
-    data = _parser_buf.get();
-    length = _parser_buf_sz;
-
-#endif
+    if (length == 0) {
+        return Status::EndOfFile(_file->filename());
+    }
 
     // Check the content formart accroding to the first non-space character.
     // Treat json string started with '{' as ndjson.
@@ -724,7 +718,7 @@ Status JsonReader::_read_and_parse_json() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << data[i] << "]";
-            return Status::EndOfFile("illegal json started with " + data[i]);
+            return Status::InternalError("illegal json started with " + data[i]);
         }
     }
 
@@ -755,7 +749,11 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
-    return _parser->parse(data, length, length + simdjson::SIMDJSON_PADDING);
+    auto ret = _parser->parse(data, length, length + simdjson::SIMDJSON_PADDING);
+    if (need_skip) {
+        RETURN_IF_ERROR(_file->skip(length));
+    }
+    return ret;
 }
 
 // _construct_column constructs column based on no value.

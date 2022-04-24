@@ -8,7 +8,6 @@
 #include "column/hash_set.h"
 #include "env/env.h"
 #include "env/env_broker.h"
-#include "env/env_stream_pipe.h"
 #include "env/env_util.h"
 #include "exec/decompressor.h"
 #include "gutil/strings/substitute.h"
@@ -252,8 +251,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
-        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe));
-        src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
+        src_file = std::make_shared<SequentialFile>(new_pipe_read_stream(pipe), "stream-load-pipe");
         break;
     }
     case TFileType::FILE_BROKER: {

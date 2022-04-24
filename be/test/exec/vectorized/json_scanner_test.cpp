@@ -85,7 +85,7 @@ protected:
 
         EXPECT_OK(scanner->open());
 
-        ChunkPtr chunk = scanner->get_next().value();
+        ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
         return chunk;
     }
 
@@ -135,7 +135,7 @@ TEST_F(JsonScannerTest, test_json_without_path) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(2, chunk->num_rows());
 
@@ -167,7 +167,7 @@ TEST_F(JsonScannerTest, test_json_with_path) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(2, chunk->num_rows());
 
@@ -202,7 +202,7 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(2, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -232,7 +232,7 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -262,7 +262,7 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -293,7 +293,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
 
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
@@ -324,7 +324,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -352,7 +352,7 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(2, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -382,7 +382,7 @@ TEST_F(JsonScannerTest, test_ndjson) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
@@ -417,7 +417,7 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
@@ -470,7 +470,7 @@ TEST_F(JsonScannerTest, test_multi_type) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(14, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -506,7 +506,7 @@ TEST_F(JsonScannerTest, test_cast_type) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(5, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -539,7 +539,7 @@ TEST_F(JsonScannerTest, test_load_native_json) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(kNumColumns, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
@@ -577,7 +577,7 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(4, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
@@ -710,7 +710,7 @@ TEST_F(JsonScannerTest, test_expanded_with_json_root) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(3, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
@@ -747,7 +747,7 @@ TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(3, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
@@ -791,7 +791,7 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     st = scanner->open();
     ASSERT_TRUE(st.ok());
 
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSIGN_OR_ABORT(auto chunk, scanner->get_next());
     EXPECT_EQ(11, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 

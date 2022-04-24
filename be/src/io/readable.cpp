@@ -2,6 +2,8 @@
 
 #include "io/readable.h"
 
+#include <fmt/format.h>
+
 namespace starrocks::io {
 
 Status Readable::read_fully(void* data, int64_t count) {
@@ -10,7 +12,7 @@ Status Readable::read_fully(void* data, int64_t count) {
         ASSIGN_OR_RETURN(auto n, read(static_cast<uint8_t*>(data) + nread, count - nread));
         nread += n;
         if (n == 0) {
-            return Status::IOError("cannot read fully");
+            return Status::IOError(fmt::format("cannot read fully. expect {} got {}", count, nread));
         }
     }
     return Status::OK();

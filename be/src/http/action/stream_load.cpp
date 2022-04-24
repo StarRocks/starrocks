@@ -348,8 +348,13 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     if (ctx->use_streaming) {
-        auto pipe =
-                std::make_shared<StreamLoadPipe>(1024 * 1024 /* max_buffered_bytes */, 64 * 1024 /* min_chunk_size */);
+        // If this is a json file, set the min_chunk_size to the length of HTTP body,
+        // because the JsonReader can only parse a complete json file at once.
+        // TODO: chunked transfer encoding
+        bool json_format = ctx->format == TFileFormatType::FORMAT_JSON;
+        size_t min_chunk_size = json_format ? ctx->body_bytes : 1024;
+        size_t max_chunk_size = json_format ? ctx->body_bytes : 1024 * 1024;
+        auto pipe = std::make_shared<StreamLoadPipe>(max_chunk_size, min_chunk_size);
         RETURN_IF_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe));
         request.fileType = TFileType::FILE_STREAM;
         ctx->body_sink = pipe;

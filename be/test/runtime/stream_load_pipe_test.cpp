@@ -38,72 +38,26 @@ public:
     void SetUp() override {}
 };
 
-PARALLEL_TEST(StreamLoadPipeTest, append_bytes) {
-    StreamLoadPipe pipe(66, 64);
+PARALLEL_TEST(StreamLoadPipeTest, stream) {
+    auto pipe = std::make_shared<StreamLoadPipe>(66, 64);
+    auto stream = new_pipe_read_stream(pipe);
 
     auto appender = [&pipe] {
         for (int i = 0; i < 128; ++i) {
             char buf = '0' + (i % 10);
-            pipe.append(&buf, 1);
+            pipe->append(&buf, 1);
         }
-        pipe.finish();
+        pipe->finish();
     };
     std::thread t1(appender);
 
     char buf[256];
-    size_t buf_len = 256;
-    bool eof = false;
-    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(128, buf_len);
-    ASSERT_FALSE(eof);
+    ASSERT_OK(stream->read_fully(buf, 128));
     for (int i = 0; i < 128; ++i) {
         ASSERT_EQ('0' + (i % 10), buf[i]);
     }
-    st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
-
-    t1.join();
-}
-
-PARALLEL_TEST(StreamLoadPipeTest, append_bytes2) {
-    StreamLoadPipe pipe(66, 64);
-
-    auto appender = [&pipe] {
-        for (int i = 0; i < 128; ++i) {
-            char buf = '0' + (i % 10);
-            pipe.append(&buf, 1);
-        }
-        pipe.finish();
-    };
-    std::thread t1(appender);
-
-    char buf[128];
-    size_t buf_len = 62;
-    bool eof = false;
-    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(62, buf_len);
-    ASSERT_FALSE(eof);
-    for (int i = 0; i < 62; ++i) {
-        ASSERT_EQ('0' + (i % 10), buf[i]);
-    }
-    for (int i = 62; i < 128; ++i) {
-        char ch;
-        buf_len = 1;
-        auto st = pipe.read((uint8_t*)&ch, &buf_len, &eof);
-        ASSERT_TRUE(st.ok());
-        ASSERT_EQ(1, buf_len);
-        ASSERT_FALSE(eof);
-        ASSERT_EQ('0' + (i % 10), ch);
-    }
-    st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
-
+    ASSIGN_OR_ABORT(auto nread, stream->read(buf, 128));
+    ASSERT_EQ(0, nread);
     t1.join();
 }
 
@@ -121,15 +75,12 @@ PARALLEL_TEST(StreamLoadPipeTest, cancel) {
     };
     std::thread t1(appender);
 
-    char buf[128];
-    size_t buf_len = 128;
-    bool eof = false;
-    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_FALSE(st.ok());
+    auto res = pipe.read();
+    ASSERT_FALSE(res.ok());
     t1.join();
 }
 
-PARALLEL_TEST(StreamLoadPipeTest, read_one_message) {
+PARALLEL_TEST(StreamLoadPipeTest, read) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
@@ -144,51 +95,22 @@ PARALLEL_TEST(StreamLoadPipeTest, read_one_message) {
     };
     std::thread t1(appender);
 
-    std::unique_ptr<uint8_t[]> buf;
-    size_t buf_cap = 0;
-    size_t buf_sz = 0;
-    // 1st message
-    auto st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(64, buf_sz);
-    for (int i = 0; i < buf_sz; ++i) {
-        ASSERT_EQ('0' + (i % 10), buf[i]);
+    ASSIGN_OR_ABORT(auto buff, pipe.read());
+    ASSERT_EQ(64, buff->remaining());
+    for (int i = 0; i < 64; ++i) {
+        ASSERT_EQ('0' + (i % 10), buff->ptr[i]);
     }
 
-    // 2nd message
-    st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(64, buf_sz);
-    for (int i = 0; i < buf_sz; ++i) {
-        ASSERT_EQ('0' + (i % 10), buf[i]);
+    ASSIGN_OR_ABORT(buff, pipe.read());
+    ASSERT_EQ(64, buff->remaining());
+    for (int i = 0; i < 64; ++i) {
+        ASSERT_EQ('0' + (i % 10), buff->ptr[i]);
     }
 
-    st = pipe.read_one_message(&buf, &buf_cap, &buf_sz, 0);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(0, buf_sz);
+    ASSIGN_OR_ABORT(buff, pipe.read());
+    ASSERT_TRUE(buff == nullptr);
 
     t1.join();
-}
-
-PARALLEL_TEST(StreamLoadPipeTest, append_and_flush) {
-    StreamLoadPipe pipe;
-
-    ASSERT_OK(pipe.append("123", 3));
-    ASSERT_OK(pipe.append_and_flush("456", 3));
-    pipe.finish();
-
-    char buf[12];
-    size_t buf_len = 12;
-    bool eof = false;
-    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
-    ASSERT_EQ(6, buf_len);
-    ASSERT_FALSE(eof);
-    ASSERT_EQ(std::string_view("123456"), std::string_view(buf, buf_len));
-
-    pipe.finish();
-    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
@@ -200,16 +122,10 @@ PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
         pipe.finish();
     });
 
-    char buf[12];
-    size_t buf_len = 12;
-    bool eof = false;
-    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
-    ASSERT_EQ(10, buf_len);
-    ASSERT_FALSE(eof);
-    ASSERT_EQ(std::string_view("0123456789"), std::string_view(buf, buf_len));
-    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
+    ASSIGN_OR_ABORT(auto buff, pipe.read());
+    ASSERT_EQ(std::string_view("0123456789"), std::string_view(buff->ptr, buff->limit));
+    ASSIGN_OR_ABORT(buff, pipe.read());
+    ASSERT_TRUE(buff == nullptr);
 
     producer.join();
 }
