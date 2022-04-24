@@ -92,6 +92,7 @@ public:
 
     Status flush_chunk(const vectorized::Chunk& chunk) override;
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
+    Status flush_chunk_with_deletes_only(const vectorized::Column& deletes);
 
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;

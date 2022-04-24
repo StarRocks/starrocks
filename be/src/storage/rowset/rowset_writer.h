@@ -105,6 +105,10 @@ public:
         return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
     }
 
+    virtual Status flush_chunk_with_deletes_only(const vectorized::Column& deletes) {
+        return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes_only");
+    }
+
     // Precondition: the input `rowset` should have the same type of the rowset we're building
     virtual Status add_rowset(RowsetSharedPtr rowset) { return Status::NotSupported("RowsetWriter::add_rowset"); }
 

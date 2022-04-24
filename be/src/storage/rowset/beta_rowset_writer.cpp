@@ -123,7 +123,7 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     _rowset_meta->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        _rowset_meta->set_num_delete_files(!_segment_has_deletes.empty() && _segment_has_deletes[0]);
+        _rowset_meta->set_num_delete_files(_segment_has_deletes.size());
         _rowset_meta->set_segments_overlap(NONOVERLAPPING);
         if (_context.partial_update_tablet_schema) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
@@ -292,7 +292,9 @@ Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk&
 
 Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
     auto segment_writer = _create_segment_writer();
-    if (!segment_writer.ok()) return segment_writer.status();
+    if (!segment_writer.ok()) {
+        return segment_writer.status();
+    }
     RETURN_IF_ERROR((*segment_writer)->append_chunk(chunk));
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -322,6 +324,26 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         _segment_has_deletes[_num_segment] = true;
     }
     return flush_chunk(upserts);
+}
+
+Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes_only(const vectorized::Column& deletes) {
+    if (!deletes.empty()) {
+        auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id,
+                                                      _segment_has_deletes.size());
+        std::unique_ptr<fs::WritableBlock> wblock;
+        fs::CreateBlockOptions opts({path});
+        RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
+        size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
+        std::vector<uint8_t> content(sz);
+        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
+            return Status::InternalError("deletes column serialize failed");
+        }
+        RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
+        RETURN_IF_ERROR(wblock->finalize());
+        RETURN_IF_ERROR(wblock->close());
+        _segment_has_deletes.push_back(true);
+    }
+    return Status::OK();
 }
 
 Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
@@ -376,7 +398,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     }
 
     if (!std::all_of(_segment_has_deletes.cbegin(), _segment_has_deletes.cend(), std::logical_not<bool>())) {
-        return Status::NotSupported("multi-segments with delete not supported.");
+        return Status::NotSupported("multi-segments with mixed upsert/delete not supported.");
     }
 
     MonotonicStopWatch timer;
@@ -419,7 +441,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     }
 
     ChunkIteratorPtr itr = nullptr;
-    // schema change vecotrized
+    // schema change vectorized
     // schema change with sorting create temporary segment files first
     // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {

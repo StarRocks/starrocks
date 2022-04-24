@@ -23,6 +23,8 @@ class MemTable;
 
 enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
 
+enum class FlushChunkState { original, upserts, deletes, mixed };
+
 struct DeltaWriterOptions {
     int64_t tablet_id;
     int32_t schema_hash;
@@ -86,6 +88,8 @@ public:
         return _rowset_writer->global_dict_columns_valid_info();
     }
 
+    void calc_flush_chunk_state(bool upserts, bool deletes);
+
 private:
     enum State {
         kUninitialized,
@@ -123,6 +127,8 @@ private:
     const TabletSchema* _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
+    FlushChunkState _flush_chunk_state = FlushChunkState::original;
+    FlushChunkState _curr_flush_chunk_state = FlushChunkState::original;
 };
 
 } // namespace vectorized
