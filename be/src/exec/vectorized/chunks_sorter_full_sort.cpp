@@ -44,10 +44,12 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     if (!_unsorted_chunk) {
         return Status::OK();
     }
-    // TODO: do partial sort before reach chunk limit
     bool reach_limit = _unsorted_chunk->num_rows() >= kMaxBufferedChunkSize || _unsorted_chunk->reach_capacity_limit();
     if (done || reach_limit) {
         SCOPED_TIMER(_sort_timer);
+
+        // Check column overflow problem
+        RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
         _sort_permutation.resize(0);
