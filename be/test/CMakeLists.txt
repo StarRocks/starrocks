@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/es_scan_reader_test.cpp
+        ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -273,8 +274,8 @@ set(EXEC_FILES
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
-        ./exec/vectorized/hdfs_scan_node_test.cpp
         )
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
