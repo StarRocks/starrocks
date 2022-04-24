@@ -213,8 +213,6 @@ public class RuleSet {
                 new PushDownPredicateDirectRule(),
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
-                PushDownPredicateScanRule.ICEBERG_SCAN,
-                PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
@@ -229,6 +227,7 @@ public class RuleSet {
 
                 MergePredicateRule.HIVE_SCAN,
                 MergePredicateRule.HUDI_SCAN,
+                MergePredicateRule.ICEBERG_SCAN,
                 MergePredicateRule.SCHEMA_SCAN,
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
