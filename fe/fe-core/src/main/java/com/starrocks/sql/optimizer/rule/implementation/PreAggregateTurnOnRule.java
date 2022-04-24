@@ -16,7 +16,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -127,7 +127,7 @@ public class PreAggregateTurnOnRule {
             // check has value conjunct
             boolean allKeyConjunct =
                     Utils.extractColumnRef(
-                                    Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
+                            Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
                             .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {
@@ -292,7 +292,16 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visitPhysicalHashJoin(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalHashJoinOperator hashJoinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        @Override
+        public Void visitPhysicalMergeJoin(OptExpression optExpression, PreAggregationContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        public Void visitPhysicalJoin(OptExpression optExpression, PreAggregationContext context) {
+            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             OptExpression leftChild = optExpression.getInputs().get(0);
             OptExpression rightChild = optExpression.getInputs().get(1);
 
@@ -300,9 +309,9 @@ public class PreAggregateTurnOnRule {
             ColumnRefSet rightOutputColumns = optExpression.getInputs().get(1).getOutputColumns();
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftOutputColumns,
-                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getOnPredicate()));
+                    rightOutputColumns, Utils.extractConjuncts(joinOperator.getOnPredicate()));
             // cross join can not do pre-aggregation
-            if (hashJoinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
+            if (joinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 context.notPreAggregationJoin = true;
                 context.groupings.clear();
                 context.aggregations.clear();
@@ -334,11 +343,11 @@ public class PreAggregateTurnOnRule {
             boolean checkLeft = leftOutputColumns.containsAll(aggregationColumns);
             boolean checkRight = rightOutputColumns.containsAll(aggregationColumns);
             // Add join on predicate and predicate to context
-            if (hashJoinOperator.getOnPredicate() != null) {
-                context.joinPredicates.add(hashJoinOperator.getOnPredicate().clone());
+            if (joinOperator.getOnPredicate() != null) {
+                context.joinPredicates.add(joinOperator.getOnPredicate().clone());
             }
-            if (hashJoinOperator.getPredicate() != null) {
-                context.joinPredicates.add(hashJoinOperator.getPredicate().clone());
+            if (joinOperator.getPredicate() != null) {
+                context.joinPredicates.add(joinOperator.getPredicate().clone());
             }
 
             PreAggregationContext disableContext = new PreAggregationContext();

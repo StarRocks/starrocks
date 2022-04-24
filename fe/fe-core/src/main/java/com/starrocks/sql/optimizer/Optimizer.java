@@ -131,6 +131,16 @@ public class Optimizer {
             }
         }
 
+        //add join implementRule
+        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addMergeJoinImplementationRule();
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addHashJoinImplementationRule();
+        } else {
+            context.getRuleSet().addAutoJoinImplementationRule();
+        }
+
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(
                 rootTaskContext, memo.getRootGroup()));
 

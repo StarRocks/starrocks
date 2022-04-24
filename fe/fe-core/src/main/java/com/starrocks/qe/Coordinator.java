@@ -51,10 +51,10 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
-import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
@@ -1399,8 +1399,8 @@ public class Coordinator {
         }
 
         // One fragment could only have one HashJoinNode
-        if (node instanceof HashJoinNode) {
-            HashJoinNode joinNode = (HashJoinNode) node;
+        if (node instanceof JoinNode) {
+            JoinNode joinNode = (JoinNode) node;
             if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
                 if (joinNode.getJoinOp().isFullOuterJoin() || joinNode.getJoinOp().isRightJoin()) {
