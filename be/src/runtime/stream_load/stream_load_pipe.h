@@ -25,7 +25,6 @@
 #include <deque>
 #include <mutex>
 
-#include "exec/file_reader.h"
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
@@ -35,13 +34,11 @@ namespace starrocks {
 
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
-class StreamLoadPipe : public MessageBodySink, public FileReader {
+class StreamLoadPipe : public MessageBodySink {
 public:
     StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
             : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
     ~StreamLoadPipe() override = default;
-
-    Status open() override { return Status::OK(); }
 
     Status append_and_flush(const char* data, size_t size) {
         ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(size + 1));
@@ -120,7 +117,7 @@ public:
         return Status::OK();
     }
 
-    Status read(uint8_t* data, size_t* data_size, bool* eof) override {
+    Status read(uint8_t* data, size_t* data_size, bool* eof) {
         size_t bytes_read = 0;
         while (bytes_read < *data_size) {
             if (_read_buf == nullptr || !_read_buf->has_remaining()) {
@@ -156,20 +153,8 @@ public:
         return Status::OK();
     }
 
-    Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override {
-        return Status::InternalError("Not implemented");
-    }
-
-    int64_t size() override { return 0; }
-
-    Status seek(int64_t position) override { return Status::InternalError("Not implemented"); }
-
-    Status tell(int64_t* position) override { return Status::InternalError("Not implemented"); }
-
     // called when consumer finished
-    void close() override { cancel(Status::OK()); }
-
-    bool closed() override { return _cancelled; }
+    void close() { cancel(Status::OK()); }
 
     // called when producer finished
     Status finish() override {
