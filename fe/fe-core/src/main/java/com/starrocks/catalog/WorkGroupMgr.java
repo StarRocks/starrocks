@@ -46,7 +46,7 @@ public class WorkGroupMgr implements Writable {
     private Map<Long, Long> minVersionPerBe = new HashMap<>();
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    WorkGroupMgr(GlobalStateMgr globalStateMgr) {
+    public WorkGroupMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
 
