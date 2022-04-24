@@ -1,15 +1,15 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/column_chunk_reader.h"
+#include "formats/parquet/column_chunk_reader.h"
 
 #include <memory>
 
 #include "env/env.h"
-#include "exec/parquet/encoding.h"
-#include "exec/parquet/encoding_dict.h"
-#include "exec/parquet/page_reader.h"
-#include "exec/parquet/types.h"
-#include "exec/parquet/utils.h"
+#include "formats/parquet/encoding.h"
+#include "formats/parquet/encoding_dict.h"
+#include "formats/parquet/page_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/runtime_profile.h"

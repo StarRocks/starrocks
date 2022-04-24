@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/parquet/level_codec.h"
+#include "formats/parquet/level_codec.h"
 
 #include "util/bit_util.h"
 #include "util/coding.h"
