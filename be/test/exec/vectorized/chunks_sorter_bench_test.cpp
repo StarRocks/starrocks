@@ -380,7 +380,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
     ChunkPtr chunk2 = std::make_shared<Chunk>(columns, map);
 
     int64_t num_rows = 0;
-    SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
+    SortDescs sort_desc({1, 1, 1}, {-1, -1, -1});
     for (auto _ : state) {
         ChunkPtr merged;
         std::vector<ChunkPtr> inputs;
@@ -392,7 +392,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
                 inputs.push_back(chunk2);
             }
         }
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged->num_rows());
 
         num_rows += merged->num_rows();
