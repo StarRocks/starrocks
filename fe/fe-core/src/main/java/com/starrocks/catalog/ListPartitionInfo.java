@@ -28,11 +28,9 @@ public class ListPartitionInfo extends PartitionInfo {
     //serialize values for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
     @SerializedName("idToMultiValues")
     private Map<Long, List<List<String>>> idToMultiValues;
-    private Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
     //serialize values for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
-    private Map<Long, List<LiteralExpr>> idToLiteralValues;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -41,17 +39,13 @@ public class ListPartitionInfo extends PartitionInfo {
         this.setIsMultiColumnPartition();
 
         this.idToValues = new HashMap<>();
-        this.idToLiteralValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
-        this.idToMultiLiteralExprValues = new HashMap<>();
     }
 
     public ListPartitionInfo() {
         super();
         this.idToValues = new HashMap<>();
-        this.idToLiteralValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
-        this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
     }
 
@@ -59,16 +53,8 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToValues.put(partitionId, values);
     }
 
-    public void setLiteralValues(long partitionId, List<LiteralExpr> values) {
-        this.idToLiteralValues.put(partitionId, values);
-    }
-
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
         this.idToMultiValues.put(partitionId, multiValues);
-    }
-
-    public void setMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiLiteralExprValues) {
-        this.idToMultiLiteralExprValues.put(partitionId, multiLiteralExprValues);
     }
 
     private void setIsMultiColumnPartition() {
