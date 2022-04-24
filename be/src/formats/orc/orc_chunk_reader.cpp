@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/vectorized/orc_scanner_adapter.h"
+#include "formats/orc/orc_chunk_reader.h"
 
 #include <glog/logging.h>
 
@@ -104,7 +104,7 @@ static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
 static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
                                      const TypeDescriptor& type_desc, void* ctx) {
-    OrcScannerAdapter* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col_start + size);
@@ -123,8 +123,8 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
     // don't do overflow check on BIGINT(int64_t) or LARGEINT(int128_t)
     constexpr bool wild_type = (Type == PrimitiveType::TYPE_BIGINT || Type == PrimitiveType::TYPE_LARGEINT);
     if constexpr (!wild_type) {
-        if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
-            auto filter = adapter->get_broker_load_fiter()->data();
+        if (reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+            auto filter = reader->get_broker_load_fiter()->data();
             bool reported = false;
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
@@ -135,11 +135,11 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        auto slot = adapter->get_current_slot();
+                        auto slot = reader->get_current_slot();
                         std::string error_msg = strings::Substitute(
                                 "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
                                 slot->col_name(), slot->type().debug_string());
-                        adapter->report_error_message(error_msg);
+                        reader->report_error_message(error_msg);
                     }
                 }
             }
@@ -150,7 +150,7 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
 static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
                                                const TypeDescriptor& type_desc, void* ctx) {
-    OrcScannerAdapter* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -174,9 +174,9 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, Colum
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
-        auto filter = adapter->get_broker_load_fiter()->data();
-        auto strict_mode = adapter->get_strict_mode();
+    if (reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+        auto filter = reader->get_broker_load_fiter()->data();
+        auto strict_mode = reader->get_strict_mode();
         bool reported = false;
 
         if (strict_mode) {
@@ -188,11 +188,11 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, Colum
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
-                        auto slot = adapter->get_current_slot();
+                        auto slot = reader->get_current_slot();
                         std::string error_msg = strings::Substitute(
                                 "Value '$0' is out of range. The type of '$1' is $2'", std::to_string(value),
                                 slot->col_name(), slot->type().debug_string());
-                        adapter->report_error_message(error_msg);
+                        reader->report_error_message(error_msg);
                     }
                 }
             }
@@ -540,7 +540,7 @@ static void fill_decimal128_column_with_null(orc::ColumnVectorBatch* cvb, Column
 
 static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                const TypeDescriptor& type_desc, void* ctx) {
-    OrcScannerAdapter* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
 
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -575,8 +575,8 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
-        auto filter = adapter->get_broker_load_fiter()->data();
+    if (reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+        auto filter = reader->get_broker_load_fiter()->data();
         // only report once.
         bool reported = false;
         for (int i = 0; i < size; i++) {
@@ -587,11 +587,11 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
                 if (!reported) {
                     reported = true;
                     std::string raw_data(data->data[i], data->length[i]);
-                    auto slot = adapter->get_current_slot();
+                    auto slot = reader->get_current_slot();
                     std::string error_msg =
                             strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
                                                 slot->col_name(), slot->type().debug_string());
-                    adapter->report_error_message(error_msg);
+                    reader->report_error_message(error_msg);
                 }
             }
         }
@@ -600,7 +600,7 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
 
 static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                          const TypeDescriptor& type_desc, void* ctx) {
-    auto* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -666,9 +666,9 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    if (adapter->get_broker_load_mode() && from == 0 && col_start == 0) {
-        auto* filter = adapter->get_broker_load_fiter()->data();
-        auto strict_mode = adapter->get_strict_mode();
+    if (reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+        auto* filter = reader->get_broker_load_fiter()->data();
+        auto strict_mode = reader->get_strict_mode();
         bool reported = false;
 
         if (strict_mode) {
@@ -679,11 +679,11 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
                     if (!reported) {
                         reported = true;
                         std::string raw_data(data->data[i], data->length[i]);
-                        auto slot = adapter->get_current_slot();
+                        auto slot = reader->get_current_slot();
                         std::string error_msg =
                                 strings::Substitute("String '$0' is too long. The type of '$1' is $2'", raw_data,
                                                     slot->col_name(), slot->type().debug_string());
-                        adapter->report_error_message(error_msg);
+                        reader->report_error_message(error_msg);
                     }
                 }
             }
@@ -791,24 +791,24 @@ static inline void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone
 
 static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                   const TypeDescriptor& type_desc, void* ctx) {
-    OrcScannerAdapter* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
     auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(col)->get_data().data();
-    bool use_ns = adapter->use_nanoseconds_in_datetime();
+    bool use_ns = reader->use_nanoseconds_in_datetime();
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         int64_t ns = 0;
         if (use_ns) {
             ns = data->nanoseconds[from];
         }
-        orc_ts_to_native_ts(&(values[i]), adapter->tzinfo(), adapter->tzoffset_in_seconds(), data->data[from], ns);
+        orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), reader->tzoffset_in_seconds(), data->data[from], ns);
     }
 }
 
 static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                             const TypeDescriptor& type_desc, void* ctx) {
-    OrcScannerAdapter* adapter = static_cast<OrcScannerAdapter*>(ctx);
+    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -816,7 +816,7 @@ static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
     auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto* nulls = c->null_column()->get_data().data();
     auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c->data_column())->get_data().data();
-    bool use_ns = adapter->use_nanoseconds_in_datetime();
+    bool use_ns = reader->use_nanoseconds_in_datetime();
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         nulls[i] = cvb->hasNulls && !cvb->notNull[from];
@@ -825,7 +825,7 @@ static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
             if (use_ns) {
                 ns = data->nanoseconds[from];
             }
-            orc_ts_to_native_ts(&(values[i]), adapter->tzinfo(), adapter->tzoffset_in_seconds(), data->data[from], ns);
+            orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), reader->tzoffset_in_seconds(), data->data[from], ns);
         }
     }
 
@@ -986,7 +986,7 @@ const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable) {
     return nullable ? FunctionsMap::instance()->get_nullable_func(type) : FunctionsMap::instance()->get_func(type);
 }
 
-OrcScannerAdapter::OrcScannerAdapter(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors)
+OrcChunkReader::OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors)
         : _src_slot_descriptors(src_slot_descriptors),
           _read_chunk_size(state->chunk_size()),
           _tzinfo(cctz::utc_time_zone()),
@@ -1008,21 +1008,21 @@ OrcScannerAdapter::OrcScannerAdapter(RuntimeState* state, const std::vector<Slot
     }
 }
 
-Status OrcScannerAdapter::init(std::unique_ptr<orc::InputStream> input_stream) {
+Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdapter::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
     return Status::OK();
 }
 
-void OrcScannerAdapter::build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
-                                                        const std::vector<std::string>* hive_column_names,
-                                                        const orc::Type& root_type) {
+void OrcChunkReader::build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
+                                                     const std::vector<std::string>* hive_column_names,
+                                                     const orc::Type& root_type) {
     mapping->clear();
     if (hive_column_names != nullptr) {
         // build hive column names index.
@@ -1044,9 +1044,9 @@ void OrcScannerAdapter::build_column_name_to_id_mapping(std::unordered_map<std::
     }
 }
 
-void OrcScannerAdapter::build_column_name_set(std::unordered_set<std::string>* name_set,
-                                              const std::vector<std::string>* hive_column_names,
-                                              const orc::Type& root_type) {
+void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name_set,
+                                           const std::vector<std::string>* hive_column_names,
+                                           const orc::Type& root_type) {
     name_set->clear();
     if (hive_column_names != nullptr && hive_column_names->size() > 0) {
         // build hive column names index.
@@ -1064,26 +1064,24 @@ void OrcScannerAdapter::build_column_name_set(std::unordered_set<std::string>* n
     }
 }
 
-Status OrcScannerAdapter::_slot_to_orc_column_name(const SlotDescriptor* desc,
-                                                   const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                                   std::string* orc_column_name) {
+Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
+                                                const std::unordered_map<int, std::string>& column_id_to_orc_name,
+                                                std::string* orc_column_name) {
     auto it = _name_to_column_id.find(desc->col_name());
     if (it == _name_to_column_id.end()) {
-        auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
-                                     desc->col_name());
+        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found", desc->col_name());
         return Status::NotFound(s);
     }
     auto it2 = column_id_to_orc_name.find(it->second);
     if (it2 == column_id_to_orc_name.end()) {
-        auto s = strings::Substitute("OrcScannerAdapter::init_include_columns. col name = $0 not found",
-                                     desc->col_name());
+        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found", desc->col_name());
         return Status::NotFound(s);
     }
     *orc_column_name = it2->second;
     return Status::OK();
 }
 
-Status OrcScannerAdapter::_init_include_columns() {
+Status OrcChunkReader::_init_include_columns() {
     build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType());
     std::unordered_map<int, std::string> column_id_to_orc_name;
     std::list<std::string> orc_column_names;
@@ -1117,7 +1115,7 @@ Status OrcScannerAdapter::_init_include_columns() {
     return Status::OK();
 }
 
-Status OrcScannerAdapter::init(std::unique_ptr<orc::Reader> reader) {
+Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     _reader = std::move(reader);
     // ORC writes empty schema (struct<>) to ORC files containing zero rows.
     // Hive 0.12
@@ -1137,7 +1135,7 @@ Status OrcScannerAdapter::init(std::unique_ptr<orc::Reader> reader) {
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdapter::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1148,7 +1146,7 @@ Status OrcScannerAdapter::init(std::unique_ptr<orc::Reader> reader) {
     return Status::OK();
 }
 
-Status OrcScannerAdapter::_init_position_in_orc() {
+Status OrcChunkReader::_init_position_in_orc() {
     int column_size = _src_slot_descriptors.size();
     _position_in_orc.clear();
     _position_in_orc.resize(column_size);
@@ -1172,9 +1170,8 @@ Status OrcScannerAdapter::_init_position_in_orc() {
         int col_id = it->second;
         auto it2 = column_id_to_pos.find(col_id);
         if (it2 == column_id_to_pos.end()) {
-            auto s =
-                    strings::Substitute("OrcScannerAdapter::init_position_in_orc. failed to find position. col_id = $0",
-                                        std::to_string(col_id));
+            auto s = strings::Substitute("OrcChunkReader::init_position_in_orc. failed to find position. col_id = $0",
+                                         std::to_string(col_id));
             return Status::NotFound(s);
         }
         int pos = it2->second;
@@ -1251,7 +1248,7 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     }
 }
 
-Status OrcScannerAdapter::_init_src_types() {
+Status OrcChunkReader::_init_src_types() {
     int column_size = _src_slot_descriptors.size();
     // update source types.
     _src_types.clear();
@@ -1269,7 +1266,7 @@ Status OrcScannerAdapter::_init_src_types() {
     return Status::OK();
 }
 
-Status OrcScannerAdapter::_init_cast_exprs() {
+Status OrcChunkReader::_init_cast_exprs() {
     int column_size = _src_slot_descriptors.size();
     _cast_exprs.clear();
     _cast_exprs.resize(column_size);
@@ -1306,7 +1303,7 @@ Status OrcScannerAdapter::_init_cast_exprs() {
     return Status::OK();
 }
 
-Status OrcScannerAdapter::_init_fill_functions() {
+Status OrcChunkReader::_init_fill_functions() {
     int column_size = _src_slot_descriptors.size();
     _fill_functions.clear();
     _fill_functions.resize(column_size);
@@ -1322,7 +1319,7 @@ Status OrcScannerAdapter::_init_fill_functions() {
     return Status::OK();
 }
 
-OrcScannerAdapter::~OrcScannerAdapter() {
+OrcChunkReader::~OrcChunkReader() {
     _batch.reset(nullptr);
     _reader.reset(nullptr);
     _row_reader.reset(nullptr);
@@ -1334,7 +1331,7 @@ OrcScannerAdapter::~OrcScannerAdapter() {
     _fill_functions.clear();
 }
 
-Status OrcScannerAdapter::read_next(orc::RowReader::ReadPosition* pos) {
+Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
     if (_batch == nullptr) {
         _batch = _row_reader->createRowBatch(_read_chunk_size);
     }
@@ -1343,19 +1340,19 @@ Status OrcScannerAdapter::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcScannerAdapter::read_next failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::read_next failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
     return Status::OK();
 }
 
-size_t OrcScannerAdapter::get_cvb_size() {
+size_t OrcChunkReader::get_cvb_size() {
     return _batch->numElements;
 }
 
-Status OrcScannerAdapter::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
-                                      const std::vector<int>* indices) {
+Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                   const std::vector<int>* indices) {
     int column_size = src_slot_descriptors.size();
     DCHECK_GT(_batch->numElements, 0);
     const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get())->fields;
@@ -1412,8 +1409,8 @@ Status OrcScannerAdapter::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDes
     return Status::OK();
 }
 
-ChunkPtr OrcScannerAdapter::_create_chunk(const std::vector<SlotDescriptor*>& src_slot_descriptors,
-                                          const std::vector<int>* indices) {
+ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                       const std::vector<int>* indices) {
     auto chunk = std::make_shared<Chunk>();
     int column_size = src_slot_descriptors.size();
     chunk->columns().reserve(column_size);
@@ -1433,8 +1430,8 @@ ChunkPtr OrcScannerAdapter::_create_chunk(const std::vector<SlotDescriptor*>& sr
     return chunk;
 }
 
-ChunkPtr OrcScannerAdapter::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
-                                        const std::vector<int>* indices) {
+ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                     const std::vector<int>* indices) {
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     ChunkPtr& src = (*chunk);
     int column_size = src_slot_descriptors.size();
@@ -1454,32 +1451,32 @@ ChunkPtr OrcScannerAdapter::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotD
     return cast_chunk;
 }
 
-ChunkPtr OrcScannerAdapter::create_chunk() {
+ChunkPtr OrcChunkReader::create_chunk() {
     return _create_chunk(_src_slot_descriptors, nullptr);
 }
-Status OrcScannerAdapter::fill_chunk(ChunkPtr* chunk) {
+Status OrcChunkReader::fill_chunk(ChunkPtr* chunk) {
     return _fill_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
-ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
+ChunkPtr OrcChunkReader::cast_chunk(ChunkPtr* chunk) {
     return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::get_chunk() {
+StatusOr<ChunkPtr> OrcChunkReader::get_chunk() {
     ChunkPtr ptr = create_chunk();
     RETURN_IF_ERROR(fill_chunk(&ptr));
     ChunkPtr ret = cast_chunk(&ptr);
     return ret;
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::get_active_chunk() {
+StatusOr<ChunkPtr> OrcChunkReader::get_active_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     return ret;
 }
 
-void OrcScannerAdapter::lazy_filter_on_cvb(Filter* filter) {
+void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
     size_t true_size = SIMD::count_nonzero(*filter);
     if (filter->size() != true_size) {
         _batch->filterOnFields(filter->data(), filter->size(), true_size, _lazy_load_ctx->lazy_load_orc_positions,
@@ -1487,22 +1484,22 @@ void OrcScannerAdapter::lazy_filter_on_cvb(Filter* filter) {
     }
 }
 
-StatusOr<ChunkPtr> OrcScannerAdapter::get_lazy_chunk() {
+StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     return ret;
 }
 
-void OrcScannerAdapter::lazy_read_next(size_t numValues) {
+void OrcChunkReader::lazy_read_next(size_t numValues) {
     _row_reader->lazyLoadNext(*_batch, numValues);
 }
 
-void OrcScannerAdapter::lazy_seek_to(size_t rowInStripe) {
+void OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
     _row_reader->lazyLoadSeekTo(rowInStripe);
 }
 
-void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
+void OrcChunkReader::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
     _row_reader_options.rowReaderFilter(std::move(filter));
 }
 
@@ -1557,7 +1554,7 @@ static std::unordered_map<PrimitiveType, orc::PredicateDataType> _supported_prim
         {PrimitiveType::TYPE_DECIMAL128, orc::PredicateDataType::DECIMAL},
 };
 
-bool OrcScannerAdapter::_ok_to_add_conjunct(const Expr* conjunct) {
+bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
     if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
@@ -1688,7 +1685,7 @@ static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType p
     }
 }
 
-void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
+void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
@@ -1878,8 +1875,8 @@ void OrcScannerAdapter::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc:
         ADD_RF_TO_BUILDER                                                                                     \
     }
 
-bool OrcScannerAdapter::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
-                                            std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
+bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
+                                         std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     PrimitiveType ptype = slot->type().type;
     auto type_it = _supported_primitive_types.find(ptype);
     if (type_it == _supported_primitive_types.end()) return false;
@@ -1906,18 +1903,18 @@ bool OrcScannerAdapter::_add_runtime_filter(const SlotDescriptor* slot, const Jo
     return false;
 }
 
-void OrcScannerAdapter::set_conjuncts(const std::vector<Expr*>& conjuncts) {
+void OrcChunkReader::set_conjuncts(const std::vector<Expr*>& conjuncts) {
     set_conjuncts_and_runtime_filters(conjuncts, nullptr);
 }
 
-void OrcScannerAdapter::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                                          const RuntimeFilterProbeCollector* rf_collector) {
+void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                                       const RuntimeFilterProbeCollector* rf_collector) {
     std::unique_ptr<orc::SearchArgumentBuilder> builder = orc::SearchArgumentFactory::newBuilder();
     int ok = 0;
     builder->startAnd();
     for (Expr* expr : conjuncts) {
         bool applied = _ok_to_add_conjunct(expr);
-        VLOG_FILE << "OrcScannerAdapter: add_conjunct: " << expr->debug_string() << ", applied: " << applied;
+        VLOG_FILE << "OrcChunkReader: add_conjunct: " << expr->debug_string() << ", applied: " << applied;
         if (!applied) {
             continue;
         }
@@ -1942,7 +1939,7 @@ void OrcScannerAdapter::set_conjuncts_and_runtime_filters(const std::vector<Expr
     if (ok) {
         builder->end();
         std::unique_ptr<orc::SearchArgument> sargs = builder->build();
-        VLOG_FILE << "OrcScannerAdapter::set_conjuncts. search argument = " << sargs->toString();
+        VLOG_FILE << "OrcChunkReader::set_conjuncts. search argument = " << sargs->toString();
         _row_reader_options.searchArgument(std::move(sargs));
     }
 }
@@ -2074,8 +2071,8 @@ static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::Col
     return Status::NotFound("date column stats not found");
 }
 
-Status OrcScannerAdapter::decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats,
-                                               ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds) {
+Status OrcChunkReader::decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats,
+                                            ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds) {
     if (slot->is_nullable()) {
         auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
         auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
@@ -2113,8 +2110,8 @@ Status OrcScannerAdapter::decode_min_max_value(SlotDescriptor* slot, const orc::
     }
 }
 
-Status OrcScannerAdapter::apply_dict_filter_eval_cache(
-        const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache, Filter* filter) {
+Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
+                                                    Filter* filter) {
     if (dict_filter_eval_cache.size() == 0) {
         return Status::OK();
     }
@@ -2162,7 +2159,7 @@ Status OrcScannerAdapter::apply_dict_filter_eval_cache(
     return Status::OK();
 }
 
-Status OrcScannerAdapter::set_timezone(const std::string& tz) {
+Status OrcChunkReader::set_timezone(const std::string& tz) {
     if (!TimezoneUtils::find_cctz_time_zone(tz, _tzinfo)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", tz));
     }
@@ -2171,14 +2168,14 @@ Status OrcScannerAdapter::set_timezone(const std::string& tz) {
 }
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
-void OrcScannerAdapter::report_error_message(const std::string& error_msg) {
+void OrcChunkReader::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
     _state->append_error_msg_to_file("", error_msg);
 }
 
-int OrcScannerAdapter::get_column_id_by_name(const std::string& name) const {
+int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
     const auto& it = _name_to_column_id.find(name);
     if (it != _name_to_column_id.end()) {
         return it->second;
