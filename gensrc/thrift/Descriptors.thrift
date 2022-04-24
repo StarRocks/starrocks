@@ -129,23 +129,23 @@ const map<string, THdfsCompression> COMPRESSION_MAP = {
   "snappy": THdfsCompression.SNAPPY
 }
 
-struct TColumn {                                                                                      
-    1: required string column_name          
-    // Deprecated, use |index_len| and |type_desc| instead.                                           
+struct TColumn {
+    1: required string column_name
+    // Deprecated, use |index_len| and |type_desc| instead.
     // TColumnType is too simple to represent complex types, e.g, array.
-    2: optional Types.TColumnType column_type      
+    2: optional Types.TColumnType column_type
     3: optional Types.TAggregationType aggregation_type
-    4: optional bool is_key                      
-    5: optional bool is_allow_null                                                                    
-    6: optional string default_value               
-    7: optional bool is_bloom_filter_column     
-    8: optional Exprs.TExpr define_expr                                                               
-                                                                                                      
+    4: optional bool is_key
+    5: optional bool is_allow_null
+    6: optional string default_value
+    7: optional bool is_bloom_filter_column
+    8: optional Exprs.TExpr define_expr
+
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
-    20: optional i32 index_len                 
+    20: optional i32 index_len
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
 }
 
 struct TOlapTableIndexTablets {
@@ -167,9 +167,6 @@ struct TOlapTablePartition {
 
     6: optional list<Exprs.TExprNode> start_keys
     7: optional list<Exprs.TExprNode> end_keys
-
-    8: optional list<string> values 
-    9: optional list<list<string>> multi_values
 }
 
 struct TOlapTablePartitionParam {
@@ -269,7 +266,7 @@ struct THdfsPartitionLocation {
     1: optional i32 prefix_index = -1
 
     // 'suffix' is the rest of the partition location.
-    // prefix + suffix = partition path 
+    // prefix + suffix = partition path
     2: optional string suffix
 }
 
@@ -326,6 +323,11 @@ struct THudiTable {
 }
 
 struct TJDBCTable {
+    1: optional string jdbc_driver
+    2: optional string jdbc_url
+    3: optional string jdbc_table
+    4: optional string jdbc_user
+    5: optional string jdbc_passwd
     1: optional string jdbc_driver_name
     2: optional string jdbc_driver_url
     3: optional string jdbc_driver_checksum
@@ -373,3 +375,4 @@ struct TDescriptorTable {
   3: optional list<TTableDescriptor> tableDescriptors;
   4: optional bool is_cached;
 }
+

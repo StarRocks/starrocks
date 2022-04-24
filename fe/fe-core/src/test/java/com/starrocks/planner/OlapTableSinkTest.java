@@ -30,8 +30,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.ListPartitionDescTest;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -48,8 +46,6 @@ import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -81,7 +77,7 @@ public class OlapTableSinkTest {
     public OlapTable dstTable;
 
     @Before
-    public void setUp() throws DdlException, AnalysisException {
+    public void setUp() {
 
     }
 
@@ -107,41 +103,6 @@ public class OlapTableSinkTest {
         v2.setIsMaterialized(true);
 
         return tuple;
-    }
-
-    @Test
-    public void testSingleListPartition() throws UserException {
-        TupleDescriptor tuple = getTuple();
-        Long partitionId = 2L;
-
-        List<Column> columnList = Lists.newArrayList(
-                new Column("id",Type.BIGINT),
-                new Column("province",Type.VARCHAR));
-        List<String> values = Lists.newArrayList("guangdong","tianjin");
-        ListPartitionInfo partInfo = new ListPartitionInfo(PartitionType.LIST,columnList);
-        partInfo.setValues(partitionId,values);
-
-        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
-        HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
-        Partition partition = new Partition(partitionId, "p1", index, distInfo);
-
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(partitionId);
-            result = partition;
-        }};
-
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(partitionId));
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
     @Test
@@ -388,3 +349,4 @@ public class OlapTableSinkTest {
         Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
     }
 }
+
