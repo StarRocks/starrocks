@@ -37,9 +37,14 @@ def get_current_time():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_user():
-    return os.getenv("USER")
+    user = os.getenv("USER")
+    if not user:
+        user = "StarRocks"
+    return user
 
 def get_hostname():
+    if os.path.exists('/.dockerenv'):
+        return "docker"
     res = subprocess.Popen(["hostname", "-f"], stdout=subprocess.PIPE)
     out, err = res.communicate()
     return out.decode('utf-8').strip()
