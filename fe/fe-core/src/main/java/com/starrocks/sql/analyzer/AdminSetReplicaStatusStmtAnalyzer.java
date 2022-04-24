@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
