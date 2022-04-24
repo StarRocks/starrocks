@@ -133,8 +133,8 @@ public class ListPartitionDesc extends PartitionDesc {
      */
     private void analyzeDuplicateValues(int partitionColSize, List<List<LiteralExpr>> allMultiLiteralExprValues) throws AnalysisException {
         for (int i = 0; i < allMultiLiteralExprValues.size(); i++) {
+            List<LiteralExpr> literalExprValues1 = allMultiLiteralExprValues.get(i);
             for (int j = i + 1; j < allMultiLiteralExprValues.size(); j++) {
-                List<LiteralExpr> literalExprValues1 = allMultiLiteralExprValues.get(i);
                 List<LiteralExpr> literalExprValues2 = allMultiLiteralExprValues.get(j);
                 int duplicatedSize = 0;
                 for (int k = 0; k < literalExprValues1.size(); k++) {
