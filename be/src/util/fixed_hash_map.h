@@ -3,8 +3,10 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <type_traits>
@@ -16,17 +18,16 @@ namespace starrocks::vectorized {
 // FixedSizeHashMap
 // Key: KeyType integer type eg: uint8 uint16
 // value shouldn't be nullptr
+
 template <typename KeyType, typename ValueType>
 class SmallFixedSizeHashMap {
 public:
     static_assert(std::is_integral_v<KeyType>);
     static_assert(std::is_pointer_v<ValueType>);
     static constexpr int hash_table_size = 1 << sizeof(KeyType) * 8;
-    class iterator;
 
     using key_type = KeyType;
     using search_key_type = typename std::make_unsigned<KeyType>::type;
-    using iterator = iterator;
 
     SmallFixedSizeHashMap() {
         memset(_hash_table, 0, sizeof(ValueType) * hash_table_size);
@@ -96,18 +97,18 @@ public:
 
     iterator end() { return iterator(_hash_table, hash_table_size); }
 
-    void prefetch_hash(size_t hashval) const {
-        CHECK(false) << "unreachable path in fixed hash map";
-        __builtin_unreachable();
-    }
+    void prefetch_hash(size_t hashval) const { __builtin_prefetch(static_cast<const void*>(_hash_table + hashval)); }
 
     template <class F>
     iterator lazy_emplace_with_hash(KeyType key, size_t& hashval, F&& f) {
-        CHECK(false) << "unreachable path in fixed hash map";
-        __builtin_unreachable();
+        return lazy_emplace(key, f);
     }
 
-    std::hash<KeyType> hash_function() { return std::hash<KeyType>(); }
+    struct HashFunction {
+        size_t operator()(KeyType key) { return static_cast<size_t>(key); }
+    };
+
+    HashFunction hash_function() { return HashFunction(); }
 
     size_t bucket_count() { return hash_table_size; }
 
@@ -120,6 +121,72 @@ public:
 private:
     size_t _size = 0;
     ValueType _hash_table[hash_table_size + 1];
+};
+
+template <typename KeyType>
+class SmallFixedSizeHashSet {
+public:
+    static_assert(std::is_integral_v<KeyType>);
+    static constexpr int hash_table_size = 1 << sizeof(KeyType) * 8;
+
+    using key_type = KeyType;
+    using search_key_type = typename std::make_unsigned<KeyType>::type;
+
+    class iterator {
+    public:
+        iterator(uint8_t* hash_table_begin, uint32_t cursor) : _hash_table_begin(hash_table_begin), _cursor(cursor) {}
+
+        KeyType operator*() const { return static_cast<KeyType>(_cursor); }
+
+        iterator& operator++() {
+            _cursor++;
+            skip_empty_value();
+            return *this;
+        }
+
+        void skip_empty_value() {
+            while (_hash_table_begin[_cursor] == 0) {
+                ++_cursor;
+            }
+        }
+
+        friend bool operator==(const iterator& a, const iterator& b) { return a._cursor == b._cursor; }
+        friend bool operator!=(const iterator& a, const iterator& b) { return !(a == b); }
+
+    private:
+        uint8_t* _hash_table_begin;
+        int32_t _cursor;
+    };
+
+    SmallFixedSizeHashSet() {
+        memset(_hash_table, 0, sizeof(uint8_t) * hash_table_size);
+        _hash_table[hash_table_size] = 0xFF;
+    }
+
+    iterator begin() {
+        auto iter = iterator(_hash_table, 0);
+        iter.skip_empty_value();
+        return iter;
+    }
+
+    iterator end() { return iterator(_hash_table, hash_table_size); }
+
+    void emplace(KeyType key) {
+        _size += _hash_table[static_cast<search_key_type>(key)] == 0;
+        _hash_table[static_cast<search_key_type>(key)] = 1;
+    }
+
+    bool contains(KeyType key) { return _hash_table[static_cast<search_key_type>(key)]; }
+
+    size_t dump_bound() { return hash_table_size; }
+
+    size_t size() { return _size; }
+
+    size_t capacity() { return hash_table_size; }
+
+private:
+    size_t _size = 0;
+    uint8_t _hash_table[hash_table_size + 1];
 };
 
 } // namespace starrocks::vectorized
