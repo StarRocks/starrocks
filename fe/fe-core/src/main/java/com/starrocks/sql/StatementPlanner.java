@@ -2,6 +2,7 @@
 package com.starrocks.sql;
 
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -166,12 +167,15 @@ public class StatementPlanner {
                 || statement instanceof QueryStmt
                 || statement instanceof QueryStatement
                 || statement instanceof ShowDbStmt
-                || statement instanceof ShowTableStmt;
+                || statement instanceof AlterSystemStmt
+                || statement instanceof ShowTableStmt
+                || AlterSystemStmt.isSupportNewAnalyzer(statement);
     }
 
     public static boolean supportedByNewAnalyzer(StatementBase statement) {
         return statement instanceof AlterViewStmt
                 || statement instanceof AdminSetConfigStmt
+                || statement instanceof AlterSystemStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof CreateTableAsSelectStmt
                 || statement instanceof CreateViewStmt
@@ -185,6 +189,7 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStmt
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt;
+                || statement instanceof ShowWorkGroupStmt
+                || AlterSystemStmt.isSupportNewAnalyzer(statement);
     }
 }

@@ -38,8 +38,8 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | alterSystem DROP BACKEND '(' string (',' string)* ')'                                                   #dropBackend
-    | alterSystem ADD FREE? BACKEND (TO string)? '(' string (',' string)* ')'                            #addBackend
+    | alterSystem DROP BACKEND string (',' string)*                                        #dropBackend
+    | alterSystem ADD FREE? BACKEND (TO string)? string (',' string)*                      #addBackend
     | alterSystem DROP FOLLOWER string                                                   #dropFollower
     | alterSystem ADD FOLLOWER string                                                   #addFollower
     | alterSystem DROP OBSERVER string                                                   #dropObserver

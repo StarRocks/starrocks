@@ -38,6 +38,14 @@ public class AlterSystemStmt extends DdlStmt {
         this.alterClause = alterClause;
     }
 
+    public static boolean isSupportNewAnalyzer(StatementBase statement) {
+        return statement != null && statement instanceof AlterSystemStmt && (
+                ((AlterSystemStmt) statement).getAlterClause() instanceof AddBackendClause &&
+                ((AlterSystemStmt) statement).getAlterClause() instanceof DropBackendClause &&
+                ((AlterSystemStmt) statement).getAlterClause() instanceof FrontendClause
+        );
+    }
+
     public AlterClause getAlterClause() {
         return alterClause;
     }

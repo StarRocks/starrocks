@@ -120,7 +120,6 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
-import org.apache.commons.lang3.StringUtils;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -1686,58 +1685,45 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropBackend(StarRocksParser.DropBackendContext context) {
-        List<String> clusters = context.clusters().cluster()
-                .stream()
-                .map(ParseTree::getText)
-                .map(c -> StringUtils.replace(StringUtils.replace(c, "\"", ""), "'", ""))
-                .collect(toList());
-        return new AlterSystemStmt(new DropBackendClause(clusters));
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new AlterSystemStmt(new DropBackendClause(clusters, false));
     }
 
     @Override
     public ParseNode visitAddBackend(StarRocksParser.AddBackendContext context) {
-        List<String> clusters = context.clusters().cluster()
-                .stream()
-                .map(ParseTree::getText)
-                .map(c -> StringUtils.replace(StringUtils.replace(c, "\"", ""), "'", ""))
-                .collect(toList());
+        List<String> clusters =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         if (context.TO() != null) {
-            return new AlterSystemStmt(new AddBackendClause(clusters, context.clusterName().getText()));
+            return new AlterSystemStmt(new AddBackendClause(clusters.subList(1, clusters.size() - 1), clusters.get(0)));
         }
-
-        boolean free = context.FREE() != null;
-        if (free) {
-            return new AlterSystemStmt(new AddBackendClause(clusters, free));
+        if (context.FREE() != null) {
+            return new AlterSystemStmt(new AddBackendClause(clusters, true));
         }
-
         return new AlterSystemStmt(new AddBackendClause(clusters, false));
     }
 
     @Override
     public ParseNode visitAddObserver(StarRocksParser.AddObserverContext context) {
-        String cluster =
-                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         return new AlterSystemStmt(new AddObserverClause(cluster));
     }
 
     @Override
     public ParseNode visitDropObserver(StarRocksParser.DropObserverContext context) {
-        String cluster =
-                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         return new AlterSystemStmt(new DropObserverClause(cluster));
     }
 
     @Override
     public ParseNode visitAddFollower(StarRocksParser.AddFollowerContext context) {
-        String cluster =
-                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         return new AlterSystemStmt(new AddFollowerClause(cluster));
     }
 
     @Override
     public ParseNode visitDropFollower(StarRocksParser.DropFollowerContext context) {
-        String cluster =
-                StringUtils.replaceEach(context.cluster().getText(), new String[] {"\"", "\'"}, new String[] {"", ""});
+        String cluster = ((StringLiteral) visit(context.string())).getStringValue();
         return new AlterSystemStmt(new DropFollowerClause(cluster));
     }
 
