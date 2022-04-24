@@ -6,6 +6,8 @@
 #include <variant>
 
 #include "column/type_traits.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/date_value.hpp"
@@ -23,6 +25,13 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
         return true;
     }
     return slot.type().is_string_type() && expr.type().is_string_type();
+}
+
+static Expr* get_root_expr(ExprContext* ctx) {
+    if (dynamic_cast<DictMappingExpr*>(ctx->root())) {
+        return ctx->root()->get_child(1);
+    }
+    return ctx->root();
 }
 
 template <typename ValueType>
@@ -64,7 +73,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         }
     }
 
-    if ((l->node_type() != TExprNodeType::SLOT_REF) || !r->is_constant()) {
+    if (!l->is_slotref() || !r->is_constant()) {
         return false;
     }
 
@@ -159,14 +168,13 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescrip
             continue;
         }
 
-        const Expr* root_expr = conjunct_ctxs[i]->root();
+        const Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
             const Expr* l = root_expr->get_child(0);
 
-            if ((l->node_type() != TExprNodeType::SLOT_REF) ||
-                (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+            if ((!l->is_slotref()) || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
             }
             std::vector<SlotId> slot_ids;
@@ -219,7 +227,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
             continue;
         }
 
-        const Expr* root_expr = conjunct_ctxs[i]->root();
+        const Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
 
         // 1. Normalize in conjuncts like 'where col in (v1, v2, v3)'
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
@@ -234,7 +242,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
             if (l->op() == TExprOpcode::CAST) {
                 l = l->get_child(0);
             }
-            if (l->node_type() != TExprNodeType::SLOT_REF) {
+            if (!l->is_slotref()) {
                 continue;
             }
             std::vector<SlotId> slot_ids;
@@ -305,7 +313,7 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
             continue;
         }
 
-        Expr* root_expr = conjunct_ctxs[i]->root();
+        Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
         if (TExprNodeType::BINARY_PRED != root_expr->node_type()) {
             continue;
         }
@@ -333,11 +341,10 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
             continue;
         }
 
-        const Expr* root_expr = conjunct_ctxs[i]->root();
+        const Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
         if (TExprOpcode::FILTER_IN == root_expr->op()) {
             const Expr* l = root_expr->get_child(0);
-            if ((l->node_type() != TExprNodeType::SLOT_REF) ||
-                (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
             }
             std::vector<SlotId> slot_ids;
@@ -410,7 +417,7 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
         if (normalized_conjuncts[i]) {
             continue;
         }
-        Expr* root_expr = conjunct_ctxs[i]->root();
+        Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
         // handle not equal
         if (root_expr->node_type() == TExprNodeType::BINARY_PRED && root_expr->op() == TExprOpcode::NE) {
             SQLFilterOp op;
@@ -424,8 +431,7 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
         // handle not in
         if (root_expr->node_type() == TExprNodeType::IN_PRED && root_expr->op() == TExprOpcode::FILTER_NOT_IN) {
             const Expr* l = root_expr->get_child(0);
-            if ((l->node_type() != TExprNodeType::SLOT_REF) ||
-                (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+            if (!l->is_slotref() || (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
                 continue;
             }
             std::vector<SlotId> slot_ids;
@@ -459,12 +465,12 @@ void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor&
         if (normalized_conjuncts[i]) {
             continue;
         }
-        Expr* root_expr = conjunct_ctxs[i]->root();
+        Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
         if (TExprNodeType::FUNCTION_CALL == root_expr->node_type()) {
             std::string is_null_str;
             if (root_expr->is_null_scalar_function(is_null_str)) {
                 Expr* e = root_expr->get_child(0);
-                if (e->node_type() != TExprNodeType::SLOT_REF) {
+                if (!e->is_slotref()) {
                     continue;
                 }
                 std::vector<SlotId> slot_ids;

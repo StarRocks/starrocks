@@ -16,6 +16,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictMappingExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -28,6 +29,8 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.PlaceHolderExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -42,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -454,5 +458,33 @@ public class ScalarOperatorToExpr {
             result.setType(operator.getType());
             return result;
         }
+
+        @Override
+        public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
+            final ColumnRefOperator dictColumn = operator.getDictColumn();
+            final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
+            final ScalarOperator call = operator.getOriginScalaOperator();
+            final ColumnRefOperator key =
+                    new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
+                            operator.getDictColumn().getName(),
+                            dictExpr.isNullable());
+            
+            // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
+            // the PlaceHolder and the original string column have the same id,
+            // so we need to save the original string column first and restore it after we build the expression
+
+            // 1. save the previous expr, it was null or string column
+            final Expr old = context.colRefToExpr.get(key);
+            // 2. use a placeholder instead of string column to build DictMapping
+            context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
+            final Expr callExpr = buildExecExpression(call, context);
+            // 3. recover the previous column
+            context.colRefToExpr.put(key, old);
+
+            Expr result = new DictMappingExpr(dictExpr, callExpr);
+            result.setType(operator.getType());
+            return result;
+        }
+
     }
 }
