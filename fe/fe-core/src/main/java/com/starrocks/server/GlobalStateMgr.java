@@ -5862,8 +5862,8 @@ public class GlobalStateMgr {
     public void createMaterializedView(CreateMaterializedViewStatement statement)
             throws DdlException {
         // check Mv exists,name must be different from view/mv/table which exists in metadata
-        String mvName = statement.getMvName();
-        String dbName = statement.getDbName();
+        String mvName = statement.getTableName().getTbl();
+        String dbName = statement.getTableName().getDb();
         Log.debug("begin create materialized view: {}", mvName);
         // check if db exists
         Database db = this.getDb(dbName);

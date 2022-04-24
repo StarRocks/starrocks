@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import org.spark_project.guava.collect.Maps;
@@ -29,7 +30,7 @@ import java.util.Map;
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
-    private String mvName;
+    private TableName tableName;
 
     private boolean ifNotExists;
 
@@ -47,18 +48,18 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private KeysType myKeyType = KeysType.DUP_KEYS;
 
-    private String dbName;
+    protected String inlineViewDef;
 
     private List<Column> mvColumnItems = Lists.newArrayList();
 
     private Map<Column, Expr> columnExprMap = Maps.newHashMap();
 
-    public String getMvName() {
-        return mvName;
+    public TableName getTableName() {
+        return tableName;
     }
 
-    public void setMvName(String mvName) {
-        this.mvName = mvName;
+    public void setTableName(TableName tableName) {
+        this.tableName = tableName;
     }
 
     public boolean isIfNotExists() {
@@ -109,6 +110,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.properties = properties;
     }
 
+    public String getInlineViewDef() {
+        return inlineViewDef;
+    }
+
+    public void setInlineViewDef(String inlineViewDef) {
+        this.inlineViewDef = inlineViewDef;
+    }
+
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -128,14 +137,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public String getDbName() {
-        return dbName;
-    }
-
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
-
     public void setColumnExprMap(Map<Column, Expr> columnExprMap) {
         this.columnExprMap = columnExprMap;
     }
@@ -144,11 +145,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return columnExprMap;
     }
 
-    public CreateMaterializedViewStatement(String mvName, boolean ifNotExists, String comment,
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, PartitionExpDesc partitionExpDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
-        this.mvName = mvName;
+        this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
