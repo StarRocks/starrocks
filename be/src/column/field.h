@@ -18,7 +18,7 @@ class Datum;
 
 class Field {
 public:
-    Field(ColumnId id, const std::string_view& name, TypeInfoPtr type, starrocks::FieldAggregationMethod agg,
+    Field(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::FieldAggregationMethod agg,
           uint16_t short_key_length, bool is_key, bool nullable)
             : _id(id),
               _agg_method(agg),
@@ -29,12 +29,11 @@ public:
               _flags((is_key << kIsKeyShift) | (nullable << kNullableShift)) {}
 
     // Non-key field of any type except for ARRAY
-    Field(ColumnId id, const std::string_view& name, FieldType type, int precision, int scale, bool nullable)
+    Field(ColumnId id, std::string_view name, FieldType type, int precision, int scale, bool nullable)
             : Field(id, name, get_type_info(type, precision, scale), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
-    Field(ColumnId id, const std::string_view& name, FieldType type, bool nullable)
-            : Field(id, name, type, -1, -1, nullable) {
+    Field(ColumnId id, std::string_view name, FieldType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL32);
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL64);
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL128);
@@ -42,7 +41,7 @@ public:
     }
 
     // Non-key field of any type
-    Field(ColumnId id, const std::string_view& name, TypeInfoPtr type, bool nullable = true)
+    Field(ColumnId id, std::string_view name, TypeInfoPtr type, bool nullable = true)
             : Field(id, name, std::move(type), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
 
     ~Field() { delete _sub_fields; }
@@ -100,7 +99,7 @@ public:
     FieldPtr with_type(const TypeInfoPtr& type);
 
     // return a copy of this field with the replaced name
-    FieldPtr with_name(const std::string_view& name);
+    FieldPtr with_name(std::string_view name);
 
     // return a copy of this field with the replaced nullability
     FieldPtr with_nullable(bool nullable);
@@ -204,7 +203,7 @@ inline FieldPtr Field::with_type(const TypeInfoPtr& type) {
                                    _short_key_length, is_key(), is_nullable());
 }
 
-inline FieldPtr Field::with_name(const std::string_view& name) {
+inline FieldPtr Field::with_name(std::string_view name) {
     return std::make_shared<Field>(_id, name, _type, _agg_method, _short_key_length, is_key(), is_nullable());
 }
 

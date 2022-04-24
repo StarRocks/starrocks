@@ -45,7 +45,7 @@ public:
 
     ~RowsetMeta() = default;
 
-    bool init(const std::string_view& pb_rowset_meta) {
+    bool init(std::string_view pb_rowset_meta) {
         bool ret = _deserialize_from_pb(pb_rowset_meta);
         if (!ret) {
             return false;
@@ -272,7 +272,7 @@ public:
     const RowsetMetaPB& get_meta_pb() const { return _rowset_meta_pb; }
 
 private:
-    bool _deserialize_from_pb(const std::string_view& value) {
+    bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb.ParseFromArray(value.data(), value.size());
     }
 
