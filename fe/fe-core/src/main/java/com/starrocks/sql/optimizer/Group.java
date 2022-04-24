@@ -93,8 +93,10 @@ public class Group {
 
     public void addExpression(GroupExpression groupExpression) {
         if (groupExpression.getOp().isLogical()) {
+            Preconditions.checkState(!logicalExpressions.contains(groupExpression));
             logicalExpressions.add(groupExpression);
         } else {
+            Preconditions.checkState(!physicalExpressions.contains(groupExpression));
             physicalExpressions.add(groupExpression);
         }
         groupExpression.setGroup(this);
