@@ -353,6 +353,15 @@ public class Explain {
 
         @Override
         public OperatorStr visitPhysicalHashJoin(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalMergeJoin(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
+        public OperatorStr visitPhysicalJoin(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
