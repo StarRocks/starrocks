@@ -3,7 +3,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
@@ -42,6 +44,12 @@ public class MultiListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
+        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        province.setAggregateType(AggregateType.NONE);
+        ColumnDef dt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE));
+        dt.setAggregateType(AggregateType.NONE);
+        List<ColumnDef> columnDefLists = Lists.newArrayList(dt, province);
+
         String partitionName = "p1";
         List<List<String>> multiValues = Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
                 , Lists.newArrayList("2022-04-15", "tianjin"));
@@ -55,7 +63,7 @@ public class MultiListPartitionDescTest {
 
         MultiItemListPartitionDesc partitionDesc = new MultiItemListPartitionDesc(ifNotExists, partitionName,
                 multiValues, partitionProperties);
-        partitionDesc.analyze(2, null);
+        partitionDesc.analyze(columnDefLists, null);
 
         Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());

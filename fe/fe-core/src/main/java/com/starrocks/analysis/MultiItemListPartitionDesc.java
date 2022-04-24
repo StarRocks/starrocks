@@ -6,6 +6,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
@@ -13,10 +14,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.HashMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class MultiItemListPartitionDesc extends PartitionDesc {
@@ -30,6 +28,7 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
     private Boolean isInMemory;
     private TTabletType tabletType;
     private Long versionInfo;
+    private List<ColumnDef> columnDefList;
 
     public MultiItemListPartitionDesc(boolean ifNotExists, String partitionName, List<List<String>> multiValues,
                                       Map<String, String> partitionProperties) {
@@ -64,10 +63,26 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
         return this.partitionName;
     }
 
-    public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
+    public List<List<LiteralExpr>> getMultiLiteralExprValues() throws AnalysisException {
+        List<List<LiteralExpr>> multiPartitionValues = new ArrayList<>(this.multiValues.size());
+        for (List<String> values : this.multiValues) {
+            List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
+            for (int i = 0; i < values.size(); i++) {
+                String value = values.get(i);
+                Type type = this.columnDefList.get(i).getType();
+                LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+                partitionValues.add(partitionValue);
+            }
+            multiPartitionValues.add(partitionValues);
+        }
+        return multiPartitionValues;
+    }
+
+    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
-        this.analyzeValues(partitionColSize);
+        this.analyzeValues(columnDefList.size());
         this.analyzeProperties(tableProperties);
+        this.columnDefList = columnDefList;
     }
 
     private void analyzeValues(int partitionColSize) throws AnalysisException {
@@ -140,4 +155,5 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
     public String toString() {
         return this.toSql();
     }
+
 }

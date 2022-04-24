@@ -30,11 +30,11 @@ public class ListPartitionInfo extends PartitionInfo {
     //serialize values for statement like `PARTITION p1 VALUES IN (("2022-04-01", "beijing"))`
     @SerializedName("idToMultiValues")
     private Map<Long, List<List<String>>> idToMultiValues;
-    private Map<Long, List<List<LiteralExpr>>> idToMultiPartitionValues;
+    private Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues;
     //serialize values for statement like `PARTITION p1 VALUES IN ("beijing","chongqing")`
     @SerializedName("idToValues")
     private Map<Long, List<String>> idToValues;
-    private Map<Long, List<LiteralExpr>> idToPartitionValues;
+    private Map<Long, List<LiteralExpr>> idToLiteralValues;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -42,48 +42,35 @@ public class ListPartitionInfo extends PartitionInfo {
         this.partitionColumns = partitionColumns;
         this.setIsMultiColumnPartition();
 
-        idToValues = new HashMap<>();
-        idToPartitionValues = new HashMap<>();
-        idToMultiValues = new HashMap<>();
-        idToMultiPartitionValues = new HashMap<>();
+        this.idToValues = new HashMap<>();
+        this.idToLiteralValues = new HashMap<>();
+        this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
     }
 
     public ListPartitionInfo() {
         super();
-        idToValues = new HashMap<>();
-        idToPartitionValues = new HashMap<>();
-        idToMultiValues = new HashMap<>();
-        idToMultiPartitionValues = new HashMap<>();
-        partitionColumns = new ArrayList<>();
+        this.idToValues = new HashMap<>();
+        this.idToLiteralValues = new HashMap<>();
+        this.idToMultiValues = new HashMap<>();
+        this.idToMultiLiteralExprValues = new HashMap<>();
+        this.partitionColumns = new ArrayList<>();
     }
 
-    public void setValues(long partitionId, List<String> values) throws AnalysisException {
-        idToPartitionValues.put(partitionId, this.toSinglePartitionValues(values));
-        idToValues.put(partitionId, values);
+    public void setValues(long partitionId, List<String> values) {
+        this.idToValues.put(partitionId, values);
     }
 
-    /**
-     * 1. transform string partition value to LiteralExpr
-     * 2. Check that the partition value and the partition column are valid
-     *
-     * @param values partition values
-     * @return
-     * @throws AnalysisException
-     */
-    private List<LiteralExpr> toSinglePartitionValues(List<String> values) throws AnalysisException {
-        List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
-        for (String value : values) {
-            //there only one partition column for single partition list
-            Type type = partitionColumns.get(0).getType();
-            LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
-            partitionValues.add(partitionValue);
-        }
-        return partitionValues;
+    public void setLiteralValues(long partitionId, List<LiteralExpr> values) {
+        this.idToLiteralValues.put(partitionId, values);
     }
 
-    public void setMultiValues(long partitionId, List<List<String>> multiValues) throws AnalysisException {
-        this.idToMultiPartitionValues.put(partitionId, this.toMultiPartitionValues(multiValues));
+    public void setMultiValues(long partitionId, List<List<String>> multiValues) {
         this.idToMultiValues.put(partitionId, multiValues);
+    }
+
+    public void setMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiLiteralExprValues) {
+        this.idToMultiLiteralExprValues.put(partitionId, multiLiteralExprValues);
     }
 
     /**

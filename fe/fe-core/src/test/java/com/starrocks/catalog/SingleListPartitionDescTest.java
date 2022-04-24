@@ -3,7 +3,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
@@ -43,6 +45,10 @@ public class SingleListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
+        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        province.setAggregateType(AggregateType.NONE);
+        List<ColumnDef> columnDefLists = Lists.newArrayList(province);
+
         String partitionName = "p1";
         List<String> values = Lists.newArrayList("guangdong", "tianjin");
         boolean ifNotExists = false;
@@ -55,7 +61,7 @@ public class SingleListPartitionDescTest {
 
         SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(ifNotExists, partitionName,
                 values, partitionProperties);
-        partitionDesc.analyze(1, null);
+        partitionDesc.analyze(columnDefLists, null);
 
         Assert.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assert.assertEquals(PartitionType.LIST, partitionDesc.getType());

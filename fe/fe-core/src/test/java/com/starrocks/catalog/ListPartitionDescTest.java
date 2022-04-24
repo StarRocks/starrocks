@@ -30,7 +30,7 @@ public class ListPartitionDescTest {
         rechargeMoney.setAggregateType(AggregateType.NONE);
         ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
         province.setAggregateType(AggregateType.NONE);
-        ColumnDef dt = new ColumnDef("dt", TypeDef.createVarchar(10));
+        ColumnDef dt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE));
         dt.setAggregateType(AggregateType.NONE);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
@@ -107,8 +107,8 @@ public class ListPartitionDescTest {
         return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
-    @Test(expected = DdlException.class)
-    public void testInvalidValueAndColumnTypeForMultiPartition() throws AnalysisException, DdlException {
+    @Test(expected = AnalysisException.class)
+    public void testInvalidValueAndColumnTypeForMultiPartition() throws AnalysisException {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
                 //aaaa is invalid value for a date type column dt, it will throw a DdlException
@@ -118,14 +118,9 @@ public class ListPartitionDescTest {
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-
-        Map<String, Long> partitionNameToId = new HashMap<>();
-        partitionNameToId.put("p1", 10001L);
-
-        listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testInvalidValueAndColumnTypeForSinglePartition() throws AnalysisException, DdlException {
         List<String> partitionColNames = Lists.newArrayList("user_id");
         SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
@@ -135,11 +130,6 @@ public class ListPartitionDescTest {
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-
-        Map<String, Long> partitionNameToId = new HashMap<>();
-        partitionNameToId.put("p1", 10001L);
-
-        listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
     @Test
@@ -292,10 +282,10 @@ public class ListPartitionDescTest {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
                 Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
+                        , Lists.newArrayList("2022-04-15", "beijing")), null);
         MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
                 Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai")
-                        , Lists.newArrayList("2022-04-16", "beijing")), null);
+                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);

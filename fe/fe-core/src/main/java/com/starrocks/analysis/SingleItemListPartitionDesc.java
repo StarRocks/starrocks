@@ -6,6 +6,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
@@ -13,10 +14,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TTabletType;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.HashMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class SingleItemListPartitionDesc extends PartitionDesc {
@@ -30,6 +28,7 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     private Boolean isInMemory;
     private TTabletType tabletType;
     private Long versionInfo;
+    private List<ColumnDef> columnDefList;
 
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> partitionProperties) {
@@ -64,12 +63,24 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         return this.partitionName;
     }
 
-    public void analyze(int partitionColSize, Map<String, String> tableProperties) throws AnalysisException {
+    public List<LiteralExpr> getLiteralExprValues() throws AnalysisException {
+        List<LiteralExpr> partitionValues = new ArrayList<>(this.values.size());
+        for (String value : this.values) {
+            //there only one partition column for single partition list
+            Type type = this.columnDefList.get(0).getType();
+            LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
+            partitionValues.add(partitionValue);
+        }
+        return partitionValues;
+    }
+
+    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
         FeNameFormat.checkPartitionName(this.getPartitionName());
-        if (partitionColSize != 1) {
+        if (columnDefList.size() != 1) {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
         this.analyzeProperties(tableProperties);
+        this.columnDefList = columnDefList;
     }
 
     private void analyzeProperties(Map<String, String> tableProperties) throws AnalysisException {

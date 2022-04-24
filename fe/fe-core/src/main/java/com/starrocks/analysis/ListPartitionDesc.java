@@ -58,17 +58,18 @@ public class ListPartitionDesc extends PartitionDesc {
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
-        this.analyzePartitionColumns(columnDefs);
+        List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
         // analyze single list property
-        this.analyzeSingleListPartition(tableProperties);
+        this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
-        this.analyzeMultiListPartition(tableProperties);
+        this.analyzeMultiListPartition(tableProperties, columnDefList);
     }
 
-    private void analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
+    private List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
         if (this.partitionColNames == null || this.partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }
+        List<ColumnDef> partitionColumns = new ArrayList<>(this.partitionColNames.size());
         Set<String> partColNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (String partitionCol : this.partitionColNames) {
             if (!partColNames.add(partitionCol)) {
@@ -85,6 +86,7 @@ public class ListPartitionDesc extends PartitionDesc {
                         throw new AnalysisException("The partition column could not be aggregated column");
                     }
                     found = true;
+                    partitionColumns.add(columnDef);
                     break;
                 }
             }
@@ -92,71 +94,78 @@ public class ListPartitionDesc extends PartitionDesc {
                 throw new AnalysisException("Partition column[" + partitionCol + "] does not exist in column list.");
             }
         }
+        return partitionColumns;
     }
 
-    private void analyzeMultiListPartition(Map<String, String> tableProperties) throws AnalysisException {
+    private void analyzeMultiListPartition(Map<String, String> tableProperties,
+                                           List<ColumnDef> columnDefList) throws AnalysisException {
         Set<String> multiListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        List<List<String>> allMultiValues = Lists.newArrayList();
+        List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
         for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs) {
             if (!multiListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
-            desc.analyze(this.partitionColNames.size(), tableProperties);
-            allMultiValues.addAll(desc.getMultiValues());
+            desc.analyze(columnDefList, tableProperties);
+            allMultiLiteralExprValues.addAll(desc.getMultiLiteralExprValues());
         }
-        this.analyzeDuplicateValues(this.partitionColNames.size(), allMultiValues);
+        this.analyzeDuplicateValues(this.partitionColNames.size(), allMultiLiteralExprValues);
     }
 
-    private void analyzeSingleListPartition(Map<String, String> copiedProperties) throws AnalysisException {
-        List<String> allValues = Lists.newArrayList();
+    private void analyzeSingleListPartition(Map<String, String> copiedProperties, List<ColumnDef> columnDefList) throws AnalysisException {
+        List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
         Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
             if (!singListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
-            desc.analyze(this.partitionColNames.size(), copiedProperties);
-            allValues.addAll(desc.getValues());
+            desc.analyze(columnDefList, copiedProperties);
+            allLiteralExprValues.addAll(desc.getLiteralExprValues());
         }
-        this.analyzeDuplicateValues(allValues);
+        this.analyzeDuplicateValues(allLiteralExprValues);
     }
 
     /**
      * Check if duplicate values are found
      * If the value of the member in the same position is equals, it is considered a duplicate
      * @param partitionColSize the partition column size
-     * @param allMultiValues values from multi list partition
+     * @param allMultiLiteralExprValues values from multi list partition
      * @throws AnalysisException
      */
-    private void analyzeDuplicateValues(int partitionColSize, List<List<String>> allMultiValues) throws AnalysisException {
-        List<List<String>> tempMultiValues = new ArrayList<>(allMultiValues.size());
-        for (List<String> values : allMultiValues) {
-            for (List<String> tempValues : tempMultiValues){
+    private void analyzeDuplicateValues(int partitionColSize, List<List<LiteralExpr>> allMultiLiteralExprValues) throws AnalysisException {
+        List<List<LiteralExpr>> tempMultiValues = new ArrayList<>(allMultiLiteralExprValues.size());
+        for (List<LiteralExpr> literalExprValues : allMultiLiteralExprValues) {
+            for (List<LiteralExpr> tmpValues : tempMultiValues){
                 int duplicatedSize = 0;
-                for (int i = 0; i < values.size(); i++) {
-                    if(values.get(i).equals(tempValues.get(i))){
+                for (int i = 0; i < tmpValues.size(); i++) {
+                    String value = literalExprValues.get(i).getStringValue();
+                    String tmpValue = tmpValues.get(i).getStringValue();
+                    if(value.equals(tmpValue)){
                         duplicatedSize++;
                     }
                 }
                 if (duplicatedSize == partitionColSize) {
+                    List<String> msg = literalExprValues.stream()
+                            .map(value -> ("\"" + value.getStringValue() + "\""))
+                            .collect(Collectors.toList());
                     throw new AnalysisException("Duplicate values " +
-                            "(" + String.join(",", values) + ") not allow");
+                            "(" + String.join(",",msg) + ") not allow");
                 }
             }
-            tempMultiValues.add(values);
+            tempMultiValues.add(literalExprValues);
         }
     }
 
     /**
      * Check if duplicate values are found
      * Use hashSet to check duplicate value
-     * @param allValues values from single list partition
+     * @param allLiteralExprValues values from single list partition
      * @throws AnalysisException
      */
-    private void analyzeDuplicateValues(List<String> allValues) throws AnalysisException {
+    private void analyzeDuplicateValues(List<LiteralExpr> allLiteralExprValues) throws AnalysisException {
         Set<String> hashSet = new HashSet<>();
-        for (String value : allValues) {
-            if (!hashSet.add(value)) {
-                throw new AnalysisException("Duplicated value" + value);
+        for (LiteralExpr value : allLiteralExprValues) {
+            if (!hashSet.add(value.getStringValue())) {
+                throw new AnalysisException("Duplicated value " + value.getStringValue());
             }
         }
     }
@@ -173,6 +182,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setValues(partitionId, desc.getValues());
+                listPartitionInfo.setLiteralValues(partitionId,desc.getLiteralExprValues());
             }
             for (MultiItemListPartitionDesc desc : this.multiListPartitionDescs){
                 long partitionId = partitionNameToId.get(desc.getPartitionName());
@@ -181,6 +191,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setTabletType(partitionId, desc.getTabletType());
                 listPartitionInfo.setReplicationNum(partitionId, desc.getReplicationNum());
                 listPartitionInfo.setMultiValues(partitionId, desc.getMultiValues());
+                listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiLiteralExprValues());
             }
             return listPartitionInfo;
         }catch (AnalysisException exception){
@@ -194,6 +205,7 @@ public class ListPartitionDesc extends PartitionDesc {
             for (Column column : columns) {
                 if (column.getName().equalsIgnoreCase(colName)) {
                     partitionColumns.add(column);
+                    break;
                 }
             }
         }
