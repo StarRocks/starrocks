@@ -120,8 +120,10 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
-    std::call_once(StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
-                                                                          [this] { update_metrics(); }));
+    std::call_once(_init_metrics, []() {
+        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
+                                                               [] { WorkGroupManager::instance()->update_metrics(); });
+    });
 
     if (_wg_metrics.count(wg->name()) == 0) {
         //cpu limit

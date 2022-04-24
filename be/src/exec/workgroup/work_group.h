@@ -130,7 +130,7 @@ public:
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
 
-    double mem_limit() const;
+    int64_t mem_limit() const;
 
 private:
     std::string _name;
