@@ -191,12 +191,6 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             _right_run.reset();
             result = std::move(merged);
         }
-
-#ifndef NDEBUG
-        for (int i = 0; i < result->num_rows(); i++) {
-            fmt::print("merge row: {}\n", result->debug_row(i));
-        }
-#endif
     }
 
     return result;

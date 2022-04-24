@@ -399,16 +399,6 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
 }
 
-// Merge multiple chunks in two-way merge
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, ChunkPtr* output, size_t limit) {
-    SortedRuns merged;
-    merge_sorted_chunks(descs, sort_exprs, chunks, &merged, limit);
-    *output = merged.assemble();
-
-    return Status::OK();
-}
-
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,
                                            const Columns& right_columns, Permutation* output, size_t limit) {
     constexpr int kLeftChunkIndex = 0;

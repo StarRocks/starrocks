@@ -18,17 +18,17 @@ class SortContext;
 using SortContextPtr = std::shared_ptr<SortContext>;
 using vectorized::ChunkPtr;
 using vectorized::ChunksSorter;
+using vectorized::SortDescs;
 
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers,
-                         const std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
-                         const std::vector<bool>& is_null_first)
+                         const std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs)
             : _state(state),
               _limit(limit),
               _num_partition_sinkers(num_right_sinkers),
               _sort_exprs(sort_exprs),
-              _sort_desc(is_asc_order, is_null_first) {
+              _sort_desc(sort_descs) {
         _chunks_sorter_partions.reserve(num_right_sinkers);
     }
 
@@ -87,8 +87,7 @@ private:
     const int64_t _limit;
     const int32_t _num_right_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
-    const std::vector<bool> _is_asc_order;
-    const std::vector<bool> _is_null_first;
+    const SortDescs _sort_descs;
 };
 
 } // namespace starrocks::pipeline

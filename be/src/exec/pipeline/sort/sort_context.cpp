@@ -46,8 +46,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int
           _limit(limit),
           _num_right_sinkers(num_right_sinkers),
           _sort_exprs(sort_exprs),
-          _is_asc_order(is_asc_order),
-          _is_null_first(is_null_first) {}
+          _sort_descs(is_asc_order, is_null_first) {}
 
 SortContextPtr SortContextFactory::create(int32_t idx) {
     size_t actual_idx = _is_merging ? 0 : idx;
@@ -56,7 +55,7 @@ SortContextPtr SortContextFactory::create(int32_t idx) {
     DCHECK_LE(actual_idx, _sort_contexts.size());
     if (!_sort_contexts[actual_idx]) {
         _sort_contexts[actual_idx] =
-                std::make_shared<SortContext>(_state, _limit, num_sinkers, _sort_exprs, _is_asc_order, _is_null_first);
+                std::make_shared<SortContext>(_state, _limit, num_sinkers, _sort_exprs, _sort_descs);
     }
     return _sort_contexts[actual_idx];
 }

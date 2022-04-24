@@ -28,6 +28,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TMergeJoinNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
@@ -43,47 +44,47 @@ import java.util.List;
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
-public class HashJoinNode extends JoinNode {
-    private static final Logger LOG = LogManager.getLogger(HashJoinNode.class);
+public class MergeJoinNode extends JoinNode {
+    private static final Logger LOG = LogManager.getLogger(MergeJoinNode.class);
 
 
-    public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                        List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super("HASH JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
+    public MergeJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
+                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
+        super("MERGE JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
     }
 
-    public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
-                        List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super("HASH JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
+    public MergeJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
+                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
+        super("MERGE JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
 
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
-        msg.hash_join_node = new THashJoinNode();
-        msg.hash_join_node.join_op = joinOp.toThrift();
-        msg.hash_join_node.distribution_mode = distrMode.toThrift();
+        msg.node_type = TPlanNodeType.MERGE_JOIN_NODE;
+        msg.merge_join_node = new TMergeJoinNode();
+        msg.merge_join_node.join_op = joinOp.toThrift();
+        msg.merge_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(eqJoinPredicate.getChild(0).treeToThrift(),
                     eqJoinPredicate.getChild(1).treeToThrift());
             eqJoinCondition.setOpcode(eqJoinPredicate.getOp().getOpcode());
-            msg.hash_join_node.addToEq_join_conjuncts(eqJoinCondition);
+            msg.merge_join_node.addToEq_join_conjuncts(eqJoinCondition);
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
             sqlJoinPredicatesBuilder.append(eqJoinPredicate.toSql());
         }
         for (Expr e : otherJoinConjuncts) {
-            msg.hash_join_node.addToOther_join_conjuncts(e.treeToThrift());
+            msg.merge_join_node.addToOther_join_conjuncts(e.treeToThrift());
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
             sqlJoinPredicatesBuilder.append(e.toSql());
         }
         if (sqlJoinPredicatesBuilder.length() > 0) {
-            msg.hash_join_node.setSql_join_predicates(sqlJoinPredicatesBuilder.toString());
+            msg.merge_join_node.setSql_join_predicates(sqlJoinPredicatesBuilder.toString());
         }
         if (!conjuncts.isEmpty()) {
             StringBuilder sqlPredicatesBuilder = new StringBuilder();
@@ -94,26 +95,26 @@ public class HashJoinNode extends JoinNode {
                 sqlPredicatesBuilder.append(e.toSql());
             }
             if (sqlPredicatesBuilder.length() > 0) {
-                msg.hash_join_node.setSql_predicates(sqlPredicatesBuilder.toString());
+                msg.merge_join_node.setSql_predicates(sqlPredicatesBuilder.toString());
             }
         }
-        msg.hash_join_node.setIs_push_down(isPushDown);
+        msg.merge_join_node.setIs_push_down(isPushDown);
         if (innerRef != null) {
-            msg.hash_join_node.setIs_rewritten_from_not_in(innerRef.isJoinRewrittenFromNotIn());
+            msg.merge_join_node.setIs_rewritten_from_not_in(innerRef.isJoinRewrittenFromNotIn());
         }
         if (!buildRuntimeFilters.isEmpty()) {
-            msg.hash_join_node.setBuild_runtime_filters(
+            msg.merge_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
-        msg.hash_join_node.setBuild_runtime_filters_from_planner(
+        msg.merge_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
         if (partitionExprs != null) {
-            msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            msg.merge_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
         msg.setFilter_null_value_columns(filter_null_value_columns);
 
         if (outputSlots != null) {
-            msg.hash_join_node.setOutput_columns(outputSlots);
+            msg.merge_join_node.setOutput_columns(outputSlots);
         }
     }
 
