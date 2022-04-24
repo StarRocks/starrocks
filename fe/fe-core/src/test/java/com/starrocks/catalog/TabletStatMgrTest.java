@@ -21,7 +21,7 @@ import java.util.Map;
 
 public class TabletStatMgrTest {
     @Test
-    public void testUpdateTabletStat(@Mocked Catalog catalog) {
+    public void testUpdateTabletStat(@Mocked GlobalStateMgr globalStateMgr) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -90,11 +90,11 @@ public class TabletStatMgrTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                GlobalStateMgr.getCurrentInvertedIndex();
                 result = invertedIndex;
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = db;
             }
         };

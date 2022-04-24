@@ -21,8 +21,8 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
@@ -44,11 +44,11 @@ public class UpdateDbUsedDataQuotaDaemon extends MasterDaemon {
     }
 
     private void updateAllDatabaseUsedDataQuota() {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        List<Long> dbIdList = catalog.getDbIds();
-        GlobalTransactionMgr globalTransactionMgr = catalog.getGlobalTransactionMgr();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Long> dbIdList = globalStateMgr.getDbIds();
+        GlobalTransactionMgr globalTransactionMgr = globalStateMgr.getGlobalTransactionMgr();
         for (Long dbId : dbIdList) {
-            Database db = catalog.getDb(dbId);
+            Database db = globalStateMgr.getDb(dbId);
             if (db == null) {
                 LOG.warn("Database [" + dbId + "] doese not exist, skip to update database used data quota");
                 continue;

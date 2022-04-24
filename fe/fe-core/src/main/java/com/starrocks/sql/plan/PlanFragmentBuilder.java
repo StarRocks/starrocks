@@ -16,10 +16,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -549,7 +549,7 @@ public class PlanFragmentBuilder {
 
                     long localBeId = -1;
                     if (Config.enable_local_replica_selection) {
-                        localBeId = Catalog.getCurrentSystemInfo()
+                        localBeId = GlobalStateMgr.getCurrentSystemInfo()
                                 .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                     }
 
@@ -1305,7 +1305,7 @@ public class PlanFragmentBuilder {
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
             if (node instanceof OlapScanNode) {
-                ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+                ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
                 OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
                     return true;

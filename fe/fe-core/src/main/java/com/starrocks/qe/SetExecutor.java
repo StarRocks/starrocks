@@ -66,6 +66,7 @@ public class SetExecutor {
 
     /**
      * SetExecutor will set the session variables and password
+     *
      * @throws DdlException
      */
     public void execute() throws DdlException {

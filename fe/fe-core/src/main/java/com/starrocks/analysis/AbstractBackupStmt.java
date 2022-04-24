@@ -25,8 +25,8 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -71,7 +71,7 @@ public class AbstractBackupStmt extends DdlStmt {
 
         // user need database level priv(not table level), because when doing restore operation,
         // the restore table may be newly created, so we can not judge its privs.
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
                 labelName.getDbName(), PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
         }

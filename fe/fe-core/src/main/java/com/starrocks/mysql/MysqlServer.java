@@ -21,7 +21,7 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
@@ -114,8 +114,8 @@ public class MysqlServer {
                     }
                     // submit this context to scheduler
                     ConnectContext context = new ConnectContext(clientChannel);
-                    // Set catalog here.
-                    context.setCatalog(Catalog.getCurrentCatalog());
+                    // Set globalStateMgr here.
+                    context.setCatalog(GlobalStateMgr.getCurrentState());
                     if (!scheduler.submit(context)) {
                         LOG.warn("Submit one connect request failed. Client=" + clientChannel.toString());
                         // clear up context

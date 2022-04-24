@@ -23,10 +23,10 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
@@ -57,8 +57,8 @@ public class DatabaseTransactionMgrTest {
     private static FakeTransactionIDGenerator fakeTransactionIDGenerator;
     private static GlobalTransactionMgr masterTransMgr;
     private static GlobalTransactionMgr slaveTransMgr;
-    private static Catalog masterCatalog;
-    private static Catalog slaveCatalog;
+    private static GlobalStateMgr masterGlobalStateMgr;
+    private static GlobalStateMgr slaveGlobalStateMgr;
     private static Map<String, Long> lableToTxnId;
 
     private TransactionState.TxnCoordinator transactionSource =
@@ -70,24 +70,24 @@ public class DatabaseTransactionMgrTest {
         fakeEditLog = new FakeEditLog();
         fakeCatalog = new FakeCatalog();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
-        masterCatalog = CatalogTestUtil.createTestCatalog();
-        slaveCatalog = CatalogTestUtil.createTestCatalog();
+        masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
+        slaveGlobalStateMgr = CatalogTestUtil.createTestCatalog();
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeMetaVersion.VERSION_83);
         metaContext.setThreadLocalInfo();
 
-        masterTransMgr = masterCatalog.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterCatalog.getEditLog());
+        masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
+        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
-        slaveTransMgr = slaveCatalog.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveCatalog.getEditLog());
+        slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
+        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
         Map<String, Long> lableToTxnId = Maps.newHashMap();
-        FakeCatalog.setCatalog(masterCatalog);
+        FakeCatalog.setCatalog(masterGlobalStateMgr);
         long transactionId1 = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -134,7 +134,7 @@ public class DatabaseTransactionMgrTest {
 
         TransactionState transactionState1 = fakeEditLog.getTransaction(transactionId1);
 
-        FakeCatalog.setCatalog(slaveCatalog);
+        FakeCatalog.setCatalog(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState1);
         return lableToTxnId;
     }

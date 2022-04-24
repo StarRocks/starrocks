@@ -82,32 +82,32 @@ public class CatalogTestUtil {
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
-    public static Catalog createTestCatalog() throws InstantiationException, IllegalAccessException,
+    public static GlobalStateMgr createTestCatalog() throws InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
-        Constructor<Catalog> constructor = Catalog.class.getDeclaredConstructor();
+        Constructor<GlobalStateMgr> constructor = GlobalStateMgr.class.getDeclaredConstructor();
         constructor.setAccessible(true);
-        Catalog catalog = constructor.newInstance();
-        catalog.setEditLog(new EditLog("name"));
-        FakeCatalog.setCatalog(catalog);
+        GlobalStateMgr globalStateMgr = constructor.newInstance();
+        globalStateMgr.setEditLog(new EditLog("name"));
+        FakeCatalog.setCatalog(globalStateMgr);
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
         backend1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         backend2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         backend3.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        Catalog.getCurrentSystemInfo().addBackend(backend1);
-        Catalog.getCurrentSystemInfo().addBackend(backend2);
-        Catalog.getCurrentSystemInfo().addBackend(backend3);
-        catalog.initDefaultCluster();
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        globalStateMgr.initDefaultCluster();
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        catalog.unprotectCreateDb(db);
-        return catalog;
+        globalStateMgr.unprotectCreateDb(db);
+        return globalStateMgr;
     }
 
-    public static boolean compareCatalog(Catalog masterCatalog, Catalog slaveCatalog) {
-        Database masterDb = masterCatalog.getDb(testDb1);
-        Database slaveDb = slaveCatalog.getDb(testDb1);
+    public static boolean compareCatalog(GlobalStateMgr masterGlobalStateMgr, GlobalStateMgr slaveGlobalStateMgr) {
+        Database masterDb = masterGlobalStateMgr.getDb(testDb1);
+        Database slaveDb = slaveGlobalStateMgr.getDb(testDb1);
         List<Table> tables = masterDb.getTables();
         for (Table table : tables) {
             Table slaveTable = slaveDb.getTable(table.getId());
@@ -156,7 +156,7 @@ public class CatalogTestUtil {
 
     public static Database createSimpleDb(long dbId, long tableId, long partitionId, long indexId, long tabletId,
                                           long version) {
-        Catalog.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentInvertedIndex().clear();
 
         // replica
         long replicaId = 0;
@@ -210,14 +210,15 @@ public class CatalogTestUtil {
         OlapTable table = new OlapTable(tableId, testTable1, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
-        table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1, TStorageType.COLUMN,
+                KeysType.AGG_KEYS);
         table.setBaseIndexId(indexId);
         // db
         Database db = new Database(dbId, testDb1);
         db.createTable(table);
         db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
-        // add a es table to catalog
+        // add a es table to globalStateMgr
         try {
             createEsTable(db);
         } catch (DdlException e) {

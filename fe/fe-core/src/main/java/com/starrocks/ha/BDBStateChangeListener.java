@@ -24,7 +24,7 @@ package com.starrocks.ha;
 import com.google.common.base.Preconditions;
 import com.sleepycat.je.rep.StateChangeEvent;
 import com.sleepycat.je.rep.StateChangeListener;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.EditLog;
 import org.apache.logging.log4j.LogManager;
@@ -45,7 +45,7 @@ public class BDBStateChangeListener implements StateChangeListener {
                 break;
             }
             case REPLICA: {
-                if (Catalog.getCurrentCatalog().isElectable()) {
+                if (GlobalStateMgr.getCurrentState().isElectable()) {
                     newType = FrontendNodeType.FOLLOWER;
                 } else {
                     newType = FrontendNodeType.OBSERVER;
@@ -64,7 +64,7 @@ public class BDBStateChangeListener implements StateChangeListener {
             }
         }
         Preconditions.checkNotNull(newType);
-        Catalog.getCurrentCatalog().notifyNewFETypeTransfer(newType);
+        GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(newType);
     }
 
 }

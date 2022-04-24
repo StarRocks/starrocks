@@ -24,8 +24,8 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
@@ -185,7 +185,7 @@ public abstract class AlterJob implements Writable {
      */
     protected boolean checkBackendState(Replica replica) {
         LOG.debug("check backend[{}] state for replica[{}]", replica.getBackendId(), replica.getId());
-        Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
         // not send event to event bus because there is a dead lock, job --> check state --> bus lock --> handle backend down
         // backend down --> bus lock --> handle backend down --> job.lock
         if (backend == null) {
@@ -293,7 +293,7 @@ public abstract class AlterJob implements Writable {
             return true;
         } else {
             try {
-                isPreviousLoadFinished = Catalog.getCurrentGlobalTransactionMgr()
+                isPreviousLoadFinished = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .isPreviousTransactionsFinished(transactionId, dbId, Lists.newArrayList(tableId));
             } catch (AnalysisException e) {
                 // this is a deprecated method, so just return true to make the compilation happy.
@@ -308,7 +308,7 @@ public abstract class AlterJob implements Writable {
     public synchronized void readFields(DataInput in) throws IOException {
         // read common members as write in AlterJob.write().
         // except 'type' member, which is read in AlterJob.read()
-        if (Catalog.getCurrentCatalogJournalVersion() >= 4) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 4) {
             state = JobState.valueOf(Text.readString(in));
         }
 
@@ -327,7 +327,7 @@ public abstract class AlterJob implements Writable {
             String group = Text.readString(in);
             resourceInfo = new TResourceInfo(user, group);
         }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             transactionId = in.readLong();
         }
     }

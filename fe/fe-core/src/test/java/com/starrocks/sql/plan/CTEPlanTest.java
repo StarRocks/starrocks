@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -27,13 +27,13 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
 
-        Catalog catalog = connectContext.getCatalog();
-        catalog.setStatisticStorage(new TestStorage());
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        globalStateMgr.setStatisticStorage(new TestStorage());
 
-        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
-        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
         setTableStatistics(t1, 2000000);
     }
 

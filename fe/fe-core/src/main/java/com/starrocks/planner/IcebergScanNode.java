@@ -8,7 +8,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
@@ -71,7 +71,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        for (Backend be : Catalog.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAlive()) {
                 hostToBeId.put(be.getHost(), be.getId());
             }

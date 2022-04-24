@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -66,7 +66,7 @@ public class RoutineLoadsProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult baseProcResult = new BaseProcResult();
         baseProcResult.setNames(TITLE_NAMES);
-        RoutineLoadManager routineLoadManager = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
         try {
             List<RoutineLoadJob> routineLoadJobList = routineLoadManager.getJob(null, null, true);
             for (RoutineLoadJob routineLoadJob : routineLoadJobList) {

@@ -22,8 +22,8 @@
 package com.starrocks.mysql;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -48,7 +48,7 @@ public class MysqlProtoTest {
     @Mocked
     private MysqlPassword password;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private Auth auth;
 
@@ -74,28 +74,28 @@ public class MysqlProtoTest {
                     }
                 };
 
-                catalog.getDb(anyString);
+                globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = new Database();
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                catalog.changeDb((ConnectContext) any, anyString);
+                globalStateMgr.changeDb((ConnectContext) any, anyString);
                 minTimes = 0;
             }
         };
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
             }
         };
 
@@ -204,7 +204,7 @@ public class MysqlProtoTest {
         mockPassword(true);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
-        context.setCatalog(catalog);
+        context.setCatalog(globalStateMgr);
         context.setThreadLocalInfo();
         Assert.assertTrue(MysqlProto.negotiate(context));
     }
@@ -215,7 +215,7 @@ public class MysqlProtoTest {
         mockPassword(true);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
-        context.setCatalog(catalog);
+        context.setCatalog(globalStateMgr);
         context.setThreadLocalInfo();
         Assert.assertTrue(MysqlProto.negotiate(context));
         ByteBuffer changeUserPacket = mockChangeUserPacket("change-user");

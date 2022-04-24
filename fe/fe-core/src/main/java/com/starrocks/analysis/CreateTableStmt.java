@@ -26,8 +26,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
@@ -301,7 +301,7 @@ public class CreateTableStmt extends DdlStmt {
         tableName.analyze(analyzer);
         FeNameFormat.checkTableName(tableName.getTbl());
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
                 tableName.getTbl(), PrivPredicate.CREATE)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
         }
@@ -634,7 +634,7 @@ public class CreateTableStmt extends DdlStmt {
         // properties may contains password and other sensitive information,
         // so do not print properties.
         // This toSql() method is only used for log, user can see detail info by using show create table stmt,
-        // which is implemented in Catalog.getDdlStmt()
+        // which is implemented in GlobalStateMgr.getDdlStmt()
         if (properties != null && !properties.isEmpty()) {
             sb.append("\nPROPERTIES (");
             sb.append(new PrintableMap<String, String>(properties, " = ", true, true, true));

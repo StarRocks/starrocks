@@ -21,7 +21,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.UserException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -157,7 +157,7 @@ public class DynamicPluginLoader extends PluginLoader {
      * @throws PluginException
      */
     public void reload() throws IOException, UserException {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             /*
              * No need to reload the plugin when this is a checkpoint thread.
              * Because this reload() method will create a new instance of plugin and try to start it.

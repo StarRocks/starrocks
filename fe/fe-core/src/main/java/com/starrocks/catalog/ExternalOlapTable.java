@@ -151,13 +151,13 @@ public class ExternalOlapTable extends OlapTable {
                 throw new DdlException("miss properties for external table, "
                         + "they are: host, port, user, password, database and table");
             }
-    
+
             host = properties.get("host");
             if (Strings.isNullOrEmpty(host)) {
                 throw new DdlException("Host of external table is null. "
                         + "Please add properties('host'='xxx.xxx.xxx.xxx') when create table");
             }
-    
+
             String portStr = properties.get("port");
             if (Strings.isNullOrEmpty(portStr)) {
                 // Maybe null pointer or number convert
@@ -176,19 +176,19 @@ public class ExternalOlapTable extends OlapTable {
                 throw new DdlException("User of external table is null. "
                         + "Please add properties('user'='root') when create table");
             }
-    
+
             password = properties.get("password");
             if (password == null) {
                 throw new DdlException("Password of external table is null. "
                         + "Please add properties('password'='xxxx') when create table");
             }
-    
+
             dbName = properties.get("database");
             if (Strings.isNullOrEmpty(dbName)) {
                 throw new DdlException("Database of external table is null. "
                         + "Please add properties('database'='xxxx') when create table");
             }
-    
+
             tableName = properties.get("table");
             if (Strings.isNullOrEmpty(tableName)) {
                 throw new DdlException("external table name missing."
@@ -213,7 +213,7 @@ public class ExternalOlapTable extends OlapTable {
     public ExternalOlapTable(long dbId, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
                              PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                              TableIndexes indexes, Map<String, String> properties)
-        throws DdlException {
+            throws DdlException {
         super(tableId, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
         setType(TableType.OLAP_EXTERNAL);
         this.dbId = dbId;
@@ -261,12 +261,12 @@ public class ExternalOlapTable extends OlapTable {
 
     @Override
     public void onCreate() {
-        Catalog.getCurrentCatalog().getStarRocksRepository().registerTable(this);
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().registerTable(this);
     }
 
     @Override
     public void onDrop() {
-        Catalog.getCurrentCatalog().getStarRocksRepository().deRegisterTable(this);
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().deRegisterTable(this);
     }
 
     @Override
@@ -293,7 +293,8 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.fromJsonObj(obj);
     }
 
-    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException, IOException {
+    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
+            throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
             LOG.info("no meta changed since last time, do nothing");
@@ -304,7 +305,7 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.setDbId(meta.getDb_id());
         externalTableInfo.setTableId(meta.getTable_id());
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new DdlException("database " + dbId + " does not exist");
         }
@@ -330,7 +331,7 @@ public class ExternalOlapTable extends OlapTable {
                 List<Index> indexList = new ArrayList<>();
                 for (TIndexInfo indexInfo : meta.getIndex_infos()) {
                     Index index = new Index(indexInfo.getIndex_name(), indexInfo.getColumns(),
-                                            IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
+                            IndexDef.IndexType.valueOf(indexInfo.getIndex_type()), indexInfo.getComment());
                     indexList.add(index);
                 }
                 indexes = new TableIndexes(indexList);
@@ -375,7 +376,7 @@ public class ExternalOlapTable extends OlapTable {
                         boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
                         TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
                         DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
-                                                                     thriftDataProperty.getCold_time());
+                                thriftDataProperty.getCold_time());
                         // TODO: confirm false is ok
                         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                         rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
@@ -384,13 +385,15 @@ public class ExternalOlapTable extends OlapTable {
                 case UNPARTITIONED:
                     partitionInfo = new SinglePartitionInfo();
                     TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
-                    for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map().entrySet()) {
+                    for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map()
+                            .entrySet()) {
                         long partitionId = entry.getKey();
                         short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
                         boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
-                        TDataProperty thriftDataProperty = singePartitionDesc.getBase_desc().getData_property().get(partitionId);
+                        TDataProperty thriftDataProperty =
+                                singePartitionDesc.getBase_desc().getData_property().get(partitionId);
                         DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
-                                                                     thriftDataProperty.getCold_time());
+                                thriftDataProperty.getCold_time());
                         partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
                     }
                     break;
@@ -422,13 +425,13 @@ public class ExternalOlapTable extends OlapTable {
                     columns.add(column);
                 }
                 MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), columns,
-                                                                        indexMeta.getSchema_meta().getSchema_version(),
-                                                                        indexMeta.getSchema_meta().getSchema_hash(),
-                                                                        indexMeta.getSchema_meta().getShort_key_col_count(),
-                                                                        indexMeta.getSchema_meta().getStorage_type(),
-                                                                        KeysType.valueOf(indexMeta.getSchema_meta()
-                                                                                .getKeys_type()),
-                                                                        null);
+                        indexMeta.getSchema_meta().getSchema_version(),
+                        indexMeta.getSchema_meta().getSchema_hash(),
+                        indexMeta.getSchema_meta().getShort_key_col_count(),
+                        indexMeta.getSchema_meta().getStorage_type(),
+                        KeysType.valueOf(indexMeta.getSchema_meta()
+                                .getKeys_type()),
+                        null);
                 indexIdToMeta.put(index.getIndexId(), index);
                 // TODO(wulei)
                 // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
@@ -439,25 +442,26 @@ public class ExternalOlapTable extends OlapTable {
             idToPartition.clear();
             nameToPartition.clear();
 
-            DistributionInfoType type = DistributionInfoType.valueOf(meta.getDistribution_desc().getDistribution_type());
+            DistributionInfoType type =
+                    DistributionInfoType.valueOf(meta.getDistribution_desc().getDistribution_type());
             if (type == DistributionInfoType.HASH) {
                 THashDistributionInfo hashDist = meta.getDistribution_desc().getHash_distribution();
                 DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
-                                                                             hashDist.getDistribution_columns());
+                        hashDist.getDistribution_columns());
                 defaultDistributionInfo = distributionDesc.toDistributionInfo(getBaseSchema());
             }
 
             for (TPartitionMeta partitionMeta : meta.getPartitions()) {
                 Partition partition = new Partition(partitionMeta.getPartition_id(),
-                                                    partitionMeta.getPartition_name(),
-                                                    null, // TODO(wulei): fix it
-                                                    defaultDistributionInfo);
+                        partitionMeta.getPartition_name(),
+                        null, // TODO(wulei): fix it
+                        defaultDistributionInfo);
                 partition.setNextVersion(partitionMeta.getNext_version());
                 partition.updateVisibleVersion(partitionMeta.getVisible_version(),
-                                               partitionMeta.getVisible_time());
+                        partitionMeta.getVisible_time());
                 for (TIndexMeta indexMeta : meta.getIndexes()) {
                     MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
-                                                                    IndexState.fromThrift(indexMeta.getIndex_state()));
+                            IndexState.fromThrift(indexMeta.getIndex_state()));
                     index.setRowCount(indexMeta.getRow_count());
                     index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
@@ -466,19 +470,19 @@ public class ExternalOlapTable extends OlapTable {
                         tablet.setIsConsistent(tTabletMeta.isConsistent());
                         for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {
                             Replica replica = new Replica(replicaMeta.getReplica_id(), replicaMeta.getBackend_id(),
-                                                        replicaMeta.getVersion(),
-                                                        replicaMeta.getSchema_hash(), replicaMeta.getData_size(),
-                                                        replicaMeta.getRow_count(), ReplicaState.valueOf(replicaMeta.getState()),
-                                                        replicaMeta.getLast_failed_version(),
-                                                        replicaMeta.getLast_success_version());
+                                    replicaMeta.getVersion(),
+                                    replicaMeta.getSchema_hash(), replicaMeta.getData_size(),
+                                    replicaMeta.getRow_count(), ReplicaState.valueOf(replicaMeta.getState()),
+                                    replicaMeta.getLast_failed_version(),
+                                    replicaMeta.getLast_success_version());
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);
                             tablet.addReplica(replica, true);
                         }
                         TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
-                                                            tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
-                                                            tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
+                                tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
+                                tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                         index.addTablet(tablet, tabletMeta);
                     }
                     if (indexMeta.getPartition_id() == partition.getId()) {
@@ -492,7 +496,7 @@ public class ExternalOlapTable extends OlapTable {
                 addPartition(partition);
             }
 
-            SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
                 Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
                 if (backend == null) {

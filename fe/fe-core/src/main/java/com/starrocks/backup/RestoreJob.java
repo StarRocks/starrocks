@@ -37,10 +37,10 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -95,7 +95,7 @@ public class RestoreJob extends AbstractJob {
     private static final Logger LOG = LogManager.getLogger(RestoreJob.class);
 
     public enum RestoreJobState {
-        PENDING, // Job is newly created. Check and prepare meta in catalog. Create replica if necessary.
+        PENDING, // Job is newly created. Check and prepare meta in globalStateMgr. Create replica if necessary.
         // Waiting for replica creation finished synchronously, then sending snapshot tasks.
         // then transfer to SNAPSHOTING
         SNAPSHOTING, // Waiting for snapshot finished. Than transfer to DOWNLOAD.
@@ -136,7 +136,7 @@ public class RestoreJob extends AbstractJob {
     private List<Pair<String, Partition>> restoredPartitions = Lists.newArrayList();
     private List<OlapTable> restoredTbls = Lists.newArrayList();
 
-    // save all restored partitions' version info which are already exist in catalog
+    // save all restored partitions' version info which are already exist in globalStateMgr
     // table id -> partition id -> version
     private com.google.common.collect.Table<Long, Long, Long> restoredVersionInfo = HashBasedTable.create();
     // tablet id->(be id -> snapshot info)
@@ -161,8 +161,8 @@ public class RestoreJob extends AbstractJob {
     public RestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                       boolean allowLoad, int restoreReplicationNum, long timeoutMs, int metaVersion,
                       int starrocksMetaVersion,
-                      Catalog catalog, long repoId) {
-        super(JobType.RESTORE, label, dbId, dbName, timeoutMs, catalog, repoId);
+                      GlobalStateMgr globalStateMgr, long repoId) {
+        super(JobType.RESTORE, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.backupTimestamp = backupTs;
         this.jobInfo = jobInfo;
         this.allowLoad = allowLoad;
@@ -311,7 +311,7 @@ public class RestoreJob extends AbstractJob {
 
         // get repo if not set
         if (repo == null) {
-            repo = catalog.getBackupHandler().getRepoMgr().getRepo(repoId);
+            repo = globalStateMgr.getBackupHandler().getRepoMgr().getRepo(repoId);
             if (repo == null) {
                 status = new Status(ErrCode.COMMON_ERROR, "failed to get repository: " + repoId);
                 cancelInternal(false);
@@ -361,7 +361,7 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " has been dropped");
             return;
@@ -409,18 +409,18 @@ public class RestoreJob extends AbstractJob {
      * 2. set all existing restored table's state to RESTORE.
      * 3. check if the expected restore objs are valid.
      * 4. create replicas if necessary.
-     * 5. add restored objs to catalog.
+     * 5. add restored objs to globalStateMgr.
      * 6. make snapshot for all replicas for incremental download later.
      */
     private void checkAndPrepareMeta() {
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
             return;
         }
 
         // generate job id
-        jobId = catalog.getNextId();
+        jobId = globalStateMgr.getNextId();
 
         // deserialize meta
         if (!downloadAndDeserializeMetaInfo()) {
@@ -573,7 +573,7 @@ public class RestoreJob extends AbstractJob {
                     }
 
                     // reset all ids in this table
-                    Status st = remoteOlapTbl.resetIdsForRestore(catalog, db, restoreReplicationNum);
+                    Status st = remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
                     if (!st.ok()) {
                         status = st;
                         return;
@@ -588,7 +588,7 @@ public class RestoreJob extends AbstractJob {
             } // end of all restore tables
 
             LOG.debug("finished to prepare restored partitions and tables. {}", this);
-            // for now, nothing is modified in catalog
+            // for now, nothing is modified in globalStateMgr
 
             // generate create replica tasks for all restored partitions
             for (Pair<String, Partition> entry : restoredPartitions) {
@@ -647,7 +647,7 @@ public class RestoreJob extends AbstractJob {
 
             if (ok) {
                 LOG.debug("finished to create all restored replcias. {}", this);
-                // add all restored partition and tbls to catalog
+                // add all restored partition and tbls to globalStateMgr
                 db.writeLock();
                 try {
                     // add restored partitions.
@@ -709,7 +709,7 @@ public class RestoreJob extends AbstractJob {
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 LocalTablet tablet = (LocalTablet) index.getTablet(idChain.getTabletId());
                 Replica replica = tablet.getReplicaById(idChain.getReplicaId());
-                long signature = catalog.getNextId();
+                long signature = globalStateMgr.getNextId();
                 SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), signature,
                         jobId, db.getId(),
                         tbl.getId(), part.getId(), index.getId(), tablet.getId(),
@@ -726,7 +726,7 @@ public class RestoreJob extends AbstractJob {
 
         // check disk capacity
         com.starrocks.common.Status st =
-                Catalog.getCurrentSystemInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
+                GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
         if (!st.ok()) {
             status = new Status(ErrCode.COMMON_ERROR, st.getErrorMsg());
             return;
@@ -775,9 +775,9 @@ public class RestoreJob extends AbstractJob {
             TabletMeta tabletMeta = new TabletMeta(db.getId(), localTbl.getId(), restorePart.getId(),
                     restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                 for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
-                    Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                    GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                     CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
                             restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
@@ -797,7 +797,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     // reset remote partition.
-    // reset all id in remote partition, but DO NOT modify any exist catalog objects.
+    // reset all id in remote partition, but DO NOT modify any exist globalStateMgr objects.
     private Partition resetPartitionForRestore(OlapTable localTbl, OlapTable remoteTbl, String partName,
                                                String clusterName, int restoreReplicationNum) {
         Preconditions.checkState(localTbl.getPartition(partName) == null);
@@ -807,7 +807,7 @@ public class RestoreJob extends AbstractJob {
         Preconditions.checkState(localPartitionInfo.getType() == PartitionType.RANGE);
 
         // generate new partition id
-        long newPartId = catalog.getNextId();
+        long newPartId = globalStateMgr.getNextId();
         remotePart.setIdForRestore(newPartId);
 
         // indexes
@@ -835,14 +835,15 @@ public class RestoreJob extends AbstractJob {
             remoteIdx.clearTabletsForRestore();
             for (int i = 0; i < remotetabletSize; i++) {
                 // generate new tablet id
-                long newTabletId = catalog.getNextId();
+                long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 // add tablet to index, but not add to TabletInvertedIndex
                 remoteIdx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
 
                 // replicas
-                List<Long> beIds = Catalog.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
-                        true, clusterName);
+                List<Long> beIds =
+                        GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
+                                true, clusterName);
                 if (beIds == null) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "
@@ -850,7 +851,7 @@ public class RestoreJob extends AbstractJob {
                     return null;
                 }
                 for (Long beId : beIds) {
-                    long newReplicaId = catalog.getNextId();
+                    long newReplicaId = globalStateMgr.getNextId();
                     Replica newReplica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                             visibleVersion, schemaHash);
                     newTablet.addReplica(newReplica, true /* is restore */);
@@ -898,7 +899,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     private void replayCheckAndPrepareMeta() {
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         db.writeLock();
         try {
             // replay set all existing tables's state to RESTORE
@@ -934,9 +935,9 @@ public class RestoreJob extends AbstractJob {
                     TabletMeta tabletMeta = new TabletMeta(db.getId(), localTbl.getId(), restorePart.getId(),
                             restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                     for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                        Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                        GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                         for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
-                            Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                            GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                         }
                     }
                 }
@@ -952,9 +953,10 @@ public class RestoreJob extends AbstractJob {
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), restoreTbl.getId(), restorePart.getId(),
                                 restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                         for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                            Catalog.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                            GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                             for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
-                                Catalog.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                                GlobalStateMgr.getCurrentInvertedIndex()
+                                        .addReplica(restoreTablet.getId(), restoreReplica);
                             }
                         }
                     }
@@ -972,7 +974,7 @@ public class RestoreJob extends AbstractJob {
             snapshotFinishedTime = System.currentTimeMillis();
             state = RestoreJobState.DOWNLOAD;
 
-            catalog.getEditLog().logRestoreJob(this);
+            globalStateMgr.getEditLog().logRestoreJob(this);
             LOG.info("finished making snapshots. {}", this);
             return;
         }
@@ -997,7 +999,7 @@ public class RestoreJob extends AbstractJob {
         for (long dbId : dbToSnapshotInfos.keySet()) {
             List<SnapshotInfo> infos = dbToSnapshotInfos.get(dbId);
 
-            Database db = catalog.getDb(dbId);
+            Database db = globalStateMgr.getDb(dbId);
             if (db == null) {
                 status = new Status(ErrCode.NOT_FOUND, "db " + dbId + " does not exist");
                 return;
@@ -1022,7 +1024,7 @@ public class RestoreJob extends AbstractJob {
                             beId, batchNum, totalNum, this);
 
                     List<FsBroker> brokerAddrs = Lists.newArrayList();
-                    Status st = repo.getBrokerAddress(beId, catalog, brokerAddrs);
+                    Status st = repo.getBrokerAddress(beId, globalStateMgr, brokerAddrs);
                     if (!st.ok()) {
                         status = st;
                         return;
@@ -1082,7 +1084,7 @@ public class RestoreJob extends AbstractJob {
                             IdChain repoIds = fileMapping.get(catalogIds);
                             if (repoIds == null) {
                                 status = new Status(ErrCode.NOT_FOUND,
-                                        "failed to get id mapping of catalog ids: " + catalogIds.toString());
+                                        "failed to get id mapping of globalStateMgr ids: " + catalogIds.toString());
                                 LOG.info("current file mapping: {}", fileMapping);
                                 return;
                             }
@@ -1100,7 +1102,7 @@ public class RestoreJob extends AbstractJob {
                             srcToDest.put(src, dest);
                             LOG.debug("create download src path: {}, dest path: {}", src, dest);
                         }
-                        long signature = catalog.getNextId();
+                        long signature = globalStateMgr.getNextId();
                         DownloadTask task = new DownloadTask(null, beId, signature, jobId, dbId,
                                 srcToDest, brokerAddrs.get(0), repo.getStorage().getProperties());
                         batchTask.addTask(task);
@@ -1133,7 +1135,7 @@ public class RestoreJob extends AbstractJob {
             // backupMeta is useless now
             backupMeta = null;
 
-            catalog.getEditLog().logRestoreJob(this);
+            globalStateMgr.getEditLog().logRestoreJob(this);
             LOG.info("finished to download. {}", this);
         }
 
@@ -1149,7 +1151,7 @@ public class RestoreJob extends AbstractJob {
         // tablet id->(be id -> download info)
         for (Cell<Long, Long, SnapshotInfo> cell : snapshotInfos.cellSet()) {
             SnapshotInfo info = cell.getValue();
-            long signature = catalog.getNextId();
+            long signature = globalStateMgr.getNextId();
             DirMoveTask task = new DirMoveTask(null, cell.getColumnKey(), signature, jobId, dbId,
                     info.getTblId(), info.getPartitionId(), info.getTabletId(),
                     cell.getRowKey(), info.getTabletPath(), info.getSchemaHash(),
@@ -1184,7 +1186,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     private Status allTabletCommitted(boolean isReplay) {
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             return new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
         }
@@ -1244,7 +1246,7 @@ public class RestoreJob extends AbstractJob {
             finishedTime = System.currentTimeMillis();
             state = RestoreJobState.FINISHED;
 
-            catalog.getEditLog().logRestoreJob(this);
+            globalStateMgr.getEditLog().logRestoreJob(this);
 
             // register table in DynamicPartitionScheduler after restore job finished
             db.readLock();
@@ -1368,7 +1370,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         // clean restored objs
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db != null) {
             db.writeLock();
             try {
@@ -1381,7 +1383,7 @@ public class RestoreJob extends AbstractJob {
                     for (Partition part : restoreTbl.getPartitions()) {
                         for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
-                                Catalog.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
                             }
                         }
                     }
@@ -1415,7 +1417,7 @@ public class RestoreJob extends AbstractJob {
             finishedTime = System.currentTimeMillis();
             state = RestoreJobState.CANCELLED;
             // log
-            catalog.getEditLog().logRestoreJob(this);
+            globalStateMgr.getEditLog().logRestoreJob(this);
 
             LOG.info("finished to cancel restore job. current state: {}. is replay: {}. {}",
                     curState.name(), isReplay, this);

@@ -4,13 +4,9 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -76,7 +72,7 @@ public class AnalyzeJoinTest {
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) t , t1");
-        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1","Column 'v1' is ambiguous");
+        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
 
@@ -93,16 +89,20 @@ public class AnalyzeJoinTest {
 
     @Test
     public void testColumnNames() {
-        QueryRelation query = ((QueryStatement) analyzeSuccess("select * from t0 left semi join t1 on t0.v1 = t1.v4")).getQueryRelation();
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select * from t0 left semi join t1 on t0.v1 = t1.v4")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select t0.*,v1,t1.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess(
+                "select t0.*,v1,t1.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3,v1,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select t1.*,v1,t0.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess(
+                "select t1.*,v1,t0.* from t0 join t1 on t0.v1=t1.v4")).getQueryRelation();
         Assert.assertEquals("v4,v5,v6,v1,v1,v2,v3", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess(
+                "select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b")).getQueryRelation();
         Assert.assertEquals("v,v,v", String.join(",", query.getColumnOutputNames()));
         analyzeFail("select a.v1 as v, a.v2 as v, b.v1 as v from t0 a,t0 b order by v", "Column 'v' is ambiguous");
         analyzeFail("select v1 from (select * from t0 a,t0 b) t", "Column 'v1' is ambiguous");

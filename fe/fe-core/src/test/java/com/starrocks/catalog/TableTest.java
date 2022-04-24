@@ -40,14 +40,14 @@ import java.util.List;
 public class TableTest {
     private FakeCatalog fakeCatalog;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
         fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
     }
 

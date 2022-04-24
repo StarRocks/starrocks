@@ -5,9 +5,9 @@ package com.starrocks.statistic;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -43,10 +43,10 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
-        long id = Catalog.getCurrentCatalog().getNextId();
+        long id = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(id);
         analyzeJobMap.put(id, job);
-        Catalog.getCurrentCatalog().getEditLog().logAddAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
     }
 
     public void updateAnalyzeJobWithoutLog(AnalyzeJob job) {
@@ -55,12 +55,12 @@ public class AnalyzeManager implements Writable {
 
     public void updateAnalyzeJobWithLog(AnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
-        Catalog.getCurrentCatalog().getEditLog().logAddAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
     }
 
     public void removeAnalyzeJob(long id) {
         if (analyzeJobMap.containsKey(id)) {
-            Catalog.getCurrentCatalog().getEditLog().logRemoveAnalyzeJob(analyzeJobMap.remove(id));
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(analyzeJobMap.remove(id));
         }
     }
 
@@ -85,7 +85,7 @@ public class AnalyzeManager implements Writable {
             }
 
             // check db/table
-            Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+            Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
             if (null == db) {
                 expireList.add(job);
                 continue;
@@ -116,7 +116,7 @@ public class AnalyzeManager implements Writable {
 
         expireList.forEach(d -> analyzeJobMap.remove(d.getId()));
         for (AnalyzeJob job : expireList) {
-            Catalog.getCurrentCatalog().getEditLog().logRemoveAnalyzeJob(job);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
         }
     }
 
@@ -181,24 +181,24 @@ public class AnalyzeManager implements Writable {
                 List<String> columns = (job.getColumns() == null || job.getColumns().isEmpty()) ?
                         table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                                 .collect(Collectors.toList()) : job.getColumns();
-                Catalog.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+                GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
             }
         }
 
         public void expireCachedStatistics(AnalyzeJob job) {
             if (job.getScheduleType().equals(Constants.ScheduleType.ONCE)) {
-                Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
                 if (null == db) {
                     return;
                 }
-                Catalog.getCurrentStatisticStorage()
+                GlobalStateMgr.getCurrentStatisticStorage()
                         .expireColumnStatistics(db.getTable(job.getTableId()), job.getColumns());
             } else {
                 List<Table> tableNeedCheck = new ArrayList<>();
                 if (job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
-                    List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+                    List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                     for (Long dbId : dbIds) {
-                        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+                        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                             continue;
                         }
@@ -206,13 +206,13 @@ public class AnalyzeManager implements Writable {
                     }
                 } else if (job.getDbId() != AnalyzeJob.DEFAULT_ALL_ID &&
                         job.getTableId() == AnalyzeJob.DEFAULT_ALL_ID) {
-                    Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+                    Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
                     if (null == db) {
                         return;
                     }
                     tableNeedCheck.addAll(db.getTables());
                 } else {
-                    Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+                    Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
                     if (null == db) {
                         return;
                     }

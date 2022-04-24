@@ -22,8 +22,8 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -72,12 +72,12 @@ public class GetStreamLoadState extends RestBaseAction {
         // FIXME(cmy)
         // checkReadPriv(authInfo.fullUserName, fullDbName);
 
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }
 
-        String state = Catalog.getCurrentGlobalTransactionMgr().getLabelState(db.getId(), label).toString();
+        String state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(), label).toString();
 
         sendResult(request, response, new Result(state));
     }

@@ -53,14 +53,14 @@ public class JDBCTableTest {
     }
 
     @Test
-    public void testWithProperties(@Mocked Catalog catalog,
+    public void testWithProperties(@Mocked GlobalStateMgr globalStateMgr,
                                    @Mocked ResourceMgr resourceMgr) throws Exception {
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("jdbc0");
@@ -73,14 +73,14 @@ public class JDBCTableTest {
     }
 
     @Test
-    public void testToThrift(@Mocked Catalog catalog,
+    public void testToThrift(@Mocked GlobalStateMgr globalStateMgr,
                              @Mocked ResourceMgr resourceMgr) throws Exception {
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("jdbc0");
@@ -92,7 +92,8 @@ public class JDBCTableTest {
 
         // build expected table descriptor
         JDBCResource resource = (JDBCResource) getMockedJDBCResource("jdbc0");
-        TTableDescriptor expectedDesc = new TTableDescriptor(1000, TTableType.JDBC_TABLE, columns.size(), 0, "jdbc_table", "");
+        TTableDescriptor expectedDesc =
+                new TTableDescriptor(1000, TTableType.JDBC_TABLE, columns.size(), 0, "jdbc_table", "");
         TJDBCTable expectedTable = new TJDBCTable();
         // we will not compute checksum in ut, so we can skip to setJdbc_driver_checksum
         expectedTable.setJdbc_driver_name(resource.getName());
@@ -107,16 +108,15 @@ public class JDBCTableTest {
         Assert.assertEquals(tableDescriptor, expectedDesc);
     }
 
-
     @Test(expected = DdlException.class)
-    public void testWithIlegalResourceName(@Mocked Catalog catalog,
+    public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) throws Exception {
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("jdbc0");
@@ -128,14 +128,14 @@ public class JDBCTableTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testWithIlegalResourceType(@Mocked Catalog catalog,
+    public void testWithIlegalResourceType(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) throws Exception {
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("jdbc0");

@@ -1,13 +1,10 @@
 [sql]
-select
-    sum(l_extendedprice * l_discount) as revenue
-from
-    lineitem
-where
-        l_shipdate >= date '1995-01-01'
+select sum(l_extendedprice * l_discount) as revenue
+from lineitem
+where l_shipdate >= date '1995-01-01'
   and l_shipdate < date '1996-01-01'
   and l_discount between 0.02 and 0.04
-  and l_quantity < 24 ;
+  and l_quantity < 24;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:19: sum
@@ -47,5 +44,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=8142251
 avgRowSize=36.0
 numNodes=0
-[end]
+[
+end]
 

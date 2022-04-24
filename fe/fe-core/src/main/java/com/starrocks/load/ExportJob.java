@@ -39,9 +39,9 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
@@ -151,7 +151,7 @@ public class ExportJob implements Writable {
         this.startTimeMs = -1;
         this.finishTimeMs = -1;
         this.failMsg = new ExportFailMsg(ExportFailMsg.CancelType.UNKNOWN, "");
-        this.analyzer = new Analyzer(Catalog.getCurrentCatalog(), null);
+        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
         this.desc = analyzer.getDescTbl();
         this.exportPath = "";
         this.exportTempPath = "";
@@ -169,7 +169,7 @@ public class ExportJob implements Writable {
 
     public void setJob(ExportStmt stmt) throws UserException {
         String dbName = stmt.getTblName().getDb();
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -268,7 +268,7 @@ public class ExportJob implements Writable {
             }
 
             long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
-            TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
             int taskIdx = 0;
             while (!copyTabletLocations.isEmpty()) {
@@ -563,7 +563,7 @@ public class ExportJob implements Writable {
                 break;
         }
         if (!isReplay) {
-            Catalog.getCurrentCatalog().getEditLog().logExportUpdateState(id, newState);
+            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState);
         }
         return true;
     }
@@ -575,12 +575,12 @@ public class ExportJob implements Writable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
-            Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
             long backendId = backend.getId();
-            if (!Catalog.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                 continue;
             }
 
@@ -733,7 +733,7 @@ public class ExportJob implements Writable {
         columnSeparator = Text.readString(in);
         rowDelimiter = Text.readString(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_53) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_53) {
             int count = in.readInt();
             for (int i = 0; i < count; i++) {
                 String propertyKey = Text.readString(in);
@@ -763,7 +763,7 @@ public class ExportJob implements Writable {
             brokerDesc = BrokerDesc.read(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
             tableName = new TableName();
             tableName.readFields(in);
         } else {

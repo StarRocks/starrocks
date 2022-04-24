@@ -1,21 +1,15 @@
 [sql]
-select
-        sum(l_extendedprice) / 7.0 as avg_yearly
-from
-    lineitem,
-    part
-where
-        p_partkey = l_partkey
+select sum(l_extendedprice) / 7.0 as avg_yearly
+from lineitem,
+     part
+where p_partkey = l_partkey
   and p_brand = 'Brand#35'
   and p_container = 'JUMBO CASE'
   and l_quantity < (
-    select
-            0.2 * avg(l_quantity)
-    from
-        lineitem
-    where
-            l_partkey = p_partkey
-) ;
+    select 0.2 * avg(l_quantity)
+    from lineitem
+    where l_partkey = p_partkey
+);
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:49: expr
@@ -139,5 +133,6 @@ tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=16.0
 numNodes=0
-[end]
+[
+end]
 

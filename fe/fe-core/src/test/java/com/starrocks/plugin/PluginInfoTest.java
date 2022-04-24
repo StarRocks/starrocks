@@ -21,8 +21,8 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -41,16 +41,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PluginInfoTest {
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private FakeCatalog fakeCatalog;
 
     @Before
     public void setUp() {
         fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
     }
 

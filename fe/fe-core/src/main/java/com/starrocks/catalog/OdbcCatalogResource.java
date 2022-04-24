@@ -31,9 +31,9 @@ import com.starrocks.common.proc.BaseProcResult;
 import java.util.Map;
 
 /**
- * External ODBC Catalog resource for external table query.
+ * External ODBC GlobalStateMgr resource for external table query.
  * <p>
- * External ODBC Catalog resource example:
+ * External ODBC GlobalStateMgr resource example:
  * CREATE EXTERNAL RESOURCE "odbc_mysql"
  * PROPERTIES
  * (

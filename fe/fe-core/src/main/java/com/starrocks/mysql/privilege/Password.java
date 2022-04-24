@@ -4,7 +4,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-
 
 public class Password implements Writable {
     private static final Logger LOG = LogManager.getLogger(Password.class);
@@ -108,7 +107,7 @@ public class Password implements Writable {
             }
         } else if (authPlugin == AuthPlugin.AUTHENTICATION_KERBEROS) {
             try {
-                Class<?> authClazz = Catalog.getCurrentCatalog().getAuth().getAuthClazz();
+                Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuth().getAuthClazz();
                 Method method = authClazz.getMethod("authenticate",
                         String.class, String.class, String.class, byte[].class);
                 return (boolean) method.invoke(null,

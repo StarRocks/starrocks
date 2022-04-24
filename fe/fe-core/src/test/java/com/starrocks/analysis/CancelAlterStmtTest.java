@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
@@ -37,7 +37,7 @@ import org.junit.Test;
 public class CancelAlterStmtTest {
 
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private ConnectContext ctx;
 
@@ -45,12 +45,12 @@ public class CancelAlterStmtTest {
 
     @Before
     public void setUp() {
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
         ctx = new ConnectContext(null);
         ctx.setQualifiedUser("root");
         ctx.setRemoteIP("192.168.1.1");
 
-        analyzer = new Analyzer(catalog, ctx);
+        analyzer = new Analyzer(globalStateMgr, ctx);
         new Expectations(analyzer) {
             {
                 analyzer.getDefaultDb();
@@ -74,7 +74,7 @@ public class CancelAlterStmtTest {
     @Test
     public void testNormal() throws UserException, AnalysisException {
         fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         // cancel alter column
         CancelAlterTableStmt stmt = new CancelAlterTableStmt(AlterType.COLUMN, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);

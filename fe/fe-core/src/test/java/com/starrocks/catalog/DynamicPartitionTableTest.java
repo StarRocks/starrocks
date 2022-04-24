@@ -28,14 +28,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-
-import java.util.UUID;
 
 public class DynamicPartitionTableTest {
     private static ConnectContext connectContext;
@@ -60,7 +57,7 @@ public class DynamicPartitionTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     @Test
@@ -90,7 +87,7 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.buckets\" = \"1\"\n" +
                 ");");
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("dynamic_partition_normal");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(),
                 DynamicPartitionProperty.NOT_SET_REPLICATION_NUM);
@@ -240,7 +237,7 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.time_unit\" = \"day\",\n" +
                 "\"dynamic_partition.prefix\" = \"p\"\n" +
                 ");");
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("dynamic_partition_buckets");
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getBuckets(), 32);
     }
@@ -421,7 +418,7 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.buckets\" = \"1\",\n" +
                 "\"dynamic_partition.replication_num\" = \"2\"\n" +
                 ");");
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable(tableName);
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(), 2);
     }

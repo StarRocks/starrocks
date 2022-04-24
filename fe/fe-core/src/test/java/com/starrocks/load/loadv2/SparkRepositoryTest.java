@@ -3,7 +3,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
@@ -37,7 +37,7 @@ public class SparkRepositoryTest {
     private List<TBrokerFileStatus> files;
 
     @Mocked
-    Catalog catalog;
+    GlobalStateMgr globalStateMgr;
     @Mocked
     BrokerUtil brokerUtil;
 

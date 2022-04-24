@@ -35,7 +35,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -43,7 +42,6 @@ import org.junit.Test;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class InsertStmtTest {
     private static StarRocksAssert starRocksAssert;

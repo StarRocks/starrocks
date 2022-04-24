@@ -29,10 +29,10 @@ public class HudiResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

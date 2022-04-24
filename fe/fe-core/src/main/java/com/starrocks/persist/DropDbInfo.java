@@ -22,7 +22,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -60,7 +60,7 @@ public class DropDbInfo implements Writable {
     }
 
     public static DropDbInfo read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_89) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_89) {
             DropDbInfo info = new DropDbInfo();
             info.readFields(in);
             return info;

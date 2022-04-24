@@ -34,14 +34,14 @@ public class StarOSAgent {
     public long getPrimaryBackendIdByShard(long shardId) {
         long workerId = client.getPrimaryWorkerIdByShard(shardId);
         Worker worker = client.getWorker(workerId);
-        return Catalog.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
+        return GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
     }
 
     public Set<Long> getBackendIdsByShard(long shardId) {
         Set<Long> backendIds = Sets.newHashSet();
         for (long workerId : client.getWorkerIdsByShard(shardId)) {
             Worker worker = client.getWorker(workerId);
-            long backendId = Catalog.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
+            long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(worker.getHost());
             backendIds.add(backendId);
         }
         return backendIds;
@@ -75,7 +75,7 @@ public class StarOSAgent {
         public synchronized List<Long> getWorkerIdsByShard(long shardId) {
             // Use workers from StarOS
             idToWorker.clear();
-            ImmutableMap<Long, Backend> idToBackend = Catalog.getCurrentSystemInfo().getIdToBackend();
+            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
             for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
                 idToWorker.put(entry.getKey(), new Worker(entry.getKey(), entry.getValue().getHost()));
             }

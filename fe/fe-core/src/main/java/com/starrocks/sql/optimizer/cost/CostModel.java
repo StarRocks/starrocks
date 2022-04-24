@@ -4,8 +4,8 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -294,9 +294,9 @@ public class CostModel {
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
-                    int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+                    int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns) *
-                                    Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
+                                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size(),
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     break;

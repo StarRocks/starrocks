@@ -30,8 +30,8 @@ import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.LoadException;
@@ -91,7 +91,7 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
-    public void testBeNumMin(@Mocked Catalog catalog,
+    public void testBeNumMin(@Mocked GlobalStateMgr globalStateMgr,
                              @Mocked SystemInfoService systemInfoService,
                              @Mocked Database database,
                              @Mocked RoutineLoadDesc routineLoadDesc) throws MetaNotFoundException {
@@ -107,7 +107,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
                 systemInfoService.getClusterBackendIds(clusterName1, true);
@@ -150,22 +150,22 @@ public class KafkaRoutineLoadJobTest {
                                          @Mocked RoutineLoadDesc routineLoadDesc)
             throws UserException {
 
-        Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         RoutineLoadJob routineLoadJob =
                 new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", "default", 1L,
                         1L, "127.0.0.1:9020", "topic1");
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                catalog.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadManager();
                 minTimes = 0;
                 result = routineLoadManager;
             }
         };
 
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
-        Deencapsulation.setField(catalog, "routineLoadTaskScheduler", routineLoadTaskScheduler);
+        Deencapsulation.setField(globalStateMgr, "routineLoadTaskScheduler", routineLoadTaskScheduler);
 
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", Arrays.asList(1, 4, 6));
 
@@ -192,7 +192,7 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testProcessTimeOutTasks(@Injectable GlobalTransactionMgr globalTransactionMgr,
                                         @Injectable RoutineLoadManager routineLoadManager) {
-        Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         RoutineLoadJob routineLoadJob =
                 new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", "default", 1L,
@@ -200,7 +200,7 @@ public class KafkaRoutineLoadJobTest {
         long maxBatchIntervalS = 10;
         new Expectations() {
             {
-                catalog.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadManager();
                 minTimes = 0;
                 result = routineLoadManager;
             }
@@ -228,7 +228,7 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
-    public void testFromCreateStmtWithErrorTable(@Mocked Catalog catalog,
+    public void testFromCreateStmtWithErrorTable(@Mocked GlobalStateMgr globalStateMgr,
                                                  @Injectable Database database) throws LoadException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
@@ -251,7 +251,7 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
-    public void testFromCreateStmt(@Mocked Catalog catalog,
+    public void testFromCreateStmt(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database database,
                                    @Injectable OlapTable table) throws UserException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();

@@ -21,7 +21,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 
@@ -204,7 +204,8 @@ public class ReplicaPersistInfo implements Writable {
                 -1L, -1, -1L, -1L, -1L, -1L);
     }
 
-    private ReplicaPersistInfo() {}
+    private ReplicaPersistInfo() {
+    }
 
     private ReplicaPersistInfo(ReplicaOperationType opType, long dbId, long tableId, long partitionId,
                                long indexId, long tabletId, long backendId, long replicaId, long version,
@@ -326,7 +327,7 @@ public class ReplicaPersistInfo implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         opType = ReplicaOperationType.DEFAULT_OP;
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             opType = ReplicaOperationType.findByValue(in.readInt());
             if (opType == null) {
                 throw new IOException("could not parse operation type from replica info");
@@ -337,7 +338,7 @@ public class ReplicaPersistInfo implements Writable {
             in.readLong(); // read a version_hash for compatibility
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {
             schemaHash = in.readInt();
         }
     }

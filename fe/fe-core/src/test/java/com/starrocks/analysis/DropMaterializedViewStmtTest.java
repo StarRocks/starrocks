@@ -21,9 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -52,7 +52,7 @@ public class DropMaterializedViewStmtTest {
     Analyzer analyzer;
     @Mocked
     Auth auth;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private ConnectContext connectContext;
 
@@ -60,8 +60,8 @@ public class DropMaterializedViewStmtTest {
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         MockedAuth.mockedAuth(auth);
-        catalog = Deencapsulation.newInstance(Catalog.class);
-        analyzer = new Analyzer(catalog, connectContext);
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        analyzer = new Analyzer(globalStateMgr, connectContext);
         Database db = new Database(50000L, "test");
 
         Column column1 = new Column("col1", Type.BIGINT);
@@ -81,10 +81,10 @@ public class DropMaterializedViewStmtTest {
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            Catalog getCurrentCatalog() {
-                return catalog;
+            GlobalStateMgr getCurrentCatalog() {
+                return globalStateMgr;
             }
 
             @Mock

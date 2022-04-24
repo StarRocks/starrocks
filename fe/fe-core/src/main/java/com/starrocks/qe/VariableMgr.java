@@ -28,7 +28,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SysVariableDesc;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -251,7 +251,8 @@ public class VariableMgr {
     // Input:
     //      sessionVariable: the variable of current session
     //      setVar: variable information that needs to be set
-    public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar) throws DdlException {
+    public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar)
+            throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
@@ -279,7 +280,7 @@ public class VariableMgr {
                 // write edit log
                 GlobalVarPersistInfo info =
                         new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(attr.name()));
-                EditLog editLog = Catalog.getCurrentCatalog().getEditLog();
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
                 editLog.logGlobalVariableV2(info);
             } finally {
                 wlock.unlock();
@@ -303,7 +304,7 @@ public class VariableMgr {
         wlock.lock();
         try {
             defaultSessionVariable.readFields(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_90) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_90) {
                 GlobalVarPersistInfo info = GlobalVarPersistInfo.read(in);
                 replayGlobalVariableV2(info);
             }

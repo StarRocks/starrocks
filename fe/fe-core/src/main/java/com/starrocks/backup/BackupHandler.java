@@ -37,8 +37,8 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -96,24 +96,24 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
     private boolean isInit = false;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     public BackupHandler() {
         // for persist
     }
 
-    public BackupHandler(Catalog catalog) {
+    public BackupHandler(GlobalStateMgr globalStateMgr) {
         super("backupHandler", 3000L);
-        this.catalog = catalog;
+        this.globalStateMgr = globalStateMgr;
     }
 
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
+    public void setCatalog(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     @Override
     public synchronized void start() {
-        Preconditions.checkNotNull(catalog);
+        Preconditions.checkNotNull(globalStateMgr);
         super.start();
         repoMgr.start();
     }
@@ -167,20 +167,20 @@ public class BackupHandler extends MasterDaemon implements Writable {
         }
 
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
-            job.setCatalog(catalog);
+            job.setCatalog(globalStateMgr);
             job.run();
         }
     }
 
     // handle create repository stmt
     public void createRepository(CreateRepositoryStmt stmt) throws DdlException {
-        if (!catalog.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
+        if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
             ErrorReport
                     .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
         }
 
         BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties());
-        long repoId = catalog.getNextId();
+        long repoId = globalStateMgr.getNextId();
         Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
 
         Status st = repoMgr.addAndInitRepoIfNotExist(repo, false);
@@ -228,7 +228,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
         // check if db exist
         String dbName = stmt.getDbName();
-        Database db = catalog.getDb(dbName);
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -370,9 +370,9 @@ public class BackupHandler extends MasterDaemon implements Writable {
         BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(),
                 ClusterNamespace.getNameFromFullName(db.getFullName()),
                 tblRefs, stmt.getTimeoutMs(),
-                catalog, repository.getId());
+                globalStateMgr, repository.getId());
         // write log
-        catalog.getEditLog().logBackupJob(backupJob);
+        globalStateMgr.getEditLog().logBackupJob(backupJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
         dbIdToBackupOrRestoreJob.put(db.getId(), backupJob);
@@ -399,8 +399,9 @@ public class BackupHandler extends MasterDaemon implements Writable {
         // Create a restore job
         RestoreJob restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 db.getId(), db.getFullName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), catalog, repository.getId());
-        catalog.getEditLog().logRestoreJob(restoreJob);
+                stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
+                repository.getId());
+        globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
         dbIdToBackupOrRestoreJob.put(db.getId(), restoreJob);
@@ -450,7 +451,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
     public void cancel(CancelBackupStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
-        Database db = catalog.getDb(dbName);
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -541,7 +542,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
                         existingJob, job);
                 return;
             }
-            existingJob.setCatalog(catalog);
+            existingJob.setCatalog(globalStateMgr);
             existingJob.replayCancel();
         } else if (!job.isPending()) {
             AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());

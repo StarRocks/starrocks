@@ -6,10 +6,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -871,20 +871,20 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
                                               long pathHash) {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        Database db = catalog.getDbIncludeRecycleBin(dbId);
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return 0;
         }
 
         db.readLock();
         try {
-            OlapTable table = (OlapTable) catalog.getTableIncludeRecycleBin(db, tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return 0;
             }
 
-            Partition partition = catalog.getPartitionIncludeRecycleBin(table, partitionId);
+            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, partitionId);
             if (partition == null) {
                 return 0;
             }
@@ -1202,21 +1202,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Preconditions.checkArgument(beIds != null || bePaths != null);
 
         List<Pair<Long, Set<Long>>> result = Lists.newArrayList();
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        Database db = catalog.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return result;
         }
 
         try {
             db.readLock();
-            OlapTable table = (OlapTable) catalog.getTableIncludeRecycleBin(db, tableId);
+            OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
             }
 
-            Partition partition = catalog.getPartitionIncludeRecycleBin(table, partitionId);
+            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, partitionId);
             if (partition == null) {
                 return result;
             }
@@ -1282,20 +1282,20 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     // NOTICE: call this function as little as possible, cause this will get db lock
     private boolean isTabletHealthy(Long tabletId, TabletMeta tabletMeta, List<Long> aliveBeIds) {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        Database db = catalog.getDbIncludeRecycleBin(tabletMeta.getDbId());
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDbIncludeRecycleBin(tabletMeta.getDbId());
         if (db == null) {
             return false;
         }
 
         try {
             db.readLock();
-            OlapTable table = (OlapTable) catalog.getTableIncludeRecycleBin(db, tabletMeta.getTableId());
+            OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tabletMeta.getTableId());
             if (table == null) {
                 return false;
             }
 
-            Partition partition = catalog.getPartitionIncludeRecycleBin(table, tabletMeta.getPartitionId());
+            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, tabletMeta.getPartitionId());
             if (partition == null) {
                 return false;
             }
@@ -1310,7 +1310,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return false;
             }
 
-            short replicaNum = catalog.getReplicationNumIncludeRecycleBin(table.getPartitionInfo(), partition.getId());
+            short replicaNum =
+                    globalStateMgr.getReplicationNumIncludeRecycleBin(table.getPartitionInfo(), partition.getId());
             if (replicaNum == (short) -1) {
                 return false;
             }
@@ -1366,11 +1367,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             Preconditions.checkArgument(bePaths.first != -1 && bePaths.second.size() > 1);
         }
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Map<Pair<Long, Long>, PartitionStat> partitionStats = Maps.newHashMap();
-        List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
-            Database db = catalog.getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -1381,14 +1382,14 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             db.readLock();
             try {
-                for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
+                for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         if (partition.isUseStarOS()) {
                             // replicas are managed by StarOS and cloud storage.
                             continue;
@@ -1400,8 +1401,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
-                        DataProperty dataProperty = catalog.getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(),
-                                partition.getId());
+                        DataProperty dataProperty =
+                                globalStateMgr.getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(),
+                                        partition.getId());
                         if (dataProperty == null) {
                             continue;
                         }
@@ -1411,7 +1413,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         }
 
                         int replicaNum = partition.getDistributionInfo().getBucketNum()
-                                * catalog.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
+                                * globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                 partition.getId());
                         // replicaNum may be negative, cause getReplicationNumIncludeRecycleBin can return -1
                         if (replicaNum < 0) {

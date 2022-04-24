@@ -6,7 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;
@@ -35,7 +35,7 @@ public class HiveRepositoryTest {
     }
 
     @Test
-    public void testGetClient(@Mocked Catalog catalog,
+    public void testGetClient(@Mocked GlobalStateMgr globalStateMgr,
                               @Mocked ResourceMgr resourceMgr) throws Exception {
         String resourceName = "hive0";
         String metastoreURIs = "thrift://127.0.0.1:9380";
@@ -55,11 +55,11 @@ public class HiveRepositoryTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("hive0");

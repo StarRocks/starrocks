@@ -23,8 +23,8 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -65,11 +65,11 @@ public class ShowCreateDbStmt extends ShowStmt {
         }
         db = ClusterNamespace.getFullName(getClusterName(), db);
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), db,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                        Privilege.ALTER_PRIV,
-                        Privilege.CREATE_PRIV,
-                        Privilege.DROP_PRIV),
+                                Privilege.ALTER_PRIV,
+                                Privilege.CREATE_PRIV,
+                                Privilege.DROP_PRIV),
                         Operator.OR))) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ConnectContext.get().getQualifiedUser(), db);

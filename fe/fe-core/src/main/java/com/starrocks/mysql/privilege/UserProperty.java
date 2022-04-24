@@ -28,7 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -336,7 +336,8 @@ public class UserProperty implements Writable {
 
             // starrocks path
             if (dppConfig.getStarRocksPath() != null) {
-                result.add(Lists.newArrayList(clusterPrefix + DppConfig.getStarRocksPathKey(), dppConfig.getStarRocksPath()));
+                result.add(Lists.newArrayList(clusterPrefix + DppConfig.getStarRocksPathKey(),
+                        dppConfig.getStarRocksPath()));
             }
 
             // http port
@@ -411,37 +412,37 @@ public class UserProperty implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
             // consume the flag of empty user name
             in.readBoolean();
         }
 
         // user name
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             qualifiedUser = Text.readString(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
             int passwordLen = in.readInt();
             password = new byte[passwordLen];
             in.readFully(password);
 
             isAdmin = in.readBoolean();
 
-            if (Catalog.getCurrentCatalogJournalVersion() >= 1) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 1) {
                 isSuperuser = in.readBoolean();
             }
         }
 
         maxConn = in.readLong();
 
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
             int numPriv = in.readInt();
             for (int i = 0; i < numPriv; ++i) {
                 String dbName = null;
-                if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+                if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
                     dbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
                 } else {
                     dbName = Text.readString(in);
@@ -455,7 +456,7 @@ public class UserProperty implements Writable {
         resource = UserResource.readIn(in);
 
         // load cluster
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 defaultLoadCluster = Text.readString(in);
             }
@@ -469,15 +470,15 @@ public class UserProperty implements Writable {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_21) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_21) {
             whiteList.readFields(in);
-            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
                 whiteList.convertOldDomainPrivMap(qualifiedUser);
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
                 if (in.readBoolean()) {
                     // consume cluster name
                     Text.readString(in);

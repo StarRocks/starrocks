@@ -25,14 +25,14 @@ import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 
-public class FakeCatalog extends MockUp<Catalog> {
+public class FakeCatalog extends MockUp<GlobalStateMgr> {
 
-    private static Catalog catalog;
+    private static GlobalStateMgr globalStateMgr;
     private static int metaVersion;
     private static SystemInfoService systemInfo = new SystemInfoService();
 
-    public static void setCatalog(Catalog catalog) {
-        FakeCatalog.catalog = catalog;
+    public static void setCatalog(GlobalStateMgr globalStateMgr) {
+        FakeCatalog.globalStateMgr = globalStateMgr;
     }
 
     public static void setMetaVersion(int metaVersion) {
@@ -44,13 +44,13 @@ public class FakeCatalog extends MockUp<Catalog> {
     }
 
     @Mock
-    public static Catalog getCurrentCatalog() {
-        return catalog;
+    public static GlobalStateMgr getCurrentCatalog() {
+        return globalStateMgr;
     }
 
     @Mock
-    public static Catalog getInstance() {
-        return catalog;
+    public static GlobalStateMgr getInstance() {
+        return globalStateMgr;
     }
 
     @Mock

@@ -33,7 +33,7 @@ import com.sleepycat.je.Environment;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.meta.MetaContext;
 import org.json.JSONArray;
@@ -67,7 +67,7 @@ public class BDBTool {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
             e.printStackTrace();
-            System.err.println("Failed to open BDBJE env: " + Catalog.getCurrentCatalog().getBdbDir() + ". exit");
+            System.err.println("Failed to open BDBJE env: " + GlobalStateMgr.getCurrentState().getBdbDir() + ". exit");
             return false;
         }
         Preconditions.checkNotNull(env);

@@ -14,7 +14,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -99,7 +99,7 @@ public class CTASAnalyzer {
         if (null == createTableStmt.getDistributionDesc()) {
             String defaultColumnName = finalColumnNames.get(0);
             double candidateDistinctCountCount = 1.0;
-            StatisticStorage currentStatisticStorage = Catalog.getCurrentStatisticStorage();
+            StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentStatisticStorage();
 
             for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
                 Pair<String, String> columnName = columnEntry.getKey().second;

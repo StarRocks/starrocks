@@ -24,7 +24,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 
@@ -67,7 +67,7 @@ public class AuthProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        result.setRows(Catalog.getCurrentCatalog().getAuth().getAuthInfo(null /* get all user */));
+        result.setRows(GlobalStateMgr.getCurrentState().getAuth().getAuthInfo(null /* get all user */));
         return result;
     }
 }

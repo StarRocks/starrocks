@@ -24,8 +24,8 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -46,10 +46,10 @@ public class DbsProcDir implements ProcDirInterface {
             .add("LastConsistencyCheckTime").add("ReplicaQuota")
             .build();
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    public DbsProcDir(Catalog catalog) {
-        this.catalog = catalog;
+    public DbsProcDir(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     @Override
@@ -59,7 +59,7 @@ public class DbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String dbIdStr) throws AnalysisException {
-        if (catalog == null || Strings.isNullOrEmpty(dbIdStr)) {
+        if (globalStateMgr == null || Strings.isNullOrEmpty(dbIdStr)) {
             throw new AnalysisException("Db id is null");
         }
 
@@ -70,7 +70,7 @@ public class DbsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        Database db = catalog.getDb(dbId);
+        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             throw new AnalysisException("Database[" + dbId + "] does not exist.");
         }
@@ -80,11 +80,11 @@ public class DbsProcDir implements ProcDirInterface {
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        Preconditions.checkNotNull(catalog);
+        Preconditions.checkNotNull(globalStateMgr);
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = catalog.getDbNames();
+        List<String> dbNames = globalStateMgr.getDbNames();
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;
@@ -93,7 +93,7 @@ public class DbsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
         for (String dbName : dbNames) {
-            Database db = catalog.getDb(dbName);
+            Database db = globalStateMgr.getDb(dbName);
             if (db == null) {
                 continue;
             }

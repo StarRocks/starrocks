@@ -32,7 +32,7 @@ import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.UseStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
@@ -83,7 +83,7 @@ public class StmtExecutorTest {
 
         SessionVariable sessionVariable = new SessionVariable();
         MysqlSerializer serializer = MysqlSerializer.newInstance();
-        Catalog catalog = AccessTestUtil.fetchAdminCatalog();
+        GlobalStateMgr globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
         MysqlChannel channel = new MysqlChannel(socketChannel);
         new Expectations(channel) {
@@ -108,7 +108,7 @@ public class StmtExecutorTest {
 
                 ctx.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 ctx.getState();
                 minTimes = 0;
@@ -276,7 +276,7 @@ public class StmtExecutorTest {
     @Test
     public void testKillOtherFail(@Mocked KillStmt killStmt, @Mocked SqlParser parser, @Mocked ConnectContext killCtx)
             throws Exception {
-        Catalog killCatalog = AccessTestUtil.fetchAdminCatalog();
+        GlobalStateMgr killGlobalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
         new Expectations() {
             {
@@ -302,7 +302,7 @@ public class StmtExecutorTest {
 
                 killCtx.getCatalog();
                 minTimes = 0;
-                result = killCatalog;
+                result = killGlobalStateMgr;
 
                 killCtx.getQualifiedUser();
                 minTimes = 0;
@@ -337,7 +337,7 @@ public class StmtExecutorTest {
     @Test
     public void testKillOther(@Mocked KillStmt killStmt, @Mocked SqlParser parser, @Mocked ConnectContext killCtx)
             throws Exception {
-        Catalog killCatalog = AccessTestUtil.fetchAdminCatalog();
+        GlobalStateMgr killGlobalStateMgr = AccessTestUtil.fetchAdminCatalog();
         new Expectations() {
             {
                 killStmt.analyze((Analyzer) any);
@@ -362,7 +362,7 @@ public class StmtExecutorTest {
 
                 killCtx.getCatalog();
                 minTimes = 0;
-                result = killCatalog;
+                result = killGlobalStateMgr;
 
                 killCtx.getQualifiedUser();
                 minTimes = 0;
@@ -510,7 +510,7 @@ public class StmtExecutorTest {
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((Catalog) any, (DdlStmt) any);
+                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
                 minTimes = 0;
             }
         };
@@ -543,7 +543,7 @@ public class StmtExecutorTest {
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((Catalog) any, (DdlStmt) any);
+                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
                 minTimes = 0;
                 result = new DdlException("ddl fail");
             }
@@ -577,7 +577,7 @@ public class StmtExecutorTest {
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((Catalog) any, (DdlStmt) any);
+                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
                 minTimes = 0;
                 result = new Exception("bug");
             }

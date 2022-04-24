@@ -166,18 +166,18 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void refreshTableCache() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository().refreshTableCache(hmsTableInfo);
+        GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
     }
 
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
+        GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshPartitionCache(hmsTableInfo, partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
+        GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableColumnStats(hmsTableInfo);
     }
 
@@ -207,7 +207,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         String resourceName = copiedProps.remove(HUDI_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         HudiResource hudiResource = (HudiResource) resource;
         if (hudiResource == null) {
             throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
@@ -217,7 +217,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
         hudiProperties.put(HUDI_METASTORE_URIS, hudiResource.getHiveMetastoreURIs());
 
-        org.apache.hadoop.hive.metastore.api.Table metastoreTable = Catalog.getCurrentCatalog().getHiveRepository()
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getTable(resourceName, this.db, this.table);
 
         this.resourceName = resourceName;
@@ -508,7 +508,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop() {
         if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getHiveRepository().clearCache(hmsTableInfo);
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
         }
     }
 

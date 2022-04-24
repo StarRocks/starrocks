@@ -22,7 +22,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,16 +36,16 @@ public final class ProcService {
 
     private ProcService() {
         root = new BaseProcDir();
-        root.register("auth", new AuthProcDir(Catalog.getCurrentCatalog().getAuth()));
-        root.register("backends", new BackendsProcDir(Catalog.getCurrentSystemInfo()));
-        root.register("dbs", new DbsProcDir(Catalog.getCurrentCatalog()));
-        root.register("jobs", new JobsDbProcDir(Catalog.getCurrentCatalog()));
-        root.register("statistic", new StatisticProcDir(Catalog.getCurrentCatalog()));
+        root.register("auth", new AuthProcDir(GlobalStateMgr.getCurrentState().getAuth()));
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+        root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
+        root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));
+        root.register("statistic", new StatisticProcDir(GlobalStateMgr.getCurrentState()));
         root.register("tasks", new TasksProcDir());
-        root.register("frontends", new FrontendsProcNode(Catalog.getCurrentCatalog()));
-        root.register("brokers", Catalog.getCurrentCatalog().getBrokerMgr().getProcNode());
-        root.register("resources", Catalog.getCurrentCatalog().getResourceMgr().getProcNode());
-        root.register("load_error_hub", new LoadErrorHubProcNode(Catalog.getCurrentCatalog()));
+        root.register("frontends", new FrontendsProcNode(GlobalStateMgr.getCurrentState()));
+        root.register("brokers", GlobalStateMgr.getCurrentState().getBrokerMgr().getProcNode());
+        root.register("resources", GlobalStateMgr.getCurrentState().getResourceMgr().getProcNode());
+        root.register("load_error_hub", new LoadErrorHubProcNode(GlobalStateMgr.getCurrentState()));
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());

@@ -29,7 +29,6 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
-import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,7 +60,7 @@ public class HiveTableTest {
     }
 
     @Test
-    public void testWithResourceName(@Mocked Catalog catalog,
+    public void testWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked HiveRepository hiveRepository) throws DdlException {
         Resource hiveResource = new HiveResource(resourceName);
@@ -82,17 +81,17 @@ public class HiveTableTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("hive0");
                 result = hiveResource;
 
-                catalog.getHiveRepository();
+                globalStateMgr.getHiveRepository();
                 result = hiveRepository;
 
                 hiveRepository.getTable(resourceName, hiveDb, hiveTable);

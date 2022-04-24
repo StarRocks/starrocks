@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
@@ -1076,8 +1076,8 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
-        Catalog catalog = connectContext.getCatalog();
-        Database db = catalog.getDb("default_cluster:test");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        Database db = globalStateMgr.getDb("default_cluster:test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
@@ -1103,8 +1103,8 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("default_cluster:test");
-        Catalog catalog = connectContext.getCatalog();
-        Table table = catalog.getDb("default_cluster:test").getTable("join2");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {
@@ -1624,8 +1624,8 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
-        Catalog catalog = connectContext.getCatalog();
-        Table table = catalog.getDb("default_cluster:test").getTable("join2");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {

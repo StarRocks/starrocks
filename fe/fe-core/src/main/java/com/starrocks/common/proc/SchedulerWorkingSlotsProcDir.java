@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.system.Backend;
 
@@ -38,7 +38,7 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        List<List<String>> infos = Catalog.getCurrentCatalog().getTabletScheduler().getSlotsInfo();
+        List<List<String>> infos = GlobalStateMgr.getCurrentState().getTabletScheduler().getSlotsInfo();
         result.setRows(infos);
         return result;
     }
@@ -61,7 +61,7 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid backend id format: " + beIdStr);
         }
 
-        Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }

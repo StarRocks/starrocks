@@ -59,12 +59,12 @@ public class StarOSTablet extends Tablet {
     }
 
     public long getPrimaryBackendId() {
-        return Catalog.getCurrentCatalog().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(shardId);
     }
 
     @Override
     public Set<Long> getBackendIds() {
-        return Catalog.getCurrentCatalog().getStarOSAgent().getBackendIdsByShard(shardId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(shardId);
     }
 
     // visibleVersion and schemaHash is not used

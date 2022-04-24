@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
@@ -72,7 +72,7 @@ public class ResourceDesc {
 
     public void analyze() throws AnalysisException {
         // check resource exist or not
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(getName());
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(getName());
         if (resource == null) {
             throw new AnalysisException("Resource does not exist. name: " + getName());
         }

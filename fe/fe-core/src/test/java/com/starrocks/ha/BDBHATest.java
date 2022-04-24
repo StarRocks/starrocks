@@ -1,6 +1,6 @@
 package com.starrocks.ha;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.system.Frontend;
@@ -19,10 +19,10 @@ public class BDBHATest {
 
     @Test
     public void testAddAndRemoveUnstableNode() {
-        BDBJEJournal journal = (BDBJEJournal) Catalog.getCurrentCatalog().getEditLog().getJournal();
+        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getEditLog().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
 
-        BDBHA ha = (BDBHA) Catalog.getCurrentCatalog().getHaProtocol();
+        BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
         ha.addUnstableNode("host1", 3);
         Assert.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
@@ -42,27 +42,27 @@ public class BDBHATest {
 
     @Test
     public void testAddAndDropFollower() throws Exception {
-        BDBJEJournal journal = (BDBJEJournal) Catalog.getCurrentCatalog().getEditLog().getJournal();
+        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getEditLog().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         // add two followers
-        Catalog.getCurrentCatalog().addFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
+        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        Catalog.getCurrentCatalog().addFrontend(FrontendNodeType.FOLLOWER, "host2", 9010);
+        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "host2", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "host2", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                        1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
+                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
                         false);
         Assert.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
-        Catalog.getCurrentCatalog().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
+        GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "host1", 9010);
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
     }

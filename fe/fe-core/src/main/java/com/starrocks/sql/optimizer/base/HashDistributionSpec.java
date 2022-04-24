@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.optimizer.base;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.GlobalStateMgr;
 
 import java.util.List;
 import java.util.Objects;
@@ -90,7 +90,7 @@ public class HashDistributionSpec extends DistributionSpec {
         }
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
-            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
             long tableId = propertyInfo.tableId;
             // Disable use colocate/bucket join when table with empty partition
             boolean satisfyColocate = (colocateIndex.isColocateTable(tableId) &&

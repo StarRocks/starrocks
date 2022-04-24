@@ -61,11 +61,11 @@ public class MetaObject implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
             this.signature = in.readLong();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 6) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 6) {
             this.lastCheckTime = in.readLong();
         }
     }

@@ -50,19 +50,19 @@ public class BackendTest {
     private int httpPort = 21237;
     private int beRpcPort = 21238;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private FakeCatalog fakeCatalog;
     private FakeEditLog fakeEditLog;
 
     @Before
     public void setUp() {
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
         fakeCatalog = new FakeCatalog();
         fakeEditLog = new FakeEditLog();
 
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
         FakeCatalog.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
 

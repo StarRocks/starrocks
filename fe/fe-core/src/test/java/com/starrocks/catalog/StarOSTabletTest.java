@@ -24,13 +24,13 @@ import java.util.Map;
 
 public class StarOSTabletTest {
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Test
     public void testSerialization() throws Exception {
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentCatalogJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
             }
@@ -72,11 +72,11 @@ public class StarOSTabletTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                catalog.getStarOSAgent();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getStarOSAgent();
                 result = new StarOSAgent();
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);

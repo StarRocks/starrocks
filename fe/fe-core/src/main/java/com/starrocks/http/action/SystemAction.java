@@ -24,7 +24,7 @@ package com.starrocks.http.action;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -86,7 +86,7 @@ public class SystemAction extends WebBaseAction {
 
         List<String> columnNames = null;
         List<List<String>> rows = null;
-        if (!Catalog.getCurrentCatalog().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
             // forward to master
             String showProcStmt = "SHOW PROC \"" + procPath + "\"";
             MasterOpExecutor masterOpExecutor = new MasterOpExecutor(new OriginStatement(showProcStmt, 0),

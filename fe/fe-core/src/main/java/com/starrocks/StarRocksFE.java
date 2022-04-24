@@ -23,7 +23,7 @@ package com.starrocks;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.CommandLineOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
@@ -103,9 +103,9 @@ public class StarRocksFE {
             FrontendOptions.init();
             ExecuteEnv.setup();
 
-            // init catalog and wait it be ready
-            Catalog.getCurrentCatalog().initialize(args);
-            Catalog.getCurrentCatalog().waitForReady();
+            // init globalStateMgr and wait it be ready
+            GlobalStateMgr.getCurrentState().initialize(args);
+            GlobalStateMgr.getCurrentState().waitForReady();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -235,7 +235,8 @@ public class StarRocksFE {
                     }
 
                     BDBToolOptions bdbOpts =
-                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion, starrocksMetaVersion);
+                            new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
+                                    starrocksMetaVersion);
                     return new CommandLineOptions(false, "", bdbOpts);
                 }
             } else {
@@ -265,7 +266,7 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            BDBTool bdbTool = new BDBTool(Catalog.getCurrentCatalog().getBdbDir(), cmdLineOpts.getBdbToolOpts());
+            BDBTool bdbTool = new BDBTool(GlobalStateMgr.getCurrentState().getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);
             } else {

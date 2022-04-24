@@ -21,9 +21,9 @@
 
 package com.starrocks.external.elasticsearch;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.GlobalStateMgr;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -33,7 +33,7 @@ public class EsShardPartitionsTest extends EsTestCase {
 
     @Test
     public void testPartition() throws Exception {
-        EsTable esTable = (EsTable) Catalog.getCurrentCatalog()
+        EsTable esTable = (EsTable) GlobalStateMgr.getCurrentState()
                 .getDb(CatalogTestUtil.testDb1)
                 .getTable(CatalogTestUtil.testEsTableId1);
         EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",

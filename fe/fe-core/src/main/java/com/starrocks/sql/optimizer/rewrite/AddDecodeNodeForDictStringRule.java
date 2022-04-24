@@ -9,10 +9,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -827,7 +827,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     continue;
                 }
 
-                ColumnStatistic columnStatistic = Catalog.getCurrentStatisticStorage().
+                ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage().
                         getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||

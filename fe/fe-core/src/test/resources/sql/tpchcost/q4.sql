@@ -1,25 +1,17 @@
 [sql]
-select
-    o_orderpriority,
-    count(*) as order_count
-from
-    orders
-where
-        o_orderdate >= date '1994-09-01'
+select o_orderpriority,
+       count(*) as order_count
+from orders
+where o_orderdate >= date '1994-09-01'
   and o_orderdate < date '1994-12-01'
-  and exists (
-        select
-            *
-        from
-            lineitem
-        where
-                l_orderkey = o_orderkey
+  and exists(
+        select *
+        from lineitem
+        where l_orderkey = o_orderkey
           and l_receiptdate > l_commitdate
     )
-group by
-    o_orderpriority
-order by
-    o_orderpriority ;
+group by o_orderpriority
+order by o_orderpriority;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:6: O_ORDERPRIORITY | 29: count
@@ -109,5 +101,6 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5675676
 avgRowSize=27.0
 numNodes=0
-[end]
+[
+end]
 

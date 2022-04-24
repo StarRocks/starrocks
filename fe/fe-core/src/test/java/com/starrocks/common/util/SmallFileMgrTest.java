@@ -22,8 +22,8 @@
 package com.starrocks.common.util;
 
 import com.starrocks.analysis.CreateFileStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -39,7 +39,7 @@ import org.junit.Test;
 public class SmallFileMgrTest {
 
     @Mocked
-    Catalog catalog;
+    GlobalStateMgr globalStateMgr;
     @Mocked
     EditLog editLog;
     @Mocked
@@ -53,7 +53,7 @@ public class SmallFileMgrTest {
                 db.getId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getDb(anyString);
+                globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = db;
                 stmt1.getDbName();

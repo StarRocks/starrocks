@@ -25,17 +25,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -66,9 +63,9 @@ public class PluginMgrTest {
     //
     //            InstallPluginStmt stmt =
     //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("auditdemo.zip"), Maps.newHashMap());
-    //            Catalog.getCurrentCatalog().installPlugin(stmt);
+    //            GlobalStateMgr.getCurrentCatalog().installPlugin(stmt);
     //
-    //            PluginMgr pluginMgr = Catalog.getCurrentPluginMgr();
+    //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
     //
     //            assertEquals(2, pluginMgr.getActivePluginList(PluginInfo.PluginType.AUDIT).size());
     //
@@ -110,9 +107,9 @@ public class PluginMgrTest {
     //
     //            InstallPluginStmt stmt =
     //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("test_local_plugin"), Maps.newHashMap());
-    //            Catalog.getCurrentCatalog().installPlugin(stmt);
+    //            GlobalStateMgr.getCurrentCatalog().installPlugin(stmt);
     //
-    //            PluginMgr pluginMgr = Catalog.getCurrentPluginMgr();
+    //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
     //
     //            assertTrue(Files.exists(PluginTestUtil.getTestPath("test_local_plugin")));
     //            assertTrue(Files.exists(PluginTestUtil.getTestPath("test_local_plugin/auditdemo.jar")));

@@ -3,9 +3,9 @@
 package com.starrocks.external.starrocks;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
@@ -18,7 +18,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-
 
 /**
  * It is responsible for loading all StarRocks OLAP external table's meta-data periodically
@@ -56,7 +55,7 @@ public class StarRocksRepository extends MasterDaemon {
     }
 
     public void registerTable(ExternalOlapTable srTable) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         srTables.put(srTable.getId(), srTable);
@@ -70,7 +69,7 @@ public class StarRocksRepository extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (Catalog.getCurrentCatalog().getRole() != FrontendNodeType.FOLLOWER) {
+        if (GlobalStateMgr.getCurrentState().getRole() != FrontendNodeType.FOLLOWER) {
             return;
         }
         for (ExternalOlapTable table : srTables.values()) {
@@ -82,19 +81,19 @@ public class StarRocksRepository extends MasterDaemon {
     // the rest of tables will be added or removed by replaying edit log
     // when fe is start to load image, should call this method to init the state store
     public void loadTableFromCatalog() {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
 
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
-            Database database = Catalog.getCurrentCatalog().getDb(dbId);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
 
             List<Table> tables = database.getTables();
             for (Table table : tables) {
                 if (table.getType() == TableType.OLAP_EXTERNAL) {
                     ExternalOlapTable olapTable = (ExternalOlapTable) table;
-                    LOG.info("load external olap table {} from catalog", table.getName());
+                    LOG.info("load external olap table {} from globalStateMgr", table.getName());
                     registerTable(olapTable);
                 }
             }

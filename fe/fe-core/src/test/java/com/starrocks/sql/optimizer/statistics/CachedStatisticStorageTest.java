@@ -4,8 +4,8 @@ package com.starrocks.sql.optimizer.statistics;
 
 import avro.shaded.com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -26,7 +26,6 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -60,7 +59,7 @@ public class CachedStatisticStorageTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            Catalog.getCurrentCatalog().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }

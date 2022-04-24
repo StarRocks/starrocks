@@ -7,8 +7,8 @@ import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -48,7 +48,8 @@ public class CacheDictManager implements IDictManager {
     private final AsyncCacheLoader<ColumnIdentifier, Optional<ColumnDict>> dictLoader =
             new AsyncCacheLoader<ColumnIdentifier, Optional<ColumnDict>>() {
                 @Override
-                public @NonNull CompletableFuture<Optional<ColumnDict>> asyncLoad(
+                public @NonNull
+                CompletableFuture<Optional<ColumnDict>> asyncLoad(
                         @NonNull ColumnIdentifier columnIdentifier,
                         @NonNull Executor executor) {
                     return CompletableFuture.supplyAsync(() -> {
@@ -145,7 +146,7 @@ public class CacheDictManager implements IDictManager {
 
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
-            Database db = Catalog.getCurrentCatalog().getDb(id);
+            Database db = GlobalStateMgr.getCurrentState().getDb(id);
             if (db != null && db.getTable(tableId) != null) {
                 columnIdentifier.setDbId(db.getId());
                 break;

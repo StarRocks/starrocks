@@ -23,8 +23,8 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -65,7 +65,8 @@ public class ShowUserPropertyStmt extends ShowStmt {
         } else {
             user = ClusterNamespace.getFullName(getClusterName(), user);
 
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
         }
@@ -74,7 +75,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
     }
 
     public List<List<String>> getRows() throws AnalysisException {
-        List<List<String>> rows = Catalog.getCurrentCatalog().getAuth().getUserProperties(user);
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getUserProperties(user);
 
         if (pattern == null) {
             return rows;

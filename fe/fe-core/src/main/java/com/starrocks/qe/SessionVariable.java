@@ -21,7 +21,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -1045,7 +1045,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_67) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_67) {
             codegenLevel = in.readInt();
             netBufferLength = in.readInt();
             sqlSafeUpdates = in.readInt();
@@ -1068,7 +1068,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
             resourceGroup = Text.readString(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_65) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {
                 // read old version SQL mode
@@ -1078,15 +1078,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             isReportSucc = in.readBoolean();
             queryTimeoutS = in.readInt();
             maxExecMemByte = in.readLong();
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_37) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_37) {
                 collationServer = Text.readString(in);
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_38) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_38) {
                 batchSize = in.readInt();
                 disableStreamPreaggregations = in.readBoolean();
                 parallelExecInstanceNum = in.readInt();
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_62) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_62) {
                 exchangeInstanceParallel = in.readInt();
             }
         } else {

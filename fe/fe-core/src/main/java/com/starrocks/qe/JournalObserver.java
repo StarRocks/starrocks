@@ -21,7 +21,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,7 +70,7 @@ public class JournalObserver implements Comparable<JournalObserver> {
             boolean ok = false;
             do {
                 // check if the replayed journal version is already larger than the expected version
-                long replayedJournalId = Catalog.getCurrentCatalog().getReplayedJournalId();
+                long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
                 if (replayedJournalId >= targetJournalVersion || timeoutMs <= 0) {
                     LOG.debug("the replayed journal version {} already large than expected version: {}",
                             replayedJournalId, targetJournalVersion);

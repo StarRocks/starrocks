@@ -24,8 +24,8 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -106,7 +106,7 @@ public class BackendProcNode implements ProcNodeInterface {
             }
 
             // tablet num
-            info.add(String.valueOf(Catalog.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
+            info.add(String.valueOf(GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
                     backend.getId(), diskInfo.getPathHash())));
 
             // data total

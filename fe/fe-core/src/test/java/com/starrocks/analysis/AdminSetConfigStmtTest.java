@@ -21,8 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
@@ -30,8 +29,6 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-
-import java.util.UUID;
 
 public class AdminSetConfigStmtTest {
     private static ConnectContext connectContext;
@@ -52,7 +49,7 @@ public class AdminSetConfigStmtTest {
         String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-        Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
+        GlobalStateMgr.getCurrentState().setConfig(adminSetConfigStmt);
     }
 
     @Test
@@ -62,7 +59,7 @@ public class AdminSetConfigStmtTest {
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
-        Catalog.getCurrentCatalog().setConfig(adminSetConfigStmt);
+        GlobalStateMgr.getCurrentState().setConfig(adminSetConfigStmt);
     }
 }
 

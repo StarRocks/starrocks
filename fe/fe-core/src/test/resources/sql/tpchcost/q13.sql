@@ -1,24 +1,18 @@
 [sql]
-select
-    c_count,
-    count(*) as custdist
-from
-    (
-        select
-            c_custkey,
-            count(o_orderkey) as c_count
-        from
-            customer left outer join orders on
-                        c_custkey = o_custkey
-                    and o_comment not like '%unusual%deposits%'
-        group by
-            c_custkey
-    ) a
-group by
-    c_count
-order by
-    custdist desc,
-    c_count desc ;
+select c_count,
+       count(*) as custdist
+from (
+         select c_custkey,
+                count(o_orderkey) as c_count
+         from customer
+                  left outer join orders on
+                     c_custkey = o_custkey
+                 and o_comment not like '%unusual%deposits%'
+         group by c_custkey
+     ) a
+group by c_count
+order by custdist desc,
+         c_count desc;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:20: count | 21: count
@@ -132,5 +126,6 @@ tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=112500000
 avgRowSize=95.0
 numNodes=0
-[end]
+[
+end]
 

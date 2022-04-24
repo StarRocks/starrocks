@@ -21,7 +21,7 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
@@ -47,7 +47,7 @@ public abstract class LoadTask extends MasterTask {
 
     public LoadTask(LoadTaskCallback callback, TaskType taskType) {
         this.taskType = taskType;
-        this.signature = Catalog.getCurrentCatalog().getNextId();
+        this.signature = GlobalStateMgr.getCurrentState().getNextId();
         this.callback = callback;
     }
 
@@ -98,7 +98,7 @@ public abstract class LoadTask extends MasterTask {
     // Derived class may need to override this.
     public void updateRetryInfo() {
         this.retryTime--;
-        this.signature = Catalog.getCurrentCatalog().getNextId();
+        this.signature = GlobalStateMgr.getCurrentState().getNextId();
     }
 
     public TaskType getTaskType() {

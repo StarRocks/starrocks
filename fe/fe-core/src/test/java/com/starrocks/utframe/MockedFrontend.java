@@ -23,7 +23,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
@@ -223,7 +223,7 @@ public class MockedFrontend {
                 ExecuteEnv.setup();
 
                 if (!startBDB) {
-                    // init catalog and wait it be ready
+                    // init globalStateMgr and wait it be ready
                     new MockUp<JournalFactory>() {
                         @Mock
                         public Journal create(String name) {
@@ -239,10 +239,10 @@ public class MockedFrontend {
                     }
                 };
 
-                Catalog.getCurrentCatalog().initialize(args);
-                Catalog.getCurrentCatalog().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
+                GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
 
-                Catalog.getCurrentCatalog().waitForReady();
+                GlobalStateMgr.getCurrentState().waitForReady();
 
                 while (true) {
                     Thread.sleep(2000);
@@ -268,17 +268,17 @@ public class MockedFrontend {
     }
 
     private void waitForCatalogReady() throws FeStartException {
-        while (!Catalog.getCurrentCatalog().isReady()) {
+        while (!GlobalStateMgr.getCurrentState().isReady()) {
             try {
                 Thread.sleep(1000);
-                System.out.println("catalog is not ready, wait for 1 second");
+                System.out.println("globalStateMgr is not ready, wait for 1 second");
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
-        if (!Catalog.getCurrentCatalog().isReady()) {
-            System.err.println("catalog is not ready");
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            System.err.println("globalStateMgr is not ready");
             throw new FeStartException("fe start failed");
         }
     }

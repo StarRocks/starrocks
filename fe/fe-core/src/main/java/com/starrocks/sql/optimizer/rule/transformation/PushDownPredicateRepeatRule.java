@@ -73,7 +73,7 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
      * 1: replace the column of nullColumns in  expression to NULL literal
      * 2: Call the ScalarOperatorRewriter function to perform constant folding
      * 3: If the result of constant folding is true or can't reduction,
-     *    it proves that the expression may contains null value, can not push down
+     * it proves that the expression may contains null value, can not push down
      */
     private boolean canPushDownPredicate(ScalarOperator predicate, Set<ColumnRefOperator> repeatColumns) {
         Map<ColumnRefOperator, ScalarOperator> m =

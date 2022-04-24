@@ -29,9 +29,9 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -87,7 +87,7 @@ public class StreamLoadPlanner {
     }
 
     private void resetAnalyzer() {
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), null);
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
         // TODO(cmy): currently we do not support UDF in stream load command.
         // Because there is no way to check the privilege of accessing UDF..
         analyzer.setUDFAllowed(false);
@@ -133,7 +133,7 @@ public class StreamLoadPlanner {
 
             if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
                     col.getName())) {
-                Optional<ColumnDict>  dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 if (dict != null && dict.isPresent()) {
                     globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
                 }

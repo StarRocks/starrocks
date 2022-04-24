@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
@@ -47,10 +47,10 @@ public class CreateResourceStmtTest {
     }
 
     @Test
-    public void testNormal(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -77,10 +77,11 @@ public class CreateResourceStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testUnsupportedResourceType(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testUnsupportedResourceType(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

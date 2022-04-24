@@ -157,7 +157,7 @@ public class ColocateTableIndex implements Writable {
                     groupId = assignedGroupId;
                 } else {
                     // generate a new one
-                    groupId = new GroupId(dbId, Catalog.getCurrentCatalog().getNextId());
+                    groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
@@ -192,7 +192,7 @@ public class ColocateTableIndex implements Writable {
             if (unstableGroups.add(groupId)) {
                 if (needEditLog) {
                     ColocatePersistInfo info = ColocatePersistInfo.createForMarkUnstable(groupId);
-                    Catalog.getCurrentCatalog().getEditLog().logColocateMarkUnstable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkUnstable(info);
                 }
                 LOG.info("mark group {} as unstable", groupId);
             }
@@ -210,7 +210,7 @@ public class ColocateTableIndex implements Writable {
             if (unstableGroups.remove(groupId)) {
                 if (needEditLog) {
                     ColocatePersistInfo info = ColocatePersistInfo.createForMarkStable(groupId);
-                    Catalog.getCurrentCatalog().getEditLog().logColocateMarkStable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkStable(info);
                 }
                 LOG.info("mark group {} as stable", groupId);
             }
@@ -445,7 +445,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
-        Database db = Catalog.getCurrentCatalog().getDb(info.getGroupId().dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
         Preconditions.checkNotNull(tbl);
@@ -552,7 +552,7 @@ public class ColocateTableIndex implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
             Multimap<Long, Long> tmpGroup2Tables = ArrayListMultimap.create();
             Map<Long, Long> tmpTable2Group = Maps.newHashMap();
             Map<Long, Long> tmpGroup2Db = Maps.newHashMap();
@@ -655,7 +655,7 @@ public class ColocateTableIndex implements Writable {
 
         for (Map.Entry<Long, Long> entry : tmpGroup2Db.entrySet()) {
             GroupId groupId = new GroupId(entry.getValue(), entry.getKey());
-            Database db = Catalog.getCurrentCatalog().getDb(groupId.dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -698,7 +698,7 @@ public class ColocateTableIndex implements Writable {
             Preconditions.checkState(tabletOrderIdx < backends.size(), tabletOrderIdx + " vs. " + backends.size());
             backends.set(tabletOrderIdx, Lists.newArrayList(newBackends));
             ColocatePersistInfo info = ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backends);
-            Catalog.getCurrentCatalog().getEditLog().logColocateBackendsPerBucketSeq(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
         } finally {
             writeUnlock();
         }

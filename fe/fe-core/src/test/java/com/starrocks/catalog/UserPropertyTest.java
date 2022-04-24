@@ -41,7 +41,7 @@ public class UserPropertyTest {
 
     @Test
     public void testNormal() throws IOException, DdlException {
-        // mock catalog
+        // mock globalStateMgr
         fakeCatalog = new FakeCatalog();
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
 

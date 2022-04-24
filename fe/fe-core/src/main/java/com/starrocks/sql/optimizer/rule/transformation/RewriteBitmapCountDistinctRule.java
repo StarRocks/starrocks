@@ -4,9 +4,9 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -55,7 +55,7 @@ public class RewriteBitmapCountDistinctRule extends TransformationRule {
 
                 Function searchDesc = new Function(new FunctionName(FunctionSet.BITMAP_UNION_COUNT),
                         oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-                Function fn = Catalog.getCurrentCatalog().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+                Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
                 CallOperator c = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                         oldFunctionCall.getType(), oldFunctionCall.getChildren(), fn);

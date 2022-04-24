@@ -43,7 +43,7 @@ public class MaterializedIndexTest {
 
     private List<Column> columns;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private FakeCatalog fakeCatalog;
 
@@ -58,7 +58,7 @@ public class MaterializedIndexTest {
         index = new MaterializedIndex(indexId, IndexState.NORMAL);
 
         fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
     }
 

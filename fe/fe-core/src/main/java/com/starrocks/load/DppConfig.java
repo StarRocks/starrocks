@@ -24,7 +24,7 @@ package com.starrocks.load;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;
@@ -292,12 +292,13 @@ public class DppConfig implements Writable {
     }
 
     public String getApplicationsPath() {
-        return String.format("%s/%d/%s/%s", starrocksPath, Catalog.getCurrentCatalog().getClusterId(), APPLICATIONS_PATH,
+        return String.format("%s/%d/%s/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(),
+                APPLICATIONS_PATH,
                 FeConstants.dpp_version);
     }
 
     public String getOutputPath() {
-        return String.format("%s/%d/%s", starrocksPath, Catalog.getCurrentCatalog().getClusterId(), OUTPUT_PATH);
+        return String.format("%s/%d/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(), OUTPUT_PATH);
     }
 
     public static String getHttpPortKey() {
@@ -353,7 +354,8 @@ public class DppConfig implements Writable {
 
     @Override
     public String toString() {
-        return "DppConfig{starrocksPath=" + starrocksPath + ", httpPort=" + httpPort + ", hadoopConfigs=" + hadoopConfigs + "}";
+        return "DppConfig{starrocksPath=" + starrocksPath + ", httpPort=" + httpPort + ", hadoopConfigs=" +
+                hadoopConfigs + "}";
     }
 
     @Override
@@ -386,7 +388,7 @@ public class DppConfig implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         boolean readStarRocksPath = false;
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 readStarRocksPath = true;
             }
@@ -400,7 +402,7 @@ public class DppConfig implements Writable {
         httpPort = in.readInt();
 
         boolean readHadoopConfigs = false;
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 readHadoopConfigs = true;
             }
@@ -415,7 +417,7 @@ public class DppConfig implements Writable {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_15) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_15) {
             this.priority = TPriority.valueOf(Text.readString(in));
         } else {
             this.priority = TPriority.NORMAL;

@@ -52,7 +52,7 @@ public class TabletStatMgr extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> backends = Catalog.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
         for (Backend backend : backends.values()) {
@@ -83,9 +83,9 @@ public class TabletStatMgr extends MasterDaemon {
 
         // after update replica in all backends, update index row num
         start = System.currentTimeMillis();
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -119,7 +119,7 @@ public class TabletStatMgr extends MasterDaemon {
     }
 
     private void updateTabletStat(Long beId, TTabletStatResult result) {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
             long tabletId = entry.getKey();
@@ -131,7 +131,7 @@ public class TabletStatMgr extends MasterDaemon {
 
             TTabletStat tabletStat = entry.getValue();
             if (tabletMeta.isUseStarOS()) {
-                Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
                 if (db == null) {
                     continue;
                 }
@@ -165,7 +165,7 @@ public class TabletStatMgr extends MasterDaemon {
             } else {
                 Replica replica = invertedIndex.getReplica(entry.getKey(), beId);
                 if (replica == null) {
-                    // replica may be deleted from catalog, ignore it.
+                    // replica may be deleted from globalStateMgr, ignore it.
                     continue;
                 }
                 // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num

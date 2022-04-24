@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -36,7 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class DropFileStmt extends DdlStmt {
-    public static final String PROP_CATALOG = "catalog";
+    public static final String PROP_CATALOG = "globalStateMgr";
 
     private String fileName;
     private String dbName;
@@ -67,7 +67,7 @@ public class DropFileStmt extends DdlStmt {
         super.analyze(analyzer);
 
         // check operation privilege
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
         }
 
@@ -96,7 +96,7 @@ public class DropFileStmt extends DdlStmt {
 
         catalogName = properties.get(PROP_CATALOG);
         if (Strings.isNullOrEmpty(catalogName)) {
-            throw new AnalysisException("catalog name is missing");
+            throw new AnalysisException("globalStateMgr name is missing");
         }
     }
 

@@ -22,8 +22,8 @@
 package com.starrocks.http.rest;
 
 import com.google.gson.Gson;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -97,16 +97,16 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
     public Map<String, String> getHaInfo() {
         HashMap<String, String> feInfo = new HashMap<String, String>();
-        feInfo.put("role", Catalog.getCurrentCatalog().getFeType().toString());
-        if (Catalog.getCurrentCatalog().isMaster()) {
+        feInfo.put("role", GlobalStateMgr.getCurrentState().getFeType().toString());
+        if (GlobalStateMgr.getCurrentState().isMaster()) {
             feInfo.put("current_journal_id",
-                    String.valueOf(Catalog.getCurrentCatalog().getEditLog().getMaxJournalId()));
+                    String.valueOf(GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId()));
         } else {
             feInfo.put("current_journal_id",
-                    String.valueOf(Catalog.getCurrentCatalog().getReplayedJournalId()));
+                    String.valueOf(GlobalStateMgr.getCurrentState().getReplayedJournalId()));
         }
 
-        HAProtocol haProtocol = Catalog.getCurrentCatalog().getHaProtocol();
+        HAProtocol haProtocol = GlobalStateMgr.getCurrentState().getHaProtocol();
         if (haProtocol != null) {
 
             InetSocketAddress master = null;
@@ -141,8 +141,8 @@ public class ShowMetaInfoAction extends RestBaseAction {
             }
         }
 
-        feInfo.put("can_read", String.valueOf(Catalog.getCurrentCatalog().canRead()));
-        feInfo.put("is_ready", String.valueOf(Catalog.getCurrentCatalog().isReady()));
+        feInfo.put("can_read", String.valueOf(GlobalStateMgr.getCurrentState().canRead()));
+        feInfo.put("is_ready", String.valueOf(GlobalStateMgr.getCurrentState().isReady()));
         try {
             Storage storage = new Storage(Config.meta_dir + "/image");
             feInfo.put("last_checkpoint_version", String.valueOf(storage.getImageJournalId()));
@@ -156,11 +156,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
     public Map<String, Long> getDataSize() {
         Map<String, Long> result = new HashMap<String, Long>();
-        List<String> dbNames = Catalog.getCurrentCatalog().getDbNames();
+        List<String> dbNames = GlobalStateMgr.getCurrentState().getDbNames();
 
         for (int i = 0; i < dbNames.size(); i++) {
             String dbName = dbNames.get(i);
-            Database db = Catalog.getCurrentCatalog().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
 
             long totalSize = 0;
             List<Table> tables = db.getTables();

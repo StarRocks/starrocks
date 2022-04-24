@@ -24,10 +24,10 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -86,15 +86,15 @@ public class AccessTestUtil {
         return auth;
     }
 
-    public static Catalog fetchAdminCatalog() {
+    public static GlobalStateMgr fetchAdminCatalog() {
         try {
-            Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
             Auth auth = fetchAdminAccess();
 
             fakeEditLog = new FakeEditLog();
             EditLog editLog = new EditLog("name");
-            catalog.setEditLog(editLog);
+            globalStateMgr.setEditLog(editLog);
 
             Database db = new Database(50000L, "testCluster:testDb");
             MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
@@ -104,64 +104,65 @@ public class AccessTestUtil {
             Column column = new Column();
             baseSchema.add(column);
             OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                    KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, catalog.getClusterId(), null);
+                    KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
+                    null);
             table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                     TStorageType.COLUMN, KeysType.AGG_KEYS);
             table.addPartition(partition);
             table.setBaseIndexId(baseIndex.getId());
             db.createTable(table);
 
-            new Expectations(catalog) {
+            new Expectations(globalStateMgr) {
                 {
-                    catalog.getAuth();
+                    globalStateMgr.getAuth();
                     minTimes = 0;
                     result = auth;
 
-                    catalog.getDb(50000L);
+                    globalStateMgr.getDb(50000L);
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb("testCluster:testDb");
+                    globalStateMgr.getDb("testCluster:testDb");
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb("testCluster:emptyDb");
+                    globalStateMgr.getDb("testCluster:emptyDb");
                     minTimes = 0;
                     result = null;
 
-                    catalog.getDb(anyString);
+                    globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
 
-                    catalog.getDbNames();
+                    globalStateMgr.getDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    catalog.getEditLog();
+                    globalStateMgr.getEditLog();
                     minTimes = 0;
                     result = editLog;
 
-                    catalog.getLoadInstance();
+                    globalStateMgr.getLoadInstance();
                     minTimes = 0;
                     result = new Load();
 
-                    catalog.getClusterDbNames("testCluster");
+                    globalStateMgr.getClusterDbNames("testCluster");
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    catalog.changeDb((ConnectContext) any, "blockDb");
+                    globalStateMgr.changeDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    catalog.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeDb((ConnectContext) any, anyString);
                     minTimes = 0;
 
-                    catalog.getBrokerMgr();
+                    globalStateMgr.getBrokerMgr();
                     minTimes = 0;
                     result = new BrokerMgr();
                 }
             };
-            return catalog;
+            return globalStateMgr;
         } catch (DdlException e) {
             return null;
         } catch (AnalysisException e) {
@@ -266,49 +267,49 @@ public class AccessTestUtil {
         return db;
     }
 
-    public static Catalog fetchBlockCatalog() {
+    public static GlobalStateMgr fetchBlockCatalog() {
         try {
-            Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
             Auth auth = fetchBlockAccess();
             Database db = mockDb("testCluster:testDb");
 
-            new Expectations(catalog) {
+            new Expectations(globalStateMgr) {
                 {
-                    catalog.getAuth();
+                    globalStateMgr.getAuth();
                     minTimes = 0;
                     result = auth;
 
-                    catalog.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeDb((ConnectContext) any, anyString);
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    catalog.getDb("testCluster:testDb");
+                    globalStateMgr.getDb("testCluster:testDb");
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb("testCluster:emptyDb");
+                    globalStateMgr.getDb("testCluster:emptyDb");
                     minTimes = 0;
                     result = null;
 
-                    catalog.getDb(anyString);
+                    globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
 
-                    catalog.getDbNames();
+                    globalStateMgr.getDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    catalog.getClusterDbNames("testCluster");
+                    globalStateMgr.getClusterDbNames("testCluster");
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    catalog.getDb("emptyCluster");
+                    globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;
                     result = null;
                 }
             };
-            return catalog;
+            return globalStateMgr;
         } catch (DdlException e) {
             return null;
         } catch (AnalysisException e) {
@@ -478,8 +479,8 @@ public class AccessTestUtil {
                 result = "testDb";
             }
         };
-        Catalog catalog = fetchBlockCatalog();
-        Analyzer analyzer = new Analyzer(catalog, new ConnectContext(null));
+        GlobalStateMgr globalStateMgr = fetchBlockCatalog();
+        Analyzer analyzer = new Analyzer(globalStateMgr, new ConnectContext(null));
         new Expectations(analyzer) {
             {
                 analyzer.getDefaultDb();
@@ -496,7 +497,7 @@ public class AccessTestUtil {
 
                 analyzer.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 analyzer.getClusterName();
                 minTimes = 0;

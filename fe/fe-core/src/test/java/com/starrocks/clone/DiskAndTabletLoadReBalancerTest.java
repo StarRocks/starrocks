@@ -5,12 +5,12 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -51,7 +51,7 @@ public class DiskAndTabletLoadReBalancerTest {
      * two tablets moved to be3, one from be1 and the other from be2
      */
     @Test
-    public void testBalance(@Mocked Catalog catalog) {
+    public void testBalance(@Mocked GlobalStateMgr globalStateMgr) {
         String cluster = "cluster1";
         // system info
         long dbId = 10001L;
@@ -117,39 +117,39 @@ public class DiskAndTabletLoadReBalancerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getDbIdsIncludeRecycleBin();
+                globalStateMgr.getDbIdsIncludeRecycleBin();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                catalog.getDbIncludeRecycleBin(dbId);
+                globalStateMgr.getDbIncludeRecycleBin(dbId);
                 result = database;
                 minTimes = 0;
 
-                catalog.getTableIncludeRecycleBin((Database) any, anyLong);
+                globalStateMgr.getTableIncludeRecycleBin((Database) any, anyLong);
                 result = table;
                 minTimes = 0;
 
-                catalog.getTablesIncludeRecycleBin((Database) any);
+                globalStateMgr.getTablesIncludeRecycleBin((Database) any);
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                catalog.getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
+                globalStateMgr.getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
                 result = partition;
                 minTimes = 0;
 
-                catalog.getAllPartitionsIncludeRecycleBin((OlapTable) any);
+                globalStateMgr.getAllPartitionsIncludeRecycleBin((OlapTable) any);
                 result = Lists.newArrayList(partition);
                 minTimes = 0;
 
-                catalog.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
+                globalStateMgr.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
                 result = (short) 1;
                 minTimes = 0;
 
-                catalog.getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
+                globalStateMgr.getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
                 result = dataProperty;
                 minTimes = 0;
             }
@@ -189,7 +189,7 @@ public class DiskAndTabletLoadReBalancerTest {
      * nothing changed
      */
     @Test
-    public void testBalanceWithSameHost(@Mocked Catalog catalog) {
+    public void testBalanceWithSameHost(@Mocked GlobalStateMgr globalStateMgr) {
         String cluster = "cluster1";
         // system info
         long dbId = 10001L;
@@ -269,39 +269,39 @@ public class DiskAndTabletLoadReBalancerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getDbIdsIncludeRecycleBin();
+                globalStateMgr.getDbIdsIncludeRecycleBin();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                catalog.getDbIncludeRecycleBin(dbId);
+                globalStateMgr.getDbIncludeRecycleBin(dbId);
                 result = database;
                 minTimes = 0;
 
-                catalog.getTableIncludeRecycleBin((Database) any, anyLong);
+                globalStateMgr.getTableIncludeRecycleBin((Database) any, anyLong);
                 result = table;
                 minTimes = 0;
 
-                catalog.getTablesIncludeRecycleBin((Database) any);
+                globalStateMgr.getTablesIncludeRecycleBin((Database) any);
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                catalog.getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
+                globalStateMgr.getPartitionIncludeRecycleBin((OlapTable) any, anyLong);
                 result = partition;
                 minTimes = 0;
 
-                catalog.getPartitionsIncludeRecycleBin((OlapTable) any);
+                globalStateMgr.getPartitionsIncludeRecycleBin((OlapTable) any);
                 result = Lists.newArrayList(partition);
                 minTimes = 0;
 
-                catalog.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
+                globalStateMgr.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
                 result = (short) 1;
                 minTimes = 0;
 
-                catalog.getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
+                globalStateMgr.getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
                 result = dataProperty;
                 minTimes = 0;
             }
@@ -345,7 +345,7 @@ public class DiskAndTabletLoadReBalancerTest {
      * 1 tablet moved from be1 data13 to data14
      */
     @Test
-    public void testBalanceBackendTablet(@Mocked Catalog catalog) {
+    public void testBalanceBackendTablet(@Mocked GlobalStateMgr globalStateMgr) {
         String cluster = "cluster1";
         // system info
         long dbId = 10001L;
@@ -445,47 +445,47 @@ public class DiskAndTabletLoadReBalancerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getDbIdsIncludeRecycleBin();
+                globalStateMgr.getDbIdsIncludeRecycleBin();
                 result = Lists.newArrayList(dbId);
                 minTimes = 0;
 
-                catalog.getDbIncludeRecycleBin(dbId);
+                globalStateMgr.getDbIncludeRecycleBin(dbId);
                 result = database;
                 minTimes = 0;
 
-                catalog.getTableIncludeRecycleBin((Database) any, anyLong);
+                globalStateMgr.getTableIncludeRecycleBin((Database) any, anyLong);
                 result = table;
                 minTimes = 0;
 
-                catalog.getTablesIncludeRecycleBin((Database) any);
+                globalStateMgr.getTablesIncludeRecycleBin((Database) any);
                 result = Lists.newArrayList(table);
                 minTimes = 0;
 
-                catalog.getPartitionIncludeRecycleBin((OlapTable) any, partitionId1);
+                globalStateMgr.getPartitionIncludeRecycleBin((OlapTable) any, partitionId1);
                 result = partition1;
                 minTimes = 0;
 
-                catalog.getPartitionIncludeRecycleBin((OlapTable) any, partitionId2);
+                globalStateMgr.getPartitionIncludeRecycleBin((OlapTable) any, partitionId2);
                 result = partition2;
                 minTimes = 0;
 
-                catalog.getAllPartitionsIncludeRecycleBin((OlapTable) any);
+                globalStateMgr.getAllPartitionsIncludeRecycleBin((OlapTable) any);
                 result = Lists.newArrayList(partition1, partition2);
                 minTimes = 0;
 
-                catalog.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
+                globalStateMgr.getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
                 result = (short) 1;
                 minTimes = 0;
 
-                catalog.getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId1);
+                globalStateMgr.getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId1);
                 result = dataProperty1;
                 minTimes = 0;
 
-                catalog.getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId2);
+                globalStateMgr.getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId2);
                 result = dataProperty2;
                 minTimes = 0;
             }

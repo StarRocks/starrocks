@@ -22,7 +22,7 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.system.SystemInfoService;
@@ -120,7 +120,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     // If user use kerberos for authentication, fe need to resend the handshake request.
     public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
         String fullUserName = SystemInfoService.DEFAULT_CLUSTER + ":" + user;
-        Password password = Catalog.getCurrentCatalog().getAuth().getUserPrivTable()
+        Password password = GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable()
                 .getPasswordByApproximate(fullUserName, remoteIp);
         if (password == null) {
             String msg = String.format("Can not find password with [user: %s, remoteIp: %s].", user, remoteIp);
@@ -129,7 +129,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
 
         String userRealm = password.getUserForAuthPlugin();
-        Class<?> authClazz = Catalog.getCurrentCatalog().getAuth().getAuthClazz();
+        Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuth().getAuthClazz();
         Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
         byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
         serializer.writeBytes(packet);

@@ -22,9 +22,9 @@
 package com.starrocks.external.elasticsearch;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
@@ -54,7 +54,7 @@ public class EsRepository extends MasterDaemon {
     }
 
     public void registerTable(EsTable esTable) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         esTables.put(esTable.getId(), esTable);
@@ -87,12 +87,12 @@ public class EsRepository extends MasterDaemon {
     // the rest of tables will be added or removed by replaying edit log
     // when fe is start to load image, should call this method to init the state store
     public void loadTableFromCatalog() {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
-        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
-            Database database = Catalog.getCurrentCatalog().getDb(dbId);
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
 
             List<Table> tables = database.getTables();
             for (Table table : tables) {

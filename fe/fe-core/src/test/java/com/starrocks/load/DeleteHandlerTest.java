@@ -11,8 +11,8 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.backup.CatalogMocker;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -67,7 +67,7 @@ public class DeleteHandlerTest {
     private static final long DB_ID = 20000L;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
     @Mocked
@@ -88,7 +88,7 @@ public class DeleteHandlerTest {
     public void setUp() {
         FeConstants.runningUnitTest = true;
 
-        globalTransactionMgr = new GlobalTransactionMgr(catalog);
+        globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         globalTransactionMgr.setEditLog(editLog);
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
@@ -117,31 +117,31 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                catalog.getDb(anyString);
+                globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = db;
 
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 result = 10L;
 
-                catalog.getTabletInvertedIndex();
+                globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
@@ -151,15 +151,15 @@ public class DeleteHandlerTest {
         SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                Catalog.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 minTimes = 0;
                 result = globalTransactionMgr;
 
@@ -170,7 +170,7 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = true;
 
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
 

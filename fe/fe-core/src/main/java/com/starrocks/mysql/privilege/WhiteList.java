@@ -27,7 +27,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -89,7 +89,7 @@ public class WhiteList implements Writable {
                 Preconditions.checkNotNull(password, entry.getKey());
                 // set password
                 try {
-                    Catalog.getCurrentCatalog().getAuth()
+                    GlobalStateMgr.getCurrentState().getAuth()
                             .setPasswordInternal(userIdent, new Password(password), domainUserIdent,
                                     false /* err on non exist */, true /* set by resolver */, true /* is replay */);
                 } catch (DdlException e) {
@@ -137,8 +137,8 @@ public class WhiteList implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
-            if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
                 // db priv map
                 int size = in.readInt();
                 for (int i = 0; i < size; i++) {
@@ -185,7 +185,7 @@ public class WhiteList implements Writable {
     // and now, these privs which corresponding to the domains should be saved directly in priv tables.
     // so we need to convert them.
     public void convertOldDomainPrivMap(String user) {
-        Preconditions.checkState(Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69);
+        Preconditions.checkState(GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69);
         for (Map.Entry<String, Map<TablePattern, PrivBitSet>> domainEntry : oldDomainPrivsMap.entrySet()) {
             String domain = domainEntry.getKey();
             for (Map.Entry<TablePattern, PrivBitSet> privEntry : domainEntry.getValue().entrySet()) {
@@ -193,7 +193,7 @@ public class WhiteList implements Writable {
                 PrivBitSet privBitSet = privEntry.getValue();
                 UserIdentity userIdent = UserIdentity.createAnalyzedUserIdentWithDomain(user, domain);
                 try {
-                    Catalog.getCurrentCatalog().getAuth().grantPrivs(userIdent, tablePattern, privBitSet,
+                    GlobalStateMgr.getCurrentState().getAuth().grantPrivs(userIdent, tablePattern, privBitSet,
                             false /* err on non exist */);
                 } catch (DdlException e) {
                     // this may happen if priv entry is already set by user. just print a log here.

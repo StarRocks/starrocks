@@ -29,14 +29,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.List;
-import java.util.UUID;
 
 public class CreateTableLikeTest {
     private static ConnectContext connectContext;
@@ -50,28 +47,28 @@ public class CreateTableLikeTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        Catalog.getCurrentCatalog().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
         String createDbStmtStr2 = "create database test2;";
         CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr2, connectContext);
-        Catalog.getCurrentCatalog().createDb(createDbStmt2);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt2);
     }
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     private static void createTableLike(String sql) throws Exception {
         CreateTableLikeStmt createTableLikeStmt =
                 (CreateTableLikeStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().createTableLike(createTableLikeStmt);
+        GlobalStateMgr.getCurrentState().createTableLike(createTableLikeStmt);
     }
 
     private static void checkTableEqual(Table newTable, Table existedTable) {
         List<String> newCreateTableStmt = Lists.newArrayList();
-        Catalog.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
+        GlobalStateMgr.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
         List<String> existedTableStmt = Lists.newArrayList();
-        Catalog.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
+        GlobalStateMgr.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
         Assert.assertEquals(newCreateTableStmt.get(0).replace(newTable.getName(), existedTable.getName()),
                 existedTableStmt.get(0));
     }
@@ -81,8 +78,8 @@ public class CreateTableLikeTest {
                                                  String newTblName, String existedTblName) throws Exception {
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = Catalog.getCurrentCatalog().getDb("default_cluster:" + newDbName);
-        Database existedDb = Catalog.getCurrentCatalog().getDb("default_cluster:" + existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + existedDbName);
         OlapTable newTbl = (OlapTable) newDb.getTable(newTblName);
         OlapTable existedTbl = (OlapTable) existedDb.getTable(existedTblName);
         checkTableEqual(newTbl, existedTbl);
@@ -94,8 +91,8 @@ public class CreateTableLikeTest {
 
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = Catalog.getCurrentCatalog().getDb("default_cluster:" + newDbName);
-        Database existedDb = Catalog.getCurrentCatalog().getDb("default_cluster:" + existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + existedDbName);
         MysqlTable newTbl = (MysqlTable) newDb.getTable(newTblName);
         MysqlTable existedTbl = (MysqlTable) existedDb.getTable(existedTblName);
         checkTableEqual(newTbl, existedTbl);

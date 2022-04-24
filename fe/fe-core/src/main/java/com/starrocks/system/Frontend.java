@@ -21,7 +21,7 @@
 
 package com.starrocks.system;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -121,9 +121,9 @@ public class Frontend implements Writable {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive && !isReplay) {
-                if (Catalog.getCurrentCatalog().getHaProtocol() instanceof BDBHA) {
-                    BDBHA ha = (BDBHA) Catalog.getCurrentCatalog().getHaProtocol();
-                    ha.removeUnstableNode(host, Catalog.getCurrentCatalog().getFollowerCnt());
+                if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
+                    BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
+                    ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getFollowerCnt());
                 }
             }
             isAlive = true;
@@ -162,10 +162,10 @@ public class Frontend implements Writable {
         role = FrontendNodeType.valueOf(Text.readString(in));
         host = Text.readString(in);
         editLogPort = in.readInt();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
             nodeName = Text.readString(in);
         } else {
-            nodeName = Catalog.genFeNodeName(host, editLogPort, true /* old style */);
+            nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, true /* old style */);
         }
     }
 

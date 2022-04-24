@@ -489,7 +489,7 @@ public class Replica implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         state = ReplicaState.valueOf(Text.readString(in));
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
             lastFailedVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             lastSuccessVersion = in.readLong();

@@ -23,7 +23,7 @@ package com.starrocks.task;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -260,7 +260,7 @@ public class ExportExportingTask extends MasterTask {
             this.coord = coord;
             this.taskIdx = taskIdx;
             this.coordSize = coordSize;
-            this.signature = Catalog.getCurrentCatalog().getNextId();
+            this.signature = GlobalStateMgr.getCurrentState().getNextId();
         }
 
         public int getTaskIdx() {

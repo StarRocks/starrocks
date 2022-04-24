@@ -24,7 +24,7 @@ package com.starrocks.backup;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.backup.Status.ErrCode;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import org.apache.logging.log4j.LogManager;
@@ -78,7 +78,7 @@ public class RepositoryMgr extends Daemon implements Writable {
 
                 if (!isReplay) {
                     // write log
-                    Catalog.getCurrentCatalog().getEditLog().logCreateRepository(repo);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo);
                 }
 
                 LOG.info("successfully adding repo {} to repository mgr. is replay: {}",
@@ -108,7 +108,7 @@ public class RepositoryMgr extends Daemon implements Writable {
 
                 if (!isReplay) {
                     // log
-                    Catalog.getCurrentCatalog().getEditLog().logDropRepository(repoName);
+                    GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName);
                 }
                 LOG.info("successfully removing repo {} from repository mgr", repoName);
                 return Status.OK;

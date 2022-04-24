@@ -55,7 +55,7 @@ import java.util.stream.Collectors;
  * this class stores a inverted index
  * key is tablet id. value is the related ids of this tablet
  * Checkpoint thread is no need to modify this inverted index, because this inverted index will not be wrote
- * into images, all meta data are in catalog, and the inverted index will be rebuild when FE restart.
+ * into images, all meta data are in globalStateMgr, and the inverted index will be rebuild when FE restart.
  */
 public class TabletInvertedIndex {
     private static final Logger LOG = LogManager.getLogger(TabletInvertedIndex.class);
@@ -130,7 +130,7 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        Backend be = Catalog.getCurrentSystemInfo().getBackend(backendId);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (be != null) {
             backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }
@@ -199,7 +199,7 @@ public class TabletInvertedIndex {
                                         if (backendStorageTypeCnt <= 1) {
                                             LOG.debug("available storage medium type count is less than 1, " +
                                                             "no need to send migrate task. tabletId={}, backendId={}.",
-                                                            tabletId, backendId);
+                                                    tabletId, backendId);
                                         } else {
                                             tabletMigrationMap.put(storageMedium, tabletId);
                                         }
@@ -211,7 +211,8 @@ public class TabletInvertedIndex {
                                 // check if should clear transactions
                                 if (backendTabletInfo.isSetTransaction_ids()) {
                                     List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
-                                    GlobalTransactionMgr transactionMgr = Catalog.getCurrentGlobalTransactionMgr();
+                                    GlobalTransactionMgr transactionMgr =
+                                            GlobalStateMgr.getCurrentGlobalTransactionMgr();
                                     for (Long transactionId : transactionIds) {
                                         TransactionState transactionState =
                                                 transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
@@ -397,7 +398,7 @@ public class TabletInvertedIndex {
 
     // always add tablet before adding replicas
     public void addTablet(long tabletId, TabletMeta tabletMeta) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -418,7 +419,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteTablet(long tabletId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -446,7 +447,7 @@ public class TabletInvertedIndex {
     }
 
     public void addReplica(long tabletId, Replica replica) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -463,7 +464,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteReplica(long tabletId, long backendId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -509,7 +510,7 @@ public class TabletInvertedIndex {
     }
 
     public void setNewSchemaHash(long partitionId, long indexId, int newSchemaHash) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -522,7 +523,7 @@ public class TabletInvertedIndex {
     }
 
     public void updateToNewSchemaHash(long partitionId, long indexId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();
@@ -535,7 +536,7 @@ public class TabletInvertedIndex {
     }
 
     public void deleteNewSchemaHash(long partitionId, long indexId) {
-        if (Catalog.isCheckpointThread()) {
+        if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
         writeLock();

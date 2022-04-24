@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -162,10 +162,10 @@ public class CastExpr extends Expr {
         FunctionName fnName = new FunctionName(getFnName(type));
         Function searchDesc = new Function(fnName, collectChildReturnTypes(), Type.INVALID, false);
         if (isImplicit) {
-            fn = Catalog.getCurrentCatalog().getFunction(
+            fn = GlobalStateMgr.getCurrentState().getFunction(
                     searchDesc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else {
-            fn = Catalog.getCurrentCatalog().getFunction(
+            fn = GlobalStateMgr.getCurrentState().getFunction(
                     searchDesc, Function.CompareMode.IS_IDENTICAL);
         }
     }

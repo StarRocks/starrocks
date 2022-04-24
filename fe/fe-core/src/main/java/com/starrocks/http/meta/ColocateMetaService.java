@@ -25,10 +25,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -72,7 +72,7 @@ public class ColocateMetaService {
     private static final String GROUP_ID = "group_id";
     private static final String DB_ID = "db_id";
 
-    private static ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
 
     private static GroupId checkAndGetGroupId(BaseRequest request) throws DdlException {
         long grpId = Long.valueOf(request.getSingleParameter(GROUP_ID).trim());
@@ -123,7 +123,7 @@ public class ColocateMetaService {
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
-            result.addResultEntry("colocate_meta", Catalog.getCurrentColocateIndex());
+            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentColocateIndex());
             sendResult(request, response, result);
         }
     }
@@ -212,13 +212,14 @@ public class ColocateMetaService {
             List<List<Long>> backendsPerBucketSeq = new Gson().fromJson(meta, type);
             LOG.info("get buckets sequence: {}", backendsPerBucketSeq);
 
-            ColocateGroupSchema groupSchema = Catalog.getCurrentColocateIndex().getGroupSchema(groupId);
+            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentColocateIndex().getGroupSchema(groupId);
             if (backendsPerBucketSeq.size() != groupSchema.getBucketsNum()) {
                 throw new DdlException("Invalid bucket num. expected: " + groupSchema.getBucketsNum() + ", actual: "
                         + backendsPerBucketSeq.size());
             }
 
-            List<Long> clusterBackendIds = Catalog.getCurrentSystemInfo().getClusterBackendIds(clusterName, true);
+            List<Long> clusterBackendIds =
+                    GlobalStateMgr.getCurrentSystemInfo().getClusterBackendIds(clusterName, true);
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {
@@ -245,7 +246,7 @@ public class ColocateMetaService {
             colocateIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info2 =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            Catalog.getCurrentCatalog().getEditLog().logColocateBackendsPerBucketSeq(info2);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info2);
         }
     }
 

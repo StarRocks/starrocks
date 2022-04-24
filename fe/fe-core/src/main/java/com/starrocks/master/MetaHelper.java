@@ -21,7 +21,7 @@
 
 package com.starrocks.master;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.io.IOUtils;
 
 import java.io.BufferedInputStream;
@@ -40,7 +40,7 @@ public class MetaHelper {
     private static final int CHECKPOINT_LIMIT_BYTES = 30 * 1024 * 1024;
 
     public static File getMasterImageDir() {
-        String metaDir = Catalog.getCurrentCatalog().getImageDir();
+        String metaDir = GlobalStateMgr.getCurrentState().getImageDir();
         return new File(metaDir);
     }
 

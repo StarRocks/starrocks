@@ -24,10 +24,10 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -194,7 +194,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithStarOSTablet(@Mocked Catalog catalog, @Mocked StarOSAgent agent,
+    public void testCreateLocationWithStarOSTablet(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent,
                                                    @Mocked SystemInfoService systemInfoService) {
         long dbId = 1L;
         long tableId = 2L;
@@ -242,13 +242,13 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                catalog.getStarOSAgent();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getStarOSAgent();
                 result = agent;
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = backendId;
@@ -269,7 +269,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithLocalTablet(@Mocked Catalog catalog,
+    public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
                                                   @Mocked SystemInfoService systemInfoService) {
         long dbId = 1L;
         long tableId = 2L;
@@ -322,13 +322,13 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                catalog.getOrCreateSystemInfo(anyInt);
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getOrCreateSystemInfo(anyInt);
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;

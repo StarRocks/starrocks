@@ -2,28 +2,23 @@
 
 package com.starrocks.master;
 
-
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Database;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.master.ReportHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 public class ReportHandlerTest {
     private static ConnectContext connectContext;
@@ -47,10 +42,10 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         long dbId = db.getId();
         long backendId = 10001L;
-        List<Long> tabletIds = Catalog.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();

@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.TabletScheduler;
@@ -50,7 +50,7 @@ public class TabletSchedulerDetailProcDir implements ProcDirInterface {
 
     public TabletSchedulerDetailProcDir(String type) {
         this.type = type;
-        tabletScheduler = Catalog.getCurrentCatalog().getTabletScheduler();
+        tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
     }
 
     @Override
@@ -87,7 +87,7 @@ public class TabletSchedulerDetailProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
         }
 
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         List<Replica> replicas = invertedIndex.getReplicasByTabletId(tabletId);
         return new ReplicasProcNode(tabletId, replicas);
     }

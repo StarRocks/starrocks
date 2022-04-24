@@ -26,8 +26,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -74,7 +74,7 @@ public enum ExpressionFunctions {
             // 1. Not UDF
             // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
             // 3. Has null parameter
-            if (!Catalog.getCurrentCatalog()
+            if (!GlobalStateMgr.getCurrentState()
                     .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
                     && !fn.isUdf()) {
                 for (Expr e : constExpr.getChildren()) {
@@ -206,7 +206,7 @@ public enum ExpressionFunctions {
                     Preconditions.checkArgument(method.getParameterTypes().length == typeIndex + 1);
                     final List<Expr> variableLengthExprs = Lists.newArrayList();
                     for (int variableLengthArgIndex = typeIndex; variableLengthArgIndex < args.size();
-                         variableLengthArgIndex++) {
+                            variableLengthArgIndex++) {
                         variableLengthExprs.add(args.get(variableLengthArgIndex));
                     }
                     LiteralExpr[] variableLengthArgs = createVariableLengthArgs(variableLengthExprs, typeIndex);

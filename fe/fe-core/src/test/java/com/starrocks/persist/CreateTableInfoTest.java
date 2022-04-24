@@ -23,9 +23,9 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -51,16 +51,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CreateTableInfoTest {
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private FakeCatalog fakeCatalog;
 
     @Before
     public void setUp() {
         fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
     }
 

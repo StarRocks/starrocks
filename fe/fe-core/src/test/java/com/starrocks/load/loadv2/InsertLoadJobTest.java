@@ -21,8 +21,8 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -37,14 +37,14 @@ import java.util.Set;
 public class InsertLoadJobTest {
 
     @Test
-    public void testGetTableNames(@Mocked Catalog catalog,
+    public void testGetTableNames(@Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database database,
                                   @Injectable Table table) throws MetaNotFoundException {
         InsertLoadJob insertLoadJob = new InsertLoadJob("label", 1L, 1L, 1000, "", "");
         String tableName = "table1";
         new Expectations() {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 result = database;
                 database.getTable(anyLong);
                 result = table;

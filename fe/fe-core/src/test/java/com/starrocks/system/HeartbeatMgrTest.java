@@ -21,8 +21,8 @@
 
 package com.starrocks.system;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
@@ -46,23 +46,23 @@ import org.junit.Test;
 public class HeartbeatMgrTest {
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
         new Expectations() {
             {
-                catalog.getSelfNode();
+                globalStateMgr.getSelfNode();
                 minTimes = 0;
                 result = Pair.create("192.168.1.3", 9010); // not self
 
-                catalog.isReady();
+                globalStateMgr.isReady();
                 minTimes = 0;
                 result = true;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
             }
         };
 

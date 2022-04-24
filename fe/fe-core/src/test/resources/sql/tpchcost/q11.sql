@@ -1,7 +1,6 @@
 [sql]
-select
-    ps_partkey,
-    sum(ps_supplycost * ps_availqty) as value
+select ps_partkey,
+       sum(ps_supplycost * ps_availqty) as value
 from
     partsupp,
     supplier,
@@ -11,21 +10,23 @@ where
   and s_nationkey = n_nationkey
   and n_name = 'PERU'
 group by
-    ps_partkey having
-    sum(ps_supplycost * ps_availqty) > (
+    ps_partkey
+having
+    sum (ps_supplycost * ps_availqty)
+     > (
     select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000
+    sum (ps_supplycost * ps_availqty) * 0.0001000000
     from
-    partsupp,
-    supplier,
-    nation
+    partsupp
+     , supplier
+     , nation
     where
     ps_suppkey = s_suppkey
-                  and s_nationkey = n_nationkey
-                  and n_name = 'PERU'
+   and s_nationkey = n_nationkey
+   and n_name = 'PERU'
     )
 order by
-    value desc ;
+    value desc;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:1: PS_PARTKEY | 21: sum
@@ -240,5 +241,6 @@ tabletList=10185
 cardinality=1
 avgRowSize=29.0
 numNodes=0
-[end]
+[
+end]
 

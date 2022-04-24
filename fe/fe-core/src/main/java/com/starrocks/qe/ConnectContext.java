@@ -24,7 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -109,9 +109,9 @@ public class ConnectContext {
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
-    // Catalog: put catalog here is convenient for unit test,
-    // because catalog is singleton, hard to mock
-    protected Catalog catalog;
+    // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
+    // because globalStateMgr is singleton, hard to mock
+    protected GlobalStateMgr globalStateMgr;
     protected boolean isSend;
 
     protected AuditEventBuilder auditEventBuilder = new AuditEventBuilder();
@@ -229,12 +229,12 @@ public class ConnectContext {
         return new TResourceInfo(qualifiedUser, sessionVariable.getResourceGroup());
     }
 
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
+    public void setCatalog(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
-    public Catalog getCatalog() {
-        return catalog;
+    public GlobalStateMgr getCatalog() {
+        return globalStateMgr;
     }
 
     public String getQualifiedUser() {

@@ -23,7 +23,7 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -74,7 +74,7 @@ public class TruncateTableInfo implements Writable {
     }
 
     public static TruncateTableInfo read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_74) {
             TruncateTableInfo info = new TruncateTableInfo();
             info.readFields(in);
             return info;

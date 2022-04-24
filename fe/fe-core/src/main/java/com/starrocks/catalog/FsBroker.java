@@ -141,7 +141,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_73) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_73) {
             FsBroker broker = new FsBroker();
             broker.readFields(in);
             return broker;

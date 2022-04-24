@@ -50,10 +50,10 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UseStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -205,14 +205,14 @@ public class StmtExecutor {
     }
 
     public boolean isForwardToMaster() {
-        if (Catalog.getCurrentCatalog().isMaster()) {
+        if (GlobalStateMgr.getCurrentState().isMaster()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
-                !Catalog.getCurrentCatalog().isMaster()
-                && !Catalog.getCurrentCatalog().canRead()) {
+                !GlobalStateMgr.getCurrentState().isMaster()
+                && !GlobalStateMgr.getCurrentState().canRead()) {
             return true;
         }
 
@@ -473,13 +473,13 @@ public class StmtExecutor {
                         String errMsg = Strings.emptyToNull(context.getState().getErrorMessage());
                         if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
                             ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
-                            Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                                     externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
                                     externalTable.getSourceTableHost(),
                                     externalTable.getSourceTablePort(),
                                     errMsg == null ? "unknown reason" : errMsg);
                         } else {
-                            Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                     insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
                                     (errMsg == null ? "unknown reason" : errMsg));
                         }
@@ -606,7 +606,7 @@ public class StmtExecutor {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
-                Catalog.getCurrentCatalog().getDeleteHandler().killJob(jobId);
+                GlobalStateMgr.getCurrentState().getDeleteHandler().killJob(jobId);
             }
         } else {
             Coordinator coordRef = coord;
@@ -631,7 +631,7 @@ public class StmtExecutor {
             // Check auth
             // Only user itself and user with admin priv can kill connection
             if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
-                    && !Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.ADMIN)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
             }
@@ -769,13 +769,13 @@ public class StmtExecutor {
         try {
             statisticExecutor.collectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                     analyzeStmt.isSample(), job.getSampleCollectRows());
-            Catalog.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
+            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
         } catch (Exception e) {
             job.setReason(e.getMessage());
             throw e;
         }
 
-        Catalog.getCurrentCatalog().getAnalyzeManager().addAnalyzeJob(job);
+        GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeJob(job);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1042,16 +1042,17 @@ public class StmtExecutor {
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
             transactionId =
-                    Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                            Lists.newArrayList(externalTable.getSourceTableId()), label,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                                    FrontendOptions.getLocalHostAddress()),
-                            sourceType,
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                            .beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                                    Lists.newArrayList(externalTable.getSourceTableId()), label,
+                                    externalTable.getSourceTableHost(),
+                                    externalTable.getSourceTablePort(),
+                                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                                            FrontendOptions.getLocalHostAddress()),
+                                    sourceType,
+                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
         } else {
-            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
+            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
                     Lists.newArrayList(targetTable.getId()),
                     label,
@@ -1062,7 +1063,8 @@ public class StmtExecutor {
 
             // add table indexes to transaction state
             TransactionState txnState =
-                    Catalog.getCurrentGlobalTransactionMgr().getTransactionState(database.getId(), transactionId);
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                            .getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
@@ -1127,13 +1129,13 @@ public class StmtExecutor {
             if (loadedRows == 0 && filteredRows == 0) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 } else {
-                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(),
                             transactionId,
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
@@ -1145,7 +1147,7 @@ public class StmtExecutor {
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
+                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
                         externalTable.getSourceTableDbId(), transactionId,
                         externalTable.getSourceTableHost(),
                         externalTable.getSourceTablePort(),
@@ -1155,7 +1157,7 @@ public class StmtExecutor {
                 }
                 // TODO: wait remote txn finished
             } else {
-                if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
@@ -1181,13 +1183,13 @@ public class StmtExecutor {
             try {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             t.getMessage() == null ? "Unknown reason" : t.getMessage());
                 } else {
-                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             t.getMessage() == null ? "Unknown reason" : t.getMessage());
                 }

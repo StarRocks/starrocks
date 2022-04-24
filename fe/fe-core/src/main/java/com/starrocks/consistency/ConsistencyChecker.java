@@ -23,8 +23,8 @@ package com.starrocks.consistency;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -232,13 +232,13 @@ public class ConsistencyChecker extends MasterDaemon {
      * chose a tablet which has the smallest 'lastCheckTime'.
      */
     private List<Long> chooseTablets() {
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetaObject chosenOne = null;
 
         List<Long> chosenTablets = Lists.newArrayList();
 
         // sort dbs
-        List<Long> dbIds = catalog.getDbIds();
+        List<Long> dbIds = globalStateMgr.getDbIds();
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }
@@ -248,7 +248,7 @@ public class ConsistencyChecker extends MasterDaemon {
                 // skip 'information_schema' database
                 continue;
             }
-            Database db = catalog.getDb(dbId);
+            Database db = globalStateMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -369,8 +369,8 @@ public class ConsistencyChecker extends MasterDaemon {
         job.handleFinishedReplica(backendId, checksum);
     }
 
-    public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, Catalog catalog) {
-        Database db = catalog.getDb(info.getDbId());
+    public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDb(info.getDbId());
         db.writeLock();
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());

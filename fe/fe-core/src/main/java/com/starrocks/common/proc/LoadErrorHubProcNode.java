@@ -22,7 +22,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 
 @Deprecated
 public class LoadErrorHubProcNode implements ProcNodeInterface {
@@ -30,10 +30,10 @@ public class LoadErrorHubProcNode implements ProcNodeInterface {
             .add("Type").add("Properties")
             .build();
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    public LoadErrorHubProcNode(Catalog catalog) {
-        this.catalog = catalog;
+    public LoadErrorHubProcNode(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     @Override

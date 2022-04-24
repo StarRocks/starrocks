@@ -27,8 +27,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob.JobType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
@@ -125,7 +125,7 @@ public final class MetricRepo {
 
         // 1. gauge
         // load jobs
-        LoadManager loadManger = Catalog.getCurrentCatalog().getLoadManager();
+        LoadManager loadManger = GlobalStateMgr.getCurrentState().getLoadManager();
         for (EtlJobType jobType : EtlJobType.values()) {
             if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
                 continue;
@@ -136,7 +136,7 @@ public final class MetricRepo {
                         MetricUnit.NOUNIT, "job statistics") {
                     @Override
                     public Long getValue() {
-                        if (!Catalog.getCurrentCatalog().isMaster()) {
+                        if (!GlobalStateMgr.getCurrentState().isMaster()) {
                             return 0L;
                         }
                         return loadManger.getLoadJobNum(state, jobType);
@@ -150,7 +150,7 @@ public final class MetricRepo {
         }
 
         // running alter job
-        Alter alter = Catalog.getCurrentCatalog().getAlterInstance();
+        Alter alter = GlobalStateMgr.getCurrentState().getAlterInstance();
         for (JobType jobType : JobType.values()) {
             if (jobType != JobType.SCHEMA_CHANGE && jobType != JobType.ROLLUP) {
                 continue;
@@ -160,7 +160,7 @@ public final class MetricRepo {
                     MetricUnit.NOUNIT, "job statistics") {
                 @Override
                 public Long getValue() {
-                    if (!Catalog.getCurrentCatalog().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
                         return 0L;
                     }
                     if (jobType == JobType.SCHEMA_CHANGE) {
@@ -196,7 +196,7 @@ public final class MetricRepo {
                 "max_journal_id", MetricUnit.NOUNIT, "max journal id of this frontends") {
             @Override
             public Long getValue() {
-                return Catalog.getCurrentCatalog().getMaxJournalId();
+                return GlobalStateMgr.getCurrentState().getMaxJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
@@ -206,7 +206,8 @@ public final class MetricRepo {
                 "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
             @Override
             public Long getValue() {
-                return Catalog.getCurrentCatalog().getMaxJournalId() - Catalog.getCurrentCatalog().getImageJournalId();
+                return GlobalStateMgr.getCurrentState().getMaxJournalId() -
+                        GlobalStateMgr.getCurrentState().getImageJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
@@ -216,16 +217,16 @@ public final class MetricRepo {
                 "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
             @Override
             public Long getValue() {
-                if (!Catalog.getCurrentCatalog().isMaster()) {
+                if (!GlobalStateMgr.getCurrentState().isMaster()) {
                     return 0L;
                 }
-                return (long) Catalog.getCurrentCatalog().getTabletScheduler().getTotalNum();
+                return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadManager routineLoadManger = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        RoutineLoadManager routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
@@ -428,8 +429,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_MAX_COMPACTION_SCORE);
 
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
             Backend be = infoService.getBackend(beId);
@@ -442,7 +443,7 @@ public final class MetricRepo {
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
                 public Long getValue() {
-                    if (!Catalog.getCurrentCatalog().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
                         return 0L;
                     }
                     return invertedIndex.getTabletNumByBackendId(beId);
@@ -457,7 +458,7 @@ public final class MetricRepo {
                     "tablet max compaction score") {
                 @Override
                 public Long getValue() {
-                    if (!Catalog.getCurrentCatalog().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
                         return 0L;
                     }
                     return be.getTabletMaxCompactionScore();
@@ -516,10 +517,10 @@ public final class MetricRepo {
 
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        List<String> dbNames = catalog.getDbNames();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
         for (String dbName : dbNames) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
                 continue;
             }
@@ -546,7 +547,7 @@ public final class MetricRepo {
     }
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
-        List<RoutineLoadJob> jobs = Catalog.getCurrentCatalog().getRoutineLoadManager().getRoutineLoadJobByState(
+        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE, RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
@@ -608,7 +609,8 @@ public final class MetricRepo {
             }
             if (maxLag >= Config.min_routine_load_lag_for_metrics) {
                 GaugeMetricImpl<Long> metric =
-                        new GaugeMetricImpl<>("routine_load_max_lag_of_partition", MetricUnit.NOUNIT, "routine load kafka lag");
+                        new GaugeMetricImpl<>("routine_load_max_lag_of_partition", MetricUnit.NOUNIT,
+                                "routine load kafka lag");
                 metric.addLabel(new MetricLabel("job_name", kJob.getName()));
                 metric.setValue(maxLag);
                 visitor.visit(metric);

@@ -80,8 +80,7 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-
-    public static  Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -240,7 +239,6 @@ public class AnalyzerUtils {
         public Void visitSubquery(SubqueryRelation node, Void context) {
             return visit(node.getQueryStatement());
         }
-
 
         public Void visitView(ViewRelation node, Void context) {
             return visit(node.getQueryStatement(), context);

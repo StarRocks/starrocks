@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.qe.QueryStatisticsItem;
@@ -56,7 +56,7 @@ public class CurrentQueryFragmentProcNode implements ProcNodeInterface {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new AnalysisException(new StringBuilder("Backend ")

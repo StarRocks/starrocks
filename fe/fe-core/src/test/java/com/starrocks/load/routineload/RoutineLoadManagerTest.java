@@ -31,8 +31,8 @@ import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -78,7 +78,7 @@ public class RoutineLoadManagerTest {
     public void testAddJobByStmt(@Injectable Auth auth,
                                  @Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
-                                 @Mocked Catalog catalog) throws UserException {
+                                 @Mocked GlobalStateMgr globalStateMgr) throws UserException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -112,7 +112,7 @@ public class RoutineLoadManagerTest {
 
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
@@ -147,7 +147,7 @@ public class RoutineLoadManagerTest {
     public void testCreateJobAuthDeny(@Injectable Auth auth,
                                       @Injectable TResourceInfo tResourceInfo,
                                       @Mocked ConnectContext connectContext,
-                                      @Mocked Catalog catalog) {
+                                      @Mocked GlobalStateMgr globalStateMgr) {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -171,7 +171,7 @@ public class RoutineLoadManagerTest {
 
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
@@ -222,7 +222,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testCreateWithSameNameOfStoppedJob(@Mocked ConnectContext connectContext,
-                                                   @Mocked Catalog catalog,
+                                                   @Mocked GlobalStateMgr globalStateMgr,
                                                    @Mocked EditLog editLog) throws DdlException {
         String jobName = "job1";
         String topicName = "topic1";
@@ -234,7 +234,7 @@ public class RoutineLoadManagerTest {
 
         new Expectations() {
             {
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
@@ -279,7 +279,7 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             public SystemInfoService getCurrentSystemInfo() {
                 return systemInfoService;
             }
@@ -305,7 +305,7 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             public SystemInfoService getCurrentSystemInfo() {
                 return systemInfoService;
             }
@@ -425,7 +425,7 @@ public class RoutineLoadManagerTest {
     public void testGetJobIncludeHistory(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
                                          @Injectable RoutineLoadJob routineLoadJob3,
-                                         @Mocked Catalog catalog,
+                                         @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database) throws MetaNotFoundException {
         new Expectations() {
             {
@@ -438,7 +438,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
-                catalog.getDb(anyString);
+                globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -467,7 +467,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
-                                        @Mocked Catalog catalog,
+                                        @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
                                         @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
@@ -493,13 +493,13 @@ public class RoutineLoadManagerTest {
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                catalog.getDb("");
+                globalStateMgr.getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
@@ -529,7 +529,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
-                                         @Mocked Catalog catalog,
+                                         @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
                                          @Mocked Auth auth,
                                          @Mocked ConnectContext connectContext) throws UserException {
@@ -551,13 +551,13 @@ public class RoutineLoadManagerTest {
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                catalog.getDb("");
+                globalStateMgr.getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
@@ -573,7 +573,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                       @Mocked Catalog catalog,
+                                       @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
                                        @Mocked Auth auth,
                                        @Mocked ConnectContext connectContext) throws UserException {
@@ -595,13 +595,13 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                catalog.getDb("");
+                globalStateMgr.getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
@@ -617,7 +617,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testCleanOldRoutineLoadJobs(@Injectable RoutineLoadJob routineLoadJob,
-                                            @Mocked Catalog catalog,
+                                            @Mocked GlobalStateMgr globalStateMgr,
                                             @Mocked EditLog editLog) {
         RoutineLoadManager routineLoadManager = new RoutineLoadManager();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -642,7 +642,7 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getName();
                 minTimes = 0;
                 result = "";
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
@@ -720,7 +720,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                        @Mocked Catalog catalog,
+                                        @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
                                         @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
@@ -742,13 +742,13 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                catalog.getDb("");
+                globalStateMgr.getDb("");
                 minTimes = 0;
                 result = database;
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);

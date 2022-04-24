@@ -25,7 +25,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -36,7 +36,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.MasterTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
@@ -60,12 +59,12 @@ public class LoadJobTest {
     }
 
     @Test
-    public void testGetDbNotExists(@Mocked Catalog catalog) {
+    public void testGetDbNotExists(@Mocked GlobalStateMgr globalStateMgr) {
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "dbId", 1L);
         new Expectations() {
             {
-                catalog.getDb(1L);
+                globalStateMgr.getDb(1L);
                 minTimes = 0;
                 result = null;
             }
@@ -168,12 +167,12 @@ public class LoadJobTest {
     }
 
     @Test
-    public void testProcessTimeout(@Mocked Catalog catalog, @Mocked EditLog editLog) {
+    public void testProcessTimeout(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {
             {
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
@@ -200,10 +199,10 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         loadJob.idToTasks.put(1L, loadTask1);
 
-        // TxnStateCallbackFactory factory = Catalog.getCurrentCatalog().getGlobalTransactionMgr().getCallbackFactory();
-        Catalog catalog = Catalog.getCurrentCatalog();
-        GlobalTransactionMgr mgr = new GlobalTransactionMgr(catalog);
-        Deencapsulation.setField(catalog, "globalTransactionMgr", mgr);
+        // TxnStateCallbackFactory factory = GlobalStateMgr.getCurrentCatalog().getGlobalTransactionMgr().getCallbackFactory();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        GlobalTransactionMgr mgr = new GlobalTransactionMgr(globalStateMgr);
+        Deencapsulation.setField(globalStateMgr, "globalTransactionMgr", mgr);
         Assert.assertEquals(1, loadJob.idToTasks.size());
         loadJob.updateState(JobState.FINISHED);
         Assert.assertEquals(JobState.FINISHED, loadJob.getState());

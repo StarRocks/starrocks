@@ -33,13 +33,9 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 public class CreateTableTest {
     private static ConnectContext connectContext;
@@ -53,17 +49,17 @@ public class CreateTableTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        Catalog.getCurrentCatalog().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
     }
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
     private static void alterTable(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
     @Test
@@ -118,7 +114,7 @@ public class CreateTableTest {
                         +
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
-        Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
         Assert.assertTrue(tbl6.getColumn("k2").isKey());
@@ -306,7 +302,7 @@ public class CreateTableTest {
 
     private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {
         String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
@@ -325,7 +321,7 @@ public class CreateTableTest {
 
     private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {
         String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table != null);
         db.dropTable(tableName);
@@ -372,7 +368,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableWithoutDistribution() {
         ConnectContext.get().getSessionVariable().setAllowDefaultPartition(true);
-        
+
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(

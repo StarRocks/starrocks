@@ -6,8 +6,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -36,18 +36,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
@@ -174,8 +171,8 @@ public class StatisticsCalculatorTest {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        Catalog catalog = connectContext.getCatalog();
-        OlapTable table = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
         Collection<Partition> partitions = table.getPartitions();
         List<Long> partitionIds =
                 partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
@@ -249,8 +246,8 @@ public class StatisticsCalculatorTest {
                 ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
-        Catalog catalog = connectContext.getCatalog();
-        Table table = catalog.getDb("default_cluster:test").getTable("test_all_type");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        Table table = globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {
             {
@@ -363,8 +360,8 @@ public class StatisticsCalculatorTest {
                 ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
-        Catalog catalog = connectContext.getCatalog();
-        OlapTable table = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
+        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {
             {

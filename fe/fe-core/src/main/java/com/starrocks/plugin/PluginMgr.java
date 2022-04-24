@@ -26,7 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -134,7 +134,7 @@ public class PluginMgr implements Writable {
             }
             plugins[info.getTypeId()].put(info.getName(), pluginLoader);
 
-            Catalog.getCurrentCatalog().getEditLog().logInstallPlugin(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info);
             LOG.info("install plugin {}", info.getName());
             return info;
         } catch (IOException | UserException e) {

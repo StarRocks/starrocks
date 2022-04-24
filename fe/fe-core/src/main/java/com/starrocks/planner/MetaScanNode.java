@@ -4,12 +4,12 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -77,7 +77,8 @@ public class MetaScanNode extends ScanNode {
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
                         if (useStarOS) {
-                            LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((StarOSTablet) tablet).getShardId(),
+                            LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
+                                    ((StarOSTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
                         } else {
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
@@ -92,7 +93,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     if (backend == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;

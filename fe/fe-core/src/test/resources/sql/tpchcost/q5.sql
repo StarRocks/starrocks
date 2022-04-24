@@ -1,16 +1,13 @@
 [sql]
-select
-    n_name,
-    sum(l_extendedprice * (1 - l_discount)) as revenue
-from
-    customer,
-    orders,
-    lineitem,
-    supplier,
-    nation,
-    region
-where
-        c_custkey = o_custkey
+select n_name,
+       sum(l_extendedprice * (1 - l_discount)) as revenue
+from customer,
+     orders,
+     lineitem,
+     supplier,
+     nation,
+     region
+where c_custkey = o_custkey
   and l_orderkey = o_orderkey
   and l_suppkey = s_suppkey
   and c_nationkey = s_nationkey
@@ -19,10 +16,8 @@ where
   and r_name = 'AFRICA'
   and o_orderdate >= date '1995-01-01'
   and o_orderdate < date '1996-01-01'
-group by
-    n_name
-order by
-    revenue desc ;
+group by n_name
+order by revenue desc;
 [fragment statistics]
 PLAN FRAGMENT 0(F14)
 Output Exprs:46: N_NAME | 55: sum
@@ -50,7 +45,11 @@ OutPut Exchange Id: 28
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 26:AGGREGATE (merge finalize)
-|  aggregate: sum[([55: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([55: sum, DOUBLE, true]); args
+: DOUBLE; result
+: DOUBLE; args
+nullable: true; result
+nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false]
 |  cardinality: 5
 |  column statistics:
@@ -68,7 +67,11 @@ OutPut Exchange Id: 25
 
 24:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([54: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[([54: expr, DOUBLE, false]); args
+: DOUBLE; result
+: DOUBLE; args
+nullable: false; result
+nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false]
 |  cardinality: 5
 |  column statistics:
@@ -413,4 +416,5 @@ column statistics:
   "be_number": 3,
   "exception": []
 }
-[end]
+[
+end]

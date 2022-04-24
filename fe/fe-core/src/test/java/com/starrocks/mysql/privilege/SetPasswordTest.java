@@ -26,7 +26,7 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
@@ -44,7 +44,7 @@ public class SetPasswordTest {
 
     private Auth auth;
     @Mocked
-    public Catalog catalog;
+    public GlobalStateMgr globalStateMgr;
     @Mocked
     private Analyzer analyzer;
     @Mocked
@@ -59,15 +59,15 @@ public class SetPasswordTest {
                 minTimes = 0;
                 result = SystemInfoService.DEFAULT_CLUSTER;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 

@@ -24,8 +24,8 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 
 import java.util.ArrayList;
@@ -62,7 +62,7 @@ public class LoadProcDir implements ProcDirInterface {
 
         // merge load job from load and loadManager
         LinkedList<List<Comparable>> loadJobInfos = Lists.newLinkedList();
-        loadJobInfos.addAll(Catalog.getCurrentCatalog().getLoadManager().getLoadJobInfosByDb(db.getId(), null,
+        loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobInfosByDb(db.getId(), null,
                 false,
                 null));
         int counter = 0;

@@ -3,7 +3,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -244,7 +244,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
-        int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+        int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
         if (leftChildStats == null || rightChildStats == null) {

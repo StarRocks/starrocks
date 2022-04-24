@@ -24,7 +24,7 @@ package com.starrocks.mysql;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -67,7 +67,7 @@ public class MysqlProto {
             clusterName = strList[1];
             try {
                 // if cluster does not exist and it is not a valid cluster id, authenticate failed
-                if (Catalog.getCurrentCatalog().getCluster(clusterName) == null
+                if (GlobalStateMgr.getCurrentState().getCluster(clusterName) == null
                         && Integer.parseInt(strList[1]) != context.getCatalog().getClusterId()) {
                     ErrorReport.report(ErrorCode.ERR_UNKNOWN_CLUSTER_ID, strList[1]);
                     return false;
@@ -99,7 +99,7 @@ public class MysqlProto {
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
-        if (!Catalog.getCurrentCatalog().getAuth().checkPassword(qualifiedUser, remoteIp,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(qualifiedUser, remoteIp,
                 scramble, randomString, currentUserIdentity)) {
             ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, qualifiedUser, usePasswd);
             return false;
@@ -179,7 +179,7 @@ public class MysqlProto {
             serializer.reset();
             // 2. build the auth switch request and send to the client
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (Catalog.getCurrentCatalog().getAuth().isSupportKerberosAuth()) {
+                if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     try {
                         handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
                     } catch (Exception e) {
@@ -224,7 +224,7 @@ public class MysqlProto {
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 String dbFullName = ClusterNamespace.getFullName(context.getClusterName(), db);
-                Catalog.getCurrentCatalog().changeDb(context, dbFullName);
+                GlobalStateMgr.getCurrentState().changeDb(context, dbFullName);
             } catch (DdlException e) {
                 sendResponsePacket(context);
                 return false;
@@ -271,7 +271,7 @@ public class MysqlProto {
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 String dbFullName = ClusterNamespace.getFullName(context.getClusterName(), db);
-                Catalog.getCurrentCatalog().changeDb(context, dbFullName);
+                GlobalStateMgr.getCurrentState().changeDb(context, dbFullName);
             } catch (DdlException e) {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
                         priviousQualifiedUser, changeUserPacket.getUser(), e.getMessage());

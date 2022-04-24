@@ -46,7 +46,7 @@ public class OlapTableTest {
 
     @Test
     public void testTableWithLocalTablet() throws IOException {
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentCatalogJournalVersion() {
                 return FeConstants.meta_version;
@@ -89,7 +89,7 @@ public class OlapTableTest {
 
     @Test
     public void testTableWithStarOSTablet() throws IOException {
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentCatalogJournalVersion() {
                 return FeConstants.meta_version;

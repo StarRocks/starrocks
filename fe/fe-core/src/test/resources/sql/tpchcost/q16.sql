@@ -1,34 +1,26 @@
 [sql]
-select
-    p_brand,
-    p_type,
-    p_size,
-    count(distinct ps_suppkey) as supplier_cnt
-from
-    partsupp,
-    part
-where
-        p_partkey = ps_partkey
+select p_brand,
+       p_type,
+       p_size,
+       count(distinct ps_suppkey) as supplier_cnt
+from partsupp,
+     part
+where p_partkey = ps_partkey
   and p_brand <> 'Brand#43'
   and p_type not like 'PROMO BURNISHED%'
   and p_size in (31, 43, 9, 6, 18, 11, 25, 1)
   and ps_suppkey not in (
-    select
-        s_suppkey
-    from
-        supplier
-    where
-            s_comment like '%Customer%Complaints%'
+    select s_suppkey
+    from supplier
+    where s_comment like '%Customer%Complaints%'
 )
-group by
-    p_brand,
-    p_type,
-    p_size
-order by
-    supplier_cnt desc,
-    p_brand,
-    p_type,
-    p_size ;
+group by p_brand,
+         p_type,
+         p_size
+order by supplier_cnt desc,
+         p_brand,
+         p_type,
+         p_size;
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:10: P_BRAND | 11: P_TYPE | 12: P_SIZE | 26: count
@@ -150,5 +142,6 @@ tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=2304000
 avgRowSize=47.0
 numNodes=0
-[end]
+[
+end]
 

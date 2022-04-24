@@ -23,8 +23,8 @@ package com.starrocks.consistency;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -108,14 +108,14 @@ public class CheckConsistencyJob {
      *  false: cancel
      */
     public boolean sendTasks() {
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.debug("tablet[{}] has been removed", tabletId);
             return false;
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
@@ -245,13 +245,13 @@ public class CheckConsistencyJob {
         }
 
         // check again. in case tablet has already been removed
-        TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.warn("tablet[{}] has been removed", tabletId);
             return -1;
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
@@ -363,7 +363,7 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
                     index.getId(), tabletId, lastCheckTime,
                     checkedVersion, isConsistent);
-            Catalog.getCurrentCatalog().getEditLog().logFinishConsistencyCheck(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
             return 1;
 
         } finally {

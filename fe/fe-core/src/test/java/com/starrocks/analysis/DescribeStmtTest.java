@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import mockit.Mock;
@@ -33,7 +33,7 @@ import org.junit.Test;
 
 public class DescribeStmtTest {
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     private ConnectContext ctx;
 
     @Before
@@ -43,7 +43,7 @@ public class DescribeStmtTest {
         ctx.setRemoteIP("192.168.1.1");
 
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
         new MockUp<ConnectContext>() {
             @Mock
@@ -52,10 +52,10 @@ public class DescribeStmtTest {
             }
         };
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            Catalog getCurrentCatalog() {
-                return catalog;
+            GlobalStateMgr getCurrentCatalog() {
+                return globalStateMgr;
             }
         };
     }

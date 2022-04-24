@@ -22,7 +22,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.AnalysisException;
 
@@ -33,7 +33,7 @@ public class SchedulerStatProcNode implements ProcNodeInterface {
     private TabletSchedulerStat stat;
 
     public SchedulerStatProcNode() {
-        this.stat = Catalog.getCurrentCatalog().getTabletScheduler().getStat().getLastSnapshot();
+        this.stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat().getLastSnapshot();
     }
 
     @Override

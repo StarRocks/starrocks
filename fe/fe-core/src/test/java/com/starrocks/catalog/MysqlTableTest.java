@@ -46,7 +46,7 @@ public class MysqlTableTest {
     private Map<String, String> properties;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private FakeCatalog fakeCatalog;
 
@@ -66,7 +66,7 @@ public class MysqlTableTest {
         properties.put("table", "tbl");
 
         fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(catalog);
+        FakeCatalog.setCatalog(globalStateMgr);
         FakeCatalog.setMetaVersion(FeConstants.meta_version);
     }
 

@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -122,7 +122,7 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                     metaInfo.setTablet_id(pair.first);
                     metaInfo.setSchema_hash(pair.second);
                     TabletMeta tabletMeta =
-                            Catalog.getCurrentCatalog().getTabletInvertedIndex().getTabletMeta(pair.first);
+                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(pair.first);
                     if (tabletMeta == null) {
                         LOG.warn("could not find tablet [{}] in meta ignore it", pair.second);
                         continue;

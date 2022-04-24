@@ -20,7 +20,7 @@
 // under the License.
 package com.starrocks.load.routineload;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.system.SystemInfoService;
@@ -31,7 +31,7 @@ import com.starrocks.system.SystemInfoService;
 public class ScheduleRule {
 
     private static int deadBeCount(String clusterName) {
-        SystemInfoService systemInfoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         int total = systemInfoService.getClusterBackendIds(clusterName, false).size();
         int alive = systemInfoService.getClusterBackendIds(clusterName, true).size();
         return total - alive;

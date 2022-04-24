@@ -4,8 +4,8 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -72,7 +72,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
 
-        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
         long rightTableId = rightInfo.tableId;
 

@@ -47,22 +47,22 @@ public class LocalTabletTest {
     private TabletInvertedIndex invertedIndex;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void makeTablet() {
         invertedIndex = new TabletInvertedIndex();
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentCatalogJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                Catalog.isCheckpointThread();
+                GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
                 result = false;
             }

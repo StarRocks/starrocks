@@ -26,7 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -381,7 +381,7 @@ public class TransactionState implements Writable {
 
     public void beforeStateTransform(TransactionStatus transactionStatus) throws TransactionException {
         // before status changed
-        TxnStateChangeCallback callback = Catalog.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
             switch (transactionStatus) {
@@ -414,7 +414,7 @@ public class TransactionState implements Writable {
                                     String txnStatusChangeReason)
             throws UserException {
         // after status changed
-        TxnStateChangeCallback callback = Catalog.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
             switch (transactionStatus) {
@@ -434,8 +434,9 @@ public class TransactionState implements Writable {
     }
 
     public void replaySetTransactionStatus() {
-        TxnStateChangeCallback callback = Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallback(
-                callbackId);
+        TxnStateChangeCallback callback =
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallback(
+                        callbackId);
         if (callback != null) {
             if (transactionStatus == TransactionStatus.ABORTED) {
                 callback.replayOnAborted(this);
@@ -617,7 +618,7 @@ public class TransactionState implements Writable {
             info.readFields(in);
             idToTableCommitInfos.put(info.getTableId(), info);
         }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_83) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_83) {
             TxnSourceType sourceType = TxnSourceType.valueOf(in.readInt());
             String ip = Text.readString(in);
             txnCoordinator = new TxnCoordinator(sourceType, ip);
@@ -650,7 +651,7 @@ public class TransactionState implements Writable {
             errorReplicas.add(in.readLong());
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_49) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_49) {
             if (in.readBoolean()) {
                 txnCommitAttachment = TxnCommitAttachment.read(in);
             }
@@ -658,7 +659,7 @@ public class TransactionState implements Writable {
             timeoutMs = in.readLong();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_79) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_79) {
             tableIdList = Lists.newArrayList();
             int tableListSize = in.readInt();
             for (int i = 0; i < tableListSize; i++) {
@@ -692,12 +693,12 @@ public class TransactionState implements Writable {
         }
 
         Set<Long> publishBackends = this.getPublishVersionTasks().keySet();
-        // public version tasks are not persisted in catalog, so publishBackends may be empty.
+        // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
         // We have to send publish version task to all backends
         if (publishBackends.isEmpty()) {
             // note: tasks are sended to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = Catalog.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);

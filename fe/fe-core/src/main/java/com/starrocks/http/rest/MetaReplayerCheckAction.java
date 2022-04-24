@@ -21,7 +21,7 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -53,7 +53,7 @@ public class MetaReplayerCheckAction extends RestBaseAction {
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
 
-        Map<String, String> resultMap = Catalog.getCurrentCatalog().getMetaReplayState().getInfo();
+        Map<String, String> resultMap = GlobalStateMgr.getCurrentState().getMetaReplayState().getInfo();
 
         // to json response
         String result = "";

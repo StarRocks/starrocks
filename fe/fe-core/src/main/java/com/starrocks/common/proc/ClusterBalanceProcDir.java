@@ -23,7 +23,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
@@ -70,8 +70,8 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        TabletScheduler tabletScheduler = Catalog.getCurrentCatalog().getTabletScheduler();
-        TabletChecker tabletChecker = Catalog.getCurrentCatalog().getTabletChecker();
+        TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        TabletChecker tabletChecker = GlobalStateMgr.getCurrentState().getTabletChecker();
         result.addRow(Lists.newArrayList(CLUSTER_LOAD, String.valueOf(tabletScheduler.getStatisticMap().size())));
         result.addRow(Lists.newArrayList(WORKING_SLOTS,
                 String.valueOf(tabletScheduler.getBackendsWorkingSlots().size())));

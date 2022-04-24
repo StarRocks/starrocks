@@ -22,8 +22,8 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Range;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.FeMetaVersion;
@@ -121,11 +121,11 @@ public class PartitionPersistInfo implements Writable {
         range = RangeUtils.readRange(in);
         dataProperty = DataProperty.read(in);
         replicationNum = in.readShort();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
             isInMemory = in.readBoolean();
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
             isTempPartition = in.readBoolean();
         }
     }

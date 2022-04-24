@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
@@ -38,7 +38,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(32)))
                     .addColumn(new Column("DbName", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Catalog", ScalarType.createVarchar(32)))
+                    .addColumn(new Column("GlobalStateMgr", ScalarType.createVarchar(32)))
                     .addColumn(new Column("FileName", ScalarType.createVarchar(16)))
                     .addColumn(new Column("FileSize", ScalarType.createVarchar(16)))
                     .addColumn(new Column("IsContent", ScalarType.createVarchar(16)))
@@ -67,7 +67,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
             dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
         }
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(
                     ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
         }

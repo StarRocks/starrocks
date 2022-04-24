@@ -30,10 +30,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
@@ -263,7 +263,7 @@ public class SelectStmt extends QueryStmt {
     public Expr getHavingClause() {
         return havingClause;
     }
-    
+
     @Override
     public SortInfo getSortInfo() {
         return sortInfo;
@@ -310,7 +310,7 @@ public class SelectStmt extends QueryStmt {
                 }
 
                 // check auth
-                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
                         tblRef.getName().getTbl(),
                         PrivPredicate.SELECT)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
@@ -1583,7 +1583,6 @@ public class SelectStmt extends QueryStmt {
         }
         return strBuilder.toString();
     }
-
 
     @Override
     public String toDigest() {

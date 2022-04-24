@@ -21,7 +21,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -43,7 +43,7 @@ public class ConnectContextTest {
     @Mocked
     private SocketChannel socketChannel;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private ConnectScheduler connectScheduler;
 
@@ -129,7 +129,7 @@ public class ConnectContextTest {
         Assert.assertEquals("testCluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
-        Assert.assertEquals(Long.toString((currentTimeMillis-ctx.getStartTime()) / 1000), row.get(6));
+        Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getStartTime()) / 1000), row.get(6));
         Assert.assertEquals("", row.get(7));
         Assert.assertEquals("", row.get(8));
 
@@ -141,9 +141,9 @@ public class ConnectContextTest {
         ctx.setExecutionId(new TUniqueId(100, 200));
         Assert.assertEquals(new TUniqueId(100, 200), ctx.getExecutionId());
 
-        // Catalog
+        // GlobalStateMgr
         Assert.assertNull(ctx.getCatalog());
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         Assert.assertNotNull(ctx.getCatalog());
 
         // clean up

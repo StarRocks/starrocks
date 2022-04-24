@@ -22,7 +22,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCapability;
@@ -191,7 +191,7 @@ public class ConnectProcessorTest {
         }
     }
 
-    private static ConnectContext initMockContext(MysqlChannel channel, Catalog catalog) {
+    private static ConnectContext initMockContext(MysqlChannel channel, GlobalStateMgr globalStateMgr) {
         ConnectContext context = new ConnectContext(socketChannel) {
             private boolean firstTimeToSetCommand = true;
 
@@ -244,7 +244,7 @@ public class ConnectProcessorTest {
 
                 context.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 context.getAuditEventBuilder();
                 minTimes = 0;

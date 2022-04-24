@@ -25,8 +25,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -58,7 +58,7 @@ public class StatisticProcDir implements ProcDirInterface {
             .build();
     private static final Logger LOG = LogManager.getLogger(StatisticProcDir.class);
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     // db id -> set(tablet id)
     Multimap<Long, Long> unhealthyTabletIds;
@@ -67,8 +67,8 @@ public class StatisticProcDir implements ProcDirInterface {
     // db id -> set(tablet id)
     Multimap<Long, Long> cloningTabletIds;
 
-    public StatisticProcDir(Catalog catalog) {
-        this.catalog = catalog;
+    public StatisticProcDir(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
         unhealthyTabletIds = HashMultimap.create();
         inconsistentTabletIds = HashMultimap.create();
         cloningTabletIds = HashMultimap.create();
@@ -76,18 +76,18 @@ public class StatisticProcDir implements ProcDirInterface {
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        Preconditions.checkNotNull(catalog);
+        Preconditions.checkNotNull(globalStateMgr);
 
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<Long> dbIds = catalog.getDbIds();
+        List<Long> dbIds = globalStateMgr.getDbIds();
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
 
         int totalDbNum = 0;
         int totalTableNum = 0;
@@ -105,7 +105,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
-            Database db = catalog.getDb(dbId);
+            Database db = globalStateMgr.getDb(dbId);
             if (db == null) {
                 continue;
             }
@@ -233,7 +233,7 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
-        if (catalog.getDb(dbId) == null) {
+        if (globalStateMgr.getDb(dbId) == null) {
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

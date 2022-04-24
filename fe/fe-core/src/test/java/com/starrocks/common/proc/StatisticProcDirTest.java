@@ -2,7 +2,7 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import org.junit.Test;
 
@@ -10,6 +10,6 @@ public class StatisticProcDirTest {
 
     @Test(expected = AnalysisException.class)
     public void testLookupInvalid() throws AnalysisException {
-        new StatisticProcDir(Catalog.getCurrentCatalog()).lookup("12345");
+        new StatisticProcDir(GlobalStateMgr.getCurrentState()).lookup("12345");
     }
 }

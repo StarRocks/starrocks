@@ -23,8 +23,8 @@ package com.starrocks.clone;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -45,7 +45,7 @@ public class ClusterLoadStatisticsTest {
     private Backend be2;
     private Backend be3;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
 

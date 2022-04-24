@@ -38,12 +38,9 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TRuntimeFilterProberParams;
-import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jcodings.util.Hash;
 
 import java.util.ArrayList;
 import java.util.List;

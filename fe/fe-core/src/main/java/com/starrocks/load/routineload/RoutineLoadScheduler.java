@@ -23,7 +23,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -45,7 +45,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
     @VisibleForTesting
     public RoutineLoadScheduler() {
         super();
-        routineLoadManager = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
     }
 
     public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {

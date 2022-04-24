@@ -22,7 +22,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.thrift.TPartitionVersionInfo;
@@ -88,7 +88,7 @@ public class PublishVersionTask extends AgentTask {
 
     // collect all failed replicas for publish version task
     public Set<Long> collectErrorReplicas() {
-        TabletInvertedIndex tablets = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {

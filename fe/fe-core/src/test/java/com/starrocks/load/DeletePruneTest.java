@@ -12,7 +12,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.UUID;
 
 public class DeletePruneTest {
     private static ConnectContext connectContext;

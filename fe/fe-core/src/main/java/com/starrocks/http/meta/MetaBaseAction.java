@@ -21,7 +21,7 @@
 
 package com.starrocks.http.meta;
 
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -93,7 +93,7 @@ public class MetaBaseAction extends WebBaseAction {
 
     private boolean isFromValidFe(BaseRequest request) {
         String clientHost = request.getHostString();
-        Frontend fe = Catalog.getCurrentCatalog().getFeByHost(clientHost);
+        Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientHost);
         if (fe == null) {
             LOG.warn("request is not from valid FE. client: {}", clientHost);
             return false;

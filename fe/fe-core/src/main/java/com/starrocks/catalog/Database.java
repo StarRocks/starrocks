@@ -58,7 +58,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.zip.Adler32;
 
 /**
- * Internal representation of db-related metadata. Owned by Catalog instance.
+ * Internal representation of db-related metadata. Owned by GlobalStateMgr instance.
  * Not thread safe.
  * <p/>
  * The static initialization method loadDb is the only way to construct a Db
@@ -325,7 +325,7 @@ public class Database extends MetaObject implements Writable {
                 if (!isReplay) {
                     // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
-                    Catalog.getCurrentCatalog().getEditLog().logCreateTable(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
                 }
 
                 table.onCreate();
@@ -486,7 +486,7 @@ public class Database extends MetaObject implements Writable {
         super.readFields(in);
 
         id = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             fullQualifiedName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             fullQualifiedName = Text.readString(in);
@@ -501,7 +501,7 @@ public class Database extends MetaObject implements Writable {
 
         // read quota
         dataQuotaBytes = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         } else {
             clusterName = Text.readString(in);
@@ -509,7 +509,7 @@ public class Database extends MetaObject implements Writable {
             attachDbName = Text.readString(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_47) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_47) {
             int numEntries = in.readInt();
             for (int i = 0; i < numEntries; ++i) {
                 String name = Text.readString(in);
@@ -523,7 +523,7 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
             replicaQuotaSize = in.readLong();
         } else {
             replicaQuotaSize = FeConstants.default_db_replica_quota_size;
@@ -592,7 +592,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void addFunction(Function function) throws UserException {
         addFunctionImpl(function, false);
-        Catalog.getCurrentCatalog().getEditLog().logAddFunction(function);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
 
     public synchronized void replayAddFunction(Function function) {
@@ -617,7 +617,7 @@ public class Database extends MetaObject implements Writable {
             }
             // Get function id for this UDF, use CatalogIdGenerator. Only get function id
             // when isReplay is false
-            long functionId = Catalog.getCurrentCatalog().getNextId();
+            long functionId = GlobalStateMgr.getCurrentState().getNextId();
             // all user-defined functions id are negative to avoid conflicts with the builtin function
             function.setFunctionId(-functionId);
         }
@@ -632,7 +632,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void dropFunction(FunctionSearchDesc function) throws UserException {
         dropFunctionImpl(function);
-        Catalog.getCurrentCatalog().getEditLog().logDropFunction(function);
+        GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {

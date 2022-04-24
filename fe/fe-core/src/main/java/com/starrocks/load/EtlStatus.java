@@ -219,7 +219,7 @@ public class EtlStatus implements Writable {
             counters.put(key, value);
         }
         // TODO: Persist `tableCounters`
-        // if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_93) {
+        // if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_93) {
         //     tableCounters = GsonUtils.GSON.fromJson(Text.readString(in), tableCounters.getClass());
         // }
     }

@@ -22,7 +22,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.load.ExportJob.JobState;
@@ -99,7 +99,7 @@ public final class ExportChecker extends MasterDaemon {
     }
 
     private void runPendingJobs() {
-        ExportMgr exportMgr = Catalog.getCurrentCatalog().getExportMgr();
+        ExportMgr exportMgr = GlobalStateMgr.getCurrentState().getExportMgr();
         List<ExportJob> pendingJobs = exportMgr.getExportJobs(JobState.PENDING);
 
         // check to limit running etl job num
@@ -134,7 +134,7 @@ public final class ExportChecker extends MasterDaemon {
     }
 
     private void runExportingJobs() {
-        List<ExportJob> jobs = Catalog.getCurrentCatalog().getExportMgr().getExportJobs(JobState.EXPORTING);
+        List<ExportJob> jobs = GlobalStateMgr.getCurrentState().getExportMgr().getExportJobs(JobState.EXPORTING);
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
             try {

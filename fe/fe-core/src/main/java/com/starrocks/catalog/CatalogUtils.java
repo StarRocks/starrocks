@@ -63,7 +63,7 @@ public class CatalogUtils {
 
     // Used to temporarily disable some command on StarOS table and remove later.
     public static void checkOlapTableHasStarOSPartition(String dbName, String tableName) throws AnalysisException {
-        Database db = Catalog.getCurrentCatalog().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return;
         }

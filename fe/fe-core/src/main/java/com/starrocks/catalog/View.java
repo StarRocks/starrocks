@@ -46,7 +46,7 @@ import java.lang.ref.SoftReference;
 import java.util.List;
 
 /**
- * Table metadata representing a catalog view or a local view from a WITH clause.
+ * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
  * Most methods inherited from Table are not supposed to be called on this class because
  * views are substituted with their underlying definition during analysis of a statement.
  * <p>
@@ -54,7 +54,7 @@ import java.util.List;
  * affect the metadata of the underlying tables (if any).
  */
 public class View extends Table {
-    private static final Logger LOG = LogManager.getLogger(Catalog.class);
+    private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
 
     // The original SQL-string given as view definition. Set during analysis.
     // Corresponds to Hive's viewOriginalText.
@@ -87,7 +87,7 @@ public class View extends Table {
     // Can't keep a cache in meta data
     private SoftReference<QueryStatement> queryStmtRef = new SoftReference<QueryStatement>(null);
 
-    // Set if this View is from a WITH clause and not persisted in the catalog.
+    // Set if this View is from a WITH clause and not persisted in the globalStateMgr.
     private boolean isLocalView;
 
     // Set if this View is from a WITH clause with column labels.

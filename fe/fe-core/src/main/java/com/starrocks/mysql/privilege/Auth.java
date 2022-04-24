@@ -40,7 +40,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -401,7 +401,7 @@ public class Auth implements Writable {
             return checkDbPriv(ctx, authInfo.getDbName(), wanted);
         }
         for (String tblName : authInfo.getTableNameList()) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), authInfo.getDbName(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), authInfo.getDbName(),
                     tblName, wanted)) {
                 return false;
             }
@@ -599,7 +599,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo privInfo = new PrivInfo(userIdent, null, password, roleName);
-                Catalog.getCurrentCatalog().getEditLog().logCreateUser(privInfo);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateUser(privInfo);
             }
             LOG.debug("finished to create user: {}, is replay: {}", userIdent, isReplay);
         } finally {
@@ -623,7 +623,7 @@ public class Auth implements Writable {
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 
-        writeLock(); 
+        writeLock();
         try {
             if (!doesUserExist(stmt.getUserIdentity())) {
                 throw new DdlException(String.format("User `%s`@`%s` does not exist.", user, host));
@@ -660,7 +660,7 @@ public class Auth implements Writable {
             }
 
             if (!isReplay) {
-                Catalog.getCurrentCatalog().getEditLog().logNewDropUser(userIdent);
+                GlobalStateMgr.getCurrentState().getEditLog().logNewDropUser(userIdent);
             }
             LOG.info("finished to drop user: {}, is replay: {}", userIdent.getQualifiedUser(), isReplay);
         } finally {
@@ -719,7 +719,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, tblPattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logGrantPriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantPriv(info);
             }
             LOG.debug("finished to grant privilege. is replay: {}", isReplay);
         } finally {
@@ -750,7 +750,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, resourcePattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logGrantPriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantPriv(info);
             }
             LOG.debug("finished to grant resource privilege. is replay: {}", isReplay);
         } finally {
@@ -880,7 +880,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, tblPattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logRevokePriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokePriv(info);
             }
             LOG.info("finished to revoke privilege. is replay: {}", isReplay);
         } finally {
@@ -907,7 +907,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, resourcePattern, privs, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logRevokePriv(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokePriv(info);
             }
             LOG.info("finished to revoke privilege. is replay: {}", isReplay);
         } finally {
@@ -1004,7 +1004,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(userIdent, null, password, null);
-                Catalog.getCurrentCatalog().getEditLog().logSetPassword(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetPassword(info);
             }
         } finally {
             writeUnlock();
@@ -1033,7 +1033,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(null, null, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logCreateRole(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateRole(info);
             }
         } finally {
             writeUnlock();
@@ -1061,7 +1061,7 @@ public class Auth implements Writable {
 
             if (!isReplay) {
                 PrivInfo info = new PrivInfo(null, null, null, role);
-                Catalog.getCurrentCatalog().getEditLog().logDropRole(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropRole(info);
             }
         } finally {
             writeUnlock();
@@ -1086,7 +1086,7 @@ public class Auth implements Writable {
             propertyMgr.updateUserProperty(user, properties);
             if (!isReplay) {
                 UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
-                Catalog.getCurrentCatalog().getEditLog().logUpdateUserProperty(propertyInfo);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserProperty(propertyInfo);
             }
             LOG.info("finished to set properties for user: {}", user);
         } finally {
@@ -1426,7 +1426,7 @@ public class Auth implements Writable {
                     return false;
                 } else {
                     ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] { jarFile.toURL() },
+                            new URL[] {jarFile.toURL()},
                             getClass().getClassLoader()
                     );
                     authClazz = Class.forName(Auth.KRB5_AUTH_CLASS_NAME, true, loader);
@@ -1466,7 +1466,7 @@ public class Auth implements Writable {
         userPrivTable = (UserPrivTable) PrivTable.read(in);
         dbPrivTable = (DbPrivTable) PrivTable.read(in);
         tablePrivTable = (TablePrivTable) PrivTable.read(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourcePrivTable = (ResourcePrivTable) PrivTable.read(in);
         }
         propertyMgr = UserPropertyMgr.read(in);

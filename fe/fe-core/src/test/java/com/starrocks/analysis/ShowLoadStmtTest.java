@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.system.SystemInfoService;
@@ -34,7 +34,7 @@ import org.junit.Test;
 
 public class ShowLoadStmtTest {
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private SystemInfoService systemInfoService;
 
@@ -47,8 +47,8 @@ public class ShowLoadStmtTest {
         systemInfoService = AccessTestUtil.fetchSystemInfoService();
         FakeCatalog.setSystemInfo(systemInfoService);
 
-        catalog = AccessTestUtil.fetchAdminCatalog();
-        FakeCatalog.setCatalog(catalog);
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
+        FakeCatalog.setCatalog(globalStateMgr);
 
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         new Expectations(analyzer) {
@@ -67,7 +67,7 @@ public class ShowLoadStmtTest {
 
                 analyzer.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
             }
         };
     }

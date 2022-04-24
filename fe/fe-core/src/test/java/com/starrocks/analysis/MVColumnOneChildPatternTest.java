@@ -24,8 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
-import mockit.Expectations;
-import mockit.Injectable;
 import org.junit.Assert;
 import org.junit.Test;
 

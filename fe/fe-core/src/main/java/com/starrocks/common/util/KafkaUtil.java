@@ -24,7 +24,7 @@ package com.starrocks.common.util;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.GlobalStateMgr;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
@@ -71,7 +71,8 @@ public class KafkaUtil {
         return proxyApi.getBeginningOffsets(brokerList, topic, properties, partitions);
     }
 
-    public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests) throws UserException {
+    public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
+            throws UserException {
         return proxyApi.getBatchOffsets(requests);
     }
 
@@ -145,7 +146,8 @@ public class KafkaUtil {
             return partitionOffsets;
         }
 
-        public List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests) throws UserException {
+        public List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
+                throws UserException {
             // create request
             PProxyRequest pProxyRequest = new PProxyRequest();
             PKafkaOffsetBatchProxyRequest pKafkaOffsetBatchProxyRequest = new PKafkaOffsetBatchProxyRequest();
@@ -160,12 +162,12 @@ public class KafkaUtil {
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             try {
-                List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
+                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 if (backendIds.isEmpty()) {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                Backend be = Catalog.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
                 TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
