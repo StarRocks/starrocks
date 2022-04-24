@@ -173,7 +173,8 @@ public class Optimizer {
         ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE_OPTIMIZED);
+        // ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
