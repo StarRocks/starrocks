@@ -18,6 +18,7 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
+    DEFINE_VECTORIZED_FN(array_cum_sum);
 
 #define APPLY_COMMONE_TYPES_FOR_ARRAY(M)        \
     M(boolean, PrimitiveType::TYPE_BOOLEAN)     \
