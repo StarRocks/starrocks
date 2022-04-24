@@ -208,7 +208,7 @@ public class ColumnDef {
                 }
             }else{
                 // if character setting is not for varchar type, Display unsupported information to the user
-                if (charsetName!=null){
+                if (!DEFAULT_CHARSET.equalsIgnoreCase(charsetName)){
                     throw new AnalysisException("character setting is only supported for type varchar in column definition");
                 }
             }
