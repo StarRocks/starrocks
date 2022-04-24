@@ -232,7 +232,7 @@ public:
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
     size_t row_size() const;
-    size_t field_index(const std::string_view& field_name) const;
+    size_t field_index(const std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     size_t num_columns() const { return _cols.size(); }
