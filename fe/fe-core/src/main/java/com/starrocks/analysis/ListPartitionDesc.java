@@ -48,7 +48,7 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
-    public List<String> findAllPartitionName() {
+    public List<String> findAllPartitionNames() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
         this.multiListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -111,14 +111,14 @@ public class ListPartitionDesc extends PartitionDesc {
         this.analyzeDuplicateValues(this.partitionColNames.size(), allMultiLiteralExprValues);
     }
 
-    private void analyzeSingleListPartition(Map<String, String> copiedProperties, List<ColumnDef> columnDefList) throws AnalysisException {
+    private void analyzeSingleListPartition(Map<String, String> tableProperties, List<ColumnDef> columnDefList) throws AnalysisException {
         List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
         Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
             if (!singListPartitionName.add(desc.getPartitionName())) {
                 throw new AnalysisException("Duplicated partition name: " + desc.getPartitionName());
             }
-            desc.analyze(columnDefList, copiedProperties);
+            desc.analyze(columnDefList, tableProperties);
             allLiteralExprValues.addAll(desc.getLiteralExprValues());
         }
         this.analyzeDuplicateValues(allLiteralExprValues);
@@ -132,26 +132,26 @@ public class ListPartitionDesc extends PartitionDesc {
      * @throws AnalysisException
      */
     private void analyzeDuplicateValues(int partitionColSize, List<List<LiteralExpr>> allMultiLiteralExprValues) throws AnalysisException {
-        List<List<LiteralExpr>> tempMultiValues = new ArrayList<>(allMultiLiteralExprValues.size());
-        for (List<LiteralExpr> literalExprValues : allMultiLiteralExprValues) {
-            for (List<LiteralExpr> tmpValues : tempMultiValues){
+        for (int i = 0; i < allMultiLiteralExprValues.size(); i++) {
+            for (int j = i + 1; j < allMultiLiteralExprValues.size(); j++) {
+                List<LiteralExpr> literalExprValues1 = allMultiLiteralExprValues.get(i);
+                List<LiteralExpr> literalExprValues2 = allMultiLiteralExprValues.get(j);
                 int duplicatedSize = 0;
-                for (int i = 0; i < tmpValues.size(); i++) {
-                    String value = literalExprValues.get(i).getStringValue();
-                    String tmpValue = tmpValues.get(i).getStringValue();
+                for (int k = 0; k < literalExprValues1.size(); k++) {
+                    String value = literalExprValues1.get(k).getStringValue();
+                    String tmpValue = literalExprValues2.get(k).getStringValue();
                     if(value.equals(tmpValue)){
                         duplicatedSize++;
                     }
                 }
                 if (duplicatedSize == partitionColSize) {
-                    List<String> msg = literalExprValues.stream()
+                    List<String> msg = literalExprValues1.stream()
                             .map(value -> ("\"" + value.getStringValue() + "\""))
                             .collect(Collectors.toList());
                     throw new AnalysisException("Duplicate values " +
                             "(" + String.join(",",msg) + ") not allow");
                 }
             }
-            tempMultiValues.add(literalExprValues);
         }
     }
 

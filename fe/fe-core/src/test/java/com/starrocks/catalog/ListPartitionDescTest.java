@@ -282,10 +282,10 @@ public class ListPartitionDescTest {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
                 Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "beijing")), null);
+                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
         MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
                 Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai")
-                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
+                        , Lists.newArrayList("2022-04-15", "beijing")), null);
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);

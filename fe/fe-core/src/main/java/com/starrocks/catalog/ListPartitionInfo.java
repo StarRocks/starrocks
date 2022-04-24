@@ -4,8 +4,6 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -71,29 +69,6 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiLiteralExprValues) {
         this.idToMultiLiteralExprValues.put(partitionId, multiLiteralExprValues);
-    }
-
-    /**
-     * 1. transform string partition value to LiteralExpr
-     * 2. Check that the partition value and the partition column are valid
-     *
-     * @param multiValues partition values
-     * @return
-     * @throws AnalysisException
-     */
-    private List<List<LiteralExpr>> toMultiPartitionValues(List<List<String>> multiValues) throws AnalysisException {
-        List<List<LiteralExpr>> multiPartitionValues = new ArrayList<>(multiValues.size());
-        for (List<String> values : multiValues) {
-            List<LiteralExpr> partitionValues = new ArrayList<>(values.size());
-            for (int i = 0; i < values.size(); i++) {
-                String value = values.get(i);
-                Type type = partitionColumns.get(i).getType();
-                LiteralExpr partitionValue = new PartitionValue(value).getValue(type);
-                partitionValues.add(partitionValue);
-            }
-            multiPartitionValues.add(partitionValues);
-        }
-        return multiPartitionValues;
     }
 
     private void setIsMultiColumnPartition() {

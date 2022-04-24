@@ -5,14 +5,24 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.io.Text;
+import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletType;
+import mockit.Expectations;
+import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +39,9 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testWriteOut() throws IOException {
-        // 1. Write objects to file
+    public void testWriteOutAndReadIn(@Mocked Catalog catalog) throws IOException,
+            NotImplementedException, ParseException {
+        // Write objects to file
         File file = new File("./test_serial.log");
         if (file.exists()) {
             file.delete();
@@ -40,20 +51,63 @@ public class ListPartitionInfoTest {
         this.listPartitionInfo.write(out);
         out.flush();
         out.close();
+
+        new Expectations() {{
+            Catalog.getCurrentCatalogJournalVersion();
+            result = FeMetaVersion.VERSION_CURRENT;
+        }};
+
+        // Read object from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        PartitionInfo partitionInfo = this.listPartitionInfo.read(in);
+
+        // Asset the type
+        Assert.assertEquals(partitionInfo.getType(), PartitionType.LIST);
+
+        // Asset the partition p1 properties
+        List<Column> columnList = partitionInfo.getPartitionColumns();
+        this.assertPartitionProperties((ListPartitionInfo) partitionInfo,
+                columnList.get(0), "province", 10001L);
+
     }
+
+    private void assertPartitionProperties(ListPartitionInfo partitionInfo, Column column,
+                                           String partitionName, long partitionId) throws ParseException {
+        Assert.assertEquals(partitionName, column.getName());
+        Assert.assertEquals(Type.VARCHAR, column.getType());
+
+        DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
+        Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
+        DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
+
+        Assert.assertEquals(1, partitionInfo.getReplicationNum(partitionId));
+        Assert.assertEquals(true, partitionInfo.getIsInMemory(partitionId));
+
+        List<String> valuesFromGet = partitionInfo.getIdToValues().get(partitionId);
+        List<String> values = this.listPartitionInfo.getIdToValues().get(partitionId);
+        Assert.assertEquals(valuesFromGet.size(), values.size());
+        for (int i = 0; i < valuesFromGet.size(); i++) {
+            Assert.assertEquals(valuesFromGet.get(i), values.get(i));
+        }
+    }
+
 
     @Test
     public void testToSqlForSingle() {
         long id = 1000L;
         String tableName = "testTable";
         List<Column> baseSchema =
-                Lists.newArrayList(new Column("id", Type.BIGINT), new Column("province", Type.BIGINT));
+                Lists.newArrayList(new Column("id", Type.BIGINT),
+                        new Column("province", Type.BIGINT));
 
         Map<String, String> properties = new HashMap<>();
         properties.put("replication_num", "1");
 
         TableProperty tableProperty = new TableProperty(properties);
-        OlapTable table = new OlapTable(id, tableName, baseSchema, null, this.listPartitionInfo, null);
+        OlapTable table = new OlapTable(id, tableName, baseSchema, null,
+                this.listPartitionInfo, null);
         table.setTableProperty(tableProperty);
         Partition p1 = new Partition(10001L, "p1", null, null);
         Partition p2 = new Partition(10002L, "p2", null, null);
@@ -82,7 +136,8 @@ public class ListPartitionInfoTest {
         properties.put("replication_num", "2");
 
         TableProperty tableProperty = new TableProperty(properties);
-        OlapTable table = new OlapTable(id, tableName, baseSchema, null, this.listPartitionInfoForMulti, null);
+        OlapTable table = new OlapTable(id, tableName, baseSchema, null,
+                this.listPartitionInfoForMulti, null);
         table.setTableProperty(tableProperty);
         Partition p1 = new Partition(10001L, "p1", null, null);
         Partition p2 = new Partition(10002L, "p2", null, null);

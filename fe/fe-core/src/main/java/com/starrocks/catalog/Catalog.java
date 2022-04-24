@@ -3966,7 +3966,7 @@ public class Catalog {
                 }
             } else if (partitionDesc instanceof ListPartitionDesc) {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
-                listPartitionDesc.findAllPartitionName()
+                listPartitionDesc.findAllPartitionNames()
                         .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
