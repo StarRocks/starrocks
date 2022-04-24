@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 
 # java
 if [ "$JAVA_HOME" = "" ]; then
