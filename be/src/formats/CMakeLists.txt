@@ -1,7 +1,7 @@
 # This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/converter")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 add_library(Formats STATIC
         csv/array_converter.cpp

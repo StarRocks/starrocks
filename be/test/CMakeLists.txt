@@ -36,6 +36,14 @@ set(EXEC_FILES
         ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/vectorized/sorting_test.cpp
+        ./exec/vectorized/chunks_sorter_test.cpp
+        ./exec/vectorized/parquet_scanner_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
+        ./exec/vectorized/repeat_node_test.cpp
+        ./exec/es_scan_reader_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
