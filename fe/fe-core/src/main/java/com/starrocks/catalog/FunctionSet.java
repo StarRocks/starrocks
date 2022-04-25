@@ -78,6 +78,7 @@ public class FunctionSet {
     public static final String GROUP_CONCAT = "group_concat";
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_OVERLAP = "array_overlap";
+    public static final String WINDOW_FUNNEL = "window_funnel";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -726,6 +727,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin("group_concat",
                 Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL, Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
         // Rank
