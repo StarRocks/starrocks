@@ -232,6 +232,8 @@ public:
     MetricRegistry* metrics() { return &_metrics; }
     SystemMetrics* system_metrics() { return &_system_metrics; }
 
+    static std::unique_ptr<StarRocksMetrics> create_instance() { return std::make_unique<StarRocksMetrics>(); }
+
 private:
     // Don't allow constrctor
     StarRocksMetrics();

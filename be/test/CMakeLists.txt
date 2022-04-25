@@ -274,6 +274,8 @@ set(EXEC_FILES
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/starrocks_metrics_test.cpp
+        ./util/system_metrics_test.cpp
         ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
         )
