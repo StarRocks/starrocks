@@ -8,7 +8,7 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/types.h"
 #include "gutil/strings/substitute.h"
-#include "exec/parquet/rle_encoding.h"
+#include "util/rle_encoding.h"
 
 namespace starrocks::parquet {
 
