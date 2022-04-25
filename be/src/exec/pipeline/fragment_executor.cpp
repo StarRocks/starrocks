@@ -300,7 +300,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
 
-    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(drivers.size());
+    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
     if (maybe_driver_token.ok()) {
         _fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
     } else {
