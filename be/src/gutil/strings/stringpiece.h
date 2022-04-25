@@ -118,6 +118,7 @@
 #include <iosfwd>
 #include <limits>
 #include <string>
+#include <string_view>
 
 #include "gutil/hash/hash.h"
 #include "gutil/integral_types.h"
@@ -147,6 +148,12 @@ public:
         }
     }
     StringPiece(const std::string& str) // NOLINT(runtime/explicit)
+            : ptr_(str.data()), length_(0) {
+        size_t length = str.size();
+        assert(length <= static_cast<size_t>(std::numeric_limits<int>::max()));
+        length_ = static_cast<int>(length);
+    }
+    StringPiece(std::string_view str) // NOLINT(runtime/explicit)
             : ptr_(str.data()), length_(0) {
         size_t length = str.size();
         assert(length <= static_cast<size_t>(std::numeric_limits<int>::max()));
