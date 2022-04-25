@@ -6,7 +6,7 @@ First , you need to install jdk , and run the script
 
 ```shell
 ./stream-load-import.sh --url=http://{fe_ip}:{fe_http_port}/api/{database_name}/{table_name}/_stream_load \
---source-file=/file/path/name.csv \
+--source_file=/file/path/name.csv \
 --H=column_separator:, \
 --u=sr_username:sr_password
 ```
@@ -15,16 +15,16 @@ First , you need to install jdk , and run the script
 
 Necessary:
 
-- --source-file: the absolute path of import file
+- --source_file: the absolute path of import file
 - --url: the `fe` url , it should contain protocol and so on, not `be` redirect url
 - --u: the starrocks database user and password ,not server
 
 Optional:
 
-- --is-debug: default false ,`--is-debug=true`
-- --thread-number: parallel thread number , default min(server_core_number,32) ,`--thread-number=16`
+- --enable_debug: default false ,`--enable_debug=true`
+- --max_threads: parallel thread number , default min(server_core_number,32) ,`--max_threads=16`
 - --timeout: http protocol connect timeout and proccess timeout , default 60*1000ms, for example 5s `--timeout=5000`
-- --size: memory queue limit size , default 4096 , not reset unless you have a lot of memory
+- --queue_size: memory queue limit size , default 256 , not reset unless you have a lot of memory and you need reset `-Xmx`
 - --H: http request header , for example `--H=column_separator:,`,column_separator as key,`,`as value
  
 Other:
