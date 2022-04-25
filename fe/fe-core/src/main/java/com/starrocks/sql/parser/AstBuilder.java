@@ -28,6 +28,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -150,6 +151,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDbStmt(null, null);
         }
+    }
+
+    @Override
+    public ParseNode visitDropMaterialized(StarRocksParser.DropMaterializedContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new DropMaterializedViewStmt(context.IF() != null, mvName);
     }
 
     @Override
