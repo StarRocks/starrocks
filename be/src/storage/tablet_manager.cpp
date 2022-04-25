@@ -1061,13 +1061,6 @@ void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* pa
     }
 }
 
-void TabletManager::get_partition_related_tablets(int64_t partition_id, std::set<TabletInfo>* tablet_infos) {
-    std::shared_lock rlock(_partition_tablet_map_lock);
-    if (_partition_tablet_map.find(partition_id) != _partition_tablet_map.end()) {
-        *tablet_infos = _partition_tablet_map[partition_id];
-    }
-}
-
 void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
     std::vector<TabletSharedPtr> related_tablets;
     for (const auto& tablets_shard : _tablets_shards) {
