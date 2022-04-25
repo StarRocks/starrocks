@@ -79,7 +79,7 @@ private:
 
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
-    auto instance = StarRocksMetrics::create_instance();
+    auto instance = std::make_unique<StarRocksMetrics>();
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
