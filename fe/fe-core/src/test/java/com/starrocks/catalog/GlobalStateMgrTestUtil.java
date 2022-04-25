@@ -45,7 +45,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CatalogTestUtil {
+public class GlobalStateMgrTestUtil {
 
     public static String testDb1 = "testDb1";
     public static long testDbId1 = 1;
@@ -83,7 +83,7 @@ public class CatalogTestUtil {
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
-    public static GlobalStateMgr createTestCatalog() throws InstantiationException, IllegalAccessException,
+    public static GlobalStateMgr createTestState() throws InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
         Constructor<GlobalStateMgr> constructor = GlobalStateMgr.class.getDeclaredConstructor();
         constructor.setAccessible(true);
@@ -106,7 +106,7 @@ public class CatalogTestUtil {
         return globalStateMgr;
     }
 
-    public static boolean compareCatalog(GlobalStateMgr masterGlobalStateMgr, GlobalStateMgr slaveGlobalStateMgr) {
+    public static boolean compareState(GlobalStateMgr masterGlobalStateMgr, GlobalStateMgr slaveGlobalStateMgr) {
         Database masterDb = masterGlobalStateMgr.getDb(testDb1);
         Database slaveDb = slaveGlobalStateMgr.getDb(testDb1);
         List<Table> tables = masterDb.getTables();

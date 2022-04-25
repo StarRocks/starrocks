@@ -21,11 +21,11 @@
 
 package com.starrocks.external.elasticsearch;
 
-import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
+import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -55,7 +55,7 @@ public class EsTestCase {
     public static void init() throws Exception {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
-        masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
+        masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
         metaContext.setThreadLocalInfo();
