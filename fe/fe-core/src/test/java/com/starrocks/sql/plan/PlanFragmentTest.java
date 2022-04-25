@@ -5642,4 +5642,11 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("bitmap_hash(NULL)"));
     }
+
+    @Test
+    public void testLocalAggregateWithMultiStage() throws Exception {
+        String sql = "select rank() over(partition by L_ORDERKEY) from lineitem_partition_colocate";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(0).getPlanRoot().getChild(0).isColocate());
+    }
 }
