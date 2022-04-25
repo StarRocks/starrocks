@@ -415,6 +415,19 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testIntersectCount() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select intersect_count(b1, v1, 999999) from test_object;";
+        String plan = getThriftPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "int_literal:TIntLiteral(value:999999), " +
+                "output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true)])], " +
+                "intermediate_tuple_id:2");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testMergeAggregateNormal() throws Exception {
         String sql;
         String plan;
