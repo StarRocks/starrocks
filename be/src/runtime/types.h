@@ -261,55 +261,9 @@ struct TypeDescriptor {
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
-    /// Returns the byte size of this type.  Returns 0 for variable length types.
-    inline int get_byte_size() const {
-        switch (type) {
-        case TYPE_ARRAY:
-        case TYPE_MAP:
-        case TYPE_VARCHAR:
-        case TYPE_HLL:
-        case TYPE_OBJECT:
-        case TYPE_PERCENTILE:
-        case TYPE_JSON:
-            return 0;
-
-        case TYPE_NULL:
-        case TYPE_BOOLEAN:
-        case TYPE_TINYINT:
-            return 1;
-
-        case TYPE_SMALLINT:
-            return 2;
-
-        case TYPE_INT:
-        case TYPE_FLOAT:
-        case TYPE_DECIMAL32:
-            return 4;
-
-        case TYPE_BIGINT:
-        case TYPE_DOUBLE:
-        case TYPE_DECIMAL64:
-            return 8;
-
-        case TYPE_LARGEINT:
-        case TYPE_DATETIME:
-        case TYPE_DATE:
-        case TYPE_DECIMALV2:
-        case TYPE_DECIMAL128:
-            return 16;
-
-        case TYPE_DECIMAL:
-            return 40;
-
-        case INVALID_TYPE:
-        case TYPE_BINARY:
-        case TYPE_CHAR:
-        case TYPE_STRUCT:
-        case TYPE_TIME:
-            DCHECK(false);
-        }
-        return 0;
-    }
+    // For some types with potential huge length, whose memory consumption is far more than normal types,
+    // they need a different chunk_size setting
+    bool is_huge_type() const { return len >= 128; }
 
     /// Returns the size of a slot for this type.
     inline int get_slot_size() const {

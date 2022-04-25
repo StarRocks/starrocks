@@ -3,6 +3,7 @@
 #include "exec/pipeline/olap_chunk_source.h"
 
 #include "column/column_helper.h"
+#include "common/constexpr.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -163,6 +164,20 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
+void OlapChunkSource::_decide_chunk_size() {
+    bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
+                                            [](auto& slot) { return slot->type().is_huge_type(); });
+    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
+        // Improve for select * from table limit x, x is small
+        _params.chunk_size = _limit;
+    } else {
+        _params.chunk_size = _runtime_state->chunk_size();
+    }
+    if (has_huge_length_type) {
+        _params.chunk_size = std::min(_params.chunk_size, CHUNK_SIZE_FOR_HUGE_TYPE);
+    }
+}
+
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns) {
@@ -173,12 +188,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
-        _params.chunk_size = _limit;
-    } else {
-        _params.chunk_size = _runtime_state->chunk_size();
-    }
+    _decide_chunk_size();
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
