@@ -11,6 +11,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
@@ -132,6 +133,12 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
     }
