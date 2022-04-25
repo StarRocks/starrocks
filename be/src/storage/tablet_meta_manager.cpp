@@ -420,7 +420,8 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
 
 Status TabletMetaManager::walk(
         KVStore* meta,
-        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
+        const std::string& prefix) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -430,35 +431,7 @@ Status TabletMetaManager::walk(
         }
         return func(tablet_id, schema_hash, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
-}
-
-StatusOr<TabletSharedPtr> TabletMetaManager::traverse_for_tablet(TabletManager* tablet_manager, DataDir* data_dir,
-                                                                 int64_t tablet_id) {
-    TabletSharedPtr tablet = nullptr;
-    auto traverse_header_func = [&tablet_manager, &data_dir, &tablet](std::string_view key,
-                                                                      std::string_view value) -> bool {
-        std::string value_str(value);
-        TTabletId tablet_id;
-        TSchemaHash schema_hash;
-        if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
-            LOG(WARNING) << "invalid tablet_meta key:" << key;
-            return true;
-        }
-        auto st = tablet_manager->load_tablet_from_meta(data_dir, tablet_id, schema_hash, value_str, false, false,
-                                                        false, false, false);
-        if (st.ok()) {
-            tablet = st.value();
-            return false;
-        }
-        return true;
-    };
-    auto st = data_dir->get_meta()->iterate(
-            META_COLUMN_FAMILY_INDEX, strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id), traverse_header_func);
-    if (tablet) {
-        return tablet;
-    }
-    return st;
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX + prefix, traverse_header_func);
 }
 
 std::string json_to_string(const rapidjson::Value& val_obj) {

@@ -839,7 +839,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
     };
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
-        (void)RowsetMetaManager::traverse_rowset_metas(data_dir->get_meta(), clean_rowset_func);
+        (void)RowsetMetaManager::traverse_rowset_metas(data_dir->get_meta(), clean_rowset_func, "");
         for (auto& rowset_meta : invalid_rowset_metas) {
             (void)RowsetMetaManager::remove(data_dir->get_meta(), rowset_meta->tablet_uid(), rowset_meta->rowset_id());
         }

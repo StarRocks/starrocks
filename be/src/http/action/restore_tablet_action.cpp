@@ -85,7 +85,7 @@ Status RestoreTabletAction::_handle(HttpRequest* req) {
     LOG(INFO) << "get restore tablet action request: " << tablet_id << "-" << schema_hash;
 
     auto res = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-    if (res.ok() || !to_status(res).is_not_found()) {
+    if (res.ok()) {
         LOG(WARNING) << "find tablet. tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
         return Status::InternalError("tablet already exists, can not restore.");
     }

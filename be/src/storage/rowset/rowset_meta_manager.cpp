@@ -67,7 +67,8 @@ string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
-        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func) {
+        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, std::string_view)> const& func,
+        const std::string& prefix) {
     auto traverse_rowset_meta_func = [&func](std::string_view key, std::string_view value) -> bool {
         // key format: rst_uuid_rowset_id
         std::vector<StringPiece> parts = strings::Split(StringPiece(key.data(), static_cast<int>(key.size())), "_");
@@ -83,31 +84,7 @@ Status RowsetMetaManager::traverse_rowset_metas(
         TabletUid tablet_uid(p1, p2);
         return func(tablet_uid, rowset_id, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX, traverse_rowset_meta_func);
-}
-
-Status RowsetMetaManager::traverse_rowset_metas_for_tabletuid(KVStore* meta, TabletUid tablet_uid,
-                                                              std::vector<RowsetMetaSharedPtr>* dir_rowset_metas) {
-    auto traverse_rowset_meta_func = [&dir_rowset_metas](std::string_view key, std::string_view value) -> bool {
-        std::string key_str(key);
-        std::string value_str(value);
-
-        RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-        bool parsed = rowset_meta->init(value_str);
-        if (!parsed) {
-            LOG(WARNING) << "parse rowset meta string failed";
-            return true;
-        }
-        LOG_IF(FATAL, rowset_meta->rowset_type() != BETA_ROWSET)
-                << "must change V1 format to V2 format."
-                << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                << ", schema_hash: " << rowset_meta->tablet_schema_hash() << ", rowset_id:" << rowset_meta->rowset_id();
-        dir_rowset_metas->push_back(rowset_meta);
-        return true;
-    };
-    auto st =
-            meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX + tablet_uid.to_string(), traverse_rowset_meta_func);
-    return st;
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, ROWSET_PREFIX + prefix, traverse_rowset_meta_func);
 }
 
 } // namespace starrocks

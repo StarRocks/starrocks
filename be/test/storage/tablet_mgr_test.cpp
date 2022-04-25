@@ -71,7 +71,7 @@ public:
         _schema_hash = 368169781;
         _tablet_data_path = tmp_data_path + "/" + std::to_string(0) + "/" + std::to_string(_tablet_id) + "/" +
                             std::to_string(_schema_hash);
-        _tablet_mgr.reset(new TabletManager(_mem_tracker.get(), 1, MetaCache_Type::METACACHE_LRU, NULL));
+        _tablet_mgr.reset(new TabletManager(_mem_tracker.get(), 1, NULL));
     }
 
     virtual void TearDown() {

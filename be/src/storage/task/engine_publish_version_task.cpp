@@ -43,12 +43,12 @@ Status EnginePublishVersionTask::finish() {
             << ", version=" << _version << ", transaction_id=" << _transaction_id;
 
     auto res = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
-    if (!res.ok() && to_status(res).is_not_found()) {
+    if (res.status().is_not_found()) {
         LOG(WARNING) << "Not found tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
                      << ", txn_id: " << _transaction_id;
         return Status::NotFound(fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
                                             _tablet_info.tablet_id, _transaction_id));
-    } else {
+    } else if (!res.ok()) {
         LOG(WARNING) << "failed to get  tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
                      << ", txn_id: " << _transaction_id << " " << to_status(res);
         return to_status(res);

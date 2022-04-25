@@ -171,7 +171,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
             StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("base tablet not exist");
         }
-        auto base_tablet = res.value();
+        base_tablet = res.value();
         // If we are doing schema-change, we should use the same data dir
         // TODO(lingbin): A litter trick here, the directory should be determined before
         // entering this method

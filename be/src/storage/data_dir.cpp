@@ -380,7 +380,7 @@ Status DataDir::load() {
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
-    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func);
+    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func, "");
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;
@@ -438,7 +438,7 @@ Status DataDir::load() {
     for (const auto& rowset_meta : dir_rowset_metas) {
         auto res = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
-        if (!res.ok() && to_status(res).is_not_found()) {
+        if (res.status().is_not_found()) {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
             //              << ", schema hash: " << rowset_meta->tablet_schema_hash()
             //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
@@ -490,12 +490,41 @@ Status DataDir::load() {
 
 StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tablet_id) {
     TabletSharedPtr tablet = nullptr;
-    ASSIGN_OR_RETURN(tablet, TabletMetaManager::traverse_for_tablet(_tablet_manager, this, tablet_id));
+    auto traverse_header_func = [this, &tablet](int64_t tablet_id, int32_t schema_hash,
+                                                std::string_view value) -> bool {
+        std::string value_str(value);
+        auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value_str, false, false, false,
+                                                         false, false);
+        if (st.ok()) {
+            tablet = st.value();
+            return false;
+        }
+        return true;
+    };
+    RETURN_IF_ERROR(TabletMetaManager::walk(_kv_store, traverse_header_func, strings::Substitute("$0_", tablet_id)));
 
     TabletUid tablet_uid = tablet->tablet_uid();
 
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
-    RETURN_IF_ERROR(RowsetMetaManager::traverse_rowset_metas_for_tabletuid(_kv_store, tablet_uid, &dir_rowset_metas));
+    auto traverse_rowset_meta_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
+                                                         std::string_view meta_str) -> bool {
+        auto rowset_meta = std::make_shared<RowsetMeta>();
+        bool parsed = rowset_meta->init(meta_str);
+        if (!parsed) {
+            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+            // return false will break meta iterator, return true to skip this error
+            return true;
+        }
+
+        LOG_IF(FATAL, rowset_meta->rowset_type() != BETA_ROWSET)
+                << "must change V1 format to V2 format."
+                << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
+                << ", schema_hash: " << rowset_meta->tablet_schema_hash() << ", rowset_id:" << rowset_meta->rowset_id();
+        dir_rowset_metas.push_back(rowset_meta);
+        return true;
+    };
+    RETURN_IF_ERROR(
+            RowsetMetaManager::traverse_rowset_metas(_kv_store, traverse_rowset_meta_func, tablet_uid.to_string()));
 
     for (const auto& rowset_meta : dir_rowset_metas) {
         RowsetSharedPtr rowset;

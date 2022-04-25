@@ -97,10 +97,8 @@ public:
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
-    static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
-
-    static StatusOr<TabletSharedPtr> traverse_for_tablet(TabletManager* tablet_manager, DataDir* data_dir,
-                                                         int64_t tablet_id);
+    static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func,
+                       const std::string& prefix = "");
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
