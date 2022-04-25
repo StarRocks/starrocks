@@ -57,7 +57,7 @@ struct SortedRun {
         return range.second - range.first;
     }
     const Column* get_column(int index) const { return orderby[index].get(); }
-    bool empty() const { return range.second == range.first; }
+    bool empty() const { return range.second == range.first || chunk == nullptr; }
     void reset();
     void resize(size_t size);
     int64_t mem_usage() const { return chunk->memory_usage(); }
@@ -72,6 +72,33 @@ struct SortedRun {
             ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
             cloned->append(*chunk, range.first, slice_rows);
             return cloned;
+        }
+    }
+
+    // Steal part of chunk from the start, avoid copy if possible
+    // After steal out, this run will not reference the chunk anymore
+    ChunkPtr steal_chunk(size_t size) {
+        if (empty()) {
+            return {};
+        }
+        if (size >= num_rows()) {
+            ChunkPtr res;
+            if (range.first == 0 && range.second == chunk->num_rows()) {
+                // No others reference this chunk
+                res = chunk;
+            } else {
+                res = chunk->clone_empty(num_rows());
+                res->append(*chunk, range.first, num_rows());
+            }
+            range.first = range.second = 0;
+            chunk.reset();
+            return res;
+        } else {
+            size_t required_rows = std::min(size, num_rows());
+            ChunkPtr res = chunk->clone_empty(required_rows);
+            res->append(*chunk, range.first, required_rows);
+            range.first += required_rows;
+            return res;
         }
     }
 

@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
 
@@ -9,19 +10,32 @@ namespace starrocks::pipeline {
 
 using vectorized::Permutation;
 using vectorized::Columns;
+using vectorized::SortedRun;
 using vectorized::SortedRuns;
 
 ChunkPtr SortContext::pull_chunk() {
     if (!_is_merge_finish) {
         _merge_inputs();
         _is_merge_finish = true;
-        return _merged_chunk;
-    } else {
+    }
+    if (_merged_runs.num_chunks() == 0) {
         return {};
     }
+    size_t required_rows = _state->chunk_size();
+    required_rows = std::min<size_t>(required_rows, _total_rows);
+    if (_limit > 0) {
+        required_rows = std::min<size_t>(required_rows, _limit);
+    }
+
+    SortedRun& run = _merged_runs.front();
+    ChunkPtr res = run.steal_chunk(required_rows);
+    if (run.empty()) {
+        _merged_runs.pop_front();
+    }
+    return res;
 }
 
-void SortContext::_merge_inputs() {
+Status SortContext::_merge_inputs() {
     int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
     int64_t require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
 
@@ -31,10 +45,9 @@ void SortContext::_merge_inputs() {
         partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
     }
 
-    SortedRuns merged_run;
-    merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &merged_run, require_rows);
-    // TODO: avoid assemble
-    _merged_chunk = merged_run.assemble();
+    RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &_merged_runs, require_rows));
+
+    return Status::OK();
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,

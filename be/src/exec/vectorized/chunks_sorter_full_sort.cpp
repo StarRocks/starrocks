@@ -99,8 +99,12 @@ bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
         *chunk = nullptr;
         return true;
     }
-    *chunk = _merged_runs.front().chunk;
-    _merged_runs.pop_front();
+    size_t chunk_size = _state->chunk_size();
+    SortedRun& run = _merged_runs.front();
+    *chunk = run.steal_chunk(chunk_size);
+    if (run.empty()) {
+        _merged_runs.pop_front();
+    }
     return false;
 }
 

@@ -10,6 +10,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/chunks_sorter.h"
+#include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
 
 namespace starrocks::pipeline {
@@ -19,6 +20,7 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using vectorized::ChunkPtr;
 using vectorized::ChunksSorter;
 using vectorized::SortDescs;
+using vectorized::SortedRuns;
 
 class SortContext final : public ContextWithDependency {
 public:
@@ -52,7 +54,7 @@ public:
     ChunkPtr pull_chunk();
 
 private:
-    void _merge_inputs();
+    Status _merge_inputs();
 
     RuntimeState* _state;
     const int64_t _limit;
@@ -65,7 +67,8 @@ private:
 
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
     bool _is_merge_finish = false;
-    ChunkPtr _merged_chunk;
+
+    SortedRuns _merged_runs;
 };
 
 class SortContextFactory {

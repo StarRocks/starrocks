@@ -185,6 +185,26 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2048, merged->get(1).get_int32());
 }
 
+TEST(SortingTest, steal_chunk) {
+    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
+    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+
+    for (size_t chunk_size : std::vector<size_t>{1, 3, 4, 5, 7, 33, 101, 205}) {
+        SortedRun run(chunk, chunk->columns());
+        ChunkPtr sum = chunk->clone_empty();
+        while (!run.empty()) {
+            ChunkPtr stealed = run.steal_chunk(chunk_size);
+            sum->append(*stealed);
+        }
+        ASSERT_EQ(chunk->num_rows(), sum->num_rows());
+        ASSERT_EQ(chunk->num_columns(), sum->num_columns());
+        ASSERT_TRUE(run.empty());
+        ASSERT_TRUE(run.chunk == nullptr);
+    }
+}
+
 TEST(SortingTest, sorted_runs) {
     ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
     ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
