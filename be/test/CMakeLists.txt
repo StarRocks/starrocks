@@ -35,6 +35,15 @@ set(EXEC_FILES
         ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/vectorized/sorting_test.cpp
+        ./exec/vectorized/chunks_sorter_test.cpp
+        ./exec/vectorized/parquet_scanner_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
+        ./exec/vectorized/repeat_node_test.cpp
+        ./exec/es_scan_reader_test.cpp
+        ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -263,8 +272,11 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
+        ./util/arrow/starrocks_column_to_arrow_test.cpp
+        ./util/starrocks_metrics_test.cpp
+        ./util/system_metrics_test.cpp
+        ./util/zip_util_test.cpp
         ./gutil/sysinfo-test.cc
-        ./exec/vectorized/hdfs_scan_node_test.cpp
         )
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
@@ -309,11 +321,3 @@ TARGET_LINK_LIBRARIES(bytes_test
         gtest
         tcmalloc
         )
-
-add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
-TARGET_LINK_LIBRARIES(starrocks_column_to_arrow_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(starrocks_column_to_arrow_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-add_executable(engine_storage_migration_task_test ./storage/task/engine_storage_migration_task_test.cpp)
-TARGET_LINK_LIBRARIES(engine_storage_migration_task_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(engine_storage_migration_task_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
