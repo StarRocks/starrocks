@@ -1242,7 +1242,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private static final List<String> DATE_FUNCTIONS =
-            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB");
+            Lists.newArrayList("DATE_ADD", "ADDDATE", "DAYS_ADD", "DATE_SUB", "SUBDATE", "DAYS_SUB", "DATE_FLOOR");
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
