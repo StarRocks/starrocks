@@ -13,38 +13,45 @@ void QuerySharedDriverQueue::close() {
     _cv.notify_all();
 }
 
-void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
+void QuerySharedDriverQueue::put(const DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
-        _queues[level].queue.emplace(driver);
+        if (driver->driver_state() == DriverState::CANCELED) {
+            _queues[level].queue.emplace_front(driver);
+        } else {
+            _queues[level].queue.emplace_back(driver);
+        }
         _cv.notify_one();
     }
 }
 
-void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
+void QuerySharedDriverQueue::put(const std::vector<DriverRawPtr>& drivers) {
     std::vector<int> levels(drivers.size());
-    for (int i = 0; i < drivers.size(); i++) {
+    for (int i = 0;i < drivers.size();i ++) {
         levels[i] = _compute_driver_level(drivers[i]);
         drivers[i]->set_driver_queue_level(levels[i]);
     }
-
     std::lock_guard<std::mutex> lock(_global_mutex);
-    for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i]].queue.emplace(drivers[i]);
+    for (int i = 0;i < drivers.size();i ++) {
+        if (drivers[i]->driver_state() == DriverState::CANCELED) {
+            _queues[levels[i]].queue.emplace_front(drivers[i]);
+        } else {
+            _queues[levels[i]].queue.emplace_back(drivers[i]);
+        }
         _cv.notify_one();
     }
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
-    put_back(driver);
+    put(driver);
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
-    put_back(drivers);
+    put(drivers);
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
@@ -79,7 +86,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
         }
         // record queue's index to accumulate time for it.
         driver_ptr = _queues[queue_idx].queue.front();
-        _queues[queue_idx].queue.pop();
+        _queues[queue_idx].queue.pop_front();
     }
 
     // next pipeline driver to execute.
@@ -109,24 +116,24 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
     return QUEUE_SIZE - 1;
 }
 
-void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
-    _put_back(driver);
+void QuerySharedDriverQueueWithoutLock::put(const DriverRawPtr driver) {
+    _put(driver);
 }
 
-void QuerySharedDriverQueueWithoutLock::put_back(const std::vector<DriverRawPtr>& drivers) {
+void QuerySharedDriverQueueWithoutLock::put(const std::vector<DriverRawPtr>& drivers) {
     for (auto driver : drivers) {
-        _put_back(driver);
+        _put(driver);
     }
 }
 
 void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const DriverRawPtr driver) {
     // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put_back(driver);
+    put(driver);
 }
 
 void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put_back(drivers);
+    put(drivers);
 }
 
 StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
@@ -151,7 +158,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
     DCHECK(queue_idx >= 0);
 
     driver_ptr = _queues[queue_idx].queue.front();
-    _queues[queue_idx].queue.pop();
+    _queues[queue_idx].queue.pop_front();
 
     --_size;
 
@@ -162,10 +169,14 @@ void QuerySharedDriverQueueWithoutLock::update_statistics(const DriverRawPtr dri
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
 }
 
-void QuerySharedDriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
+void QuerySharedDriverQueueWithoutLock::_put(const DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
-    _queues[level].queue.emplace(driver);
+    if (driver->driver_state() == DriverState::CANCELED) {
+        _queues[level].queue.emplace_front(driver);
+    } else {
+        _queues[level].queue.emplace_back(driver);
+    }
     ++_size;
 }
 
@@ -186,29 +197,26 @@ void DriverQueueWithWorkGroup::close() {
     _cv.notify_all();
 }
 
-void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-    _put_back<false>(driver);
+void DriverQueueWithWorkGroup::put(const DriverRawPtr driver) {
+    _put<false>(driver);
 }
 
-void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
+void DriverQueueWithWorkGroup::put(const std::vector<DriverRawPtr>& drivers) {
     for (const auto driver : drivers) {
-        _put_back<false>(driver);
+        _put<false>(driver);
     }
 }
 
 void DriverQueueWithWorkGroup::put_back_from_executor(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
-    _put_back<true>(driver);
+    _put<true>(driver);
 }
 
 void DriverQueueWithWorkGroup::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     for (const auto driver : drivers) {
-        _put_back<true>(driver);
+        _put<true>(driver);
     }
 }
 
@@ -289,7 +297,7 @@ size_t DriverQueueWithWorkGroup::size() {
 }
 
 template <bool from_executor>
-void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
+void DriverQueueWithWorkGroup::_put(const DriverRawPtr driver) {
     auto* wg = driver->workgroup();
     if (_ready_wgs.find(wg) == _ready_wgs.end()) {
         _sum_cpu_limit += wg->cpu_limit();
@@ -316,7 +324,7 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
         }
         _ready_wgs.emplace(wg);
     }
-    wg->driver_queue()->put_back(driver);
+    wg->driver_queue()->put(driver);
     _cv.notify_one();
 }
 
