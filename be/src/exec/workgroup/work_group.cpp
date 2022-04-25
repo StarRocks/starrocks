@@ -121,7 +121,8 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 
 void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
     std::call_once(_init_metrics, []() {
-        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook", [] { update_metrics(); });
+        StarRocksMetrics::instance()->metrics()->register_hook(
+                "work_group_metrics_hook", [] { starrocks::workgroup::WorkGroupManager::update_metrics(); });
     });
 
     if (_wg_metrics.count(wg->name()) == 0) {
