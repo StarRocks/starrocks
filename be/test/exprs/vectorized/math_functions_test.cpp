@@ -219,8 +219,13 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
     } else if (c0_const && c1_const) {
         ASSERT_TRUE(res_column->is_constant());
         res_const = true;
-        decimal_res_column =
-                ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_const(res_column)).get();
+        auto maybe_nullable_res_column = FunctionHelper::get_data_column_of_const(res_column);
+        if (maybe_nullable_res_column->is_nullable()) {
+            decimal_res_column = nullptr;
+            null_fags_res_column = down_cast<NullableColumn*>(maybe_nullable_res_column.get())->null_column().get();
+        } else {
+            decimal_res_column = ColumnHelper::cast_to<TYPE_DECIMAL128>(maybe_nullable_res_column).get();
+        }
     } else if (c0_nullable || c1_nullable) {
         ASSERT_TRUE(res_column->is_nullable());
         decimal_res_column =
@@ -228,12 +233,21 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         null_fags_res_column = down_cast<NullableColumn*>(res_column.get())->null_column().get();
     } else {
         ASSERT_FALSE(res_column->is_constant());
-        ASSERT_FALSE(res_column->is_nullable());
-        decimal_res_column = ColumnHelper::cast_to<TYPE_DECIMAL128>(res_column).get();
+        auto maybe_nullable_res_column = FunctionHelper::get_data_column_of_const(res_column);
+        if (maybe_nullable_res_column->is_nullable()) {
+            decimal_res_column = ColumnHelper::cast_to<TYPE_DECIMAL128>(
+                                         FunctionHelper::get_data_column_of_nullable(maybe_nullable_res_column))
+                                         .get();
+            null_fags_res_column = down_cast<NullableColumn*>(maybe_nullable_res_column.get())->null_column().get();
+        } else {
+            decimal_res_column = ColumnHelper::cast_to<TYPE_DECIMAL128>(maybe_nullable_res_column).get();
+        }
     }
 
-    ASSERT_EQ(decimal_precision_limit<int128_t>, decimal_res_column->precision());
-    ASSERT_EQ(return_type.scale, decimal_res_column->scale());
+    if (decimal_res_column != nullptr) {
+        ASSERT_EQ(decimal_precision_limit<int128_t>, decimal_res_column->precision());
+        ASSERT_EQ(return_type.scale, decimal_res_column->scale());
+    }
     if (res_null_flags.size() == res_values.size()) {
         ASSERT_TRUE(null_fags_res_column != nullptr);
         const auto end = res_const ? 0 : res_values.size();
@@ -298,6 +312,8 @@ TEST_F(VecMathFunctionsTest, DecimalRoundUpToNullTest) {
                                        {1, 1});
     testRoundDecimal<TYPE_ROUND_UP_TO>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
                                        {1, 1});
+
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"123456789.11"}, {}, 15, 2, {38}, {}, {"INVALID"}, {1});
 }
 
 TEST_F(VecMathFunctionsTest, DecimalRoundUpToByColTest) {
@@ -335,6 +351,8 @@ TEST_F(VecMathFunctionsTest, DecimalTruncateNullTest) {
     testRoundDecimal<TYPE_TRUNCATE>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {2, 2}, {}, {"INVALID", "INVALID"}, {1, 1});
     testRoundDecimal<TYPE_TRUNCATE>({"INVALID", "INVALID"}, {1, 1}, 10, 2, {0, 0}, {1, 1}, {"INVALID", "INVALID"},
                                     {1, 1});
+
+    testRoundDecimal<TYPE_TRUNCATE>({"123456789.11"}, {}, 15, 2, {38}, {}, {"INVALID"}, {1});
 }
 
 TEST_F(VecMathFunctionsTest, DecimalTruncateByColTest) {
