@@ -5192,6 +5192,8 @@ keyword ::=
     {: RESULT = id; :}
     | KW_LEVEL:id
     {: RESULT = id; :}
+    | KW_LIST:id
+    {: RESULT = id; :}
     | KW_LOCAL:id
     {: RESULT = id; :}
     | KW_LOCATION:id

@@ -69,6 +69,7 @@ public class ListPartitionInfoTest {
         this.assertPartitionProperties((ListPartitionInfo) partitionInfo,
                 columnList.get(0), "province", 10001L);
 
+        file.delete();
     }
 
     private void assertPartitionProperties(ListPartitionInfo partitionInfo, Column column,
