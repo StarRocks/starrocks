@@ -12,7 +12,9 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "util/blocking_queue.hpp"
+#include "util/metrics.h"
 #include "util/priority_thread_pool.hpp"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -128,6 +130,8 @@ public:
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_VERSION = 0;
 
+    int64_t mem_limit() const;
+
 private:
     std::string _name;
     int64_t _id;
@@ -135,6 +139,7 @@ private:
 
     size_t _cpu_limit;
     double _memory_limit;
+    int64_t _mem_limit;
     size_t _concurrency;
     WorkGroupType _type;
 
@@ -223,6 +228,9 @@ public:
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
+    void add_metrics(const WorkGroupPtr& wg);
+    void update_metrics();
+
 private:
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
     // WorkGroupManager::_mutex is held when invoking these method.
@@ -244,6 +252,14 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
+
+    std::once_flag _init_metrics;
+    std::unordered_map<std::string, int128_t> _wg_metrics;
+
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
 };
 
 class DefaultWorkGroupInitialization {
