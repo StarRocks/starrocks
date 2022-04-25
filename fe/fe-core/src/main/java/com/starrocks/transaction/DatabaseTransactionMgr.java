@@ -56,6 +56,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -513,11 +514,16 @@ public class DatabaseTransactionMgr {
                         }
 
                         if (successReplicaNum < quorumReplicaNum) {
+                            List<String> errorBackends = new ArrayList<String>();
+                            for (long backendId : errorBackendIdsForTablet) {
+                                Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendId);
+                                errorBackends.add(backend.getId() + ":" + backend.getHost());
+                            }
                             LOG.warn("Failed to commit txn [{}]. "
                                             + "Tablet [{}] success replica num is {} < quorum replica num {} "
                                             + "while error backends {}",
                                     transactionId, tablet.getId(), successReplicaNum, quorumReplicaNum,
-                                    Joiner.on(",").join(errorBackendIdsForTablet));
+                                    Joiner.on(",").join(errorBackends));
                             throw new TabletQuorumFailedException(transactionId, tablet.getId(),
                                     successReplicaNum, quorumReplicaNum,
                                     errorBackendIdsForTablet);
