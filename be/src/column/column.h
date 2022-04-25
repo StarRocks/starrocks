@@ -36,10 +36,6 @@ private:
     friend class COW<Column>;
 
 public:
-    Column(): COW<Column>() {}
-    Column(bool pool, size_t chunk_size): COW<Column>(pool, chunk_size) {}
-
-public:
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
     // When size is 0, it means copy the string's actual size.
@@ -385,10 +381,6 @@ class ColumnFactory : public Base {
 private:
     Derived* mutable_derived() { return down_cast<Derived*>(this); }
     const Derived* derived() const { return down_cast<const Derived*>(this); }
-
-public:
-    ColumnFactory(): Base() {}
-    ColumnFactory(bool pool, size_t chunk_size): Base(pool, chunk_size) {} 
 
 public:
     template <typename... Args>

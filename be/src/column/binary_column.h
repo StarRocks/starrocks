@@ -26,7 +26,7 @@ public:
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase<T>() { _offsets.emplace_back(0); }
-    BinaryColumnBase<T>(bool pool, size_t chunk_size): ColumnFactory<Column, BinaryColumnBase<T>>(pool, chunk_size) { _offsets.emplace_back(0); }
+    
     BinaryColumnBase<T>(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
