@@ -1622,7 +1622,7 @@ public class Coordinator {
         }
 
         if (params.isSetLoaded_rows()) {
-            Catalog.getCurrentCatalog().getLoadManager().updateJobPrgress(
+            Catalog.getCurrentCatalog().getLoadManager().updateJobProgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
                     params.done);
         }

@@ -5303,6 +5303,8 @@ keyword ::=
     {: RESULT = id; :}
     | KW_CURRENT_TIMESTAMP:id
     {: RESULT = id; :}
+    | KW_SYNC:id
+    {: RESULT = id; :}
     ;
 
 // Identifier that contain keyword

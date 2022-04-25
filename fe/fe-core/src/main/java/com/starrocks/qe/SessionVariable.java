@@ -52,6 +52,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
+    public static final String QUERY_MODE = "query_mode";
     public static final String RESOURCE_VARIABLE = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
@@ -238,6 +239,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Set sqlMode to empty string
     @VariableMgr.VarAttr(name = SQL_MODE)
     private long sqlMode = 0L;
+
+    @VariableMgr.VarAttr(name = QUERY_MODE)
+    private String queryMode = "sync";
 
     @VariableMgr.VarAttr(name = RESOURCE_VARIABLE)
     private String resourceGroup = "normal";
@@ -552,6 +556,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSqlMode() {
         return sqlMode;
+    }
+
+    public String getQueryMode() {
+        return queryMode;
     }
 
     public void setSqlMode(long sqlMode) {
