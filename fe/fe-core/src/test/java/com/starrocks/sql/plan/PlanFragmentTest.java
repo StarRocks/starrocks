@@ -5633,4 +5633,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  3:EXCHANGE\n" +
                 "     limit: 2"));
     }
+
+    @Test
+    public void testLocalAggregateWithMultiStage() throws Exception {
+        String sql = "select rank() over(partition by L_ORDERKEY) from lineitem_partition_colocate";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(0).getPlanRoot().getChild(0).isColocate());
+    }
 }
