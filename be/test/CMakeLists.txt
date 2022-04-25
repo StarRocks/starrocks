@@ -341,6 +341,9 @@ ADD_BE_TEST(storage/delete_handler_test)
 ADD_BE_TEST(storage/options_test)
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
+# you can simply add test case as single binary without adding `main`
+# ADD_BE_TEST(exec/vectorized/sorting_test)
+
 # =================================================
 # benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.
 ADD_BE_BENCH(exec/vectorized/chunks_sorter_bench_test)
