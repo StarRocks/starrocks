@@ -9,6 +9,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "util/fixed_hash_map.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 
@@ -17,7 +18,7 @@ namespace starrocks::vectorized {
 // =====================
 // one level agg hash set
 template <PhmapSeed seed>
-using Int8AggHashSet = phmap::flat_hash_set<int8_t, StdHashWithSeed<int8_t, seed>>;
+using Int8AggHashSet = SmallFixedSizeHashSet<int8_t>;
 template <PhmapSeed seed>
 using Int16AggHashSet = phmap::flat_hash_set<int16_t, StdHashWithSeed<int16_t, seed>>;
 template <PhmapSeed seed>
