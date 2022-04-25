@@ -64,13 +64,16 @@ public class BackendServiceProxy {
 
     private BackendServiceProxy() {
         final RpcClientOptions rpcOptions = new RpcClientOptions();
-        if (Config.enable_brpc_share_channel) {
-            rpcOptions.setShareThreadPoolUnderEachProxy(true);
-            rpcOptions.setShareChannelPool(true);
-            rpcOptions.setThreadPoolSize(1);
-        } else {
-            rpcOptions.setThreadPoolSize(Config.brpc_number_of_concurrent_requests_processed);
-        }
+        // If false, different methods to a service endpoint use different connection pool,
+        // which will create too many connections.
+        // If true, all the methods to a service endpoint use the same connection pool.
+        rpcOptions.setShareThreadPoolUnderEachProxy(true);
+        rpcOptions.setShareChannelPool(true);
+        rpcOptions.setMaxTotoal(Config.brpc_connection_pool_size);
+        // After the RPC request sending, the connection will be closed,
+        // if the number of total connections is greater than MaxIdleSize.
+        // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
+        rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
         rpcClient = new RpcClient(rpcOptions);
         serviceMap = Maps.newHashMap();
