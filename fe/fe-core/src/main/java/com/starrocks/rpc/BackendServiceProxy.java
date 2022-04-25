@@ -67,9 +67,14 @@ public class BackendServiceProxy {
         if (Config.enable_brpc_share_channel) {
             rpcOptions.setShareThreadPoolUnderEachProxy(true);
             rpcOptions.setShareChannelPool(true);
-            rpcOptions.setThreadPoolSize(1);
+            rpcOptions.setMaxTotoal(Config.brpc_number_of_concurrent_requests_processed_for_share_channel);
+            // After the RPC request sending, the connection will be closed,
+            // if the number of total connections is greater than MaxIdleSize.
+            // Therefore, MaxIdleSize shouldn't less than MaxTotal.
+            rpcOptions.setMaxIdleSize(Config.brpc_number_of_concurrent_requests_processed_for_share_channel);
         } else {
-            rpcOptions.setThreadPoolSize(Config.brpc_number_of_concurrent_requests_processed);
+            rpcOptions.setMaxTotoal(Config.brpc_number_of_concurrent_requests_processed);
+            rpcOptions.setMaxIdleSize(Config.brpc_number_of_concurrent_requests_processed);
         }
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
         rpcClient = new RpcClient(rpcOptions);
