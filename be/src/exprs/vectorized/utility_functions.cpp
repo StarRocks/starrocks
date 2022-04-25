@@ -2,8 +2,10 @@
 
 #include "exprs/vectorized/utility_functions.h"
 
+#include <emmintrin.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
@@ -95,49 +97,41 @@ ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
         offsets[i + 1] = offsets[i] + 36;
     }
 
+#ifdef __SSE4_2__
+    alignas(16) static constexpr const char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                                                             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    const __m128i mask = _mm_set1_epi8(0xF);
+    const __m128i chars = _mm_load_si128(reinterpret_cast<const __m128i*>(hex_chars));
+#endif
+
     for (int i = 0; i < num_rows; ++i) {
-        union {
-            struct {
-                int32_t time_low;
-                int16_t time_mid;
-                int16_t time_hi_and_version;
-                int16_t clock_seq_hi_and_res;
-                int32_t node_high;
-                int16_t node_low;
-            } __attribute__((packed)) pack;
-            int128_t v;
-            static_assert(sizeof(pack) == sizeof(v));
-        } uni;
-        uni.v = uuid_data[i];
+        char buff[32];
+        memset(ptr, '-', 36);
+#ifdef __SSE4_2__
+        // SIMD::to_hex
+        __m128i value = _mm_loadu_si64(reinterpret_cast<const __m128i*>(&uuid_data[i]));
+        value = _mm_and_si128(_mm_unpacklo_epi8(_mm_srli_epi64(value, 4), value), mask);
+        value = _mm_shuffle_epi8(chars, value);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(buff), value);
 
-        int offset = 0;
-        to_hex(uni.pack.time_low, ptr);
-        offset += sizeof(uni.pack.time_low) * 2;
-        ptr[offset] = '-';
-        offset++;
+        value = _mm_loadu_si64(reinterpret_cast<const __m128i*>(reinterpret_cast<const int64_t*>(&uuid_data[i]) + 1));
+        value = _mm_and_si128(_mm_unpacklo_epi8(_mm_srli_epi64(value, 4), value), mask);
+        value = _mm_shuffle_epi8(chars, value);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(buff + 16), value);
+#else
+        to_hex(uuid_data[i], buff2);
+        std::reverse(buff, buff + 32);
+#endif
 
-        to_hex(uni.pack.time_mid, ptr + offset);
-        offset += sizeof(uni.pack.time_mid) * 2;
-        ptr[offset] = '-';
-        offset++;
+        // UUID format 8-4-4-4-12
 
-        to_hex(uni.pack.time_hi_and_version, ptr + offset);
-        offset += sizeof(uni.pack.time_hi_and_version) * 2;
-        ptr[offset] = '-';
-        offset++;
+        memcpy(ptr, buff, 8);
+        memcpy(ptr + 8 + 1, buff + 8, 4);
+        memcpy(ptr + 8 + 4 + 2, buff + 8 + 4, 4);
+        memcpy(ptr + 8 + 4 + 4 + 3, buff + 8 + 4 + 4, 4);
+        memcpy(ptr + 8 + 4 + 4 + 4 + 4, buff + 8 + 4 + 4 + 4, 12);
 
-        to_hex(uni.pack.clock_seq_hi_and_res, ptr + offset);
-        offset += sizeof(uni.pack.clock_seq_hi_and_res) * 2;
-        ptr[offset] = '-';
-        offset++;
-
-        to_hex(uni.pack.node_high, ptr + offset);
-        offset += sizeof(uni.pack.node_high) * 2;
-        to_hex(uni.pack.node_low, ptr + offset);
-        offset += sizeof(uni.pack.node_low) * 2;
-
-        DCHECK_EQ(offset, 36);
-        ptr += offset;
+        ptr += 36;
     }
 
     return res;
