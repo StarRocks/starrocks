@@ -21,15 +21,6 @@ public class AdminSetReplicaStatusStmtAnalyzer {
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt,
                                                         ConnectContext session) {
-            try {
-                checkProperties(adminSetReplicaStatusStmt);
-            } catch (SemanticException e) {
-                throw e;
-            }
-            return null;
-        }
-
-        private void checkProperties(AdminSetReplicaStatusStmt adminSetReplicaStatusStmt) {
             long tabletId = -1;
             long backendId = -1;
             ReplicaStatus status = null;
@@ -63,6 +54,7 @@ public class AdminSetReplicaStatusStmtAnalyzer {
             if (tabletId == -1 || backendId == -1 || status == null) {
                 throw new SemanticException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
             }
+            return null;
         }
     }
 }
