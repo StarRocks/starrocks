@@ -200,9 +200,9 @@ public:
                                        starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     /*
-    * Called by datetime_floor
-    * Floor to the corresponding period
-    */
+     * Called by datetime_floor
+     * Floor to the corresponding period
+     */
     DEFINE_VECTORIZED_FN(datetime_floor_second);
     DEFINE_VECTORIZED_FN(datetime_floor_minute);
     DEFINE_VECTORIZED_FN(datetime_floor_hour);
@@ -599,7 +599,7 @@ private:
         char* fmt;
     };
 
-    // method for datetime_trunc
+    // method for datetime_trunc and datetime_floor
     struct DateTruncCtx {
         ScalarFunction function;
     };
