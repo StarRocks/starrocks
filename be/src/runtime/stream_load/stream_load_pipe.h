@@ -54,7 +54,7 @@ public:
     Status append(const char* data, size_t size) override {
         size_t pos = 0;
         if (_write_buf != nullptr) {
-            if (size < _write_buf->remaining()) {
+            if (size <= _write_buf->remaining()) {
                 _write_buf->put_bytes(data, size);
                 return Status::OK();
             } else {
