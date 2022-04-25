@@ -131,6 +131,7 @@ public class FunctionSet {
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String DATE_TRUNC = "date_trunc";
+    public static final String DATE_FLOOR = "date_floor";
 
     // string functions
     public static final String SUBSTRING = "substring";
