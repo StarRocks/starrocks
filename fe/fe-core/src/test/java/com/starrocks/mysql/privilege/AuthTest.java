@@ -129,6 +129,10 @@ public class AuthTest {
                 minTimes = 0;
                 result = ctx;
 
+                ctx.getClusterName();
+                minTimes = 0;
+                result = SystemInfoService.DEFAULT_CLUSTER;
+
                 ctx.getQualifiedUser();
                 minTimes = 0;
                 result = "root";
@@ -1228,7 +1232,7 @@ public class AuthTest {
 
         // 4. grant role to user
         GrantRoleStmt grantRoleStmt = new GrantRoleStmt(selectRoleName, userIdentity);
-        grantRoleStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
         // check if select privilege granted, load privilege not granted
@@ -1258,7 +1262,7 @@ public class AuthTest {
 
         // 7. grant role to user
         grantRoleStmt = new GrantRoleStmt(loadRoleName, userIdentity);
-        grantRoleStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
         auth.grantRole(grantRoleStmt);
 
         // check if select & load privilege & spark resource usage all granted
@@ -1269,7 +1273,7 @@ public class AuthTest {
 
         // 8. revoke load & spark resource usage from user
         RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(loadRoleName, userIdentity);
-        revokeRoleStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
         auth.revokeRole(revokeRoleStmt);
 
         // check if select privilege granted, load privilege not granted

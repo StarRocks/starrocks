@@ -3,12 +3,12 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Catalog;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -17,8 +17,6 @@ import org.junit.Test;
 
 public class GrantRevokeRoleStmtTest {
 
-    @Mocked
-    private Analyzer analyzer;
     @Mocked
     private Catalog catalog;
     @Mocked
@@ -31,13 +29,6 @@ public class GrantRevokeRoleStmtTest {
     @Before
     public void setUp() {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
-        new Expectations(analyzer) {
-            {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "test_cluster";
-            }
-        };
         new Expectations() {
             {
                 Catalog.getCurrentCatalog();
@@ -63,6 +54,14 @@ public class GrantRevokeRoleStmtTest {
                 result = true;
             }
         };
+
+        new Expectations(ctx) {
+            {
+                ctx.getClusterName();
+                minTimes = 0;
+                result = "test_cluster";
+            }
+        };
     }
 
     @Test
@@ -86,15 +85,15 @@ public class GrantRevokeRoleStmtTest {
         };
         // grant
         GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(stmt.toSql(), "GRANT ROLE test_role TO 'test_cluster:test_user'@'localhost'");
         // revoke
         RevokeRoleStmt stmt2 = new RevokeRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
-        stmt2.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
         Assert.assertEquals(stmt2.toSql(), "REVOKE ROLE test_role FROM 'test_cluster:test_user'@'localhost'");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
         new Expectations(userPrivTable) {
@@ -113,11 +112,11 @@ public class GrantRevokeRoleStmtTest {
             }
         };
         GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testRoleNotExist() throws Exception {
         // suppose current exists
         new Expectations(userPrivTable) {
@@ -136,7 +135,7 @@ public class GrantRevokeRoleStmtTest {
             }
         };
         GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
  }

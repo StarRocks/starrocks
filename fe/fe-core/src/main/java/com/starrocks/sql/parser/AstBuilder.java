@@ -34,6 +34,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
@@ -59,6 +60,7 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RevokeRoleStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
@@ -105,6 +107,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -178,6 +181,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
+    public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.userIdentifier());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    @Override
+    public ParseNode visitRevokeRole(StarRocksParser.RevokeRoleContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.userIdentifier());
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
@@ -1674,6 +1691,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDigitIdentifier(StarRocksParser.DigitIdentifierContext context) {
         return new Identifier(context.getText());
+    }
+
+    @Override
+    public ParseNode visitIdentifierOfIdentifierOrString(StarRocksParser.IdentifierOfIdentifierOrStringContext context) {
+        return (Identifier) visit(context.identifier());
+    }
+
+    @Override
+    public ParseNode visitStringOfIdentifierOrString(StarRocksParser.StringOfIdentifierOrStringContext context) {
+        String raw = context.string().getText();
+        if (raw.charAt(0) == '\'' && raw.charAt(raw.length() - 1) == '\''
+                || raw.charAt(0) == '"' && raw.charAt(raw.length() - 1) == '"') {
+            raw = raw.substring(1, raw.length() - 1);
+        }
+        return new Identifier(raw);
+    }
+
+    @Override
+    public ParseNode visitUserWithHostAndBlanket(StarRocksParser.UserWithHostAndBlanketContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), true);
+    }
+
+    @Override
+    public ParseNode visitUserWithHost(StarRocksParser.UserWithHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString(0));
+        Identifier host = (Identifier) visit(context.identifierOrString(1));
+        return new UserIdentifier(user.getValue(), host.getValue(), false);
+    }
+
+    @Override
+    public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
+        Identifier user = (Identifier) visit(context.identifierOrString());
+        return new UserIdentifier(user.getValue(), "%", false);
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

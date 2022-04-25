@@ -11,8 +11,10 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -179,7 +181,9 @@ public class StatementPlanner {
                 || statement instanceof DmlStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
+                || statement instanceof GrantRoleStmt
                 || statement instanceof QueryStatement
+                || statement instanceof RevokeStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt
                 || statement instanceof ShowTableStmt

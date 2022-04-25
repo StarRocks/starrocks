@@ -12,6 +12,7 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
@@ -132,6 +133,12 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext session) {
+            GrantRoleAnalyzer.analyze(stmt, session);
             return null;
         }
     }
