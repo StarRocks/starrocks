@@ -252,7 +252,7 @@ public class PredicateReorderRuleTest {
         optExpressionT1 = olapScanImplementationRule.transform(optExpressionT1, null).get(0);
         optExpressionT1.setStatistics(statistics);
 
-        HashJoinImplementationRule hashJoinImplementationRule = new HashJoinImplementationRule();
+        HashJoinImplementationRule hashJoinImplementationRule = HashJoinImplementationRule.getInstance();
 
         LogicalJoinOperator.Builder builder1 = new LogicalJoinOperator.Builder();
         builder1.setPredicate(and);
