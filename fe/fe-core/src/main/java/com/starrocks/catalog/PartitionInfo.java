@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStorageMedium;
@@ -156,6 +157,10 @@ public class PartitionInfo implements Writable {
         return "";
     }
 
+    public List<Column> getPartitionColumns() throws NotImplementedException {
+        throw new NotImplementedException("method not implemented yet");
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, type.name());
@@ -212,7 +217,6 @@ public class PartitionInfo implements Writable {
                 buff.append(true);
             } else {
                 buff.append(false);
-
             }
             buff.append("data_property: ").append(entry.getValue().toString());
             buff.append("replica number: ").append(idToReplicationNum.get(entry.getKey()));
