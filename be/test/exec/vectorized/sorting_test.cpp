@@ -278,6 +278,7 @@ TEST(MergeTest, merge_sorted_cursor_two_way) {
         null_first.push_back(true);
         map[i] = i;
     }
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
 
     std::vector<std::unique_ptr<Chunk>> left_chunks;
     std::vector<std::unique_ptr<Chunk>> right_chunks;
