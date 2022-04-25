@@ -208,7 +208,6 @@ private:
     TabletSharedPtr _create_tablet_meta_and_dir_unlocked(const TCreateTabletReq& request, bool is_schema_change,
                                                          const Tablet* base_tablet,
                                                          const std::vector<DataDir*>& data_dirs);
-    StatusOr<TabletSharedPtr> _load_tablet(TTabletId tablet_id);
     Status _create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, bool is_schema_change_tablet,
                                         const Tablet* base_tablet, TabletMetaSharedPtr* tablet_meta);
 

@@ -438,27 +438,6 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     return Status::OK();
 }
 
-StatusOr<TabletSharedPtr> TabletManager::_load_tablet(TTabletId tablet_id) {
-    if (!config::enable_tablet_load || _storage_engine == nullptr) {
-        return Status::InternalError("tablet load failed");
-    }
-    TabletSharedPtr tablet = nullptr;
-
-    for (auto data_dir : _storage_engine->get_stores()) {
-        auto st = data_dir->load_tablet(tablet_id);
-        if (st.ok() && st.value() != nullptr) {
-            tablet = st.value();
-            break;
-        } else if (!st.ok()) {
-            return st;
-        }
-    }
-    if (tablet == nullptr) {
-        return Status::NotFound(fmt::format("Not found tablet: {}", tablet_id));
-    }
-    return tablet;
-}
-
 StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
     auto shard = _get_tablets_shard(tablet_id);
     TabletSharedPtr tablet = nullptr;
@@ -473,11 +452,9 @@ StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, bool in
         }
     }
     if (tablet == nullptr) {
-        ASSIGN_OR_RETURN(tablet, _load_tablet(tablet_id));
-        std::unique_lock wlock(shard->lock);
-        shard->id_set.insert(tablet_id);
-        shard->tablet_cache->put(tablet);
+        return Status::NotFound(fmt::format("tablet: {} not found", tablet_id));
     }
+
     if (!tablet->is_used()) {
         LOG(WARNING) << "tablet_id=" << tablet_id << " cannot be used";
         if (err != nullptr) {
@@ -592,13 +569,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
             std::shared_lock rlock(tablets_shard->lock);
             tablet_ptr = tablets_shard->tablet_cache->get(tablet_id);
             if (!tablet_ptr) {
-                rlock.unlock();
-                auto st = _load_tablet(tablet_id);
-                if (!st.ok()) {
-                    continue;
-                } else {
-                    tablet_ptr = st.value();
-                }
+                continue;
             }
         }
         if (_shard_visited_tablet_ids.find(tablet_id) == _shard_visited_tablet_ids.end()) {
@@ -645,15 +616,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                 std::shared_lock rlock(tablets_shard->lock);
                 tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
                 if (!tablet_ptr) {
-                    rlock.unlock();
-                    auto st = _load_tablet(tabletid);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        //                        std::unique_lock(tablets_shard->lock);
-                        //                        _put_into_metacache_ifabsent(tabletid, st.value());
-                        tablet_ptr = st.value();
-                    }
+                    continue;
                 }
             }
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
@@ -751,13 +714,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
                 std::shared_lock rlock(tablets_shard->lock);
                 tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
                 if (!tablet_ptr) {
-                    rlock.unlock();
-                    auto st = _load_tablet(tabletid);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        tablet_ptr = st.value();
-                    }
+                    continue;
                 }
             }
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
@@ -978,13 +935,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
                 std::shared_lock rlock(tablets_shard->lock);
                 tablet_ptr = tablets_shard->tablet_cache->get(tablet_id);
                 if (!tablet_ptr) {
-                    rlock.unlock();
-                    auto st = _load_tablet(tablet_id);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        tablet_ptr = st.value();
-                    }
+                    continue;
                 }
             }
             TTablet t_tablet;
@@ -1027,12 +978,7 @@ Status TabletManager::start_trash_sweep() {
                     std::shared_lock rlock(tablets_shard->lock);
                     tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
                     if (!tablet_ptr) {
-                        auto st = _load_tablet(tabletid);
-                        if (!st.ok()) {
-                            continue;
-                        } else {
-                            tablet_ptr = st.value();
-                        }
+                        continue;
                     }
                 }
                 all_tablets.push_back(tablet_ptr);
@@ -1234,13 +1180,7 @@ void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* pa
                 std::shared_lock rlock(tablets_shard->lock);
                 tablet = tablets_shard->tablet_cache->get(tabletid);
                 if (!tablet) {
-                    rlock.unlock();
-                    auto st = _load_tablet(tabletid);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        tablet = st.value();
-                    }
+                    continue;
                 }
             }
             ++(*tablet_count);
@@ -1271,12 +1211,7 @@ void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
             {
                 tablet_ptr = tablets_shard->tablet_cache->get(tabletid);
                 if (!tablet_ptr) {
-                    auto st = _load_tablet(tabletid);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        tablet_ptr = st.value();
-                    }
+                    continue;
                 }
             }
             if (tablet_ptr->tablet_state() != TABLET_RUNNING) {
@@ -1311,12 +1246,7 @@ void TabletManager::_build_tablet_stat() {
                 std::shared_lock rlock(tablets_shard->lock);
                 tablet = tablets_shard->tablet_cache->get(tablet_id);
                 if (!tablet) {
-                    auto st = _load_tablet(tablet_id);
-                    if (!st.ok()) {
-                        continue;
-                    } else {
-                        tablet = st.value();
-                    }
+                    continue;
                 }
             }
 
@@ -1505,12 +1435,6 @@ StatusOr<TabletSharedPtr> TabletManager::_get_tablet_unlocked(TTabletId tablet_i
     auto tablet = shard->tablet_cache->get(tablet_id);
     if (tablet) {
         return tablet;
-    }
-    if (need_load) {
-        ASSIGN_OR_RETURN(auto st, _load_tablet(tablet_id));
-        shard->id_set.insert(tablet_id);
-        shard->tablet_cache->put(st);
-        return Status::OK();
     }
     return Status::NotFound("tablet not found");
 }

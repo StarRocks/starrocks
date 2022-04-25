@@ -118,8 +118,6 @@ public:
     // So that the capacity StarRocks actually used may exceeds the user specified capacity.
     bool reach_capacity_limit(int64_t incoming_data_size);
 
-    StatusOr<std::shared_ptr<Tablet>> load_tablet(int64_t tablet_id);
-
     Status update_capacity();
 
 private:
