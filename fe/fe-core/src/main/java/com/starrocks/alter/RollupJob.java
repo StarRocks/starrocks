@@ -1099,7 +1099,7 @@ public class RollupJob extends AlterJob {
 
         rollupShortKeyColumnCount = in.readShort();
         rollupStorageType = TStorageType.valueOf(Text.readString(in));
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             boolean hasRollKeysType = in.readBoolean();
             if (hasRollKeysType) {
                 rollupKeysType = TKeysType.valueOf(Text.readString(in));

@@ -1063,7 +1063,7 @@ public class OlapTable extends Table {
             long indexId = in.readLong();
             this.indexNameToId.put(indexName, indexId);
 
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_75) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_75) {
                 // schema
                 int colCount = in.readInt();
                 List<Column> schema = new LinkedList<>();
@@ -1095,7 +1095,7 @@ public class OlapTable extends Table {
         }
 
         // partition and distribution info
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             keysType = KeysType.valueOf(Text.readString(in));
         } else {
             keysType = KeysType.AGG_KEYS;
@@ -1134,7 +1134,7 @@ public class OlapTable extends Table {
             nameToPartition.put(partition.getName(), partition);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_9) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_9) {
             if (in.readBoolean()) {
                 int bfColumnCount = in.readInt();
                 bfColumns = Sets.newHashSet();
@@ -1146,13 +1146,13 @@ public class OlapTable extends Table {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_46) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
             if (in.readBoolean()) {
                 colocateGroup = Text.readString(in);
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_57) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_57) {
             baseIndexId = in.readLong();
         } else {
             // the old table use table id as base index id
@@ -1160,22 +1160,22 @@ public class OlapTable extends Table {
         }
 
         // read indexes
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_70) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_70) {
             if (in.readBoolean()) {
                 this.indexes = TableIndexes.read(in);
             }
         }
         // tableProperty
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_71) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_71) {
             if (in.readBoolean()) {
                 tableProperty = TableProperty.read(in);
             }
         }
 
         // temp partitions
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             tempPartitions = TempPartitions.read(in);
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_77) {
                 RangePartitionInfo tempRangeInfo = tempPartitions.getPartitionInfo();
                 if (tempRangeInfo != null) {
                     for (long partitionId : tempRangeInfo.getIdToRange(false).keySet()) {

@@ -382,7 +382,7 @@ public class DateLiteral extends LiteralExpr {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_60) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_60) {
             short date_literal_type = in.readShort();
             fromPackedDatetime(in.readLong());
             if (date_literal_type == DateLiteralType.DATETIME.value()) {

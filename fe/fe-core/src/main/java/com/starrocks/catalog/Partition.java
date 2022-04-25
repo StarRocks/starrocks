@@ -162,7 +162,7 @@ public class Partition extends MetaObject implements Writable {
         if (MetaContext.get() != null) {
             // MetaContext is not null means we are in a edit log replay thread.
             // if it is upgrade from old StarRocks cluster, then should update next version info
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_45) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_45) {
                 // the partition is created and not import any data
                 if (visibleVersion == PARTITION_INIT_VERSION + 1) {
                     this.nextVersion = PARTITION_INIT_VERSION + 1;
@@ -410,7 +410,7 @@ public class Partition extends MetaObject implements Writable {
             idToVisibleRollupIndex.put(rollupTable.getId(), rollupTable);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             int shadowIndexCount = in.readInt();
             for (int i = 0; i < shadowIndexCount; i++) {
                 MaterializedIndex shadowIndex = MaterializedIndex.read(in, isUseStarOS());
@@ -419,13 +419,13 @@ public class Partition extends MetaObject implements Writable {
         }
 
         visibleVersion = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_88) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_88) {
             visibleVersionTime = in.readLong();
         } else {
             visibleVersionTime = System.currentTimeMillis();
         }
         in.readLong(); // read a version_hash for compatibility
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             nextVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             in.readLong(); // read a version_hash for compatibility

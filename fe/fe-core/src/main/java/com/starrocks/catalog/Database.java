@@ -487,7 +487,7 @@ public class Database extends MetaObject implements Writable {
         super.readFields(in);
 
         id = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             fullQualifiedName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             fullQualifiedName = Text.readString(in);
@@ -502,7 +502,7 @@ public class Database extends MetaObject implements Writable {
 
         // read quota
         dataQuotaBytes = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         } else {
             clusterName = Text.readString(in);
@@ -510,7 +510,7 @@ public class Database extends MetaObject implements Writable {
             attachDbName = Text.readString(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_47) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
             int numEntries = in.readInt();
             for (int i = 0; i < numEntries; ++i) {
                 String name = Text.readString(in);
@@ -524,7 +524,7 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             replicaQuotaSize = in.readLong();
         } else {
             replicaQuotaSize = FeConstants.default_db_replica_quota_size;

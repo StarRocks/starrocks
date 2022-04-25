@@ -60,7 +60,7 @@ public class DropDbInfo implements Writable {
     }
 
     public static DropDbInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_89) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_89) {
             DropDbInfo info = new DropDbInfo();
             info.readFields(in);
             return info;

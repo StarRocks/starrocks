@@ -162,7 +162,7 @@ public class Frontend implements Writable {
         role = FrontendNodeType.valueOf(Text.readString(in));
         host = Text.readString(in);
         editLogPort = in.readInt();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_41) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_41) {
             nodeName = Text.readString(in);
         } else {
             nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, true /* old style */);

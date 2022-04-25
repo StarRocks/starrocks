@@ -82,12 +82,12 @@ public class TablePropertyInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         long dbId = -1;
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_55) {
             dbId = in.readLong();
         }
         tableId = in.readLong();
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_55) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_55) {
             if (in.readBoolean()) {
                 groupId = GroupId.read(in);
             }

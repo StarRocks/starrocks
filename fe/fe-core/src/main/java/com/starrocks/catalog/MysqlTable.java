@@ -245,7 +245,7 @@ public class MysqlTable extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_92) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_92) {
             // Read MySQL meta
             int size = in.readInt();
             Map<String, String> serializeMap = Maps.newHashMap();

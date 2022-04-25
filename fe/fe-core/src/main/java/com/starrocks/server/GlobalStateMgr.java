@@ -697,9 +697,9 @@ public class GlobalStateMgr {
         }
     }
 
-    // NOTICE: in most case, we should use getCurrentCatalog() to get the right globalStateMgr.
+    // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
     // but in some cases, we should get the serving globalStateMgr explicitly.
-    public static GlobalStateMgr getServingCatalog() {
+    public static GlobalStateMgr getServingState() {
         return SingletonHolder.INSTANCE;
     }
 
@@ -775,11 +775,11 @@ public class GlobalStateMgr {
     }
 
     // use this to get correct GlobalStateMgr's journal version
-    public static int getCurrentCatalogJournalVersion() {
+    public static int getCurrentStateJournalVersion() {
         return MetaContext.get().getMetaVersion();
     }
 
-    public static int getCurrentCatalogStarRocksJournalVersion() {
+    public static int getCurrentStateStarRocksJournalVersion() {
         return MetaContext.get().getStarRocksMetaVersion();
     }
 
@@ -1743,7 +1743,7 @@ public class GlobalStateMgr {
     }
 
     public long loadFrontends(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             int size = dis.readInt();
             long newChecksum = checksum ^ size;
             for (int i = 0; i < size; i++) {
@@ -1754,7 +1754,7 @@ public class GlobalStateMgr {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
-                if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_41) {
+                if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_41) {
                     Frontend fe = Frontend.read(dis);
                     removedFrontends.add(fe.getNodeName());
                 } else {
@@ -1792,20 +1792,20 @@ public class GlobalStateMgr {
         Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
 
         // delete jobs
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
             jobSize = dis.readInt();
             newChecksum ^= jobSize;
             Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
         }
 
         // load error hub info
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_24) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_24) {
             LoadErrorHub.Param param = new LoadErrorHub.Param();
             param.readFields(dis);
             load.setLoadErrorHubInfo(param);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             // 4. load delete jobs
             int deleteJobSize = dis.readInt();
             newChecksum ^= deleteJobSize;
@@ -1818,7 +1818,7 @@ public class GlobalStateMgr {
 
     public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
         long newChecksum = checksum;
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_32) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_32) {
             int size = dis.readInt();
             newChecksum = checksum ^ size;
             for (int i = 0; i < size; ++i) {
@@ -1837,7 +1837,7 @@ public class GlobalStateMgr {
         long newChecksum = checksum;
         for (JobType type : JobType.values()) {
             if (type == JobType.DECOMMISSION_BACKEND) {
-                if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 5) {
+                if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
                     newChecksum = loadAlterJob(dis, newChecksum, type);
                 }
             } else {
@@ -1882,7 +1882,7 @@ public class GlobalStateMgr {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 2) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             // finished or cancelled jobs
             long currentTimeMs = System.currentTimeMillis();
             size = dis.readInt();
@@ -1899,7 +1899,7 @@ public class GlobalStateMgr {
         }
 
         // alter job v2
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
@@ -1927,7 +1927,7 @@ public class GlobalStateMgr {
     }
 
     public long loadBackupHandler(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_42) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
             getBackupHandler().readFields(dis);
         }
         getBackupHandler().setCatalog(this);
@@ -1941,7 +1941,7 @@ public class GlobalStateMgr {
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_82) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_82) {
             this.deleteHandler = DeleteHandler.read(dis);
         }
         LOG.info("finished replay deleteHandler from image");
@@ -1969,7 +1969,7 @@ public class GlobalStateMgr {
     }
 
     public long loadAuth(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
             // CAN NOT use Auth.read(), cause this auth instance is already passed to DomainResolver
             auth.readFields(dis);
         }
@@ -1978,7 +1978,7 @@ public class GlobalStateMgr {
     }
 
     public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             int size = dis.readInt();
             long newChecksum = checksum ^ size;
             globalTransactionMgr.readFields(dis);
@@ -1989,7 +1989,7 @@ public class GlobalStateMgr {
     }
 
     public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             recycleBin.readFields(dis);
             if (!isCheckpointThread()) {
                 // add tablet in Recycle bin to TabletInvertedIndex
@@ -2006,7 +2006,7 @@ public class GlobalStateMgr {
     }
 
     public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_46) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
             GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
         }
         LOG.info("finished replay colocateTableIndex from image");
@@ -2014,7 +2014,7 @@ public class GlobalStateMgr {
     }
 
     public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_49) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_49) {
             GlobalStateMgr.getCurrentState().getRoutineLoadManager().readFields(dis);
         }
         LOG.info("finished replay routineLoadJobs from image");
@@ -2022,7 +2022,7 @@ public class GlobalStateMgr {
     }
 
     public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_50) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
             loadManager.readFields(in);
         }
         LOG.info("finished replay loadJobsV2 from image");
@@ -2030,7 +2030,7 @@ public class GlobalStateMgr {
     }
 
     public long loadResources(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
@@ -2038,7 +2038,7 @@ public class GlobalStateMgr {
     }
 
     public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_52) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_52) {
             smallFileMgr.readFields(in);
         }
         LOG.info("finished replay smallFiles from image");
@@ -2309,7 +2309,7 @@ public class GlobalStateMgr {
 
     // global variable persistence
     public long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             VariableMgr.read(in);
         }
         LOG.info("finished replay globalVariable from image");
@@ -6678,7 +6678,7 @@ public class GlobalStateMgr {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException, DdlException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             int clusterCount = dis.readInt();
             checksum ^= clusterCount;
             for (long i = 0; i < clusterCount; ++i) {
@@ -7412,7 +7412,7 @@ public class GlobalStateMgr {
     }
 
     public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_78) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_78) {
             GlobalStateMgr.getCurrentPluginMgr().readFields(dis);
         }
         LOG.info("finished replay plugins from image");

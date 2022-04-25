@@ -344,7 +344,7 @@ public class LocalTablet extends Tablet {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 6) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
             checkedVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             isConsistent = in.readBoolean();

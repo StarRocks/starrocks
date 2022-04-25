@@ -304,7 +304,7 @@ public class VariableMgr {
         wlock.lock();
         try {
             defaultSessionVariable.readFields(in);
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_90) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_90) {
                 GlobalVarPersistInfo info = GlobalVarPersistInfo.read(in);
                 replayGlobalVariableV2(info);
             }

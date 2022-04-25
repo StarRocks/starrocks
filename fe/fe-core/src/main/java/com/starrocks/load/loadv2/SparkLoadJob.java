@@ -795,7 +795,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         sparkResource = (SparkResource) Resource.read(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_91) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_91) {
             sparkLoadAppHandle = SparkLoadAppHandle.read(in);
         }
         etlStartTimestamp = in.readLong();

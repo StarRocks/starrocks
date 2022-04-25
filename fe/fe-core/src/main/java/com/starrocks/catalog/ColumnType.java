@@ -176,7 +176,7 @@ public abstract class ColumnType {
         int scale = in.readInt();
         int precision = in.readInt();
         int len = in.readInt();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             // Useless, just for back compatible
             in.readBoolean();
         }

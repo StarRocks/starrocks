@@ -118,7 +118,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = invertedIndex;
 
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
             }

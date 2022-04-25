@@ -369,7 +369,7 @@ public class AlterTest {
         alterTable(stmt, false);
         Thread.sleep(5000); // sleep to wait dynamic partition scheduler run
 
-        Database db = GlobalStateMgr.getCurrentCatalog().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         OlapTable tbl = (OlapTable) db.getTable("tbl3");
         Assert.assertEquals(4, tbl.getPartitionNames().size());
         Assert.assertNull(tbl.getPartition("p1"));

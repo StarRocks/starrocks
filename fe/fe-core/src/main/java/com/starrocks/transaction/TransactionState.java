@@ -618,7 +618,7 @@ public class TransactionState implements Writable {
             info.readFields(in);
             idToTableCommitInfos.put(info.getTableId(), info);
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_83) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_83) {
             TxnSourceType sourceType = TxnSourceType.valueOf(in.readInt());
             String ip = Text.readString(in);
             txnCoordinator = new TxnCoordinator(sourceType, ip);
@@ -651,7 +651,7 @@ public class TransactionState implements Writable {
             errorReplicas.add(in.readLong());
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_49) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_49) {
             if (in.readBoolean()) {
                 txnCommitAttachment = TxnCommitAttachment.read(in);
             }
@@ -659,7 +659,7 @@ public class TransactionState implements Writable {
             timeoutMs = in.readLong();
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_79) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_79) {
             tableIdList = Lists.newArrayList();
             int tableListSize = in.readInt();
             for (int i = 0; i < tableListSize; i++) {

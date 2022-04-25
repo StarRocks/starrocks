@@ -163,7 +163,7 @@ public class DeleteInfo implements Writable {
             replicaInfos.add(info);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
             tableName = Text.readString(in);
             partitionName = Text.readString(in);
 
@@ -176,7 +176,7 @@ public class DeleteInfo implements Writable {
             createTimeMs = in.readLong();
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_19) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_19) {
             boolean hasAsyncDeleteJob = in.readBoolean();
             Preconditions.checkState(!hasAsyncDeleteJob, "async delete job is deprecated");
         }

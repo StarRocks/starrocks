@@ -162,7 +162,7 @@ public class PrivInfo implements Writable {
             tblPattern = TablePattern.read(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             if (in.readBoolean()) {
                 resourcePattern = ResourcePattern.read(in);
             }
@@ -173,7 +173,7 @@ public class PrivInfo implements Writable {
         }
 
         if (in.readBoolean()) {
-            if (GlobalStateMgr.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
+            if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
                 passwd = Password.read(in);
             } else {
                 int passwordLen = in.readInt();

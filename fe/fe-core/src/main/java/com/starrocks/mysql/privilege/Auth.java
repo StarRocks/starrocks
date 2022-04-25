@@ -1466,7 +1466,7 @@ public class Auth implements Writable {
         userPrivTable = (UserPrivTable) PrivTable.read(in);
         dbPrivTable = (DbPrivTable) PrivTable.read(in);
         tablePrivTable = (TablePrivTable) PrivTable.read(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourcePrivTable = (ResourcePrivTable) PrivTable.read(in);
         }
         propertyMgr = UserPropertyMgr.read(in);

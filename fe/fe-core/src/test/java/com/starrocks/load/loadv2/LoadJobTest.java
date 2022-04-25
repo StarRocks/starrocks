@@ -199,7 +199,7 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         loadJob.idToTasks.put(1L, loadTask1);
 
-        // TxnStateCallbackFactory factory = GlobalStateMgr.getCurrentCatalog().getGlobalTransactionMgr().getCallbackFactory();
+        // TxnStateCallbackFactory factory = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         GlobalTransactionMgr mgr = new GlobalTransactionMgr(globalStateMgr);
         Deencapsulation.setField(globalStateMgr, "globalTransactionMgr", mgr);

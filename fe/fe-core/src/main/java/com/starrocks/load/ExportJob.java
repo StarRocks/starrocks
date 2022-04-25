@@ -733,7 +733,7 @@ public class ExportJob implements Writable {
         columnSeparator = Text.readString(in);
         rowDelimiter = Text.readString(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_53) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_53) {
             int count = in.readInt();
             for (int i = 0; i < count; i++) {
                 String propertyKey = Text.readString(in);
@@ -763,7 +763,7 @@ public class ExportJob implements Writable {
             brokerDesc = BrokerDesc.read(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
             tableName = new TableName();
             tableName.readFields(in);
         } else {

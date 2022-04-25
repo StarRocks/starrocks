@@ -54,7 +54,7 @@ public class Checkpoint extends MasterDaemon {
 
     public Checkpoint(EditLog editLog) {
         super("leaderCheckpointer", FeConstants.checkpoint_interval_second * 1000L);
-        this.imageDir = GlobalStateMgr.getServingCatalog().getImageDir();
+        this.imageDir = GlobalStateMgr.getServingState().getImageDir();
         this.editLog = editLog;
     }
 
@@ -99,7 +99,7 @@ public class Checkpoint extends MasterDaemon {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
-            GlobalStateMgr.getServingCatalog().setImageJournalId(checkPointVersion);
+            GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } catch (Exception e) {
             e.printStackTrace();
@@ -113,14 +113,14 @@ public class Checkpoint extends MasterDaemon {
 
         // push image file to all the other non master nodes
         // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
-        List<Frontend> allFrontends = GlobalStateMgr.getServingCatalog().getFrontends(null);
+        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
         int successPushed = 0;
         int otherNodesCount = 0;
         if (!allFrontends.isEmpty()) {
             otherNodesCount = allFrontends.size() - 1; // skip master itself
             for (Frontend fe : allFrontends) {
                 String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingCatalog().getMasterIp())) {
+                if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
                     // skip master itself
                     continue;
                 }
@@ -149,7 +149,7 @@ public class Checkpoint extends MasterDaemon {
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingCatalog().getMasterIp())) {
+                    if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
                         // skip master itself
                         continue;
                     }

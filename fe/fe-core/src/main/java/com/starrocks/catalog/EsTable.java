@@ -266,7 +266,7 @@ public class EsTable extends Table {
             adler32.update(name.getBytes(charsetName));
             // type
             adler32.update(type.name().getBytes(charsetName));
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_68) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
                 for (Map.Entry<String, String> entry : tableContext.entrySet()) {
                     adler32.update(entry.getValue().getBytes(charsetName));
                 }
@@ -306,7 +306,7 @@ public class EsTable extends Table {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_68) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
             int size = in.readInt();
             for (int i = 0; i < size; ++i) {
                 String key = Text.readString(in);

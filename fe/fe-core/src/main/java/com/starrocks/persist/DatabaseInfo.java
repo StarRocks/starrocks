@@ -90,15 +90,15 @@ public class DatabaseInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         this.dbName = Text.readString(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             newDbName = Text.readString(in);
         }
         this.quota = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             this.clusterName = Text.readString(in);
             this.dbState = DbState.valueOf(Text.readString(in));
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             this.quotaType = QuotaType.valueOf(Text.readString(in));
         }
     }

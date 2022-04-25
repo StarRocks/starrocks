@@ -297,7 +297,7 @@ public class ShowExecutorTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            GlobalStateMgr getCurrentCatalog() {
+            GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
             }
 

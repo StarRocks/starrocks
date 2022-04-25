@@ -388,7 +388,7 @@ public class DppConfig implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         boolean readStarRocksPath = false;
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 readStarRocksPath = true;
             }
@@ -402,7 +402,7 @@ public class DppConfig implements Writable {
         httpPort = in.readInt();
 
         boolean readHadoopConfigs = false;
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 readHadoopConfigs = true;
             }
@@ -417,7 +417,7 @@ public class DppConfig implements Writable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_15) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_15) {
             this.priority = TPriority.valueOf(Text.readString(in));
         } else {
             this.priority = TPriority.NORMAL;

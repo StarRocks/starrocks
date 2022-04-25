@@ -55,7 +55,7 @@ public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
     }
 
     @Mock
-    public static int getCurrentCatalogJournalVersion() {
+    public static int getCurrentStateJournalVersion() {
         return metaVersion;
     }
 

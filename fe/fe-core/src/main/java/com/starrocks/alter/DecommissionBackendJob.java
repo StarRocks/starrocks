@@ -303,7 +303,7 @@ public class DecommissionBackendJob extends AlterJob {
     public synchronized void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             long clusterMapSize = in.readLong();
             while (clusterMapSize-- > 0) {
                 final String cluster = Text.readString(in);
@@ -318,7 +318,7 @@ public class DecommissionBackendJob extends AlterJob {
                 clusterBackendsMap.put(cluster, backends);
             }
 
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_33) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_33) {
                 String str = Text.readString(in);
                 // this is only for rectify misspellings...
                 if (str.equals("SystemDecomission")) {

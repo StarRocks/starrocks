@@ -139,7 +139,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = db;
 
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 

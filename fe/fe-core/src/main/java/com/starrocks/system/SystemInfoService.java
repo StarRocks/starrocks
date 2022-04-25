@@ -689,7 +689,7 @@ public class SystemInfoService {
 
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             newBackend.setOwnerClusterName(DEFAULT_CLUSTER);
             newBackend.setBackendState(BackendState.using);
         }

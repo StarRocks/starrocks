@@ -121,11 +121,11 @@ public class PartitionPersistInfo implements Writable {
         range = RangeUtils.readRange(in);
         dataProperty = DataProperty.read(in);
         replicationNum = in.readShort();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_72) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_72) {
             isInMemory = in.readBoolean();
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             isTempPartition = in.readBoolean();
         }
     }

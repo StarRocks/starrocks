@@ -327,7 +327,7 @@ public class ReplicaPersistInfo implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         opType = ReplicaOperationType.DEFAULT_OP;
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             opType = ReplicaOperationType.findByValue(in.readInt());
             if (opType == null) {
                 throw new IOException("could not parse operation type from replica info");
@@ -338,7 +338,7 @@ public class ReplicaPersistInfo implements Writable {
             in.readLong(); // read a version_hash for compatibility
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_48) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_48) {
             schemaHash = in.readInt();
         }
     }

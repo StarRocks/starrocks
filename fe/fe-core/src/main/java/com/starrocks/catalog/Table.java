@@ -262,14 +262,14 @@ public class Table extends MetaObject implements Writable {
             this.nameToColumn.put(column.getName(), column);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_63) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_63) {
             comment = Text.readString(in);
         } else {
             comment = "";
         }
 
         // read create time
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_64) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_64) {
             this.createTime = in.readLong();
         } else {
             this.createTime = -1L;

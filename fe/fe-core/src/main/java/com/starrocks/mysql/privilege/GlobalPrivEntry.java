@@ -163,7 +163,7 @@ public class GlobalPrivEntry extends PrivEntry {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (GlobalStateMgr.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
+        if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
             this.password = Password.read(in);
         } else {
             int passwordLen = in.readInt();

@@ -941,7 +941,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         watershedTxnId = in.readLong();
 
         // index
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_70) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_70) {
             indexChange = in.readBoolean();
             if (indexChange) {
                 if (in.readBoolean()) {
@@ -956,7 +956,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_84) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }
@@ -1007,7 +1007,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_84) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }
@@ -1023,7 +1023,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * If the meta version >=86, it will be deserialized by the `read` of AlterJobV2 rather then here.
      */
     public static SchemaChangeJobV2 read(DataInput in) throws IOException {
-        Preconditions.checkState(GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86);
+        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86);
         SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2();
         schemaChangeJob.readFields(in);
         return schemaChangeJob;
@@ -1033,7 +1033,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_80) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_80) {
             boolean isMetaPruned = in.readBoolean();
             if (isMetaPruned) {
                 readJobFinishedData(in);

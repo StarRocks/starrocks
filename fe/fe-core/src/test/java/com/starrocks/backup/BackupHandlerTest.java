@@ -122,7 +122,7 @@ public class BackupHandlerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 

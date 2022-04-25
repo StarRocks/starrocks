@@ -45,8 +45,8 @@ public class MasterDaemon extends Daemon {
 
     @Override
     protected void runOneCycle() {
-        while (!GlobalStateMgr.getServingCatalog().isReady()) {
-            // here we use getServingCatalog(), not getCurrentCatalog() because we truly want the GlobalStateMgr instance,
+        while (!GlobalStateMgr.getServingState().isReady()) {
+            // here we use getServingState(), not getCurrentState() because we truly want the GlobalStateMgr instance,
             // not the Checkpoint globalStateMgr instance.
             // and if globalStateMgr is not ready, do not run
             try {

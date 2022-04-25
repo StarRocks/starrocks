@@ -127,7 +127,7 @@ public class TempPartitions implements Writable, GsonPostProcessable {
     }
 
     public static TempPartitions read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_77) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_77) {
             TempPartitions tempPartitions = new TempPartitions();
             tempPartitions.readFields(in);
             return tempPartitions;

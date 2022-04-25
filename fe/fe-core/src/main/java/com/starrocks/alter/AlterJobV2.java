@@ -235,7 +235,7 @@ public abstract class AlterJobV2 implements Writable {
     public abstract void replay(AlterJobV2 replayedJob);
 
     public static AlterJobV2 read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86) {
             JobType type = JobType.valueOf(Text.readString(in));
             switch (type) {
                 case ROLLUP:

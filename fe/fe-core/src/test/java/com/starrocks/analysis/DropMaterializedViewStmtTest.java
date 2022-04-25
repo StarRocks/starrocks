@@ -83,7 +83,7 @@ public class DropMaterializedViewStmtTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            GlobalStateMgr getCurrentCatalog() {
+            GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
             }
 

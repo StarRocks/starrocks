@@ -1464,14 +1464,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
             String stmt = Text.readString(in);
             origStmt = new OriginStatement(stmt, 0);
         } else {
             origStmt = OriginStatement.read(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_59) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_59) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);
@@ -1483,7 +1483,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(LoadStmt.STRICT_MODE, Boolean.toString(false));
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);

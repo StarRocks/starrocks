@@ -55,7 +55,7 @@ public class LocalTabletTest {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 

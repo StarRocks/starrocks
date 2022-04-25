@@ -74,7 +74,7 @@ public class TruncateTableInfo implements Writable {
     }
 
     public static TruncateTableInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_74) {
             TruncateTableInfo info = new TruncateTableInfo();
             info.readFields(in);
             return info;

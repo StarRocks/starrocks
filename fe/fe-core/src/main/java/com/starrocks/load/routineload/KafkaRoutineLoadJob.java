@@ -502,7 +502,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             customKafkaPartitions.add(in.readInt());
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_51) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_51) {
             int count = in.readInt();
             for (int i = 0; i < count; i++) {
                 String propertyKey = Text.readString(in);

@@ -63,7 +63,7 @@ public class PluginMgrTest {
     //
     //            InstallPluginStmt stmt =
     //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("auditdemo.zip"), Maps.newHashMap());
-    //            GlobalStateMgr.getCurrentCatalog().installPlugin(stmt);
+    //            GlobalStateMgr.getCurrentState().installPlugin(stmt);
     //
     //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
     //
@@ -107,7 +107,7 @@ public class PluginMgrTest {
     //
     //            InstallPluginStmt stmt =
     //                    new InstallPluginStmt(PluginTestUtil.getTestPathString("test_local_plugin"), Maps.newHashMap());
-    //            GlobalStateMgr.getCurrentCatalog().installPlugin(stmt);
+    //            GlobalStateMgr.getCurrentState().installPlugin(stmt);
     //
     //            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
     //

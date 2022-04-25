@@ -320,7 +320,7 @@ abstract public class StarRocksHttpTestCase {
             }
 
             @Mock
-            GlobalStateMgr getCurrentCatalog() {
+            GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
             }
 

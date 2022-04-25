@@ -166,7 +166,7 @@ public class Role implements Writable {
             PrivBitSet privs = PrivBitSet.read(in);
             tblPatternToPrivs.put(tblPattern, privs);
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             size = in.readInt();
             for (int i = 0; i < size; i++) {
                 ResourcePattern resourcePattern = ResourcePattern.read(in);

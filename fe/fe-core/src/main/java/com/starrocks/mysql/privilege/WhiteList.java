@@ -137,8 +137,8 @@ public class WhiteList implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69) {
                 // db priv map
                 int size = in.readInt();
                 for (int i = 0; i < size; i++) {
@@ -185,7 +185,7 @@ public class WhiteList implements Writable {
     // and now, these privs which corresponding to the domains should be saved directly in priv tables.
     // so we need to convert them.
     public void convertOldDomainPrivMap(String user) {
-        Preconditions.checkState(GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69);
+        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69);
         for (Map.Entry<String, Map<TablePattern, PrivBitSet>> domainEntry : oldDomainPrivsMap.entrySet()) {
             String domain = domainEntry.getKey();
             for (Map.Entry<TablePattern, PrivBitSet> privEntry : domainEntry.getValue().entrySet()) {

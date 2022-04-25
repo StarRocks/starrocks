@@ -360,7 +360,7 @@ public class RangePartitionInfo extends PartitionInfo {
             idToRange.put(partitionId, range);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_77) {
             counter = in.readInt();
             for (int i = 0; i < counter; i++) {
                 long partitionId = in.readLong();

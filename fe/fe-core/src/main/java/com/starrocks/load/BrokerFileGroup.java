@@ -438,13 +438,13 @@ public class BrokerFileGroup implements Writable {
             }
         }
         // file format
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_50) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
             if (in.readBoolean()) {
                 fileFormat = Text.readString(in);
             }
         }
         // src table
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             srcTableId = in.readLong();
             isLoadFromTable = in.readBoolean();
         }

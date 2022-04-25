@@ -310,12 +310,12 @@ public abstract class BulkLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         brokerDesc = BrokerDesc.read(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_61) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_61) {
             fileGroupAggInfo.readFields(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_58) {
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_76) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_58) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
                 String stmt = Text.readString(in);
                 originStmt = new OriginStatement(stmt, 0);
             } else {
@@ -328,7 +328,7 @@ public abstract class BulkLoadJob extends LoadJob {
         // The reason is that it will thrown MetaNotFoundException when the tableId could not be found by tableName.
         // The origin stmt will be analyzed after the replay is completed.
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_66) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
             int size = in.readInt();
             for (int i = 0; i < size; i++) {
                 String key = Text.readString(in);

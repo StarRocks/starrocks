@@ -602,20 +602,20 @@ public class Column implements Writable {
         if (notNull) {
             aggregationType = AggregateType.valueOf(Text.readString(in));
 
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
                 isAggregationTypeImplicit = in.readBoolean();
             } else {
                 isAggregationTypeImplicit = false;
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             isKey = in.readBoolean();
         } else {
             isKey = (aggregationType == null);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             isAllowNull = in.readBoolean();
         } else {
             isAllowNull = false;
@@ -627,7 +627,7 @@ public class Column implements Writable {
         }
         stats = ColumnStats.read(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             comment = Text.readString(in);
         } else {
             comment = "";
@@ -635,7 +635,7 @@ public class Column implements Writable {
     }
 
     public static Column read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86) {
             Column column = new Column();
             column.readFields(in);
             return column;

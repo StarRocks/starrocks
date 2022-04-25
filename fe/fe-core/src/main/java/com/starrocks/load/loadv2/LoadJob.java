@@ -1036,7 +1036,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         dbId = in.readLong();
         label = Text.readString(in);
         state = JobState.valueOf(Text.readString(in));
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_54) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_54) {
             timeoutSecond = in.readLong();
         } else {
             timeoutSecond = in.readInt();
@@ -1055,17 +1055,17 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         progress = in.readInt();
         loadingStatus.readFields(in);
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_54) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_54) {
             strictMode = in.readBoolean();
             transactionId = in.readLong();
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_56) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_56) {
             if (in.readBoolean()) {
                 authorizationInfo = new AuthorizationInfo();
                 authorizationInfo.readFields(in);
             }
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             timezone = Text.readString(in);
         }
     }

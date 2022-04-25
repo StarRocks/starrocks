@@ -78,7 +78,7 @@ public class DropInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_89) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_89) {
             forceDrop = in.readBoolean();
         }
         boolean hasIndexId = in.readBoolean();

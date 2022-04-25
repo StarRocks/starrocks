@@ -89,7 +89,7 @@ public class ReplicaTest {
     public void testSerialization() throws Exception {
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 result = FeMetaVersion.VERSION_45;
             }
         };

@@ -412,37 +412,37 @@ public class UserProperty implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
             // consume the flag of empty user name
             in.readBoolean();
         }
 
         // user name
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
         } else {
             qualifiedUser = Text.readString(in);
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
             int passwordLen = in.readInt();
             password = new byte[passwordLen];
             in.readFully(password);
 
             isAdmin = in.readBoolean();
 
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 1) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= 1) {
                 isSuperuser = in.readBoolean();
             }
         }
 
         maxConn = in.readLong();
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
             int numPriv = in.readInt();
             for (int i = 0; i < numPriv; ++i) {
                 String dbName = null;
-                if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
+                if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
                     dbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
                 } else {
                     dbName = Text.readString(in);
@@ -456,7 +456,7 @@ public class UserProperty implements Writable {
         resource = UserResource.readIn(in);
 
         // load cluster
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_12) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_12) {
             if (in.readBoolean()) {
                 defaultLoadCluster = Text.readString(in);
             }
@@ -470,15 +470,15 @@ public class UserProperty implements Writable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_21) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_21) {
             whiteList.readFields(in);
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_69) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_69) {
                 whiteList.convertOldDomainPrivMap(qualifiedUser);
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_43) {
-            if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
                 if (in.readBoolean()) {
                     // consume cluster name
                     Text.readString(in);

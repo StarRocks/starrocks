@@ -553,7 +553,7 @@ public class ColocateTableIndex implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_55) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_55) {
             Multimap<Long, Long> tmpGroup2Tables = ArrayListMultimap.create();
             Map<Long, Long> tmpTable2Group = Maps.newHashMap();
             Map<Long, Long> tmpGroup2Db = Maps.newHashMap();

@@ -514,18 +514,18 @@ public class Backend implements Writable {
         heartbeatPort = in.readInt();
         bePort = in.readInt();
         httpPort = in.readInt();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_31) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_31) {
             beRpcPort = in.readInt();
         }
         isAlive.set(in.readBoolean());
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 5) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
             isDecommissioned.set(in.readBoolean());
         }
 
         lastUpdateMs = in.readLong();
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 2) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             lastStartTime = in.readLong();
 
             Map<String, DiskInfo> disks = Maps.newHashMap();
@@ -538,7 +538,7 @@ public class Backend implements Writable {
 
             disksRef = ImmutableMap.copyOf(disks);
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             ownerClusterName = Text.readString(in);
             backendState = in.readInt();
             decommissionType = in.readInt();
@@ -548,7 +548,7 @@ public class Backend implements Writable {
             decommissionType = DecommissionType.SystemDecommission.ordinal();
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_40) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_40) {
             brpcPort = in.readInt();
         }
     }

@@ -54,7 +54,7 @@ public class DescribeStmtTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            GlobalStateMgr getCurrentCatalog() {
+            GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
             }
         };

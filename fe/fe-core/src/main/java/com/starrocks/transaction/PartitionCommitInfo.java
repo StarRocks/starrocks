@@ -82,7 +82,7 @@ public class PartitionCommitInfo implements Writable {
     }
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_88) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_88) {
             long partitionId = in.readLong();
             long version = in.readLong();
             in.readLong();

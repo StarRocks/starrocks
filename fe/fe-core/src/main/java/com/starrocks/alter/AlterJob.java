@@ -308,7 +308,7 @@ public abstract class AlterJob implements Writable {
     public synchronized void readFields(DataInput in) throws IOException {
         // read common members as write in AlterJob.write().
         // except 'type' member, which is read in AlterJob.read()
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= 4) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 4) {
             state = JobState.valueOf(Text.readString(in));
         }
 
@@ -327,7 +327,7 @@ public abstract class AlterJob implements Writable {
             String group = Text.readString(in);
             resourceInfo = new TResourceInfo(user, group);
         }
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             transactionId = in.readLong();
         }
     }

@@ -138,7 +138,7 @@ public class RollupJobV2Test {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public GlobalStateMgr getCurrentCatalog() {
+            public GlobalStateMgr getCurrentState() {
                 return masterGlobalStateMgr;
             }
         };

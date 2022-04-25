@@ -76,7 +76,7 @@ public class LoadManagerTest {
                 table.getName();
                 minTimes = 0;
                 result = "tablename";
-                GlobalStateMgr.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeMetaVersion.VERSION_56;
             }

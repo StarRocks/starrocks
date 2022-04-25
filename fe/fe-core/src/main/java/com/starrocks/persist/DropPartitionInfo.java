@@ -83,7 +83,7 @@ public class DropPartitionInfo implements Writable {
     }
 
     public static DropPartitionInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_74) {
             DropPartitionInfo info = new DropPartitionInfo();
             info.readFields(in);
             return info;

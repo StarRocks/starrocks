@@ -767,7 +767,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      * If the meta version >=86, it will be deserialized by the `read` of AlterJobV2 rather then here.
      */
     public static RollupJobV2 read(DataInput in) throws IOException {
-        Preconditions.checkState(GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86);
+        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86);
         RollupJobV2 rollupJob = new RollupJobV2();
         rollupJob.readFields(in);
         return rollupJob;
@@ -809,7 +809,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         rollupShortKeyColumnCount = in.readShort();
 
         watershedTxnId = in.readLong();
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_85) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_85) {
             storageFormat = TStorageFormat.valueOf(Text.readString(in));
         }
     }

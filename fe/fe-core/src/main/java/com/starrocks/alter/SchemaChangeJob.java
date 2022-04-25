@@ -1270,7 +1270,7 @@ public class SchemaChangeJob extends AlterJob {
 
         tableName = Text.readString(in);
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_48) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_48) {
             if (in.readBoolean()) {
                 int count = in.readInt();
                 for (int i = 0; i < count; i++) {
@@ -1334,7 +1334,7 @@ public class SchemaChangeJob extends AlterJob {
         }
 
         // bloom filter columns
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_9) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_9) {
             hasBfChange = in.readBoolean();
             if (in.readBoolean()) {
                 int bfColumnCount = in.readInt();
@@ -1347,7 +1347,7 @@ public class SchemaChangeJob extends AlterJob {
             }
         }
 
-        if (GlobalStateMgr.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_39) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_39) {
             if (in.readBoolean()) {
                 newStorageType = TStorageType.COLUMN;
             }
