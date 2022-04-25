@@ -19,6 +19,7 @@ set(EXEC_FILES
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
+        ./common/tracer_test.cpp
         ./common/s3_uri_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
