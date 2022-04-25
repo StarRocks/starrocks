@@ -217,7 +217,7 @@ Status GroupReader::_rewrite_dict_column_predicates() {
     for (const auto& column : _dict_filter_columns) {
         SlotId slot_id = column.slot_id;
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
-        std::shared_ptr<vectorized::BinaryColumn> dict_value_column = vectorized::BinaryColumn::create();
+        vectorized::BinaryColumn::Ptr dict_value_column = vectorized::BinaryColumn::create();
         dict_value_chunk->append_column(dict_value_column, slot_id);
 
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));

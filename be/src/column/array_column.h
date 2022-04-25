@@ -19,7 +19,7 @@ public:
 
     ArrayColumn(const ArrayColumn& rhs)
             : _elements(rhs._elements->clone_shared()),
-              _offsets(std::static_pointer_cast<UInt32Column>(rhs._offsets->clone_shared())) {}
+              _offsets(rhs._offsets->clone_shared_derived()) {}
 
     ArrayColumn(ArrayColumn&& rhs) noexcept : _elements(std::move(rhs._elements)), _offsets(std::move(rhs._offsets)) {}
 
@@ -134,10 +134,16 @@ public:
     void reset_column() override;
 
     const Column& elements() const;
+    Column& elements();
+
+    const ColumnPtr& elements_column() const;
     ColumnPtr& elements_column();
 
     const UInt32Column& offsets() const;
-    UInt32Column::Ptr& offsets_column();
+    UInt32Column& offsets();
+
+    const typename UInt32Column::Ptr& offsets_column() const;
+    typename UInt32Column::Ptr& offsets_column();
 
     bool is_nullable() const override { return false; }
 
@@ -157,14 +163,23 @@ public:
 
     void check_or_die() const override;
 
+    MutableColumnPtr deepMutate() const override {
+        auto res = shallowMutate();
+        res->_elements = Column::mutate(std::move(res->_elements).detach());
+        res->_offsets = UInt32Column::mutate(std::move(res->_offsets).detach());
+        return res;
+    }
+
 private:
+
+    WrappedPtr _elements;
     // _elements must be NullableColumn
-    ColumnPtr _elements;
+
     // Offsets column will store the start position of every array element.
     // Offsets store more one data to indicate the end position.
     // For example, [1, 2, 3], [4, 5, 6].
     // The two element array has three offsets(0, 3, 6)
-    UInt32Column::Ptr _offsets;
+    UInt32Column::DerivedWrappedPtr _offsets;
 };
 
 } // namespace starrocks::vectorized

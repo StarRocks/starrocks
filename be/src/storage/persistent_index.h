@@ -327,7 +327,7 @@ private:
 
     // insert rowset data into persistent index
     Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const vectorized::Schema& pkey_schema,
-                           int64_t apply_version, std::unique_ptr<vectorized::Column> pk_column);
+                           int64_t apply_version, vectorized::MutableColumnPtr pk_column);
 
     // index storage directory
     std::string _path;

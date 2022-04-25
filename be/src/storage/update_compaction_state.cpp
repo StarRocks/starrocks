@@ -50,7 +50,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
 
     vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
 
-    std::unique_ptr<vectorized::Column> pk_column;
+    vectorized::MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }

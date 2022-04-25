@@ -15,6 +15,8 @@ template <typename T>
 class DecimalV3Column final : public ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>, Column> {
 public:
     DecimalV3Column() = default;
+    DecimalV3Column(bool pool, size_t chunk_size): ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>, Column>(pool, chunk_size) {}
+
     DecimalV3Column(int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
 

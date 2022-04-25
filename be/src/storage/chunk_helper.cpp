@@ -96,29 +96,24 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
     return id;
 }
 
-template <typename T>
-struct ColumnDeleter {
-    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
-    void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    uint32_t chunk_size;
-};
-
 template <typename T, bool force>
-inline std::shared_ptr<T> get_column_ptr(size_t chunk_size) {
+inline T* get_column_ptr(size_t chunk_size) {
     if constexpr (std::negation_v<HasColumnPool<T>>) {
-        return std::make_shared<T>();
+        return (new T());
     } else {
         T* ptr = get_column<T, force>();
         if (LIKELY(ptr != nullptr)) {
-            return std::shared_ptr<T>(ptr, ColumnDeleter<T>(chunk_size));
+            ptr->set_pool(true);
+            ptr->set_chunk_size(chunk_size);
+            return ptr;
         } else {
-            return std::make_shared<T>();
+            return (new T());
         }
     }
 }
 
 template <typename T, bool force>
-inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale, size_t chunk_size) {
+inline T* get_decimal_column_ptr(int precision, int scale, size_t chunk_size) {
     auto column = get_column_ptr<T, force>(chunk_size);
     column->set_precision(precision);
     column->set_scale(scale);
@@ -130,26 +125,28 @@ struct ColumnPtrBuilder {
     template <FieldType ftype>
     ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
         auto nullable = [&](ColumnPtr c) -> ColumnPtr {
-            return field.is_nullable()
-                           ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
-                           : c;
+            if (field.is_nullable()) {
+                return NullableColumn::create(std::move(c), ColumnHelper::as_column<NullColumn>(ColumnHelper::cast_to_ptr(get_column_ptr<NullColumn, force>(chunk_size))));
+            } else {
+                return c;
+            }
         };
 
         if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
             auto elements = field.sub_field(0).create_column();
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
-            auto array = ArrayColumn::create(std::move(elements), offsets);
+            auto array = ArrayColumn::create(std::move(elements), ColumnHelper::as_column<UInt32Column>(ColumnHelper::cast_to_ptr(offsets)));
             return nullable(array);
         } else {
             switch (ftype) {
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return nullable(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size)));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return nullable(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size)));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return nullable(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size)));
             default: {
-                return nullable(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return nullable(ColumnHelper::cast_to_ptr(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size)));
             }
             }
         }
@@ -295,7 +292,12 @@ struct ColumnBuilder {
     template <FieldType ftype>
     ColumnPtr operator()(bool nullable) {
         [[maybe_unused]] auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-            return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+            if (nullable) {
+                return NullableColumn::create(std::move(col), NullColumn::create());
+            } else {
+                return col;
+            }
+            // return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
         };
 
         if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
@@ -312,7 +314,12 @@ ColumnPtr ChunkHelper::column_from_field_type(FieldType type, bool nullable) {
 
 ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-        return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+        if (field.is_nullable()) {
+            return NullableColumn::create(std::move(col), NullColumn::create());
+        } else {
+            return col;
+        }
+        // return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
     };
 
     auto type = field.type()->type();

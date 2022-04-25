@@ -279,7 +279,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
 }
 
 Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
-                                        std::unique_ptr<vectorized::Column>* pcolumn) {
+                                        vectorized::MutableColumnPtr* pcolumn) {
     if (!is_supported(schema)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
@@ -311,7 +311,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
             *pcolumn = vectorized::Int128Column::create_mutable();
             break;
         case OLAP_FIELD_TYPE_VARCHAR:
-            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+            *pcolumn = vectorized::BinaryColumn::create_mutable();
             break;
         case OLAP_FIELD_TYPE_DATE_V2:
             *pcolumn = vectorized::DateColumn::create_mutable();
@@ -325,7 +325,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+        *pcolumn = vectorized::BinaryColumn::create_mutable();
     }
     return Status::OK();
 }

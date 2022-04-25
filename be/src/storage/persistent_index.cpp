@@ -1144,7 +1144,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
 
 Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
                                         const vectorized::Schema& pkey_schema, int64_t apply_version,
-                                        std::unique_ptr<vectorized::Column> pk_column) {
+                                        vectorized::MutableColumnPtr pk_column) {
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -1323,7 +1323,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<vectorized::Column> pk_column;
+    vectorized::MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";

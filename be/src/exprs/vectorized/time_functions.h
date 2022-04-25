@@ -200,25 +200,6 @@ public:
                                        starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     /*
-     * Called by datetime_floor
-     * Floor to the corresponding period
-     */
-    DEFINE_VECTORIZED_FN(datetime_floor_second);
-    DEFINE_VECTORIZED_FN(datetime_floor_minute);
-    DEFINE_VECTORIZED_FN(datetime_floor_hour);
-    DEFINE_VECTORIZED_FN(datetime_floor_day);
-    DEFINE_VECTORIZED_FN(datetime_floor_month);
-    DEFINE_VECTORIZED_FN(datetime_floor_year);
-    DEFINE_VECTORIZED_FN(datetime_floor_week);
-    DEFINE_VECTORIZED_FN(datetime_floor_quarter);
-    // datetime_floor for sql.
-    DEFINE_VECTORIZED_FN(datetime_floor);
-
-    static Status datetime_floor_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status datetime_floor_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope);
-    /*
      * Called by date_trunc
      * Truncate to the corresponding part
      */
@@ -599,7 +580,7 @@ private:
         char* fmt;
     };
 
-    // method for datetime_trunc and datetime_floor
+    // method for datetime_trunc
     struct DateTruncCtx {
         ScalarFunction function;
     };

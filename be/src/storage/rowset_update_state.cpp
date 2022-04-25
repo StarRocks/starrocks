@@ -55,7 +55,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         pk_columns.push_back((uint32_t)i);
     }
     vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-    std::unique_ptr<vectorized::Column> pk_column;
+    vectorized::MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
@@ -219,7 +219,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         }
     }
 
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    std::vector<ColumnUniquePtr> read_columns(read_column_ids.size());
     size_t num_segments = rowset->num_segments();
     _partial_update_states.resize(num_segments);
     for (size_t i = 0; i < num_segments; i++) {
@@ -319,7 +319,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         }
         if (!conflict_idxes.empty()) {
             total_conflicts += conflict_idxes.size();
-            std::vector<std::unique_ptr<vectorized::Column>> read_columns;
+            std::vector<ColumnUniquePtr> read_columns;
             read_columns.resize(_partial_update_states[i].write_columns.size());
             for (uint32_t j = 0; j < read_columns.size(); ++j) {
                 read_columns[j] = _partial_update_states[i].write_columns[j]->clone_empty();
@@ -333,7 +333,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                                                                  &read_columns));
 
             for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-                std::unique_ptr<vectorized::Column> new_write_column =
+                ColumnUniquePtr new_write_column =
                         _partial_update_states[i].write_columns[col_idx]->clone_empty();
                 new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
                 RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(*new_write_column,

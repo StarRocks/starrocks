@@ -26,6 +26,7 @@
 #include <memory>
 #include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "runtime/primitive_type.h"
 #include "runtime/types.h"
 
@@ -192,7 +193,7 @@ public:
     // Return true if it's constant and not null
     bool is_notnull_constant_column(int i) const;
 
-    std::shared_ptr<starrocks::vectorized::Column> get_constant_column(int arg_idx) const;
+    typename starrocks::vectorized::ColumnPtr get_constant_column(int arg_idx) const;
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }

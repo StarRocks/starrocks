@@ -305,7 +305,7 @@ void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final) {
     }
 }
 
-Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes) {
+Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes) {
     size_t op_column_id = src->num_columns() - 1;
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);

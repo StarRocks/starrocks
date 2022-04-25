@@ -63,10 +63,10 @@ public:
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
-    static std::shared_ptr<Column> column_from_field_type(FieldType type, bool nullable);
+    static ColumnPtr column_from_field_type(FieldType type, bool nullable);
 
     // Create a vectorized column from field.
-    static std::shared_ptr<Column> column_from_field(const Field& field);
+    static ColumnPtr column_from_field(const Field& field);
 
     // FieldType data size in memory
     static size_t approximate_sizeof_type(FieldType type);
