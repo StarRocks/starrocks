@@ -434,16 +434,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_number_of_concurrent_requests_processed = 4096;
 
-    @ConfField
-    public static int brpc_number_of_concurrent_requests_processed_for_share_channel = 16;
-
     // BRPC idle wait time (ms)
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
-
-    // enable using a share channel for BRPC client
-    @ConfField
-    public static boolean enable_brpc_share_channel = true;
 
     /**
      * FE mysql server port
