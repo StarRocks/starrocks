@@ -40,54 +40,57 @@ namespace starrocks {
 
 namespace {
 
-static const size_t roaring_get_size_fastpath_threshold = 1024;
-
 class RoaringWrapper {
+    static const size_t roaring_get_size_fastpath_threshold = 1024;
+
 public:
     explicit RoaringWrapper(rowid_t rid)
-            : _roaring(std::move(Roaring::bitmapOf(1, rid))),
-              _old_size(1),
+            : _roaring(Roaring::bitmapOf(1, rid)),
+              _old_size(0),
+              _element_count(1),
               _size_changed(true),
-              _enable_get_size_in_Bytes(false){};
-    Roaring& roaring() { return _roaring; }
-    uint64_t roaring_size() const { return _roaring.getSizeInBytes(false); }
-    uint64_t old_size() const { return _old_size; }
-    void set_old_size(uint64_t size) const { _old_size = size; }
-    bool size_changed() const { return _size_changed; }
-    void set_size_changed() const { _size_changed = true; }
-    void unset_size_changed() const { _size_changed = false; }
+              _enable_get_size_in_bytes(false){};
 
-    void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>& size_changed_roaring_vec) {
+    Roaring& roaring() { return _roaring; }
+
+    void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>* size_changed_roaring_vec) {
         _roaring.add(rid);
-        if (_enable_get_size_in_Bytes) {
+        if (_enable_get_size_in_bytes) {
             if (!_size_changed) {
-                size_changed_roaring_vec.push_back(this);
+                size_changed_roaring_vec->push_back(this);
             }
             _size_changed = true;
         } else {
             // roaring_get_size fastpath:
-            // If _old_size is less than roaring_get_size_fastpath_threshold, _old_size represents the cardinality of
-            // roaring, and we use _old_size * (sizeof(uint32_t) + 1) + 1 to approximate estimated true size of roaring bitmap.
-            // The reason for this optimization here is that the getSizeInBytes function in roaring bitmap is very costly when roaring
-            // bitmap has a large number of nearly empty array container.
-            _old_size++;
-            if (LIKELY(_old_size < roaring_get_size_fastpath_threshold)) {
+            // If _element_count is less than roaring_get_size_fastpath_threshold, we use
+            // _old_size * (sizeof(uint32_t) + 1) + 1 to approximate estimated true size of roaring bitmap.
+            // The reason for this optimization here is that the getSizeInBytes function in roaring bitmap
+            // is very costly when roaring bitmap has a large number of nearly empty array container.
+            _element_count++;
+            if (LIKELY(_element_count < roaring_get_size_fastpath_threshold)) {
                 reverted_index_size += sizeof(uint32_t);
             } else {
                 reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
-                _old_size = 0;
                 _size_changed = true;
-                _enable_get_size_in_Bytes = true;
-                size_changed_roaring_vec.push_back(this);
+                _enable_get_size_in_bytes = true;
+                size_changed_roaring_vec->push_back(this);
             }
         }
     }
 
+    void update_size(uint64_t* reverted_index_size) {
+        uint64_t new_size = _roaring.getSizeInBytes(false);
+        *reverted_index_size += (new_size - _old_size);
+        _old_size = new_size;
+        _size_changed = false;
+    }
+
 private:
     Roaring _roaring;
-    mutable uint64_t _old_size;
-    mutable bool _size_changed;
-    bool _enable_get_size_in_Bytes;
+    uint64_t _old_size;
+    uint32_t _element_count;
+    bool _size_changed;
+    bool _enable_get_size_in_bytes;
 };
 
 template <typename CppType>
@@ -129,7 +132,7 @@ public:
             const CppType& value = unaligned_load<CppType>(p);
             auto it = _mem_index.find(value);
             if (it != _mem_index.end()) {
-                it->second.add_rid(_rid, _reverted_index_size, _size_changed_roaring_vec);
+                it->second.add_rid(_rid, _reverted_index_size, &_size_changed_roaring_vec);
             } else {
                 // new value, copy value and insert new key->bitmap pair
                 CppType new_value;
@@ -219,10 +222,7 @@ public:
         uint64_t size = 0;
         size += _null_bitmap.getSizeInBytes(false);
         for (RoaringWrapper* roaring_wrapper : _size_changed_roaring_vec) {
-            uint64_t new_size = roaring_wrapper->roaring_size();
-            _reverted_index_size += (new_size - roaring_wrapper->old_size());
-            roaring_wrapper->set_old_size(new_size);
-            roaring_wrapper->unset_size_changed();
+            roaring_wrapper->update_size(&_reverted_index_size);
         }
         _size_changed_roaring_vec.clear();
         size += _reverted_index_size;
