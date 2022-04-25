@@ -430,9 +430,11 @@ public class Config extends ConfigBase {
     public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
-    // The number of concurrent requests BRPC can processed
+
+    // The size of BRPC connection pool. It will limit the concurrency of sending requests, because
+    // each request must borrow a connection from the pool.
     @ConfField
-    public static int brpc_number_of_concurrent_requests_processed = 4096;
+    public static int brpc_connection_pool_size = 16;
 
     // BRPC idle wait time (ms)
     @ConfField
