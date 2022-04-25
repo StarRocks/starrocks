@@ -397,7 +397,7 @@ Status DataDir::load() {
                                                                     std::string_view value) -> bool {
         auto st = _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false,
                                                          false, true);
-        if (!st.ok() && !to_status(st).is_not_found()) {
+        if (!st.ok() && !st.status().is_not_found()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
             // but it has not been cleared from rocksdb. At this time, restarting the BE
@@ -501,7 +501,12 @@ StatusOr<TabletSharedPtr> DataDir::load_tablet(int64_t tablet_id) {
         }
         return true;
     };
-    RETURN_IF_ERROR(TabletMetaManager::walk(_kv_store, traverse_header_func, strings::Substitute("$0_", tablet_id)));
+    auto st = TabletMetaManager::walk(_kv_store, traverse_header_func, strings::Substitute("$0_", tablet_id));
+    if (st.ok() && tablet == nullptr) {
+        return Status::NotFound(fmt::format("Not found tablet: {}", tablet_id));
+    } else if (!st.ok()) {
+        return st;
+    }
 
     TabletUid tablet_uid = tablet->tablet_uid();
 
@@ -596,11 +601,10 @@ void DataDir::perform_path_gc_by_tablet() {
             continue;
         }
         auto res = _tablet_manager->get_tablet(tablet_id, true);
-        if (!res.ok()) {
+        if (!res.status().is_not_found()) {
             // could find the tablet, then skip check it
             continue;
         }
-        TabletSharedPtr tablet = res.value();
         std::filesystem::path schema_hash_path(path);
         std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
         std::filesystem::path data_dir_path = tablet_id_path.parent_path().parent_path().parent_path();

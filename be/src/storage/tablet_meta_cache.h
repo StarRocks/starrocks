@@ -11,10 +11,6 @@
 
 namespace starrocks {
 
-enum MetaCache_Type {
-    METACACHE_LRU,
-};
-
 class TabletMetaCache {
 public:
     virtual TabletSharedPtr get(int64_t tablet_id) = 0;
@@ -23,7 +19,7 @@ public:
     virtual ~TabletMetaCache() = default;
 };
 
-class LRUTabletMetaCache : public TabletMetaCache {
+class FullTabletMetaCache : public TabletMetaCache {
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
 
 public:

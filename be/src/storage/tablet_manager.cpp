@@ -339,7 +339,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     auto result = _get_tablet_unlocked(tablet_id, true);
     if (!result.ok()) {
         LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": not exist";
-        return to_status(result);
+        return result.status();
     }
     TabletSharedPtr tablet_to_drop = result.value();
     LOG(INFO) << "Dropping tablet " << tablet_id;
@@ -439,10 +439,10 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
 }
 
 StatusOr<TabletSharedPtr> TabletManager::_load_tablet(TTabletId tablet_id) {
-    TabletSharedPtr tablet = nullptr;
-    if (_storage_engine == nullptr) {
-        return Status::NotFound("no data dir");
+    if (!config::enable_tablet_load || _storage_engine == nullptr) {
+        return Status::InternalError("tablet load failed");
     }
+    TabletSharedPtr tablet = nullptr;
 
     for (auto data_dir : _storage_engine->get_stores()) {
         auto st = data_dir->load_tablet(tablet_id);
@@ -464,27 +464,20 @@ StatusOr<TabletSharedPtr> TabletManager::get_tablet(TTabletId tablet_id, bool in
     TabletSharedPtr tablet = nullptr;
     {
         std::shared_lock rlock(shard->lock);
-        auto tablet = shard->tablet_cache->get(tablet_id);
-        if (tablet) {
-            return tablet;
-        }
+        tablet = shard->tablet_cache->get(tablet_id);
     }
-    if (include_deleted) {
+    if (tablet == nullptr && include_deleted) {
         std::shared_lock rlock(_shutdown_tablets_lock);
         if (auto it = _shutdown_tablets.find(tablet_id); it != _shutdown_tablets.end()) {
             tablet = it->second.tablet;
         }
-        if (tablet) {
-            return tablet;
-        }
     }
-    {
+    if (tablet == nullptr) {
         ASSIGN_OR_RETURN(tablet, _load_tablet(tablet_id));
         std::unique_lock wlock(shard->lock);
         shard->id_set.insert(tablet_id);
         shard->tablet_cache->put(tablet);
     }
-
     if (!tablet->is_used()) {
         LOG(WARNING) << "tablet_id=" << tablet_id << " cannot be used";
         if (err != nullptr) {
@@ -950,7 +943,7 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
     if (!res.ok()) {
         LOG(WARNING) << "Fail to report tablet info: can't find tablet."
                      << " tablet=" << tablet_info->tablet_id;
-        return to_status(res);
+        return res.status();
     }
     auto tablet = res.value();
     LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;

@@ -90,9 +90,11 @@ Status EngineCloneTask::execute() {
         }
         auto st = _do_clone(tablet.get());
         _set_tablet_info(st, false);
-    } else {
+    } else if (res.status().is_not_found()) {
         auto st = _do_clone(nullptr);
         _set_tablet_info(st, true);
+    } else {
+        return Status::InternalError("Fail to get tablet" + res.status().to_string());
     }
 
     return Status::OK();

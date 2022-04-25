@@ -5,7 +5,7 @@
 #include "env/env_s3.h"
 
 namespace starrocks {
-TabletSharedPtr LRUTabletMetaCache::get(int64_t tablet_id) {
+TabletSharedPtr FullTabletMetaCache::get(int64_t tablet_id) {
     auto it = tabletmap.find(tablet_id);
     if (it != tabletmap.end()) {
         return it->second;
@@ -13,7 +13,7 @@ TabletSharedPtr LRUTabletMetaCache::get(int64_t tablet_id) {
     return nullptr;
 }
 
-bool LRUTabletMetaCache::put(const TabletSharedPtr& meta) {
+bool FullTabletMetaCache::put(const TabletSharedPtr& meta) {
     auto [it, inserted] = tabletmap.emplace(meta->tablet_id(), meta);
     if (inserted) {
         return true;
@@ -21,7 +21,7 @@ bool LRUTabletMetaCache::put(const TabletSharedPtr& meta) {
     return false;
 }
 
-bool LRUTabletMetaCache::remove(int64_t tablet_id) {
+bool FullTabletMetaCache::remove(int64_t tablet_id) {
     tabletmap.erase(tablet_id);
     return true;
 }

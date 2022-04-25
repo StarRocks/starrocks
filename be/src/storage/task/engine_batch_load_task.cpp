@@ -154,7 +154,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
     if (!result.ok()) {
         LOG(WARNING) << "failed to get tablet: " << request.tablet_id << " " << to_status(result);
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
-        return to_status(result);
+        return result.status();
     }
     auto tablet = result.value();
     PushType type = PUSH_NORMAL_V2;

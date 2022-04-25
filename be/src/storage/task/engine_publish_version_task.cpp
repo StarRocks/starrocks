@@ -51,7 +51,7 @@ Status EnginePublishVersionTask::finish() {
     } else if (!res.ok()) {
         LOG(WARNING) << "failed to get  tablet to publish_version. tablet_id: " << _tablet_info.tablet_id
                      << ", txn_id: " << _transaction_id << " " << to_status(res);
-        return to_status(res);
+        return res.status();
     }
     TabletSharedPtr tablet = res.value();
 

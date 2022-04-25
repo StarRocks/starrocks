@@ -157,7 +157,7 @@ private:
     using TabletSet = std::unordered_set<int64_t>;
 
     struct TabletsShard {
-        TabletsShard() { tablet_cache = std::make_shared<LRUTabletMetaCache>(); }
+        TabletsShard() { tablet_cache = std::make_shared<FullTabletMetaCache>(); }
         mutable std::shared_mutex lock;
         TabletSet id_set;
         std::shared_ptr<TabletMetaCache> tablet_cache;

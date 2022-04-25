@@ -114,7 +114,7 @@ Status DeltaWriter::_init() {
             auto res = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
             if (!res.ok()) {
                 _set_state(kAborted);
-                return to_status(res);
+                return res.status();
             }
             new_tablet = res.value();
             if (_tablet != new_tablet) {
