@@ -106,19 +106,13 @@ private:
     vectorized::Schema _schema;
 
     std::vector<GroupReaderParam::Column> _read_cols;
-
-    std::vector<SlotId> _empty_chunk_slot_ids;
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _is_only_partition_scan = false;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    // conjuncts that column is not exist in file
-    std::vector<ExprContext*> _not_exist_column_conjunct_ctxs;
-
     vectorized::HdfsFileReaderParam* _param;
-    bool _should_skip_file = false;
 };
 
 } // namespace starrocks::parquet

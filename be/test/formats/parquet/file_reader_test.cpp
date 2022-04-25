@@ -77,6 +77,51 @@ private:
     ObjectPool _pool;
 };
 
+struct SlotDesc {
+    string name;
+    TypeDescriptor type;
+};
+
+void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
+    TDescriptorTableBuilder table_desc_builder;
+
+    TTupleDescriptorBuilder tuple_desc_builder;
+    int size = 0;
+    for (int i = 0;; i++) {
+        if (slot_descs[i].name == "") {
+            break;
+        }
+        TSlotDescriptorBuilder b2;
+        b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
+        tuple_desc_builder.add_slot(b2.build());
+        size += 1;
+    }
+    tuple_desc_builder.build(&table_desc_builder);
+
+    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+    std::vector<bool> nullable_tuples = std::vector<bool>{true};
+    DescriptorTbl* tbl = nullptr;
+    DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    *tuple_desc = row_desc->tuple_descriptors()[0];
+    return;
+}
+
+void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsFileReaderParam::ColumnInfo>* columns) {
+    columns->clear();
+    for (int i = 0; i < tuple_desc->slots().size(); i++) {
+        SlotDescriptor* slot = tuple_desc->slots()[i];
+        HdfsFileReaderParam::ColumnInfo c;
+        c.col_name = slot->col_name();
+        c.col_idx = i;
+        c.slot_id = slot->id();
+        c.col_type = slot->type();
+        c.slot_desc = slot;
+        columns->emplace_back(c);
+    }
+}
+
 void FileReaderTest::_create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
 
@@ -222,35 +267,17 @@ std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string
 HdfsFileReaderParam* FileReaderTest::_create_param() {
     auto* param = _pool.add(new HdfsFileReaderParam());
 
-    HdfsFileReaderParam::ColumnInfo c1;
-    c1.col_name = "c1";
-    c1.col_idx = 0;
-    c1.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
-    c1.slot_id = 0;
-
-    HdfsFileReaderParam::ColumnInfo c2;
-    c2.col_name = "c2";
-    c2.col_idx = 1;
-    c2.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT);
-    c2.slot_id = 1;
-
-    HdfsFileReaderParam::ColumnInfo c3;
-    c3.col_name = "c3";
-    c3.col_idx = 2;
-    c3.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
-    c3.slot_id = 2;
-
-    HdfsFileReaderParam::ColumnInfo c4;
-    c4.col_name = "c4";
-    c4.col_idx = 3;
-    c4.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME);
-    c4.slot_id = 3;
-
-    param->materialized_columns.emplace_back(c1);
-    param->materialized_columns.emplace_back(c2);
-    param->materialized_columns.emplace_back(c3);
-    param->materialized_columns.emplace_back(c4);
-
+    TupleDescriptor* tuple_desc;
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    param->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &param->materialized_columns);
     param->scan_ranges.emplace_back(_create_scan_range());
     param->stats = &g_hdfs_scan_stats;
 
@@ -260,13 +287,18 @@ HdfsFileReaderParam* FileReaderTest::_create_param() {
 HdfsFileReaderParam* FileReaderTest::_create_param_for_partition() {
     auto* param = _pool.add(new HdfsFileReaderParam());
 
-    HdfsFileReaderParam::ColumnInfo c1;
-    c1.col_name = "c5";
-    c1.col_idx = 0;
-    c1.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
-    c1.slot_id = 0;
-    param->partition_columns.emplace_back(c1);
-
+    TupleDescriptor* tuple_desc;
+    SlotDesc slot_descs[] = {
+            // {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            // {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            // {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {""},
+    };
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    param->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &param->partition_columns);
     auto column = vectorized::ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(1, 1);
     param->partition_values.emplace_back(column);
 
@@ -279,12 +311,18 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_partition() {
 HdfsFileReaderParam* FileReaderTest::_create_param_for_not_exist() {
     auto* param = _pool.add(new HdfsFileReaderParam());
 
-    HdfsFileReaderParam::ColumnInfo c1;
-    c1.col_name = "c5";
-    c1.col_idx = 0;
-    c1.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
-    c1.slot_id = 0;
-    param->materialized_columns.emplace_back(c1);
+    TupleDescriptor* tuple_desc;
+    SlotDesc slot_descs[] = {
+            // {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            // {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            // {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {""},
+    };
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    param->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &param->materialized_columns);
 
     param->scan_ranges.emplace_back(_create_scan_range());
     param->stats = &g_hdfs_scan_stats;
@@ -296,70 +334,17 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
     auto* param = _pool.add(new HdfsFileReaderParam());
 
     // tuple desc and conjuncts
-    TDescriptorTableBuilder table_desc_builder;
-    TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 = slot_desc_builder.type(PrimitiveType::TYPE_INT)
-                         .column_name("c1")
-                         .column_pos(0)
-                         .nullable(true)
-                         .id(0)
-                         .build();
-    auto slot2 = slot_desc_builder.type(PrimitiveType::TYPE_BIGINT)
-                         .column_name("c2")
-                         .column_pos(1)
-                         .nullable(true)
-                         .id(1)
-                         .build();
-    auto slot3 = slot_desc_builder.string_type(255).column_name("c3").column_pos(2).nullable(true).id(2).build();
-    auto slot4 = slot_desc_builder.type(PrimitiveType::TYPE_DATETIME)
-                         .column_name("c4")
-                         .column_pos(3)
-                         .nullable(true)
-                         .id(3)
-                         .build();
-    TTupleDescriptorBuilder tuple_desc_builder;
-    tuple_desc_builder.add_slot(slot1);
-    tuple_desc_builder.add_slot(slot2);
-    tuple_desc_builder.add_slot(slot3);
-    tuple_desc_builder.add_slot(slot4);
-    tuple_desc_builder.build(&table_desc_builder);
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-    auto* tuple_desc = _row_desc->tuple_descriptors()[0];
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
     param->tuple_desc = tuple_desc;
-
-    // materialized columns
-    HdfsFileReaderParam::ColumnInfo c1;
-    c1.col_name = "c1";
-    c1.col_idx = 0;
-    c1.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
-    c1.slot_id = 0;
-
-    HdfsFileReaderParam::ColumnInfo c2;
-    c2.col_name = "c2";
-    c2.col_idx = 1;
-    c2.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT);
-    c2.slot_id = 1;
-
-    HdfsFileReaderParam::ColumnInfo c3;
-    c3.col_name = "c3";
-    c3.col_idx = 2;
-    c3.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
-    c3.slot_id = 2;
-
-    HdfsFileReaderParam::ColumnInfo c4;
-    c4.col_name = "c4";
-    c4.col_idx = 3;
-    c4.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME);
-    c4.slot_id = 3;
-
-    param->materialized_columns.emplace_back(c1);
-    param->materialized_columns.emplace_back(c2);
-    param->materialized_columns.emplace_back(c3);
-    param->materialized_columns.emplace_back(c4);
+    make_column_info_vector(tuple_desc, &param->materialized_columns);
 
     // scan range
     auto* scan_range = _pool.add(new THdfsScanRange());
@@ -378,27 +363,11 @@ HdfsFileReaderParam* FileReaderTest::_create_file2_base_param() {
 HdfsFileReaderParam* FileReaderTest::_create_param_for_min_max() {
     auto* param = _create_file2_base_param();
 
-    // create min max tuple desc
-    TDescriptorTableBuilder table_desc_builder;
-    TSlotDescriptorBuilder slot_desc_builder;
-    auto slot_desc = slot_desc_builder.type(PrimitiveType::TYPE_INT)
-                             .column_name("c1")
-                             .column_pos(0)
-                             .nullable(true)
-                             .id(0)
-                             .build();
-
-    TTupleDescriptorBuilder tuple_desc_builder;
-    tuple_desc_builder.add_slot(slot_desc);
-    tuple_desc_builder.build(&table_desc_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-    auto* tuple_desc = _row_desc->tuple_descriptors()[0];
-    param->min_max_tuple_desc = tuple_desc;
+    SlotDesc min_max_slots[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {""},
+    };
+    create_tuple_descriptor(&_pool, min_max_slots, &param->min_max_tuple_desc);
 
     // create min max conjuncts
     // c1 >= 1
@@ -409,56 +378,20 @@ HdfsFileReaderParam* FileReaderTest::_create_param_for_min_max() {
 
 HdfsFileReaderParam* FileReaderTest::_create_param_for_filter_file() {
     auto* param = _create_file2_base_param();
-    // add c5 int slot
-    TDescriptorTableBuilder table_desc_builder;
-    TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 = slot_desc_builder.type(PrimitiveType::TYPE_INT)
-                         .column_name("c1")
-                         .column_pos(0)
-                         .nullable(true)
-                         .id(0)
-                         .build();
-    auto slot2 = slot_desc_builder.type(PrimitiveType::TYPE_BIGINT)
-                         .column_name("c2")
-                         .column_pos(1)
-                         .nullable(true)
-                         .id(1)
-                         .build();
-    auto slot3 = slot_desc_builder.string_type(255).column_name("c3").column_pos(2).nullable(true).id(2).build();
-    auto slot4 = slot_desc_builder.type(PrimitiveType::TYPE_DATETIME)
-                         .column_name("c4")
-                         .column_pos(3)
-                         .nullable(true)
-                         .id(3)
-                         .build();
-    auto slot5 = slot_desc_builder.type(PrimitiveType::TYPE_INT)
-                         .column_name("c5")
-                         .column_pos(4)
-                         .nullable(true)
-                         .id(4)
-                         .build();
-    TTupleDescriptorBuilder tuple_desc_builder;
-    tuple_desc_builder.add_slot(slot1);
-    tuple_desc_builder.add_slot(slot2);
-    tuple_desc_builder.add_slot(slot3);
-    tuple_desc_builder.add_slot(slot4);
-    tuple_desc_builder.add_slot(slot5);
-    tuple_desc_builder.build(&table_desc_builder);
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-    _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
-    auto* tuple_desc = _row_desc->tuple_descriptors()[0];
-    param->tuple_desc = tuple_desc;
 
-    // add c5 to materialized columns
-    HdfsFileReaderParam::ColumnInfo c5;
-    c5.col_name = "c5";
-    c5.col_idx = 4;
-    c5.col_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
-    c5.slot_id = 4;
-    param->materialized_columns.emplace_back(c5);
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {""},
+    };
+
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    param->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &param->materialized_columns);
 
     // create conjuncts
     // c5 >= 1

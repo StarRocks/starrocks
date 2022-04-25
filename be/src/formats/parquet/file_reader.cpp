@@ -34,8 +34,8 @@ Status FileReader::init(vectorized::HdfsFileReaderParam* param) {
     std::unordered_set<std::string> names;
     _file_metadata->schema().get_field_names(&names);
     param->set_columns_from_file(names);
-    ASSIGN_OR_RETURN(_should_skip_file, param->should_skip_by_evaluating_not_existed_slots());
-    if (_should_skip_file) {
+    ASSIGN_OR_RETURN(_is_file_filtered, param->should_skip_by_evaluating_not_existed_slots());
+    if (_is_file_filtered) {
         return Status::OK();
     }
     _init_group_reader();
@@ -375,10 +375,6 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
 
 Status FileReader::_init_group_reader() {
     _prepare_read_columns();
-    if (_is_only_partition_scan) {
-        return Status::OK();
-    }
-
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         bool selected = _select_row_group(_file_metadata->t_metadata().row_groups[i]);
 
@@ -402,6 +398,9 @@ Status FileReader::_init_group_reader() {
 }
 
 Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
+    if (_is_file_filtered) {
+        return Status::EndOfFile("");
+    }
     if (_is_only_partition_scan) {
         RETURN_IF_ERROR(_exec_only_partition_scan(chunk));
         return Status::OK();
