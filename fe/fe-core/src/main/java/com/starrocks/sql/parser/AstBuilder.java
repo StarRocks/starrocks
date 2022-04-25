@@ -233,8 +233,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowTables(StarRocksParser.ShowTablesContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
-        if (context.db != null) {
-            database = context.db.getText();
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
         }
 
         if (context.pattern != null) {
