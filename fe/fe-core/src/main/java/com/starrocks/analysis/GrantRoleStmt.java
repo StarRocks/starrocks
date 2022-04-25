@@ -34,7 +34,7 @@ public class GrantRoleStmt extends DdlStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("GRANT ROLE ").append(role).append(" TO ").append(userIdent);
+        sb.append("GRANT ROLE '").append(qualifiedRole).append("' TO ").append(userIdent);
         return sb.toString();
     }
 
