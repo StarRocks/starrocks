@@ -285,6 +285,22 @@ set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/
 
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
+add_library(http_client_curl STATIC IMPORTED GLOBAL)
+set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
+
+add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_common.a)
+
+add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
+
+add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
+
+
+add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
+set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -527,6 +543,11 @@ set(STARROCKS_DEPENDENCIES
     librdkafka_cpp
     librdkafka
     velocypack
+    opentelemetry_trace
+    http_client_curl
+    opentelemetry_resources	
+    opentelemetry_common
+    opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
 )
 
