@@ -40,7 +40,6 @@ public class CatalogUtils {
         }
     }
 
-    // check partition name exist for batch add partition
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
                                                                       List<SingleRangePartitionDesc> singleRangePartitionDescs)
             throws DdlException {
