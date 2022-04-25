@@ -87,23 +87,57 @@ ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
     auto& offsets = res->get_offset();
 
     offsets.resize(num_rows + 1);
-    bytes.resize(33 * num_rows);
+    bytes.resize(36 * num_rows);
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
     for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 33;
+        offsets[i + 1] = offsets[i] + 36;
     }
 
     for (int i = 0; i < num_rows; ++i) {
-        int64_t hi = uuid_data[i];
-        int64_t lo = uuid_data[i] >> 64;
+        union {
+            struct {
+                int32_t time_low;
+                int16_t time_mid;
+                int16_t time_hi_and_version;
+                int16_t clock_seq_hi_and_res;
+                int32_t node_high;
+                int16_t node_low;
+            } __attribute__((packed)) pack;
+            int128_t v;
+            static_assert(sizeof(pack) == sizeof(v));
+        } uni;
+        uni.v = uuid_data[i];
 
-        to_hex(hi, ptr);
-        ptr[16] = '-';
-        to_hex(lo, ptr + 17);
+        int offset = 0;
+        to_hex(uni.pack.time_low, ptr);
+        offset += sizeof(uni.pack.time_low) * 2;
+        ptr[offset] = '-';
+        offset++;
 
-        ptr += 33;
+        to_hex(uni.pack.time_mid, ptr + offset);
+        offset += sizeof(uni.pack.time_mid) * 2;
+        ptr[offset] = '-';
+        offset++;
+
+        to_hex(uni.pack.time_hi_and_version, ptr + offset);
+        offset += sizeof(uni.pack.time_hi_and_version) * 2;
+        ptr[offset] = '-';
+        offset++;
+
+        to_hex(uni.pack.clock_seq_hi_and_res, ptr + offset);
+        offset += sizeof(uni.pack.clock_seq_hi_and_res) * 2;
+        ptr[offset] = '-';
+        offset++;
+
+        to_hex(uni.pack.node_high, ptr + offset);
+        offset += sizeof(uni.pack.node_high) * 2;
+        to_hex(uni.pack.node_low, ptr + offset);
+        offset += sizeof(uni.pack.node_low) * 2;
+
+        DCHECK_EQ(offset, 36);
+        ptr += offset;
     }
 
     return res;
