@@ -118,7 +118,7 @@ public class JoinHelper {
         return eqConjuncts;
     }
 
-    public static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
+    private static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                  ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
