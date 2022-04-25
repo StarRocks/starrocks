@@ -555,6 +555,7 @@ nonReserved
     | VIEW | VERBOSE
     | WEEK
     | YEAR
+    | BACKEND | OBSERVER | FOLLOWER | FREE | TO
     ;
 
 alterSystem
