@@ -65,15 +65,15 @@ public class StreamLoadImportUtils {
 
     private static void printConfig() {
         if (url == null) {
-            System.out.println("url not empty , please set --url=xxx");
+            System.out.println("url is empty , please set --url=xxx");
             System.exit(0);
         }
         if (auth == null) {
-            System.out.println("auth not empty , please set --u=username:password");
+            System.out.println("auth is empty , please set --u=username:password");
             System.exit(0);
         }
         if (sourceFilePath == null) {
-            System.out.println("source file path not empty , please set --source-file=/xxx/xx.csv");
+            System.out.println("source file path is empty , please set --source-file=/xxx/xx.csv");
             System.exit(0);
         }
         if (isDebug) {
