@@ -47,7 +47,9 @@ public:
         return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
     }
 
-    bool is_output_finished() const { return _is_merge_finish; }
+    bool is_output_finished() const {
+        return is_partition_sort_finished() && _is_merge_finish && _next_output_row >= _total_rows;
+    }
 
     ChunkPtr pull_chunk();
 
@@ -66,6 +68,7 @@ private:
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
     bool _is_merge_finish = false;
     ChunkPtr _merged_chunk;
+    size_t _next_output_row = 0; // TODO: remove this field, chop chunks when merging sort
 };
 
 class SortContextFactory {

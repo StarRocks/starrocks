@@ -14,10 +14,22 @@ ChunkPtr SortContext::pull_chunk() {
     if (!_is_merge_finish) {
         _merge_inputs();
         _is_merge_finish = true;
-        return _merged_chunk;
-    } else {
+    }
+    if (_next_output_row >= _total_rows || _merged_chunk->is_empty()) {
         return {};
     }
+
+    // TODO: avoid the chopping
+    // Chop the merged chunk for output
+    size_t chunk_size = std::min<size_t>(_state->chunk_size(), _total_rows - _next_output_row);
+    if (_limit > 0) {
+        chunk_size = std::min<size_t>(chunk_size, _limit);
+    }
+
+    ChunkPtr res = _merged_chunk->clone_empty_with_slot(chunk_size);
+    res->append(*_merged_chunk, _next_output_row, chunk_size);
+    _next_output_row += chunk_size;
+    return res;
 }
 
 void SortContext::_merge_inputs() {
