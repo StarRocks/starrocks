@@ -2286,5 +2286,319 @@ TEST_F(TimeFunctionsTest, str2date_of_datetimeformat) {
         ASSERT_EQ(DateValue::create(2020, 3, 12), nullable_col->get(5).get_date());
     }
 }
+
+TEST_F(TimeFunctionsTest, datetimeFloorTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(0001, 1, 1, 21, 22, 51));
+    tc->append(TimestampValue::create(0001, 3, 2, 14, 17, 28));
+    tc->append(TimestampValue::create(0001, 5, 6, 11, 54, 23));
+    tc->append(TimestampValue::create(2022, 7, 8, 9, 13, 19));
+    tc->append(TimestampValue::create(2022, 9, 9, 8, 8, 16));
+    tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
+
+    //second
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("second");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 21, 22, 50), TimestampValue::create(0001, 3, 2, 14, 17, 25),
+                TimestampValue::create(0001, 5, 6, 11, 54, 20), TimestampValue::create(2022, 7, 8, 9, 13, 15),
+                TimestampValue::create(2022, 9, 9, 8, 8, 15),   TimestampValue::create(2022, 11, 3, 23, 41, 35)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //minute
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("minute");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 21, 20, 0), TimestampValue::create(0001, 3, 2, 14, 15, 0),
+                TimestampValue::create(0001, 5, 6, 11, 50, 0), TimestampValue::create(2022, 7, 8, 9, 10, 0),
+                TimestampValue::create(2022, 9, 9, 8, 5, 0),   TimestampValue::create(2022, 11, 3, 23, 40, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //hour
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("hour");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 20, 0, 0), TimestampValue::create(0001, 3, 2, 10, 0, 0),
+                TimestampValue::create(0001, 5, 6, 10, 0, 0), TimestampValue::create(2022, 7, 8, 8, 0, 0),
+                TimestampValue::create(2022, 9, 9, 6, 0, 0),   TimestampValue::create(2022, 11, 3, 21, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //day
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("day");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 3, 2, 0, 0, 0),
+                TimestampValue::create(0001, 5, 6, 0, 0, 0), TimestampValue::create(2022, 7, 5, 0, 0, 0),
+                TimestampValue::create(2022, 9, 8, 0, 0, 0),   TimestampValue::create(2022, 11, 2, 0, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //month
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("month");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
+                TimestampValue::create(2022, 9, 1, 0, 0, 0),   TimestampValue::create(2022, 9, 1, 0, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //year
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("year");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0),
+                TimestampValue::create(2021, 1, 1, 0, 0, 0),   TimestampValue::create(2021, 1, 1, 0, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //week
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("week");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 2, 5, 0, 0, 0),
+                TimestampValue::create(0001, 4, 16, 0, 0, 0), TimestampValue::create(2022, 6, 20, 0, 0, 0),
+                TimestampValue::create(2022, 8, 29, 0, 0, 0),   TimestampValue::create(2022, 10, 3, 0, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+
+    //quarter
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("quarter");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+
+        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::datetime_floor_prepare(_utils->get_fn_ctx(),
+                                                          FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::datetime_floor(_utils->get_fn_ctx(), columns);
+        ASSERT_TRUE(TimeFunctions::datetime_floor_close(
+                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+        TimestampValue check_result[6] = {
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
+                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
+                TimestampValue::create(2022, 4, 1, 0, 0, 0),   TimestampValue::create(2022, 4, 1, 0, 0, 0)};
+
+        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
+        }
+    }
+}
 } // namespace vectorized
 } // namespace starrocks
