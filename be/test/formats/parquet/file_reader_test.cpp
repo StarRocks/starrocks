@@ -8,6 +8,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "env/env.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -529,7 +530,7 @@ TEST_F(FileReaderTest, TestInit) {
 
     // init
     auto* param = _create_param();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 }
 
@@ -542,7 +543,7 @@ TEST_F(FileReaderTest, TestGetNext) {
 
     // init
     auto* param = _create_param();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -564,7 +565,7 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
 
     // init
     auto* param = _create_param_for_partition();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -586,7 +587,7 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
 
     // init
     auto* param = _create_param_for_not_exist();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -608,7 +609,7 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
 
     // init
     auto* param = _create_param_for_min_max();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // get next
@@ -633,7 +634,7 @@ TEST_F(FileReaderTest, TestFilterFile) {
 
     // init
     auto* param = _create_param_for_filter_file();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // check file is filtered
@@ -653,7 +654,7 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 
     // init
     auto* param = _create_param_for_dict_filter();
-    Status status = file_reader->init(*param);
+    Status status = file_reader->init(param);
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
