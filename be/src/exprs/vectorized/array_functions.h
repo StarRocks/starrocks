@@ -18,7 +18,6 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
-    DEFINE_VECTORIZED_FN(array_cum_sum);
 
 #define APPLY_COMMONE_TYPES_FOR_ARRAY(M)        \
     M(boolean, PrimitiveType::TYPE_BOOLEAN)     \
@@ -157,6 +156,9 @@ public:
     DEFINE_VECTORIZED_FN(array_max_date);
     DEFINE_VECTORIZED_FN(array_max_datetime);
     DEFINE_VECTORIZED_FN(array_max_varchar);
+
+    DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
+    DEFINE_VECTORIZED_FN(array_cum_sum_double);
 
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 

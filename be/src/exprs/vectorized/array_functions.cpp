@@ -346,25 +346,25 @@ public:
             ConstColumn* input = down_cast<ConstColumn*>(col.get());
             auto arr_col_h = input->data_column()->clone();
             ArrayColumn* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
-            call_cumu_sum(arr_col, nullptr);
+            call_cum_sum(arr_col, nullptr);
             return ConstColumn::create(std::move(arr_col_h));
         } else if (col->is_nullable()) {
             auto res = col->clone();
             NullableColumn* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->mutable_null_column();
             ArrayColumn* arr_col = down_cast<ArrayColumn*>(input->data_column().get());
-            call_cumu_sum(arr_col, null_column);
+            call_cum_sum(arr_col, null_column);
             return res;
         } else {
             auto res = col->clone();
             ArrayColumn* arr_col = down_cast<ArrayColumn*>(res.get());
-            call_cumu_sum(arr_col, nullptr);
+            call_cum_sum(arr_col, nullptr);
             return res;
         }
     }
 
 private:
-    static void call_cumu_sum(ArrayColumn* arr_col, NullColumn* null_column) {
+    static void call_cum_sum(ArrayColumn* arr_col, NullColumn* null_column) {
         bool is_nullable = null_column != nullptr;
         bool element_nullable = arr_col->elements_column()->is_nullable();
         if (is_nullable && element_nullable) {
@@ -381,6 +381,9 @@ private:
     template <bool nullable, bool element_nullable>
     static void cumu_sum(ArrayColumn* arr_col, NullColumn* null_column) {
         auto* element = arr_col->elements_column().get();
+        if (element->size() == 0) {
+            return;
+        }
         auto* element_data =
                 element->is_nullable()
                         ? ColumnHelper::get_cpp_data<TYPE>(down_cast<NullableColumn*>(element)->data_column())
@@ -432,35 +435,20 @@ private:
     }
 };
 
-ColumnPtr ArrayFunctions::array_cum_sum([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 1);
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    const ColumnPtr& arg0 = columns[0];
-    // TODO: dispatch graceful
+#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                    \
+    ColumnPtr ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context, \
+                                                   const Columns& columns) {                  \
+        DCHECK_EQ(columns.size(), 1);                                                         \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                 \
+        const ColumnPtr& arg0 = columns[0];                                                   \
+                                                                                              \
+        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                         \
+    }
 
-    ConstColumn* input = down_cast<ConstColumn*>(arg0.get());
-    auto arr_col_h = input->data_column()->clone();
-    ArrayColumn* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
-    auto* element = arr_col->elements_column().get();
-    element = element->is_nullable() ? down_cast<NullableColumn*>(element)->data_column().get() : element;
+DEFINE_ARRAY_CUMSUM_FN(bigint, TYPE_BIGINT)
+DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 
-#define HANDLE_ELEMENT_TYPE(ElementType, TYPE)            \
-    do {                                                  \
-        if (typeid(*element) == typeid(ElementType)) {    \
-            return ArrayCumSumImpl<TYPE>::evaluate(arg0); \
-        }                                                 \
-    } while (0)
-
-    HANDLE_ELEMENT_TYPE(Int8Column, TYPE_TINYINT);
-    HANDLE_ELEMENT_TYPE(Int16Column, TYPE_SMALLINT);
-    HANDLE_ELEMENT_TYPE(Int32Column, TYPE_INT);
-    HANDLE_ELEMENT_TYPE(Int64Column, TYPE_BIGINT);
-    HANDLE_ELEMENT_TYPE(Int128Column, TYPE_LARGEINT);
-
-    LOG(ERROR) << "unhandled column type: " << typeid(*element).name();
-    DCHECK(false) << "unhandled column type: " << typeid(*element).name();
-    return ColumnHelper::create_const_null_column(columns.size());
-}
+#undef DEFINE_ARRAY_CUMSUM_FN
 
 ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
