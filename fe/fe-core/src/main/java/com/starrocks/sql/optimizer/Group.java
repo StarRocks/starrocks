@@ -93,8 +93,10 @@ public class Group {
 
     public void addExpression(GroupExpression groupExpression) {
         if (groupExpression.getOp().isLogical()) {
+            Preconditions.checkState(!logicalExpressions.contains(groupExpression));
             logicalExpressions.add(groupExpression);
         } else {
+            Preconditions.checkState(!physicalExpressions.contains(groupExpression));
             physicalExpressions.add(groupExpression);
         }
         groupExpression.setGroup(this);
@@ -259,6 +261,10 @@ public class Group {
 
     @Override
     public String toString() {
+        return "->  " + "Group: " + id;
+    }
+
+    public String toPrettyString(String headlineIndent, String detailIndent) {
         StringBuilder sb = new StringBuilder();
         sb.append("->  ").append("Group: ").append(id).append('\n');
         for (GroupExpression expr : logicalExpressions) {

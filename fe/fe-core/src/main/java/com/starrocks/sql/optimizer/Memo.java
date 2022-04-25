@@ -159,51 +159,62 @@ public class Memo {
 
         // If we change the GroupExpression child group, the hash value of GroupExpression
         // will change, so we must reinsert the GroupExpression to groupExpressions map
-        List<GroupExpression> needReinsertedExpressions = Lists.newArrayList();
-        for (Iterator<Map.Entry<GroupExpression, GroupExpression>>
-                iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+        List<GroupExpression> needModifyExpressions = Lists.newArrayList();
+        for (Iterator<Map.Entry<GroupExpression, GroupExpression>> iterator = groupExpressions.entrySet().iterator();
+                iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
 
-            // 1 Find which group expression need to reinsert
-            int referSrcGroupIndex = -1;
-            for (int i = 0; i < groupExpr.getInputs().size(); i++) {
-                if (groupExpr.getInputs().get(i) == srcGroup) {
-                    referSrcGroupIndex = i;
+            // 1. find GroupExpression which refer to src group, and remove them from memo
+            for (Group group : groupExpr.getInputs()) {
+                if (group == srcGroup) {
+                    // multi-input must not same
+                    iterator.remove();
+                    needModifyExpressions.add(groupExpr);
                     break;
                 }
             }
 
-            // 2 Remove the GroupExpression from the groupExpressions map
-            // 3 Change the child group from srcGroup to dstGroup
-            if (referSrcGroupIndex >= 0) {
-                iterator.remove();
-                groupExpr.getInputs().set(referSrcGroupIndex, dstGroup);
-                needReinsertedExpressions.add(groupExpr);
-            }
-
-            // 4 Change the group of GroupExpression
+            // 2. find GroupExpression which on src group
             if (groupExpr.getGroup() == srcGroup) {
-                groupExpr.setGroup(dstGroup);
+                needModifyExpressions.add(groupExpr);
             }
         }
 
-        for (GroupExpression groupExpression : needReinsertedExpressions) {
-            if (!groupExpressions.containsKey(groupExpression)) {
-                groupExpressions.put(groupExpression, groupExpression);
+        // modify group of group expression and mark who need reinsert
+        List<GroupExpression> needReinsertedExpressions = Lists.newArrayList();
+        for (GroupExpression modifyExpression : needModifyExpressions) {
+            if (modifyExpression.getGroup() == srcGroup) {
+                modifyExpression.setGroup(dstGroup);
+            }
+
+            for (int i = 0; i < modifyExpression.getInputs().size(); i++) {
+                if (modifyExpression.getInputs().get(i) == srcGroup) {
+                    // remove self from his group, and reinsert later
+                    modifyExpression.getGroup().removeGroupExpression(modifyExpression);
+                    modifyExpression.getInputs().set(i, dstGroup);
+                    needReinsertedExpressions.add(modifyExpression);
+                }
+            }
+        }
+
+        for (GroupExpression reinsertExpression : needReinsertedExpressions) {
+            // reinsert maybe in groupExpressions because his input was modify
+            if (!groupExpressions.containsKey(reinsertExpression)) {
+                groupExpressions.put(reinsertExpression, reinsertExpression);
+                reinsertExpression.getGroup().addExpression(reinsertExpression);
             } else {
                 // group expression is already in the Memo's groupExpressions, this indicates that
                 // this is a redundant group Expression, it's should be remove.
                 // And the redundant group expression may be already in the TaskScheduler stack, so it should be
                 // set unused.
-                groupExpression.getGroup().removeGroupExpression(groupExpression);
-                groupExpression.setUnused(true);
-                GroupExpression existGroupExpression = groupExpressions.get(groupExpression);
-                if (!needMerge(groupExpression.getGroup(), existGroupExpression.getGroup())) {
+                reinsertExpression.setUnused(true);
+                GroupExpression existGroupExpression = groupExpressions.get(reinsertExpression);
+                if (!needMerge(reinsertExpression.getGroup(), existGroupExpression.getGroup())) {
                     // groupExpression and existGroupExpression are in the same group，use existGroupExpression to
                     // replace the bestExpression in the group
-                    groupExpression.getGroup().replaceBestExpression(groupExpression, existGroupExpression);
+                    reinsertExpression.getGroup().replaceBestExpression(reinsertExpression, existGroupExpression);
                     // existingGroupExpression merge the state of groupExpression
-                    existGroupExpression.mergeGroupExpression(groupExpression);
+                    existGroupExpression.mergeGroupExpression(reinsertExpression);
                 }
             }
         }
