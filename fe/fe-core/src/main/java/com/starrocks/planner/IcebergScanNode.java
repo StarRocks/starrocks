@@ -77,7 +77,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
         if (hostToBeId.isEmpty()) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException("Backend not available. Check if any backend is down or busy");
         }
     }
 

@@ -1118,7 +1118,7 @@ public class Coordinator {
         Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException("Backend not available. Check if any backend is down or busy");
         }
         return new TNetworkAddress(backend.getHost(), backend.getBeRpcPort());
     }
@@ -1127,7 +1127,7 @@ public class Coordinator {
         Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException("Backend not available. Check if any backend is down or busy");
         }
         if (backend.getBrpcPort() < 0) {
             return null;
@@ -1165,7 +1165,7 @@ public class Coordinator {
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
                 if (execHostport == null) {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not available. Check if any backend is down or busy");
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -1322,7 +1322,7 @@ public class Coordinator {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
                 if (execHostport == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not available. Check if any backend is down or busy");
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -2280,7 +2280,7 @@ public class Coordinator {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not available. Check if any backend is down or busy");
                 }
                 addressToBackendID.put(execHostPort, backendIdRef.getRef());
 
@@ -2406,7 +2406,7 @@ public class Coordinator {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("Backend not found. Check if any backend is down or not");
+                            throw new UserException("Backend not available. Check if any backend is down or busy");
                         }
                         addressToBackendID.put(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
@@ -2459,7 +2459,7 @@ public class Coordinator {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException("Backend not available. Check if any backend is down or busy");
             }
 
             addressToBackendID.put(execHostPort, backendIdRef.getRef());
@@ -2526,7 +2526,7 @@ public class Coordinator {
                 hostToBes.put(backend.getHost(), backend);
             }
             if (hostToBes.isEmpty()) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException("Backend not available. Check if any backend is down or busy");
             }
 
             // total scans / alive bes
