@@ -1166,12 +1166,12 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                                                    TabletMetaSharedPtr* tablet_meta) {
     uint32_t next_unique_id = 0;
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    TCreateTabletReq norm_request = request;
+    TCreateTabletReq normal_request = request;
     if (!is_schema_change) {
-        for (uint32_t col_idx = 0; col_idx < request.tablet_schema.columns.size(); ++col_idx) {
+        next_unique_id = request.tablet_schema.columns.size();
+        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
-        next_unique_id = request.tablet_schema.columns.size();
     } else {
         next_unique_id = base_tablet->next_unique_id();
         size_t old_num_columns = base_tablet->num_columns();
@@ -1193,7 +1193,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                     // When receiving a new schema change request, the last default value stored should be
                     // remained instead of changing.
                     if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
-                        norm_request.tablet_schema.columns[new_col_idx].__set_default_value(
+                        normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
                                 base_tablet->tablet_schema().column(old_col_idx).default_value());
                     }
                     break;
@@ -1213,7 +1213,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         return Status::InternalError("fail to get root path shard");
     }
     // We generate a new tablet_uid for this new tablet.
-    return TabletMeta::create(_mem_tracker, norm_request, TabletUid::gen_uid(), shard_id, next_unique_id,
+    return TabletMeta::create(_mem_tracker, normal_request, TabletUid::gen_uid(), shard_id, next_unique_id,
                               col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 
