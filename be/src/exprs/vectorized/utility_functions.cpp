@@ -125,7 +125,7 @@ ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
         value = _mm_shuffle_epi8(chars, value);
         _mm_storeu_si128(reinterpret_cast<__m128i*>(buff + 16), value);
 #else
-        to_hex(uuid_data[i], buff2);
+        to_hex(uuid_data[i], buff);
         std::reverse(buff, buff + 32);
 #endif
 
