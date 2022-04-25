@@ -24,6 +24,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -169,6 +170,9 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {

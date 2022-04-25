@@ -5,6 +5,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -18,7 +19,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.Map;
@@ -125,13 +125,11 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext session) {
-            TableName tableName = statement.getTableName();
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, tableName.getDb(),
-                    tableName.getTbl(), PrivPredicate.CREATE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+        public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext session) {
+            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
+                    statement.getMvName(), PrivPredicate.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
             }
-            check(statement.getQueryStatement(), session);
             return null;
         }
     }
