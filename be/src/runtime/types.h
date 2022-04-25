@@ -46,6 +46,7 @@ struct TypeDescriptor {
     static constexpr int MAX_VARCHAR_LENGTH = 1048576;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
+    static constexpr int DEFAULT_BITMAP_LENGTH = 128;
 
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
@@ -139,6 +140,12 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_bitmap_type() {
+        TypeDescriptor ret(TYPE_OBJECT);
+        ret.len = DEFAULT_BITMAP_LENGTH;
+        return ret;
+    }
+
     static TypeDescriptor from_primtive_type(PrimitiveType type,
                                              [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
                                              [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
@@ -161,6 +168,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
         case TYPE_JSON:
             return TypeDescriptor::create_json_type();
+        case TYPE_OBJECT:
+            return TypeDescriptor::create_bitmap_type();
         default:
             return TypeDescriptor(type);
         }
