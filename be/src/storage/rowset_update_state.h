@@ -11,11 +11,7 @@
 
 namespace starrocks {
 
-class Rowset;
-using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class Tablet;
-class TabletMeta;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
