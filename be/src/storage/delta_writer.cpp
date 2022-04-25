@@ -53,8 +53,7 @@ DeltaWriter::~DeltaWriter() {
 void DeltaWriter::_garbage_collection() {
     Status rollback_status = Status::OK();
     if (_tablet != nullptr) {
-        TxnManager* txn_mgr = _storage_engine->txn_manager();
-        rollback_status = txn_mgr->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
+        rollback_status = _storage_engine->txn_manager()->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id);
     }
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
@@ -114,8 +113,7 @@ Status DeltaWriter::_init() {
             new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
             if (new_tablet == nullptr) {
                 _set_state(kAborted);
-                auto msg = fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id);
-                return Status::NotFound(msg);
+                return Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
             }
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
@@ -184,7 +182,6 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::_prepare() {
-    Status st;
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
@@ -198,7 +195,7 @@ Status DeltaWriter::_prepare() {
     case kInitialized: {
         std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
         std::lock_guard push_lock(_tablet->get_push_lock());
-        st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
+        auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
         if (!st.ok()) {
             _set_state(kAborted);
             return st;
