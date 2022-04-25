@@ -110,6 +110,12 @@ ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
 #ifdef __SSE4_2__
         // SIMD::to_hex
         __m128i value = _mm_loadu_si64(reinterpret_cast<const __m128i*>(&uuid_data[i]));
+        // 0x1234
+        //-> [0x34, 0x12]
+        //-> [0x23, 0x01] right shift
+        //-> [0x34, 0x23, 0x12, 0x01] pack
+        //-> [0x04, 0x03, 0x02, 0x01] mask operator
+        //-> shuffle
         value = _mm_and_si128(_mm_unpacklo_epi8(_mm_srli_epi64(value, 4), value), mask);
         value = _mm_shuffle_epi8(chars, value);
         _mm_storeu_si128(reinterpret_cast<__m128i*>(buff), value);
