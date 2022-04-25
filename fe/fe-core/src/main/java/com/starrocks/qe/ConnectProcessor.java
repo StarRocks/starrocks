@@ -264,6 +264,7 @@ public class ConnectProcessor {
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
             } catch (Exception e) {
+                LOG.warn("failed to parse stmt with new parser", e);
                 stmts = analyze(originStmt);
             }
 
