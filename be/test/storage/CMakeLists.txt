@@ -27,3 +27,4 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/storage")
 
 ADD_BE_TEST(delete_handler_test)
 ADD_BE_TEST(options_test)
+ADD_BE_TEST(task/engine_storage_migration_task_test)

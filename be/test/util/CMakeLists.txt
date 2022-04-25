@@ -22,7 +22,7 @@
 # where to put generated libraries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/util")
 
-ADD_BE_TEST(starrocks_metrics_test)
-ADD_BE_TEST(system_metrics_test)
-ADD_BE_TEST(zip_util_test)
+# ADD_BE_TEST(starrocks_metrics_test)
+# ADD_BE_TEST(system_metrics_test)
+# ADD_BE_TEST(zip_util_test)
 

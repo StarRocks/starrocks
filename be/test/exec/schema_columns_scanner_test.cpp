@@ -37,7 +37,7 @@ TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
 }
 } // namespace starrocks::vectorized
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
+// int main(int argc, char** argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }
