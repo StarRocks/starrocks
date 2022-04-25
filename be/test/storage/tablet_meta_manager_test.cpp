@@ -325,11 +325,11 @@ protected:
                     rowset_meta_pb.set_num_segments(1);
                     rowset_meta_pb.set_data_disk_size(1024 * 1024);
                     rowset_meta_pb.set_empty(false);
-                    rowset_meta_pb.set_rowset_id(i /*unused*/);
+                    rowset_meta_pb.set_deprecated_rowset_id(0);
                     rowset_meta_pb.set_rowset_seg_id(i);
                     RowsetId id;
                     id.init(2, i, 0, 0);
-                    rowset_meta_pb.set_rowset_id_v2(id.to_string());
+                    rowset_meta_pb.set_rowset_id(id.to_string());
 
                     EditVersionMetaPB edit;
                     auto v = edit.mutable_version();

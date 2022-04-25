@@ -1968,8 +1968,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         // use src_rowset's meta as base, change some fields to new tablet
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         src_rowset.rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-        rowset_meta_pb.set_rowset_id(0);
-        rowset_meta_pb.set_rowset_id_v2(rid.to_string());
+        rowset_meta_pb.set_deprecated_rowset_id(0);
+        rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
         rowset_meta_pb.set_partition_id(_tablet.tablet_meta()->partition_id());
         rowset_meta_pb.set_tablet_id(tablet_id);
@@ -2134,7 +2134,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
         (*new_rowset)->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
-        rowset_meta_pb.set_rowset_id_v2(rid.to_string());
+        rowset_meta_pb.set_rowset_id(rid.to_string());
 
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
     }
@@ -2338,7 +2338,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
     auto check_rowset_files = [&](const RowsetMetaPB& rowset) {
         for (int seg_id = 0; seg_id < rowset.num_segments(); seg_id++) {
             RowsetId rowset_id;
-            rowset_id.init(rowset.rowset_id_v2());
+            rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {
@@ -2347,7 +2347,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         }
         for (int del_id = 0; del_id < rowset.num_delete_files(); del_id++) {
             RowsetId rowset_id;
-            rowset_id.init(rowset.rowset_id_v2());
+            rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {
