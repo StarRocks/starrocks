@@ -42,7 +42,7 @@ bool RowsetMetaManager::check_rowset_meta(KVStore* meta, const TabletUid& tablet
 }
 
 Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb) {
-    std::string key = fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_meta_pb.rowset_id_v2());
+    std::string key = fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_meta_pb.rowset_id());
     std::string value;
     bool ret = rowset_meta_pb.SerializeToString(&value);
     if (!ret) {
