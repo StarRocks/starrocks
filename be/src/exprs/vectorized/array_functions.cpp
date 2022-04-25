@@ -389,7 +389,7 @@ private:
                 element->is_nullable() ? down_cast<NullableColumn*>(element)->null_column_data().data() : nullptr;
         auto& offsets = arr_col->offsets().get_data();
         size_t num_rows = offsets.size() - 1;
-	NullColumn::Container::pointer null_data = null_column ? null_column->get_data().data() : nullptr;
+        NullColumn::Container::pointer null_data = null_column ? null_column->get_data().data() : nullptr;
 
         if constexpr (element_nullable) {
             DCHECK(element_null_data != nullptr);
@@ -442,14 +442,13 @@ ColumnPtr ArrayFunctions::array_cum_sum([[maybe_unused]] FunctionContext* contex
     auto arr_col_h = input->data_column()->clone();
     ArrayColumn* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
     auto* element = arr_col->elements_column().get();
-    element = element->is_nullable()? down_cast<NullableColumn*>(element)->data_column().get() : element;
+    element = element->is_nullable() ? down_cast<NullableColumn*>(element)->data_column().get() : element;
 
-
-#define HANDLE_ELEMENT_TYPE(ElementType, TYPE)                                                                          \
-    do {                                                                                                                \
-        if (typeid(*element) == typeid(ElementType)) {                                                                  \
-            return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                               \
-        }                                                                                                               \
+#define HANDLE_ELEMENT_TYPE(ElementType, TYPE)            \
+    do {                                                  \
+        if (typeid(*element) == typeid(ElementType)) {    \
+            return ArrayCumSumImpl<TYPE>::evaluate(arg0); \
+        }                                                 \
     } while (0)
 
     HANDLE_ELEMENT_TYPE(Int8Column, TYPE_TINYINT);
