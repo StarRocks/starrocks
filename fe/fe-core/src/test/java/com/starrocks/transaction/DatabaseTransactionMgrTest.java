@@ -24,8 +24,8 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogTestUtil;
-import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
@@ -53,7 +53,7 @@ public class DatabaseTransactionMgrTest {
     public ExpectedException expectedEx = ExpectedException.none();
 
     private static FakeEditLog fakeEditLog;
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
     private static FakeTransactionIDGenerator fakeTransactionIDGenerator;
     private static GlobalTransactionMgr masterTransMgr;
     private static GlobalTransactionMgr slaveTransMgr;
@@ -68,7 +68,7 @@ public class DatabaseTransactionMgrTest {
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException, UserException {
         fakeEditLog = new FakeEditLog();
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
         slaveGlobalStateMgr = CatalogTestUtil.createTestCatalog();
@@ -87,7 +87,7 @@ public class DatabaseTransactionMgrTest {
 
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
         Map<String, Long> lableToTxnId = Maps.newHashMap();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId1 = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -134,7 +134,7 @@ public class DatabaseTransactionMgrTest {
 
         TransactionState transactionState1 = fakeEditLog.getTransaction(transactionId1);
 
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState1);
         return lableToTxnId;
     }

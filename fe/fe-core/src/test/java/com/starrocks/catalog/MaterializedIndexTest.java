@@ -46,7 +46,7 @@ public class MaterializedIndexTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
@@ -58,9 +58,9 @@ public class MaterializedIndexTest {
         columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
         index = new MaterializedIndex(indexId, IndexState.NORMAL);
 
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(globalStateMgr);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

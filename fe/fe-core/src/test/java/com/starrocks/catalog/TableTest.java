@@ -39,17 +39,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TableTest {
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(globalStateMgr);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

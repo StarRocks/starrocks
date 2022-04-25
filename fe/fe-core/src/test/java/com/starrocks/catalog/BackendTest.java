@@ -53,19 +53,19 @@ public class BackendTest {
 
     private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
     private FakeEditLog fakeEditLog;
 
     @Before
     public void setUp() {
         globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
 
-        FakeCatalog.setCatalog(globalStateMgr);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
-        FakeCatalog.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setSystemInfo(AccessTestUtil.fetchSystemInfoService());
 
         backend = new Backend(backendId, host, heartbeatPort);
         backend.updateOnce(bePort, httpPort, beRpcPort);

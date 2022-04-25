@@ -26,26 +26,26 @@ import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 
-public class FakeCatalog extends MockUp<GlobalStateMgr> {
+public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
 
     private static GlobalStateMgr globalStateMgr;
     private static int metaVersion;
     private static SystemInfoService systemInfo = new SystemInfoService();
 
-    public static void setCatalog(GlobalStateMgr globalStateMgr) {
-        FakeCatalog.globalStateMgr = globalStateMgr;
+    public static void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
+        FakeGlobalStateMgr.globalStateMgr = globalStateMgr;
     }
 
     public static void setMetaVersion(int metaVersion) {
-        FakeCatalog.metaVersion = metaVersion;
+        FakeGlobalStateMgr.metaVersion = metaVersion;
     }
 
     public static void setSystemInfo(SystemInfoService systemInfo) {
-        FakeCatalog.systemInfo = systemInfo;
+        FakeGlobalStateMgr.systemInfo = systemInfo;
     }
 
     @Mock
-    public static GlobalStateMgr getCurrentCatalog() {
+    public static GlobalStateMgr getCurrentStateMgr() {
         return globalStateMgr;
     }
 

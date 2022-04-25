@@ -23,7 +23,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;
@@ -41,14 +41,14 @@ import java.io.FileOutputStream;
 import java.util.Map;
 
 public class DppConfigTest {
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Test
     public void testNormal(@Mocked GlobalStateMgr globalStateMgr) throws LoadException {
         // mock globalStateMgr
         int clusterId = 10;
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(globalStateMgr);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         new Expectations() {
             {
                 globalStateMgr.getClusterId();
@@ -125,8 +125,8 @@ public class DppConfigTest {
     @Test
     public void testSerialization() throws Exception {
         // mock globalStateMgr
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setMetaVersion(FeMetaVersion.VERSION_12);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setMetaVersion(FeMetaVersion.VERSION_12);
 
         Map<String, String> configMap = Maps.newHashMap();
         configMap.put("hadoop_starrocks_path", "/user/starrocks2");

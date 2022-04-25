@@ -25,8 +25,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.CatalogTestUtil;
-import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -73,7 +73,7 @@ import static org.junit.Assert.assertTrue;
 public class GlobalTransactionMgrTest {
 
     private static FakeEditLog fakeEditLog;
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
     private static FakeTransactionIDGenerator fakeTransactionIDGenerator;
     private static GlobalTransactionMgr masterTransMgr;
     private static GlobalTransactionMgr slaveTransMgr;
@@ -87,7 +87,7 @@ public class GlobalTransactionMgrTest {
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
         fakeEditLog = new FakeEditLog();
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
         slaveGlobalStateMgr = CatalogTestUtil.createTestCatalog();
@@ -105,7 +105,7 @@ public class GlobalTransactionMgrTest {
     @Test
     public void testBeginTransaction() throws LabelAlreadyUsedException, AnalysisException,
             BeginTransactionException, DuplicatedRequestException {
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -123,7 +123,7 @@ public class GlobalTransactionMgrTest {
     @Test
     public void testBeginTransactionWithSameLabel() throws LabelAlreadyUsedException, AnalysisException,
             BeginTransactionException, DuplicatedRequestException {
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = 0;
         try {
             transactionId = masterTransMgr
@@ -156,7 +156,7 @@ public class GlobalTransactionMgrTest {
     // all replica committed success
     @Test
     public void testCommitTransaction1() throws UserException {
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -191,7 +191,7 @@ public class GlobalTransactionMgrTest {
             assertEquals(CatalogTestUtil.testStartVersion, replica.getVersion());
         }
         // slave replay new state and compare globalStateMgr
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
     }
@@ -200,7 +200,7 @@ public class GlobalTransactionMgrTest {
     @Test
     public void testCommitTransactionWithOneFailed() throws UserException {
         TransactionState transactionState = null;
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -218,11 +218,11 @@ public class GlobalTransactionMgrTest {
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
 
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         // commit another transaction with 1,3 success
         long transactionId2 = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
@@ -302,7 +302,7 @@ public class GlobalTransactionMgrTest {
         assertEquals(CatalogTestUtil.testStartVersion + 3, testPartition.getNextVersion());
 
         transactionState = fakeEditLog.getTransaction(transactionId2);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
     }
@@ -311,7 +311,7 @@ public class GlobalTransactionMgrTest {
     public void testCommitRoutineLoadTransaction(@Injectable TabletCommitInfo tabletCommitInfo,
                                                  @Mocked EditLog editLog)
             throws UserException {
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         TabletCommitInfo tabletCommitInfo1 =
                 new TabletCommitInfo(CatalogTestUtil.testTabletId1, CatalogTestUtil.testBackendId1);
@@ -384,7 +384,7 @@ public class GlobalTransactionMgrTest {
     public void testCommitRoutineLoadTransactionWithErrorMax(@Injectable TabletCommitInfo tabletCommitInfo,
                                                              @Mocked EditLog editLog) throws UserException {
 
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 
         TabletCommitInfo tabletCommitInfo1 =
                 new TabletCommitInfo(CatalogTestUtil.testTabletId1, CatalogTestUtil.testBackendId1);
@@ -510,7 +510,7 @@ public class GlobalTransactionMgrTest {
                         .getPartition(CatalogTestUtil.testPartition1);
         LocalTablet tablet = (LocalTablet) testPartition.getIndex(CatalogTestUtil.testIndexId1)
                 .getTablet(CatalogTestUtil.testTabletId1);
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
                         CatalogTestUtil.testTxnLable1,
@@ -528,12 +528,12 @@ public class GlobalTransactionMgrTest {
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
 
         // master finish the transaction failed
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(CatalogTestUtil.testReplicaId2);
         assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, Sets.newHashSet()), false);
@@ -565,11 +565,11 @@ public class GlobalTransactionMgrTest {
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
 
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         // commit another transaction with 1,3 success
         long transactionId2 = masterTransMgr
                 .beginTransaction(CatalogTestUtil.testDbId1, Lists.newArrayList(CatalogTestUtil.testTableId1),
@@ -612,7 +612,7 @@ public class GlobalTransactionMgrTest {
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId2);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
 
@@ -637,7 +637,7 @@ public class GlobalTransactionMgrTest {
         assertEquals(CatalogTestUtil.testStartVersion + 3, testPartition.getNextVersion());
 
         transactionState = fakeEditLog.getTransaction(transactionId2);
-        FakeCatalog.setCatalog(slaveGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertTrue(CatalogTestUtil.compareCatalog(masterGlobalStateMgr, slaveGlobalStateMgr));
     }

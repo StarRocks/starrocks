@@ -40,8 +40,8 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -103,13 +103,13 @@ public class RollupJobV2Test {
     private static AddRollupClause clause;
     private static AddRollupClause clause2;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
     private FakeEditLog fakeEditLog;
 
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException, AnalysisException {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
@@ -152,9 +152,9 @@ public class RollupJobV2Test {
 
     @Test
     public void testRunRollupJobConcurrentLimit() throws UserException {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
@@ -174,9 +174,9 @@ public class RollupJobV2Test {
 
     @Test
     public void testAddSchemaChange() throws UserException {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
@@ -191,9 +191,9 @@ public class RollupJobV2Test {
     // start a schema change, then finished
     @Test
     public void testSchemaChange1() throws Exception {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
 
         // add a rollup job
@@ -243,9 +243,9 @@ public class RollupJobV2Test {
 
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
 
         // add a rollup job

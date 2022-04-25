@@ -156,8 +156,8 @@ public class PartitionKeyTest {
 
     @Test
     public void testSerialization() throws Exception {
-        FakeCatalog fakeCatalog = new FakeCatalog();
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
 
         // 1. Write objects to file
         File file = new File("./keyRangePartition");

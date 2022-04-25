@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -45,18 +45,18 @@ public class ShowFunctionsStmtTest {
     private Auth auth;
     @Mocked
     private ConnectContext ctx;
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = AccessTestUtil.fetchAdminCatalog();
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.188.3.1");
-        FakeCatalog.setCatalog(globalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         new Expectations() {
             {

@@ -21,7 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +46,7 @@ public class ShowPartitionsStmtTest {
     @Before
     public void setUp() {
         globalStateMgr = AccessTestUtil.fetchAdminCatalog();
-        FakeCatalog.setCatalog(globalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         new Expectations() {
             {

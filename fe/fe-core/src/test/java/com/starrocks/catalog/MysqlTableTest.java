@@ -49,7 +49,7 @@ public class MysqlTableTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
@@ -66,9 +66,9 @@ public class MysqlTableTest {
         properties.put("database", "db");
         properties.put("table", "tbl");
 
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(globalStateMgr);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

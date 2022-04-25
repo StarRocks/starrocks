@@ -89,7 +89,7 @@ public class CatalogTestUtil {
         constructor.setAccessible(true);
         GlobalStateMgr globalStateMgr = constructor.newInstance();
         globalStateMgr.setEditLog(new EditLog("name"));
-        FakeCatalog.setCatalog(globalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);

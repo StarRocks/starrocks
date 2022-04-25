@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
@@ -41,7 +41,7 @@ public class CancelAlterStmtTest {
 
     private ConnectContext ctx;
 
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
@@ -73,8 +73,8 @@ public class CancelAlterStmtTest {
 
     @Test
     public void testNormal() throws UserException, AnalysisException {
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(globalStateMgr);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         // cancel alter column
         CancelAlterTableStmt stmt = new CancelAlterTableStmt(AlterType.COLUMN, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);

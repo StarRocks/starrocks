@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
@@ -38,14 +38,14 @@ public class ShowAlterStmtTest {
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService systemInfo;
 
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        FakeCatalog.setCatalog(globalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         analyzer = new Analyzer(globalStateMgr, new ConnectContext(null));
         new Expectations(analyzer) {

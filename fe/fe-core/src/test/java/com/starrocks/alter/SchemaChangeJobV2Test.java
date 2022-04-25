@@ -38,8 +38,8 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
-import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -93,7 +93,7 @@ public class SchemaChangeJobV2Test {
     private static String fileName = "./SchemaChangeV2Test";
 
     private static FakeEditLog fakeEditLog;
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
     private static FakeTransactionIDGenerator fakeTransactionIDGenerator;
     private static GlobalTransactionMgr masterTransMgr;
     private static GlobalTransactionMgr slaveTransMgr;
@@ -112,7 +112,7 @@ public class SchemaChangeJobV2Test {
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException, AnalysisException {
         fakeEditLog = new FakeEditLog();
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
         slaveGlobalStateMgr = CatalogTestUtil.createTestCatalog();
@@ -137,9 +137,9 @@ public class SchemaChangeJobV2Test {
 
     @Test
     public void testAddSchemaChange() throws UserException {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(addColumnClause);
@@ -154,9 +154,9 @@ public class SchemaChangeJobV2Test {
     // start a schema change, then finished
     @Test
     public void testSchemaChange1() throws Exception {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
 
         // add a schema change job
@@ -232,9 +232,9 @@ public class SchemaChangeJobV2Test {
 
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
 
         // add a schema change job
@@ -316,9 +316,9 @@ public class SchemaChangeJobV2Test {
 
     @Test
     public void testModifyDynamicPartitionNormal() throws UserException {
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeEditLog = new FakeEditLog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
@@ -373,8 +373,8 @@ public class SchemaChangeJobV2Test {
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue,
                                                            String missPropertyKey)
             throws UserException {
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();

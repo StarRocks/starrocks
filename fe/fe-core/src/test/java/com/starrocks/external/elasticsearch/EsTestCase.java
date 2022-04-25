@@ -24,8 +24,8 @@ package com.starrocks.external.elasticsearch;
 import com.starrocks.catalog.CatalogTestUtil;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.FakeCatalog;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -47,20 +47,20 @@ import java.util.Random;
 public class EsTestCase {
 
     protected static FakeEditLog fakeEditLog;
-    protected static FakeCatalog fakeCatalog;
+    protected static FakeGlobalStateMgr fakeGlobalStateMgr;
     protected static GlobalStateMgr masterGlobalStateMgr;
     protected static String mappingsStr = "";
 
     @BeforeClass
     public static void init() throws Exception {
         fakeEditLog = new FakeEditLog();
-        fakeCatalog = new FakeCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
         masterGlobalStateMgr = CatalogTestUtil.createTestCatalog();
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
         metaContext.setThreadLocalInfo();
         // masterGlobalStateMgr.setJournalVersion(FeMetaVersion.VERSION_40);
-        FakeCatalog.setCatalog(masterGlobalStateMgr);
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
     }
 
     protected String loadJsonFromFile(String fileName) throws IOException, URISyntaxException {

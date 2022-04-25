@@ -37,13 +37,13 @@ import java.io.IOException;
 import java.util.List;
 
 public class UserPropertyTest {
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Test
     public void testNormal() throws IOException, DdlException {
         // mock globalStateMgr
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
 
         UserProperty property = new UserProperty("root");
         property.getResource().updateGroupShare("low", 991);
