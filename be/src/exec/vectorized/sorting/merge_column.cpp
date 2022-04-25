@@ -326,11 +326,11 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
     int left_index = -1;
     int right_index = -1;
     auto left_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++left_index < left.num_chunks()) {
                         // TODO: avoid copy
-                        *output = left.get_chunk(left_index)->clone_unique().release();
+                        *output = left.get_chunk(left_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;
@@ -341,10 +341,10 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector
             },
             sort_exprs);
     auto right_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](Chunk** output, bool* eos) {
+            [&](ChunkUniquePtr* output, bool* eos) {
                 if (output) {
                     if (++right_index < right.num_chunks()) {
-                        *output = right.get_chunk(right_index)->clone_unique().release();
+                        *output = right.get_chunk(right_index)->clone_unique();
                         return true;
                     } else {
                         *eos = true;

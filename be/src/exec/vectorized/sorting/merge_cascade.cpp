@@ -87,7 +87,7 @@ struct CursorAlgo {
 MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor>&& left_cursor,
                                std::unique_ptr<SimpleChunkSortCursor>&& right_cursor)
         : _sort_desc(sort_desc), _left_cursor(std::move(left_cursor)), _right_cursor(std::move(right_cursor)) {
-    _chunk_provider = [&](Chunk** output, bool* eos) -> bool {
+    _chunk_provider = [&](ChunkUniquePtr* output, bool* eos) -> bool {
         if (output == nullptr || eos == nullptr) {
             return is_data_ready();
         }
@@ -96,7 +96,7 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
         if (!chunk.ok() || !chunk.value()) {
             return false;
         } else {
-            *output = chunk.value().release();
+            *output = std::move(chunk.value());
             return true;
         }
     };

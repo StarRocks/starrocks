@@ -184,7 +184,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
     if (_eos) {
         return {nullptr, {}};
     }
-    Chunk* chunk = nullptr;
+    ChunkUniquePtr chunk = nullptr;
     if (!_chunk_provider(&chunk, &_eos) || !chunk) {
         return {nullptr, {}};
     }
@@ -195,10 +195,10 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
 
     Columns sort_columns;
     for (ExprContext* expr : *_sort_exprs) {
-        auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk);
+        auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
         sort_columns.push_back(column);
     }
-    return {ChunkUniquePtr(chunk), sort_columns};
+    return {std::move(chunk), sort_columns};
 }
 
 bool SimpleChunkSortCursor::is_eos() {

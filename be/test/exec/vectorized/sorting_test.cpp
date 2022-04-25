@@ -242,7 +242,7 @@ TEST(SortingTest, merge_sorted_stream) {
     std::vector<int> chunk_probe_index(num_runs, 0);
     std::vector<int> chunk_run_max(num_runs, 0);
     for (int run = 0; run < num_runs; run++) {
-        ChunkProvider chunk_probe_supplier = [&, run](Chunk** output, bool* eos) -> bool {
+        ChunkProvider chunk_probe_supplier = [&, run](ChunkUniquePtr* output, bool* eos) -> bool {
             if (chunk_probe_index[run]++ > num_chunks_per_run) {
                 *output = nullptr;
                 *eos = true;
@@ -254,8 +254,7 @@ TEST(SortingTest, merge_sorted_stream) {
                             build_sorted_column(type_desc, col_idx, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
                     columns.push_back(column);
                 }
-                ChunkUniquePtr chunk = std::make_unique<Chunk>(columns, map);
-                *output = chunk.release();
+                *output = std::make_unique<Chunk>(columns, map);
             }
             return true;
         };
