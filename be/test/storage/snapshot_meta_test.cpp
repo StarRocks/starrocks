@@ -38,7 +38,7 @@ public:
 
         _snapshot_meta.rowset_metas()[0].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[0].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[0].set_rowset_id(1001);
+        _snapshot_meta.rowset_metas()[0].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[0].set_rowset_seg_id(1);
         _snapshot_meta.rowset_metas()[0].set_empty(false);
         _snapshot_meta.rowset_metas()[0].set_data_disk_size(1024);
@@ -52,7 +52,7 @@ public:
 
         _snapshot_meta.rowset_metas()[1].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[1].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[1].set_rowset_id(1002);
+        _snapshot_meta.rowset_metas()[1].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[1].set_rowset_seg_id(2);
         _snapshot_meta.rowset_metas()[1].set_empty(false);
         _snapshot_meta.rowset_metas()[1].set_data_disk_size(2048);
@@ -66,7 +66,7 @@ public:
 
         _snapshot_meta.rowset_metas()[2].set_creation_time(time(NULL));
         _snapshot_meta.rowset_metas()[2].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
-        _snapshot_meta.rowset_metas()[2].set_rowset_id(1003);
+        _snapshot_meta.rowset_metas()[2].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[2].set_rowset_seg_id(5);
         _snapshot_meta.rowset_metas()[2].set_empty(false);
         _snapshot_meta.rowset_metas()[2].set_data_disk_size(2048);
