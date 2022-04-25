@@ -1,23 +1,4 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/metric/MetricRepo.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.metric;
 
@@ -161,7 +142,7 @@ public class ResourceGroupMetricMgr {
         if (RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
             return;
         } else {
-            GaugeMetricImpl metricMean =
+            GaugeMetricImpl<Double> metricMean =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "mean of resource group query latency");
             metricMean.addLabel(new MetricLabel("type", "mean"));
@@ -169,7 +150,7 @@ public class ResourceGroupMetricMgr {
             metricMean.setValue(0.0);
             MetricRepo.addMetric(metricMean);
 
-            GaugeMetricImpl metric50Quantile =
+            GaugeMetricImpl<Double> metric50Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "median of resource group query latency");
             metric50Quantile.addLabel(new MetricLabel("type", "50_quantile"));
@@ -177,7 +158,7 @@ public class ResourceGroupMetricMgr {
             metric50Quantile.setValue(0.0);
             MetricRepo.addMetric(metric50Quantile);
 
-            GaugeMetricImpl metric75Quantile =
+            GaugeMetricImpl<Double> metric75Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "p75 of resource group query latency");
             metric75Quantile.addLabel(new MetricLabel("type", "75_quantile"));
@@ -185,7 +166,7 @@ public class ResourceGroupMetricMgr {
             metric75Quantile.setValue(0.0);
             MetricRepo.addMetric(metric75Quantile);
 
-            GaugeMetricImpl metric90Quantile =
+            GaugeMetricImpl<Double> metric90Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "p90 of resource group query latency");
             metric90Quantile.addLabel(new MetricLabel("type", "90_quantile"));
@@ -193,7 +174,7 @@ public class ResourceGroupMetricMgr {
             metric90Quantile.setValue(0.0);
             MetricRepo.addMetric(metric90Quantile);
 
-            GaugeMetricImpl metric95Quantile =
+            GaugeMetricImpl<Double> metric95Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "p95 of resource group query latency");
             metric95Quantile.addLabel(new MetricLabel("type", "95_quantile"));
@@ -201,7 +182,7 @@ public class ResourceGroupMetricMgr {
             metric95Quantile.setValue(0.0);
             MetricRepo.addMetric(metric95Quantile);
 
-            GaugeMetricImpl metric99Quantile =
+            GaugeMetricImpl<Double> metric99Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "p99 of resource group query latency");
             metric99Quantile.addLabel(new MetricLabel("type", "99_quantile"));
@@ -209,7 +190,7 @@ public class ResourceGroupMetricMgr {
             metric99Quantile.setValue(0.0);
             MetricRepo.addMetric(metric99Quantile);
 
-            GaugeMetricImpl metric999Quantile =
+            GaugeMetricImpl<Double> metric999Quantile =
                     new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
                             "p999 of resource group query latency");
             metric999Quantile.addLabel(new MetricLabel("type", "999_quantile"));

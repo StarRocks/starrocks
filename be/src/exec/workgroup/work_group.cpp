@@ -19,7 +19,6 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
           _version(version),
           _cpu_limit(cpu_limit),
           _memory_limit(memory_limit),
-          _mem_limit(-1),
           _concurrency(concurrency),
           _type(type) {}
 
@@ -34,7 +33,7 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     } else {
         _memory_limit = -1;
     }
-    _mem_limit = -1;
+
     if (twg.__isset.concurrency_limit) {
         _concurrency = twg.concurrency_limit;
     } else {
@@ -119,8 +118,8 @@ void WorkGroupManager::destroy() {
 
     _driver_worker_owner_manager.reset(nullptr);
     _scan_worker_owner_manager.reset(nullptr);
+    update_metrics_unlocked();
     _workgroups.clear();
-    update_metrics();
 }
 
 WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
@@ -136,20 +135,20 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
 }
 
 void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
-    std::call_once(_init_metrics, []() {
+    std::call_once(init_metrics_once_flag, []() {
         StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
                                                                [] { WorkGroupManager::instance()->update_metrics(); });
     });
 
     if (_wg_metrics.count(wg->name()) == 0) {
         //cpu limit
-        std::unique_ptr<starrocks::DoubleGauge> resource_group_cpu_limit_ratio(new DoubleGauge(MetricUnit::PERCENT));
+        auto resource_group_cpu_limit_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
         //cpu concurrent
-        std::unique_ptr<starrocks::DoubleGauge> resource_group_cpu_use_ratio(new DoubleGauge(MetricUnit::PERCENT));
+        auto resource_group_cpu_use_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
         //mem limit
-        std::unique_ptr<starrocks::IntGauge> resource_group_mem_limit_bytes(new IntGauge(MetricUnit::BYTES));
+        auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
         //mem concurrent
-        std::unique_ptr<starrocks::IntGauge> resource_group_mem_allocated_bytes(new IntGauge(MetricUnit::BYTES));
+        auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
 
         StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio",
                                                                  MetricLabels().add("name", wg->name()),
@@ -172,21 +171,26 @@ void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
     _wg_metrics.emplace(wg->name(), wg->unique_id());
 }
 
-void WorkGroupManager::update_metrics() {
+void WorkGroupManager::update_metrics_unlocked() {
     for (auto& wg_metric : _wg_metrics) {
-        WorkGroupPtr wg = _workgroups[wg_metric.second];
-        if (wg != nullptr) {
-            _wg_cpu_limit_metrics[wg_metric.first]->set_value(wg->get_cpu_expected_use_ratio());
-            _wg_cpu_metrics[wg_metric.first]->set_value(wg->get_cpu_actual_use_ratio());
-            _wg_mem_limit_metrics[wg_metric.first]->set_value(wg->mem_limit());
-            _wg_mem_metrics[wg_metric.first]->set_value(wg->mem_tracker()->consumption());
+        auto wg = _workgroups.find(wg_metric.second);
+        if (wg != _workgroups.end()) {
+            _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_expected_use_ratio());
+            _wg_cpu_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_actual_use_ratio());
+            _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_limit());
+            _wg_mem_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_tracker()->consumption());
         } else {
-            _wg_cpu_limit_metrics[wg_metric.first]->set_value(0);
-            _wg_cpu_metrics[wg_metric.first]->set_value(0);
-            _wg_mem_limit_metrics[wg_metric.first]->set_value(0);
-            _wg_mem_metrics[wg_metric.first]->set_value(0);
+            _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(0);
+            _wg_cpu_metrics.find(wg_metric.first)->second->set_value(0);
+            _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(0);
+            _wg_mem_metrics.find(wg_metric.first)->second->set_value(0);
         }
     }
+}
+
+void WorkGroupManager::update_metrics() {
+    std::unique_lock write_lock(_mutex);
+    update_metrics_unlocked();
 }
 
 WorkGroupPtr WorkGroupManager::get_default_workgroup() {

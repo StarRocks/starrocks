@@ -159,7 +159,7 @@ private:
 
     size_t _cpu_limit;
     double _memory_limit;
-    int64_t _mem_limit;
+    int64_t _mem_limit = -1;
     size_t _concurrency;
     WorkGroupType _type;
 
@@ -256,7 +256,6 @@ public:
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
-    void add_metrics(const WorkGroupPtr& wg);
     void update_metrics();
 
 private:
@@ -281,13 +280,16 @@ private:
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
 
-    std::once_flag _init_metrics;
+    std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, int128_t> _wg_metrics;
 
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+
+    void add_metrics(const WorkGroupPtr& wg);
+    void update_metrics_unlocked();
 };
 
 class DefaultWorkGroupInitialization {
