@@ -309,11 +309,11 @@ nonterminal ValueList value_clause;
 
 // No return.
 nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_or_index, opt_storage, opt_wild_where,
-            charset, opt_charset_name, equal, transaction_characteristics, isolation_level,
+            charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types, insert_ignore;
 
 // String
-nonterminal String user, opt_user;
+nonterminal String user, opt_user, opt_charset_name, opt_character_name, opt_equal_or_not;
 nonterminal UserIdentity user_identity;
 nonterminal String quantity;
 
@@ -1191,7 +1191,7 @@ create_stmt ::=
         RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns RPAREN opt_engine:engineName
+            LPAREN column_definition_list:columns RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -1200,11 +1200,11 @@ create_stmt ::=
             opt_properties:tblProperties
             opt_ext_properties:extProperties
     {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, keys, partition,
+        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, engineName, charsetName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
-            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName
+            LPAREN column_definition_list:columns COMMA index_definition_list:indexes RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
             opt_comment:tableComment
             opt_partition:partition
@@ -1213,7 +1213,7 @@ create_stmt ::=
             opt_properties:tblProperties
             opt_ext_properties:extProperties
     {:
-        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, keys, partition,
+        RESULT = new CreateTableStmt(ifNotExists, isExternal, name, columns, indexes, engineName, charsetName, keys, partition,
         distribution, tblProperties, extProperties, tableComment, index);
     :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
@@ -2265,9 +2265,9 @@ opt_is_key ::=
 	;
 
 column_definition ::=
-    ident:columnName type_def:typeDef opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
+    ident:columnName type_def:typeDef opt_character_name:characterName opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
     {:
-        ColumnDef columnDef = new ColumnDef(columnName, typeDef, isKey, aggType, isAllowNull, defaultValue, comment);
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, characterName, isKey, aggType, isAllowNull, defaultValue, comment);
         RESULT = columnDef;
     :}
     ;
@@ -2761,9 +2761,44 @@ old_or_new_charset_name_or_default ::=
     :}
     ;
 
+opt_equal_or_not ::=
+    ident_or_text:id
+    {:
+        RESULT = id;
+    :}
+    | EQUAL ident_or_text:id
+    {:
+        RESULT = id;
+    :}
+    ;
+
 opt_charset_name ::=
+    {:
+        RESULT = "utf8";
+    :}
+    | KW_DEFAULT charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    | charset opt_equal_or_not:charsetName
+    {:
+        RESULT = charsetName;
+    :}
+    ;
+
+opt_character_name ::=
     /* empty */
-    | charset old_or_new_charset_name_or_default
+    {:
+        RESULT = null;
+    :}
+    | KW_CHAR KW_SET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
+    | KW_CHARSET ident:characterName
+    {:
+        RESULT = characterName;
+    :}
     ;
 
 opt_collate ::=
