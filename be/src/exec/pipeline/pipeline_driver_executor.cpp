@@ -224,12 +224,15 @@ void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ct
 
         // use the name of pipeline' profile as pipeline driver's
         merged_driver_profile->set_name(pipeline_profile->name());
-        merged_driver_profiles.push_back(merged_driver_profile);
 
         // add all the info string and counters of the pipeline's profile
         // to the pipeline driver's profile
-        merged_driver_profile->copy_all_counters_from(pipeline_profile);
         merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
+        merged_driver_profile->copy_all_counters_from(pipeline_profile);
+
+        _simplify_common_metrics(merged_driver_profile);
+
+        merged_driver_profiles.push_back(merged_driver_profile);
     }
 
     // remove pipeline's profile from the hierarchy
@@ -254,17 +257,34 @@ void GlobalDriverExecutor::_remove_non_core_metrics(FragmentContext* fragment_ct
 
         for (auto* operator_profile : operator_profiles) {
             RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
+            DCHECK(common_metrics != nullptr);
+            common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
 
-            operator_profile->remove_childs();
-
-            if (common_metrics != nullptr) {
-                common_metrics->remove_counters(std::set<std::string>{"OperatorTotalTime"});
-            }
-
-            common_metrics->reset_parent();
-            operator_profile->add_child(common_metrics, true, nullptr);
+            RuntimeProfile* unique_metrics = operator_profile->get_child("UniqueMetrics");
+            DCHECK(unique_metrics != nullptr);
+            unique_metrics->remove_counters(std::set<std::string>{"ScanTime", "WaitTime"});
         }
     }
 }
 
+void GlobalDriverExecutor::_simplify_common_metrics(RuntimeProfile* driver_profile) {
+    std::vector<RuntimeProfile*> operator_profiles;
+    driver_profile->get_children(&operator_profiles);
+    for (auto* operator_profile : operator_profiles) {
+        RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
+        DCHECK(common_metrics != nullptr);
+
+        // Remove runtime filter related counters if it's value is 0
+        static std::string counter_names[] = {
+                "RuntimeInFilterNum",          "RuntimeBloomFilterNum",     "JoinRuntimeFilterInputRows",
+                "JoinRuntimeFilterOutputRows", "JoinRuntimeFilterEvaluate", "JoinRuntimeFilterTime",
+                "ConjunctsInputRows",          "ConjunctsOutputRows",       "ConjunctsEvaluate"};
+        for (auto& name : counter_names) {
+            auto* counter = common_metrics->get_counter(name);
+            if (counter != nullptr && counter->value() == 0) {
+                common_metrics->remove_counter(name);
+            }
+        }
+    }
+}
 } // namespace starrocks::pipeline
