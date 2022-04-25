@@ -13,10 +13,10 @@ public class StreamLoadImportUtils {
     private static String url;
     private static String auth;
     private static List<String> headers = new ArrayList<>();
-    private static Integer size = 4096;
-    private static Boolean isDebug = Boolean.FALSE;
+    private static Integer queueSize = 256;
+    private static Boolean enableDebug = Boolean.FALSE;
     private static Integer connectTimeout = 60 * 1000;
-    private static Integer threadNumber = Math.min(Runtime.getRuntime().availableProcessors(), 32);
+    private static Integer maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), 32);
     private static volatile BlockingDeque<String> blockingQueue = new LinkedBlockingDeque<>();
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -30,16 +30,19 @@ public class StreamLoadImportUtils {
 
         StringBuilder stringBuilder = new StringBuilder();
         String line;
-        int count = size;
+        int count = queueSize;
         while ((line = reader.readLine()) != null) {
             stringBuilder.append(line).append("\n");
             count--;
             if (count == 0) {
                 blockingQueue.addLast(stringBuilder.toString());
-                count = size;
+                count = queueSize;
                 stringBuilder = new StringBuilder();
                 // current-limiting
-                while (blockingQueue.size() > size) {
+                while (blockingQueue.size() > queueSize) {
+                    if (enableDebug) {
+                        System.out.println("The main thread is sleeping because the speed of reading file is too fast. If printing frequently, you should consider resetting the queue size");
+                    }
                     Thread.sleep(30L);
                 }
             }
@@ -49,7 +52,7 @@ public class StreamLoadImportUtils {
             blockingQueue.addLast(stringBuilder.toString());
         }
         // send signal to worker thread
-        for (Integer i = 0; i < threadNumber; i++) {
+        for (Integer i = 0; i < maxThreads; i++) {
             blockingQueue.addLast("");
         }
 
@@ -73,15 +76,15 @@ public class StreamLoadImportUtils {
             System.exit(0);
         }
         if (sourceFilePath == null) {
-            System.out.println("source file path is empty , please set --source-file=/xxx/xx.csv");
+            System.out.println("source file path is empty , please set --source_file=/xxx/xx.csv");
             System.exit(0);
         }
-        if (isDebug) {
+        if (enableDebug) {
             System.out.println(String.format("%s=%s", "sourceFilePath", sourceFilePath));
             System.out.println(String.format("%s=%s", "url", url));
-            System.out.println(String.format("%s=%s", "size", size));
+            System.out.println(String.format("%s=%s", "queueSize", queueSize));
             System.out.println(String.format("%s=%s", "timeout", connectTimeout));
-            System.out.println(String.format("%s=%s", "threadNumber", threadNumber));
+            System.out.println(String.format("%s=%s", "maxThreads", maxThreads));
             System.out.println(String.format("%s=%s", "auth", auth));
             System.out.println("Header:");
             for (String header : headers) {
@@ -118,7 +121,7 @@ public class StreamLoadImportUtils {
             byte[] bytes = new byte[available];
             inputStream.read(bytes);
             String result = new String(bytes);
-            if (isDebug) {
+            if (enableDebug) {
                 System.out.println(result);
             }
             if (result != null && result.contains("\"Status\": \"Fail\"")) {
@@ -186,14 +189,14 @@ public class StreamLoadImportUtils {
                 case "url":
                     url = value;
                     break;
-                case "thread-number":
-                    threadNumber = Integer.valueOf(value);
+                case "max_threads":
+                    maxThreads = Integer.valueOf(value);
                     break;
-                case "size":
-                    size = Integer.valueOf(value);
+                case "queue_size":
+                    queueSize = Integer.valueOf(value);
                     break;
-                case "is-debug":
-                    isDebug = Boolean.valueOf(value);
+                case "enable_debug":
+                    enableDebug = Boolean.valueOf(value);
                     break;
                 case "timeout":
                     connectTimeout = Integer.valueOf(value);
@@ -201,7 +204,7 @@ public class StreamLoadImportUtils {
                 case "u":
                     auth = new String(Base64.getEncoder().encode(value.getBytes(StandardCharsets.UTF_8)));
                     break;
-                case "source-file":
+                case "source_file":
                     sourceFilePath = value;
                     break;
                 case "H":
@@ -212,8 +215,8 @@ public class StreamLoadImportUtils {
     }
 
     public static void initWorkerThread() {
-        service = Executors.newFixedThreadPool(threadNumber);
-        for (Integer i = 0; i < threadNumber; i++) {
+        service = Executors.newFixedThreadPool(maxThreads);
+        for (Integer i = 0; i < maxThreads; i++) {
             service.submit(() -> executeGetAndSend());
         }
     }
