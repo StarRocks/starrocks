@@ -88,9 +88,8 @@ extern const char* k_ut_fd_path;
 extern const char* k_ut_net_snmp_path;
 
 TEST_F(SystemMetricsTest, normal) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
+    const std::string dir_path = "./be/test/util";
+
     std::string stat_path(dir_path);
     stat_path += "/test_data/stat_normal";
     LOG(INFO) << stat_path;
@@ -224,9 +223,8 @@ TEST_F(SystemMetricsTest, normal) {
 }
 
 TEST_F(SystemMetricsTest, no_proc_file) {
-    char buf[1024];
-    readlink("/proc/self/exe", buf, 1023);
-    char* dir_path = dirname(buf);
+    const std::string dir_path = "./be/test/util";
+
     std::string stat_path(dir_path);
     stat_path += "/test_data/no_stat_normal";
     LOG(INFO) << stat_path;
@@ -273,7 +271,7 @@ TEST_F(SystemMetricsTest, no_proc_file) {
 
 } // namespace starrocks
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
+// int main(int argc, char** argv) {
+//     ::testing::InitGoogleTest(&argc, argv);
+//     return RUN_ALL_TESTS();
+// }

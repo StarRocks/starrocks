@@ -25,14 +25,14 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/exec")
 
-ADD_BE_TEST(tablet_info_test)
-ADD_BE_TEST(es_scan_reader_test)
-ADD_BE_TEST(vectorized/repeat_node_test)
-ADD_BE_TEST(vectorized/arrow_converter_test)
-ADD_BE_TEST(vectorized/parquet_scanner_test)
-ADD_BE_TEST(schema_scanner/schema_columns_scanner_test)
-ADD_BE_TEST(vectorized/sorting_test)
-ADD_BE_TEST(vectorized/chunks_sorter_test)
+# ADD_BE_TEST(tablet_info_test)
+# ADD_BE_TEST(es_scan_reader_test)
+# ADD_BE_TEST(vectorized/repeat_node_test)
+# ADD_BE_TEST(vectorized/arrow_converter_test)
+# ADD_BE_TEST(vectorized/parquet_scanner_test)
+# ADD_BE_TEST(schema_scanner/schema_columns_scanner_test)
+# ADD_BE_TEST(vectorized/sorting_test)
+# ADD_BE_TEST(vectorized/chunks_sorter_test)
 
 # Benchmarks
 ADD_BE_BENCH(vectorized/chunks_sorter_bench_test)
