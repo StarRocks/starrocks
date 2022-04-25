@@ -678,12 +678,6 @@ ENDFUNCTION()
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
-    # The following commands should be removed after all tests mreged into a single binary.
-    add_subdirectory(${TEST_DIR}/exec)
-    add_subdirectory(${TEST_DIR}/http)
-    add_subdirectory(${TEST_DIR}/storage)
-    add_subdirectory(${TEST_DIR}/runtime)
-    add_subdirectory(${TEST_DIR}/util)
 endif ()
 
 # Install be
