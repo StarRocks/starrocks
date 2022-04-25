@@ -38,19 +38,19 @@ public class AdminSetReplicaStatusStmtAnalyzer {
                 String key = entry.getKey();
                 String val = entry.getValue();
 
-                if (key.equalsIgnoreCase("tablet_id")) {
+                if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.TABLET_ID)) {
                     try {
                         tabletId = Long.valueOf(val);
                     } catch (NumberFormatException e) {
                         throw new SemanticException("Invalid tablet id format: " + val);
                     }
-                } else if (key.equalsIgnoreCase("backend_id")) {
+                } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.BACKEND_ID)) {
                     try {
                         backendId = Long.valueOf(val);
                     } catch (NumberFormatException e) {
                         throw new SemanticException("Invalid backend id format: " + val);
                     }
-                } else if (key.equalsIgnoreCase("status")) {
+                } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.STATUS)) {
                     status = ReplicaStatus.valueOf(val.toUpperCase());
                     if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
                         throw new SemanticException("Do not support setting replica status as " + val);
