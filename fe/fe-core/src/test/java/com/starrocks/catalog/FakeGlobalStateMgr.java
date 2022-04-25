@@ -45,7 +45,7 @@ public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
     }
 
     @Mock
-    public static GlobalStateMgr getCurrentStateMgr() {
+    public static GlobalStateMgr getCurrentState() {
         return globalStateMgr;
     }
 
