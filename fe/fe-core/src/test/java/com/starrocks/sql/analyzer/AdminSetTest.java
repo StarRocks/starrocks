@@ -33,6 +33,8 @@ public class AdminSetTest {
                 "Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
         analyzeFail("admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\");",
                 "Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
+        analyzeFail("admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"MISSING\");",
+                "Do not support setting replica status as MISSING");
         analyzeFail("admin set replica status properties(\"unknown_config\" = \"10003\");",
                 "Unknown property: unknown_config");
     }
