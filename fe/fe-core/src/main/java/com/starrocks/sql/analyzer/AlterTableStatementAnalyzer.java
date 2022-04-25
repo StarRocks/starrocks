@@ -14,7 +14,9 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.List;
 
@@ -36,7 +38,8 @@ public class AlterTableStatementAnalyzer {
             if (StatementPlanner.isNewAlterTableClause(alterClause)) {
                 alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
             } else {
-                throw new SemanticException(alterClause.getOpType().name() + " clause not support new Analyzer");
+                throw new StarRocksPlannerException(alterClause.getOpType().name() + " clause not support new Analyzer",
+                        ErrorType.INTERNAL_ERROR);
             }
         }
     }
