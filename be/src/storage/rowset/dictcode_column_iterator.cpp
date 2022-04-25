@@ -42,7 +42,7 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator
 }
 
 void GlobalDictCodeColumnIterator::_init_local_dict_col() {
-    _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
+    //_local_dict_code_col = vectorized::MutableColumnPtr();
     if (_opts.is_nullable) {
         _local_dict_code_col =
                 vectorized::NullableColumn::create(std::move(_local_dict_code_col), vectorized::NullColumn::create());

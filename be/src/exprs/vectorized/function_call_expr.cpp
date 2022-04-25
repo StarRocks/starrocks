@@ -84,7 +84,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (_children[1]->is_constant()) {
             ColumnPtr ptr = _children[1]->evaluate(context, nullptr);
             _output_scale =
-                    std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
+                    ColumnHelper::as_column<Int32Column>(ColumnHelper::as_column<ConstColumn>(ptr)->data_column())
                             ->get_data()[0];
         }
     }

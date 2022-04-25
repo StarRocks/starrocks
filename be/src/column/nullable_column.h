@@ -25,7 +25,7 @@ public:
 
     NullableColumn(const NullableColumn& rhs)
             : _data_column(rhs._data_column->clone_shared()),
-              _null_column(std::static_pointer_cast<NullColumn>(rhs._null_column->clone_shared())),
+              _null_column(rhs._null_column->clone_shared_derived()),
               _has_null(rhs._has_null) {}
 
     NullableColumn(NullableColumn&& rhs) noexcept
@@ -203,11 +203,13 @@ public:
     const Column& data_column_ref() const { return *_data_column; }
 
     const ColumnPtr& data_column() const { return _data_column; }
-
     ColumnPtr& data_column() { return _data_column; }
 
     const NullColumn& null_column_ref() const { return *_null_column; }
+    NullColumn& null_column_ref() { return *_null_column; }
+    
     const NullColumnPtr& null_column() const { return _null_column; }
+    NullColumnPtr& null_column() { return _null_column; }
 
     size_t null_count() const;
 
@@ -285,9 +287,16 @@ public:
 
     void check_or_die() const override;
 
+    MutableColumnPtr deepMutate() const override {
+        auto res = shallowMutate();
+        res->_data_column = Column::mutate(std::move(res->_data_column).detach());
+        res->_null_column = NullColumn::mutate(std::move(res->_null_column).detach());
+        return res;
+    }
+
 private:
-    ColumnPtr _data_column;
-    NullColumnPtr _null_column;
+    WrappedPtr _data_column;
+    NullColumn::DerivedWrappedPtr _null_column;
     bool _has_null;
 };
 

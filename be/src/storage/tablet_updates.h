@@ -47,7 +47,7 @@ struct CompactionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = vectorized::MutableColumnPtr;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -207,7 +207,7 @@ public:
     // ]
     Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<vectorized::Column>>* columns);
+                             vector<ColumnUniquePtr>* columns);
 
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,

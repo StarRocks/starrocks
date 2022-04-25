@@ -146,7 +146,7 @@ private:
     bool _parsed;
     EncodingTypePB _encoding_type;
     std::unique_ptr<ColumnVectorBatch> _batch;
-    std::shared_ptr<vectorized::Column> _vec_code_buf;
+    vectorized::ColumnPtr _vec_code_buf;
 
     uint32_t _max_value_legth = 0;
 };

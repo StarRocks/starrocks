@@ -151,7 +151,10 @@ public:
             offsets += slice_sz[i];
         }
         // append result to dst column
-        CHECK((*dst)->append_strings(slices));
+        auto mut = Column::mutate(std::move(*dst));
+        CHECK(mut->append_strings(slices));
+        *dst = std::move(mut);
+        //CHECK((*dst)->append_strings(slices));
         // 6 clean up arrays
         env->DeleteLocalRef(buffer_array);
         env->DeleteLocalRef(serialize_szs);

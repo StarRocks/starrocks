@@ -6,10 +6,14 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <iostream>
 
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
+#include "column/COW.h"
+#include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "common/type_list.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 
@@ -24,7 +28,17 @@ namespace vectorized {
 // Forward declaration
 class Datum;
 
-class Column {
+template <typename Derived>
+void return_column(Derived* ptr, size_t chunk_size);
+
+class Column:public COW<Column> {
+private:
+    friend class COW<Column>;
+
+public:
+    Column(): COW<Column>() {}
+    Column(bool pool, size_t chunk_size): COW<Column>(pool, chunk_size) {}
+
 public:
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
@@ -46,9 +60,9 @@ public:
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
     // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Column>;
+    // using Ptr = std::shared_ptr<Column>; // inherit from COW<Column>
     // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Column>;
+    // using MutablePtr = std::unique_ptr<Column>; // inherit from COW<Column>
 
     virtual ~Column() = default;
 
@@ -350,9 +364,13 @@ public:
 
     virtual void check_or_die() const = 0;
 
+public:
+    static MutablePtr mutate(Ptr ptr) { return ptr->deepMutate(); }
+    virtual MutablePtr deepMutate() const { return shallowMutate(); }
+
 protected:
-    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
-    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
+    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr& col);
+    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr& col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
@@ -369,32 +387,39 @@ private:
     const Derived* derived() const { return down_cast<const Derived*>(this); }
 
 public:
+    ColumnFactory(): Base() {}
+    ColumnFactory(bool pool, size_t chunk_size): Base(pool, chunk_size) {} 
+
+public:
     template <typename... Args>
     ColumnFactory(Args&&... args) : Base(std::forward<Args>(args)...) {}
     // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Derived>;
+    using Ptr = typename Base::template immutable_ptr<Derived>;
     // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Derived>;
+    using MutablePtr = typename Base::template mutable_ptr<Derived>;
+    // the object containn chamelon_ptr inside itself
+    using DerivedWrappedPtr = typename Base::template chameleon_ptr<Derived>;
+
     using AncestorBaseType = std::enable_if_t<std::is_base_of_v<AncestorBase, Base>, AncestorBase>;
 
     template <typename... Args>
     static Ptr create(Args&&... args) {
-        return std::make_shared<Derived>(std::forward<Args>(args)...);
+        return Ptr(new Derived(std::forward<Args>(args)...));
     }
 
     template <typename... Args>
     static MutablePtr create_mutable(Args&&... args) {
-        return std::make_unique<Derived>(std::forward<Args>(args)...);
+        return MutablePtr(new Derived(std::forward<Args>(args)...));
     }
 
     template <typename T>
     static Ptr create(std::initializer_list<T>&& arg) {
-        return std::make_shared<Derived>(std::forward<std::initializer_list<T>>(arg));
+        return Ptr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
 
     template <typename T>
     static MutablePtr create_mutable(std::initializer_list<T>&& arg) {
-        return std::make_unique<Derived>(std::forward<std::initializer_list<T>>(arg));
+        return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
 
     typename AncestorBaseType::MutablePtr clone() const override {
@@ -405,11 +430,37 @@ public:
         return typename AncestorBase::Ptr(new Derived(*derived()));
     }
 
+    MutablePtr clone_derived() const {
+        return MutablePtr(new Derived(*derived()));
+    }
+
+    Ptr clone_shared_derived() const {
+        return Ptr(new Derived(*derived()));
+    }
+
     Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
 
     Status accept_mutable(ColumnVisitorMutable* visitor) override {
         return visitor->visit(static_cast<Derived*>(this));
     }
+
+    using ColumnPoolTypeList =
+        TypeList<Int8Column, UInt8Column, Int16Column, Int32Column, UInt32Column, Int64Column, Int128Column, 
+        FloatColumn, DoubleColumn, BinaryColumn, DateColumn, TimestampColumn, DecimalColumn, Decimal32Column, 
+        Decimal64Column, Decimal128Column >;
+
+    void return_to_pool() const override {
+        if constexpr (InList<Derived, ColumnPoolTypeList>::value) {
+            return_column<Derived>(const_cast<Derived *>(static_cast<const Derived *>(this)), Base::_chunk_size);
+        }
+    }
+protected:
+    MutablePtr shallowMutate() const { return MutablePtr(static_cast<Derived *>(Base::shallowMutate().get())); }
+    
+public:
+    MutablePtr assumeMutable() const { return MutablePtr(const_cast<Derived *>(static_cast<const Derived *>(this))); }
+
+    Derived & assumeMutableRef() const { return static_cast<Derived &>(Base::assumeMutableRef()); }
 };
 
 } // namespace vectorized

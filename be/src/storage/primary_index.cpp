@@ -958,7 +958,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<vectorized::Column> pk_column;
+    vectorized::MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";

@@ -213,7 +213,7 @@ public:
 };
 
 /**
- * Use for strict unary operations function, usually the result
+ * Use for strict binary operations function, usually the result
  * contains (nullable column, data column) , like:
  *
  * Cast operations: cast INT to BIGINT, etc...
@@ -226,7 +226,7 @@ using VectorizedStrictUnaryFunction =
         DealNullableColumnUnaryFunction<UnpackConstColumnUnaryFunction<UnaryFunction<OP>>>;
 
 /**
- * Use for strict unary operations function, and special for slice!
+ * Use for strict binary operations function, and special for slice!
  * You should use it if your function result type is TYPE_VARCHAR, TYPE_CHAR.
  *
  * Support functions like:

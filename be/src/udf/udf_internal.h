@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#include "column/COW.h"
+#include "column/column.h"
 #include "udf/udf.h"
 
 namespace starrocks {
@@ -40,7 +42,7 @@ class RuntimeState;
 namespace vectorized {
 class Column;
 class JavaUDAFContext;
-using ColumnPtr = std::shared_ptr<Column>;
+using ColumnPtr = typename COW<Column>::Ptr;
 } // namespace vectorized
 
 // This class actually implements the interface of FunctionContext. This is split to

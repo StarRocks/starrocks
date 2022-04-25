@@ -8,6 +8,7 @@
 
 #include <runtime/types.h>
 
+#include "column/column_pool.h"
 #include "column/const_column.h"
 #include "column/type_traits.h"
 #include "common/config.h"
@@ -180,7 +181,16 @@ public:
     template <PrimitiveType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
         down_cast<RunTimeColumnType<Type>*>(value.get());
-        return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
+        //return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
+        return typename RunTimeColumnType<Type>::Ptr(static_cast<RunTimeColumnType<Type>*>(value.get()));
+    }
+
+    /**
+     * Cast Column* to ColumnPtr 
+     *  
+     */
+    static inline ColumnPtr cast_to_ptr(const Column* column) {
+        return ColumnPtr(const_cast<Column *>(column));
     }
 
     /**
@@ -203,7 +213,8 @@ public:
      */
     template <typename Type>
     static inline typename Type::Ptr as_column(ColumnPtr value) {
-        return std::static_pointer_cast<Type>(value);
+        //return std::static_pointer_cast<Type>(value);
+        return typename Type::Ptr(dynamic_cast<Type*>(value.get()));
     }
 
     /**
@@ -232,7 +243,7 @@ public:
             return nullable_column->mutable_data_column();
         } else if (column->is_constant()) {
             auto* const_column = down_cast<ConstColumn*>(column);
-            return const_column->mutable_data_column()->get();
+            return const_column->mutable_data_column();
         } else {
             return column;
         }

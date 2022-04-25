@@ -20,7 +20,7 @@ SegmentRewriter::~SegmentRewriter() {}
 
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
+                                std::vector<vectorized::MutableColumnPtr>& columns, size_t segment_id,
                                 const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(dest_path));
     std::unique_ptr<fs::WritableBlock> wblock;
@@ -59,7 +59,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
-        chunk->get_column_by_index(i).reset(columns[i].release());
+        chunk->get_column_by_index(i) = std::move(columns[i]);
     }
     uint64_t index_size = 0;
     uint64_t segment_file_size;
@@ -72,7 +72,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
 Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
-                                std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,
+                                std::vector<vectorized::MutableColumnPtr>& columns, size_t segment_id,
                                 const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto block_mgr, fs::fs_util::block_manager(src_path));
     std::unique_ptr<fs::ReadableBlock> rblock;
@@ -100,7 +100,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
-        chunk->get_column_by_index(i).reset(columns[i].release());
+        chunk->get_column_by_index(i) = std::move(columns[i]);
     }
     uint64_t index_size = 0;
     uint64_t segment_file_size;
