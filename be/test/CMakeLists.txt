@@ -301,6 +301,7 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/test")
 
+# =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
 add_executable(bytes_test
@@ -321,3 +322,24 @@ TARGET_LINK_LIBRARIES(bytes_test
         gtest
         tcmalloc
         )
+
+# =================================================
+# test cases must be compiled as a standalone binary
+ADD_BE_TEST(http/metrics_action_test)
+ADD_BE_TEST(http/http_client_test)
+
+# ADD_BE_TEST(plugin/plugin_zip_test)
+# ADD_BE_TEST(plugin/plugin_loader_test)
+# ADD_BE_PLUGIN(plugin/example/plugin_example)
+
+ADD_BE_TEST(runtime/routine_load_task_executor_test)
+ADD_BE_TEST(runtime/small_file_mgr_test)
+ADD_BE_TEST(runtime/user_function_cache_test)
+
+ADD_BE_TEST(storage/delete_handler_test)
+ADD_BE_TEST(storage/options_test)
+ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+
+# =================================================
+# benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.
+ADD_BE_BENCH(exec/vectorized/chunks_sorter_bench_test)
