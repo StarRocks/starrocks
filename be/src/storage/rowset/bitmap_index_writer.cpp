@@ -60,7 +60,7 @@ public:
     void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>& size_changed_roaring_vec) {
         _roaring.add(rid);
         if (_enable_get_size_in_Bytes) {
-            if (_size_changed == false) {
+            if (!_size_changed) {
                 size_changed_roaring_vec.push_back(this);
             }
             _size_changed = true;
