@@ -76,6 +76,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -3956,16 +3957,22 @@ public class Catalog {
 
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
-        PartitionInfo partitionInfo = null;
+        PartitionInfo partitionInfo;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
             // gen partition id first
             if (partitionDesc instanceof RangePartitionDesc) {
-                RangePartitionDesc rangeDesc = (RangePartitionDesc) partitionDesc;
-                for (SingleRangePartitionDesc desc : rangeDesc.getSingleRangePartitionDescs()) {
+                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                for (SingleRangePartitionDesc desc : rangePartitionDesc.getSingleRangePartitionDescs()) {
                     long partitionId = getNextId();
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
+            } else if (partitionDesc instanceof ListPartitionDesc) {
+                ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                listPartitionDesc.findAllPartitionNames()
+                        .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
+            } else {
+                throw new DdlException("Currently only support range or list partition with engine type olap");
             }
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else {
@@ -4188,7 +4195,8 @@ public class Catalog {
                     Partition partition = createPartition(db, olapTable, partitionId, tableName, version, tabletIdSet);
                     buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
-                } else if (partitionInfo.getType() == PartitionType.RANGE) {
+                } else if (partitionInfo.getType() == PartitionType.RANGE
+                        || partitionInfo.getType() == PartitionType.LIST) {
                     try {
                         // just for remove entries in stmt.getProperties(),
                         // and then check if there still has unknown properties
@@ -4614,7 +4622,8 @@ public class Catalog {
             if (separatePartition) {
                 partitionId = Lists.newArrayList();
             }
-            if (partitionInfo.getType() == PartitionType.RANGE) {
+            if (partitionInfo.getType() == PartitionType.RANGE
+                    || partitionInfo.getType() == PartitionType.LIST) {
                 sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
             }
 
