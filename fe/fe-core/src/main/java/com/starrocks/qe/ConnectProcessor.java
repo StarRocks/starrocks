@@ -94,7 +94,7 @@ public class ConnectProcessor {
         }
         dbName = ClusterNamespace.getFullName(ctx.getClusterName(), dbName);
         try {
-            ctx.getCatalog().changeDb(ctx, dbName);
+            ctx.getGlobalStateMgr().changeDb(ctx, dbName);
         } catch (DdlException e) {
             ctx.getState().setError(e.getMessage());
             return;
@@ -377,7 +377,7 @@ public class ConnectProcessor {
             ctx.getState().setError("Empty tableName");
             return;
         }
-        Database db = ctx.getCatalog().getDb(ctx.getDatabase());
+        Database db = ctx.getGlobalStateMgr().getDb(ctx.getDatabase());
         if (db == null) {
             ctx.getState().setError("Unknown database(" + ctx.getDatabase() + ")");
             return;

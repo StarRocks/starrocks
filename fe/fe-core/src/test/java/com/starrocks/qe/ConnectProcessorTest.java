@@ -242,7 +242,7 @@ public class ConnectProcessorTest {
                 maxTimes = 3;
                 returns(false, true, false);
 
-                context.getCatalog();
+                context.getGlobalStateMgr();
                 minTimes = 0;
                 result = globalStateMgr;
 

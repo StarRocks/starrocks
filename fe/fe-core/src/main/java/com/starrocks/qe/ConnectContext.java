@@ -233,7 +233,7 @@ public class ConnectContext {
         this.globalStateMgr = globalStateMgr;
     }
 
-    public GlobalStateMgr getCatalog() {
+    public GlobalStateMgr getGlobalStateMgr() {
         return globalStateMgr;
     }
 

@@ -629,7 +629,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
 
-            Database database = session.getCatalog().getDb(dbName);
+            Database database = session.getGlobalStateMgr().getDb(dbName);
             if (database == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }

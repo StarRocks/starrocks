@@ -590,7 +590,7 @@ public class StmtExecutor {
         } else {
             try {
                 LOG.info("try analyze xxxx");
-                parsedStmt.analyze(new Analyzer(context.getCatalog(), context));
+                parsedStmt.analyze(new Analyzer(context.getGlobalStateMgr(), context));
             } catch (AnalysisException e) {
                 throw e;
             } catch (Exception e) {
@@ -806,7 +806,7 @@ public class StmtExecutor {
             if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
             }
-            context.getCatalog().changeDb(context, useStmt.getDatabase());
+            context.getGlobalStateMgr().changeDb(context, useStmt.getDatabase());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;
@@ -907,7 +907,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            DdlExecutor.execute(context.getCatalog(), (DdlStmt) parsedStmt);
+            DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) parsedStmt);
             context.getState().setOk();
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
@@ -929,7 +929,7 @@ public class StmtExecutor {
     private void handleEnterStmt() {
         final EnterStmt enterStmt = (EnterStmt) parsedStmt;
         try {
-            context.getCatalog().changeCluster(context, enterStmt.getClusterName());
+            context.getGlobalStateMgr().changeCluster(context, enterStmt.getClusterName());
             context.setDatabase("");
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
@@ -941,7 +941,7 @@ public class StmtExecutor {
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
-        context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
+        context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
     private void addRunningQueryDetail() {
@@ -1008,7 +1008,7 @@ public class StmtExecutor {
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && !((DeleteStmt) stmt).supportNewPlanner()) {
             try {
-                context.getCatalog().getDeleteHandler().process((DeleteStmt) stmt);
+                context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
                 context.getState().setOk();
             } catch (QueryStateException e) {
                 if (e.getQueryState().getStateType() != MysqlStateType.OK) {
@@ -1210,7 +1210,7 @@ public class StmtExecutor {
 
         String errMsg = "";
         try {
-            context.getCatalog().getLoadManager().recordFinishedLoadJob(
+            context.getGlobalStateMgr().getLoadManager().recordFinishedLoadJob(
                     label,
                     database.getFullName(),
                     targetTable.getId(),

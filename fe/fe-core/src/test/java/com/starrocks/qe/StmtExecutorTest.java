@@ -106,7 +106,7 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = serializer;
 
-                ctx.getCatalog();
+                ctx.getGlobalStateMgr();
                 minTimes = 0;
                 result = globalStateMgr;
 
@@ -300,7 +300,7 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = symbol;
 
-                killCtx.getCatalog();
+                killCtx.getGlobalStateMgr();
                 minTimes = 0;
                 result = killGlobalStateMgr;
 
@@ -360,7 +360,7 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = symbol;
 
-                killCtx.getCatalog();
+                killCtx.getGlobalStateMgr();
                 minTimes = 0;
                 result = killGlobalStateMgr;
 

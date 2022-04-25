@@ -118,7 +118,7 @@ public class ConnectScheduler {
             connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
         }
         int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        if (conns >= ctx.getCatalog().getAuth().getMaxConn(ctx.getQualifiedUser())) {
+        if (conns >= ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser())) {
             return false;
         }
         numberConnection.incrementAndGet();

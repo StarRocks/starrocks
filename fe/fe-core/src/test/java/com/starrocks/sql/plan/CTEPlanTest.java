@@ -27,7 +27,7 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");

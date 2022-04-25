@@ -16,7 +16,7 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TPCDSPlanTest.beforeClass();
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable customer_address =
                 (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer_address");
         setTableStatistics(customer_address, 1000000);

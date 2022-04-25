@@ -206,7 +206,7 @@ public class InsertStmt extends DmlStmt {
         String dbName = tblName.getDb();
 
         // check exist
-        Database db = context.getCatalog().getDb(dbName);
+        Database db = context.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }

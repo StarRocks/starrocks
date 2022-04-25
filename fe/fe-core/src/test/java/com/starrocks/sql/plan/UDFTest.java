@@ -40,7 +40,7 @@ public class UDFTest extends PlanTestBase {
 
     @Test
     public void testUDTF() throws Exception {
-        final GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        final GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         final Field functionSetField = GlobalStateMgr.class.getDeclaredField("functionSet");
         functionSetField.setAccessible(true);
         final FunctionSet functionSet = (FunctionSet) functionSetField.get(globalStateMgr);

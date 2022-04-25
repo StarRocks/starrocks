@@ -373,11 +373,11 @@ public class ShowExecutor {
     // Handle show functions
     private void handleShowFunctions() throws AnalysisException {
         ShowFunctionsStmt showStmt = (ShowFunctionsStmt) stmt;
-        Database db = ctx.getCatalog().getDb(showStmt.getDbName());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
-        List<Function> functions = showStmt.getIsBuiltin() ? ctx.getCatalog().getBuiltinFunctions() :
+        List<Function> functions = showStmt.getIsBuiltin() ? ctx.getGlobalStateMgr().getBuiltinFunctions() :
                 db.getFunctions();
 
         List<List<Comparable>> rowSet = Lists.newArrayList();
@@ -444,7 +444,7 @@ public class ShowExecutor {
     private void handleShowCluster() throws AnalysisException {
         final ShowClusterStmt showStmt = (ShowClusterStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
-        final List<String> clusterNames = ctx.getCatalog().getClusterNames();
+        final List<String> clusterNames = ctx.getGlobalStateMgr().getClusterNames();
 
         final Set<String> clusterNameSet = Sets.newTreeSet();
         for (String cluster : clusterNames) {
@@ -462,7 +462,7 @@ public class ShowExecutor {
     private void handleShowMigrations() throws AnalysisException {
         final ShowMigrationsStmt showStmt = (ShowMigrationsStmt) stmt;
         final List<List<String>> rows = Lists.newArrayList();
-        final Set<BaseParam> infos = ctx.getCatalog().getMigrations();
+        final Set<BaseParam> infos = ctx.getGlobalStateMgr().getMigrations();
 
         for (BaseParam param : infos) {
             final int percent = (int) (param.getFloatParam(0) * 100f);
@@ -477,7 +477,7 @@ public class ShowExecutor {
     private void handleShowDb() throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames = ctx.getCatalog().getClusterDbNames(ctx.getClusterName());
+        List<String> dbNames = ctx.getGlobalStateMgr().getClusterDbNames(ctx.getClusterName());
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
             matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
@@ -510,7 +510,7 @@ public class ShowExecutor {
     private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showTableStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showTableStmt.getDb());
         if (db != null) {
             Map<String, String> tableMap = Maps.newTreeMap();
             db.readLock();
@@ -553,7 +553,7 @@ public class ShowExecutor {
     private void handleShowTableStatus() throws AnalysisException {
         ShowTableStatusStmt showStmt = (ShowTableStatusStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db != null) {
             db.readLock();
             try {
@@ -609,7 +609,7 @@ public class ShowExecutor {
     private void handleShowCreateDb() throws AnalysisException {
         ShowCreateDbStmt showStmt = (ShowCreateDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
         }
@@ -622,7 +622,7 @@ public class ShowExecutor {
     // Show create table
     private void handleShowCreateTable() throws AnalysisException {
         ShowCreateTableStmt showStmt = (ShowCreateTableStmt) stmt;
-        Database db = ctx.getCatalog().getDb(showStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
         }
@@ -670,7 +670,7 @@ public class ShowExecutor {
     private void handleShowColumn() throws AnalysisException {
         ShowColumnStmt showStmt = (ShowColumnStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db != null) {
             db.readLock();
             try {
@@ -733,7 +733,7 @@ public class ShowExecutor {
     private void handleShowIndex() throws AnalysisException {
         ShowIndexStmt showStmt = (ShowIndexStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showStmt.getDbName());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
@@ -1428,7 +1428,7 @@ public class ShowExecutor {
     private void handleShowDynamicPartition() {
         ShowDynamicPartitionStmt showDynamicPartitionStmt = (ShowDynamicPartitionStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        Database db = ctx.getCatalog().getDb(showDynamicPartitionStmt.getDb());
+        Database db = ctx.getGlobalStateMgr().getDb(showDynamicPartitionStmt.getDb());
         if (db != null) {
             db.readLock();
             try {
@@ -1487,7 +1487,7 @@ public class ShowExecutor {
     // Show transaction statement.
     private void handleShowTransaction() throws AnalysisException {
         ShowTransactionStmt showStmt = (ShowTransactionStmt) stmt;
-        Database db = ctx.getCatalog().getDb(showStmt.getDbName());
+        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
@@ -1518,7 +1518,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyze() {
-        List<AnalyzeJob> jobs = ctx.getCatalog().getAnalyzeManager().getAllAnalyzeJobList();
+        List<AnalyzeJob> jobs = ctx.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {

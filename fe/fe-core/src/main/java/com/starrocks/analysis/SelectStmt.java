@@ -304,7 +304,7 @@ public class SelectStmt extends QueryStmt {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
                 }
 
-                Database db = context.getCatalog().getDb(dbName);
+                Database db = context.getGlobalStateMgr().getDb(dbName);
                 if (db == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }

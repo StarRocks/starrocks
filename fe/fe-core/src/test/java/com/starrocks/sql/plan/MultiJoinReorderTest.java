@@ -15,7 +15,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(t0, 1);

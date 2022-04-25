@@ -61,7 +61,7 @@ public class PlanTestBase {
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(1));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);

@@ -1076,7 +1076,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Database db = globalStateMgr.getDb("default_cluster:test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
@@ -1103,7 +1103,7 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("default_cluster:test");
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
@@ -1624,7 +1624,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {

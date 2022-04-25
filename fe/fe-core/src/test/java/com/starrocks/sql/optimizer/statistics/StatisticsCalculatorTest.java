@@ -171,7 +171,7 @@ public class StatisticsCalculatorTest {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
         Collection<Partition> partitions = table.getPartitions();
         List<Long> partitionIds =
@@ -246,7 +246,7 @@ public class StatisticsCalculatorTest {
                 ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {
@@ -360,7 +360,7 @@ public class StatisticsCalculatorTest {
                 ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {

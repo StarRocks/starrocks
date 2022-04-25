@@ -68,7 +68,7 @@ public class MysqlProto {
             try {
                 // if cluster does not exist and it is not a valid cluster id, authenticate failed
                 if (GlobalStateMgr.getCurrentState().getCluster(clusterName) == null
-                        && Integer.parseInt(strList[1]) != context.getCatalog().getClusterId()) {
+                        && Integer.parseInt(strList[1]) != context.getGlobalStateMgr().getClusterId()) {
                     ErrorReport.report(ErrorCode.ERR_UNKNOWN_CLUSTER_ID, strList[1]);
                     return false;
                 }

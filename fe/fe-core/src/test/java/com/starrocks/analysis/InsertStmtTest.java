@@ -156,7 +156,7 @@ public class InsertStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);
@@ -214,7 +214,7 @@ public class InsertStmtTest {
 
         SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);

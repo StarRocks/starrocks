@@ -89,9 +89,9 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(scale));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(scale));
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("region");
         setTableStatistics(t0, 5);
 

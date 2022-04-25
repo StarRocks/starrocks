@@ -77,7 +77,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "from db1.decimal_table\n" +
                 "limit 10;";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 2 && items.get(1) != null && items.get(1).getExpr() != null);
@@ -96,7 +96,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "from db1.decimal_table\n" +
                 "limit 10;";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 2 && items.get(1) != null && items.get(1).getExpr() != null);
@@ -114,7 +114,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "from db1.decimal_table\n" +
                 "limit 10;\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertNotNull(stmt.selectList);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 1 && items.get(0) != null && items.get(0).getExpr() != null);
@@ -132,7 +132,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "from db1.decimal_table\n" +
                 "limit 10;\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertNotNull(stmt.selectList);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 1 && items.get(0) != null && items.get(0).getExpr() != null);
@@ -156,7 +156,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   min(col_decimal_p38s30) as decimal128_min\n" +
                 "from db1.decimal_table\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Type[] expectTypes = Arrays.asList(
@@ -201,7 +201,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   multi_distinct_sum(col_decimal_p38s30) as decimal128_multi_distinct_sum\n" +
                 "from db1.decimal_table\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Type[] expectArgTypes = Arrays.asList(
@@ -253,7 +253,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   strleft(variance_samp(col_decimal), 2) as a\n" +
                 "from db1.decimal_table\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.get(0).getExpr().getType().isStringType());
@@ -270,7 +270,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   substr(variance_samp(col_decimal_p38s30), 1, 2) as c\n" +
                 "from db1.decimal_table\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.get(0).getExpr().getType().isStringType());
@@ -289,7 +289,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   log10(variance_samp(col_decimal_p38s30)) as c\n" +
                 "from db1.decimal_table\n";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.get(0).getExpr().getType().isFloatingPointType());
@@ -312,7 +312,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   group by col1_smallint \n" +
                 "   having col1_smallint < 10)";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.whereClause.getType().isBoolean());
     }
 
@@ -327,7 +327,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "   cast(col_decimal_p38s30 as decimal128(30, 7)) \n" +
                 "from db1.decimal_table";
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         ScalarType targetDecimal32Type = ScalarType.createDecimalV3Type(
                 PrimitiveType.DECIMAL32, 7, 4);
         ScalarType targetDecimal64Type = ScalarType.createDecimalV3Type(
@@ -360,7 +360,7 @@ public class SelectStmtWithDecimalTypesTest {
         //System.out.println(plan);
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr0 = stmt.whereClause.getChild(0).getChild(0);
             Expr expr1 = stmt.whereClause.getChild(1).getChild(0);
             Assert.assertTrue(expr0 instanceof SlotRef);
@@ -371,7 +371,7 @@ public class SelectStmtWithDecimalTypesTest {
         {
             Config.enable_decimal_v3 = false;
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr0 = stmt.whereClause.getChild(0).getChild(0);
             Expr expr1 = stmt.whereClause.getChild(1).getChild(0);
             Assert.assertTrue(expr0 instanceof SlotRef);
@@ -434,7 +434,7 @@ public class SelectStmtWithDecimalTypesTest {
                 "where\n" +
                 "   " + predicate;
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql1, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Expr expr0 = stmt.whereClause.getChild(0);
         Assert.assertTrue(expr0 instanceof SlotRef);
         Assert.assertEquals(expr0.type, targetType);
@@ -475,14 +475,14 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.type, targetType);
         }
         {
             Config.enable_decimal_v3 = false;
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.type, targetType);
         }
@@ -649,7 +649,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.type, Type.BOOLEAN);
             Assert.assertEquals(expr.getChild(0).type, ScalarType.DOUBLE);
@@ -668,7 +668,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.type, Type.BOOLEAN);
             Type decimal128p38s5 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 12);
@@ -695,7 +695,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Type decimal128p38s8 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 8);
             Type decimal32p9s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2);
@@ -715,7 +715,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Type decimal128p38s12 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 12);
             Type decimal64p15s10 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10);
@@ -735,7 +735,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Type decimal128p38s30 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30);
             Assert.assertEquals(expr.type, decimal128p38s30);
@@ -777,7 +777,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             List<SelectListItem> items = stmt.selectList.getItems();
             Assert.assertEquals(items.size(), 24);
             Type decimal128p38s9 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
@@ -804,7 +804,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             List<SelectListItem> items = stmt.selectList.getItems();
             Type decimal64p9s3 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 3);
             Assert.assertEquals(items.get(0).getExpr().getType(), decimal64p9s3);
@@ -824,7 +824,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             List<SelectListItem> items = stmt.selectList.getItems();
             Assert.assertEquals(items.get(0).getExpr().getType(), Type.BIGINT);
         }
@@ -844,7 +844,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             List<SelectListItem> items = stmt.selectList.getItems();
             Assert.assertEquals(items.get(0).getExpr().getType(),
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 9));
@@ -879,7 +879,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.getWhereClause();
             Assert.assertTrue(expr.getChild(1) instanceof DecimalLiteral);
             Assert.assertEquals(((DecimalLiteral) expr.getChild(1)).getStringValue(), "2.7");
@@ -900,7 +900,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.getWhereClause();
             Assert.assertTrue(expr.getChild(1) instanceof FloatLiteral);
             Assert.assertEquals(((FloatLiteral) expr.getChild(1)).getDoubleValue(), 2.5E307, 1E-10);
@@ -921,7 +921,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr expr = stmt.getWhereClause();
             Assert.assertEquals(expr.getChild(0).getType(), ScalarType.createDecimalV3NarrowestType(20, 15));
             Assert.assertEquals(expr.getChild(1).getType(), ScalarType.createDecimalV3NarrowestType(20, 15));
@@ -961,7 +961,7 @@ public class SelectStmtWithDecimalTypesTest {
 
         {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
             Expr lhs = stmt.fromClause_.get(1).onClause.getChild(0);
             Expr rhs = stmt.fromClause_.get(1).onClause.getChild(1);
             Assert.assertTrue(lhs instanceof CastExpr);
@@ -982,7 +982,7 @@ public class SelectStmtWithDecimalTypesTest {
         };
         for (String sql : sqls) {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
 
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.getType(), ScalarType.BIGINT);
@@ -1000,7 +1000,7 @@ public class SelectStmtWithDecimalTypesTest {
         };
         for (String sql : sqls) {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
 
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.getType(), ScalarType.createDecimalV3NarrowestType(18, 10));
@@ -1019,7 +1019,7 @@ public class SelectStmtWithDecimalTypesTest {
         };
         for (String sql : sqls) {
             SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+            stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
 
             Expr expr = stmt.selectList.getItems().get(0).getExpr();
             Assert.assertEquals(expr.getType(), ScalarType.BIGINT);

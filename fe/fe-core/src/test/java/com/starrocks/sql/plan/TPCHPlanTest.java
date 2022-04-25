@@ -17,7 +17,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testJoin() {
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");

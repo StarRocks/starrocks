@@ -27,7 +27,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
 
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
@@ -83,7 +83,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testSelectTable() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
         starRocksAssert.getCtx().setQualifiedUser("test");
@@ -101,7 +101,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testInsertStatement() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -121,7 +121,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateView() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -147,7 +147,7 @@ public class PrivilegeCheckerTest {
     }
 
     public void testDropTable() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");

@@ -248,7 +248,7 @@ public class UtilsTest {
 
     @Test
     public void unknownStats1() {
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(t0, 10);
@@ -277,7 +277,7 @@ public class UtilsTest {
 
     @Test
     public void unknownStats2() {
-        GlobalStateMgr globalStateMgr = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
         OptExpression opt =
                 new OptExpression(

@@ -172,7 +172,7 @@ public class UtFrameUtils {
             throws Exception {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);
@@ -194,7 +194,7 @@ public class UtFrameUtils {
         System.out.println("begin to parse stmts: " + originStmt);
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         List<StatementBase> statementBases = null;
         try {
             statementBases = SqlParserUtils.getMultiStmts(parser);
@@ -448,7 +448,7 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getCatalog().getDb("default_cluster:" + dbName)
+            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
@@ -458,7 +458,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getCatalog().getDb("default_cluster:" + dbName)
+            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentStatisticStorage()
