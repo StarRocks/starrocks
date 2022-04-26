@@ -57,7 +57,7 @@ MACHINE_TYPE=$(uname -m)
 VARS_TARGET=vars-${MACHINE_TYPE}.sh
 
 if [ ! -f ${TP_DIR}/${VARS_TARGET} ]; then
-    echo "${VARS_TARGET} is missing".
+    echo "${VARS_TARGET} is missing."
     exit 1
 fi
 . ${TP_DIR}/${VARS_TARGET}
