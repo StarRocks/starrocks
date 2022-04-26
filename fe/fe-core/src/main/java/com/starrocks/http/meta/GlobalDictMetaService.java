@@ -19,11 +19,19 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
+<<<<<<< HEAD
  * eg:
  * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=0
  * (mark forbit test_basic use global dict)
  * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=1
  * (mark enable test_basic use global dict)
+=======
+ *  eg:
+ *       POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=0
+ *               (mark disable test_basic use global dict)
+ *       POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=1
+ *               (mark enable test_basic use global dict)
+>>>>>>> small change
  */
 
 public class GlobalDictMetaService {
@@ -61,7 +69,7 @@ public class GlobalDictMetaService {
 
         public static void registerAction(ActionController controller) throws IllegalArgException {
             ForbitTableAction action = new ForbitTableAction(controller);
-            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table/forbit", action);
+            controller.registerHandler(HttpMethod.POST, "/api/global_dict/table/enable", action);
         }
 
         @Override
@@ -80,10 +88,11 @@ public class GlobalDictMetaService {
                 long isEnable = Long.parseLong(request.getSingleParameter(ENABLE).trim());
 
                 GlobalStateMgr.getCurrentState().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
+                response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
-                writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             }
+            writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             sendResult(request, response);
         }
     }

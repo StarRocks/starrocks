@@ -6332,7 +6332,7 @@ public class GlobalStateMgr {
         Map<String, String> property = new HashMap<>();
         Database db = getDb(dbName);
         if (db == null) {
-            throw new DdlException("the DB " + dbName + "isn't  exist");
+            throw new DdlException("the DB " + dbName + " is not exist");
         }
         db.readLock();
         try {
