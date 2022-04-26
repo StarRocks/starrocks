@@ -41,20 +41,28 @@ statement
     | DROP TABLE (IF EXISTS)? qualifiedName FORCE?                                          #dropTable
     | DROP VIEW (IF EXISTS)? qualifiedName                                                  #dropView
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | alterSystem DROP BACKEND string (',' string)*                                        #dropBackend
-    | alterSystem ADD FREE? BACKEND (TO string)? string (',' string)*                      #addBackend
-    | alterSystem DROP FOLLOWER string                                                   #dropFollower
-    | alterSystem ADD FOLLOWER string                                                   #addFollower
-    | alterSystem DROP OBSERVER string                                                   #dropObserver
-    | alterSystem ADD OBSERVER string                                                   #addObserver
     ;
 
 alterClause
     : tableRenameClause
+    | backendClause
+    | frontendClause
     ;
 
 tableRenameClause
     : RENAME identifier
+    ;
+
+backendClause
+    : ADD FREE? BACKEND (TO string)? string (',' string)*
+    | DROP BACKEND string (',' string)*
+    ;
+
+frontendClause
+    : ADD FOLLOWER string
+    | DROP FOLLOWER string
+    | ADD OBSERVER string
+    | DROP OBSERVER string
     ;
 
 explainDesc
@@ -567,9 +575,4 @@ nonReserved
     | WEEK
     | YEAR
     | BACKEND | OBSERVER | FOLLOWER | FREE | TO
-    ;
-
-alterSystem
-    : ALTER SYSTEM
-    | MATERIALIZED
     ;
