@@ -37,7 +37,6 @@ import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -55,6 +54,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -73,7 +73,7 @@ import java.util.List;
 
 public class ShowExecutorTest {
     private ConnectContext ctx;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -168,42 +168,42 @@ public class ShowExecutorTest {
         // mock auth
         Auth auth = AccessTestUtil.fetchAdminAccess();
 
-        // mock catalog.
-        catalog = Deencapsulation.newInstance(Catalog.class);
-        new Expectations(catalog) {
+        // mock globalStateMgr.
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
             {
-                catalog.getDb("testCluster:testDb");
+                globalStateMgr.getDb("testCluster:testDb");
                 minTimes = 0;
                 result = db;
 
-                catalog.getDb("testCluster:emptyDb");
+                globalStateMgr.getDb("testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
 
-                catalog.getClusterDbNames("testCluster");
+                globalStateMgr.getClusterDbNames("testCluster");
                 minTimes = 0;
                 result = Lists.newArrayList("testCluster:testDb");
 
-                catalog.getClusterDbNames("");
+                globalStateMgr.getClusterDbNames("");
                 minTimes = 0;
                 result = Lists.newArrayList("");
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
+                GlobalStateMgr.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
                 minTimes = 0;
 
-                Catalog.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
+                GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
                 minTimes = 0;
             }
         };
@@ -293,12 +293,12 @@ public class ShowExecutorTest {
     public void testDescribe() {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
         Analyzer analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-        Catalog catalog = AccessTestUtil.fetchAdminCatalog();
+        GlobalStateMgr globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        new MockUp<Catalog>() {
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            Catalog getCurrentCatalog() {
-                return catalog;
+            GlobalStateMgr getCurrentState() {
+                return globalStateMgr;
             }
 
             @Mock
@@ -380,7 +380,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowCreateDb() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:testDb");
@@ -395,7 +395,7 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testCluster:emptyDb");
@@ -425,7 +425,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowColumn() throws AnalysisException {
-        ctx.setCatalog(catalog);
+        ctx.setCatalog(globalStateMgr);
         ctx.setQualifiedUser("testCluster:testUser");
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("testCluster:testDb", "testTbl"), null, null, false);
         stmt.analyze(AccessTestUtil.fetchAdminAnalyzer(false));

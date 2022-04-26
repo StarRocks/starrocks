@@ -2,8 +2,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -14,16 +15,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
-import mockit.Mocked;
 import mockit.MockUp;
-
-import com.starrocks.qe.SessionVariable;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,7 +33,7 @@ public class ExportStmtTest {
     @Mocked
     private TableRef tableRef;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private Auth auth;
     @Mocked
@@ -75,22 +72,22 @@ public class ExportStmtTest {
                 result = new TableName(dbName, tableName);
                 tableRef.getPartitionNames();
                 result = null;
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                catalog.getAuth();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
                 result = true;
                 analyzer.getCatalog();
-                result = catalog;
-                catalog.getDb(dbName);
+                result = globalStateMgr;
+                globalStateMgr.getDb(dbName);
                 result = db;
                 db.getTable(tableName);
                 result = table;
                 table.getBaseSchema();
                 result = columns;
 
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 minTimes = 0;
                 result = brokerMgr;
                 brokerMgr.containsBroker(brokerDesc.getName());

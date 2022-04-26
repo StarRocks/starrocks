@@ -23,9 +23,9 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 
 import java.util.Arrays;
@@ -41,7 +41,8 @@ public class ReplicasProcNode implements ProcNodeInterface {
             .add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash")
             .add("LstFailedTime").add("SchemaHash").add("DataSize").add("RowCount").add("State")
-            .add("IsBad").add("IsSetBadForce").add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
+            .add("IsBad").add("IsSetBadForce").add("VersionCount").add("PathHash").add("MetaUrl")
+            .add("CompactionStatus")
             .build();
 
     private long tabletId;
@@ -54,7 +55,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = Catalog.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
@@ -64,10 +65,10 @@ public class ReplicasProcNode implements ProcNodeInterface {
             Backend backend = backendMap.get(replica.getBackendId());
             if (backend != null) {
                 metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
-                                        backend.getHost(),
-                                        backend.getHttpPort(),
-                                        tabletId,
-                                        replica.getSchemaHash());
+                        backend.getHost(),
+                        backend.getHttpPort(),
+                        tabletId,
+                        replica.getSchemaHash());
                 compactionUrl = String.format(
                         "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
                         backend.getHost(),

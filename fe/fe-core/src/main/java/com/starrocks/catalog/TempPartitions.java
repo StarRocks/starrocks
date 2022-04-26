@@ -31,6 +31,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -70,8 +71,8 @@ public class TempPartitions implements Writable, GsonPostProcessable {
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
-            if (!Catalog.isCheckpointThread() && needDropTablet) {
-                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+            if (!GlobalStateMgr.isCheckpointThread() && needDropTablet) {
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
                         invertedIndex.deleteTablet(tablet.getId());
@@ -126,7 +127,7 @@ public class TempPartitions implements Writable, GsonPostProcessable {
     }
 
     public static TempPartitions read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_77) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_77) {
             TempPartitions tempPartitions = new TempPartitions();
             tempPartitions.readFields(in);
             return tempPartitions;

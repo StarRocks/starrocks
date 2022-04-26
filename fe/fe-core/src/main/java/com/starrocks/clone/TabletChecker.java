@@ -28,7 +28,6 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
 import com.starrocks.analysis.AdminCancelRepairTableStmt;
 import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -45,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,7 +64,7 @@ public class TabletChecker extends MasterDaemon {
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     private SystemInfoService infoService;
     private TabletScheduler tabletScheduler;
     private TabletSchedulerStat stat;
@@ -115,10 +115,10 @@ public class TabletChecker extends MasterDaemon {
         }
     }
 
-    public TabletChecker(Catalog catalog, SystemInfoService infoService, TabletScheduler tabletScheduler,
+    public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
                          TabletSchedulerStat stat) {
         super("tablet checker", CHECK_INTERVAL_MS);
-        this.catalog = catalog;
+        this.globalStateMgr = globalStateMgr;
         this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;
         this.stat = stat;
@@ -197,10 +197,10 @@ public class TabletChecker extends MasterDaemon {
         long tabletInScheduler = 0;
         long tabletNotReady = 0;
 
-        List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
         OUT:
         for (Long dbId : dbIds) {
-            Database db = catalog.getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -212,13 +212,13 @@ public class TabletChecker extends MasterDaemon {
             db.readLock();
             try {
                 List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
-                for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
+                for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         if (partition.isUseStarOS()) {
                             // replicas are managed by StarOS and cloud storage.
                             continue;
@@ -229,7 +229,7 @@ public class TabletChecker extends MasterDaemon {
                             // and we can schedule the tablets in it.
                             continue;
                         }
-                        short replicaNum = catalog.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
+                        short replicaNum = globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                 partition.getId());
                         if (replicaNum == (short) -1) {
                             continue;
@@ -342,7 +342,7 @@ public class TabletChecker extends MasterDaemon {
         while (iter.hasNext()) {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 iter.remove();
                 continue;
@@ -435,8 +435,8 @@ public class TabletChecker extends MasterDaemon {
 
     public static RepairTabletInfo getRepairTabletInfo(String dbName, String tblName, List<String> partitions)
             throws DdlException {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        Database db = catalog.getDb(dbName);
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }

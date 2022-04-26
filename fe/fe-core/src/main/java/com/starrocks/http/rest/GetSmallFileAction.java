@@ -22,13 +22,13 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -58,7 +58,7 @@ public class GetSmallFileAction extends RestBaseAction {
         }
 
         // check token
-        if (!token.equals(Catalog.getCurrentCatalog().getToken())) {
+        if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
             response.appendContent("Invalid token");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
@@ -73,7 +73,7 @@ public class GetSmallFileAction extends RestBaseAction {
             return;
         }
 
-        SmallFileMgr fileMgr = Catalog.getCurrentCatalog().getSmallFileMgr();
+        SmallFileMgr fileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
         SmallFile smallFile = fileMgr.getSmallFile(fileId);
         if (smallFile == null || !smallFile.isContent) {
             response.appendContent("File not found or is not content");

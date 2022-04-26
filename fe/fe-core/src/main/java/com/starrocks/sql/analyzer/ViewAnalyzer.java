@@ -13,7 +13,7 @@ import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;
 
-public  class ViewAnalyzer {
+public class ViewAnalyzer {
     public static void analyze(BaseViewStmt stmt, ConnectContext session) {
         stmt.getTableName().normalization(session);
         Analyzer.analyze(stmt.getQueryStatement(), session);

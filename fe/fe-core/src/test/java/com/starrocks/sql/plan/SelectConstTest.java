@@ -82,7 +82,8 @@ public class SelectConstTest extends PlanTestBase {
     @Test
     public void testSubquery() throws Exception {
         assertPlanContains("select * from t0 where v3 in (select 2)", "LEFT SEMI JOIN", "<slot 7> : CAST(2 AS BIGINT)");
-        assertPlanContains("select * from t0 where v3 not in (select 2)", "NULL AWARE LEFT ANTI JOIN", "<slot 7> : CAST(2 AS BIGINT)");
+        assertPlanContains("select * from t0 where v3 not in (select 2)", "NULL AWARE LEFT ANTI JOIN",
+                "<slot 7> : CAST(2 AS BIGINT)");
         assertPlanContains("select * from t0 where exists (select 9)", "  1:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
@@ -124,7 +125,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testDoubleCastWithoutScientificNotation() throws Exception {
-        String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
+        String sql =
+                "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
     }
 }

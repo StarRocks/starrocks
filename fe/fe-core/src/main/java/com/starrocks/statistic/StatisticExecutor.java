@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -24,6 +23,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
@@ -135,14 +135,14 @@ public class StatisticExecutor {
         }
     }
 
-
     // If you call this function, you must ensure that the db lock is added
-    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column) throws Exception {
+    public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
+            throws Exception {
         if (dbId == -1) {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
 
         OlapTable olapTable = (OlapTable) table;
@@ -308,10 +308,10 @@ public class StatisticExecutor {
                                            StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
         ExecPlan execPlan;
         try {
-            if (isLockDb) { 
+            if (isLockDb) {
                 lock(dbs);
             }
-            
+
             Analyzer.analyze(parsedStmt, context);
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -330,8 +330,8 @@ public class StatisticExecutor {
                     .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
-            if (isLockDb) { 
-                unLock(dbs); 
+            if (isLockDb) {
+                unLock(dbs);
             }
         }
         return execPlan;
@@ -370,7 +370,8 @@ public class StatisticExecutor {
         return parsedStmt;
     }
 
-    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
+    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan)
+            throws Exception {
         Coordinator coord =
                 new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
@@ -393,7 +394,7 @@ public class StatisticExecutor {
     }
 
     private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         long count =
@@ -410,7 +411,7 @@ public class StatisticExecutor {
     private String buildFullInsertSQL(Long dbId, Long tableId, List<String> columnNames) {
         StringBuilder builder = new StringBuilder(INSERT_STATISTIC_TEMPLATE).append(" ");
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         for (String name : columnNames) {
@@ -447,7 +448,7 @@ public class StatisticExecutor {
     }
 
     private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) db.getTable(tableId);
 
         long hitRows = 1;

@@ -29,6 +29,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
@@ -136,20 +137,20 @@ public class CatalogTest {
         File file = new File(dir, "image");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetaContext.get().setMetaVersion(FeConstants.meta_version);
-        Field field = catalog.getClass().getDeclaredField("load");
+        Field field = globalStateMgr.getClass().getDeclaredField("load");
         field.setAccessible(true);
-        field.set(catalog, new Load());
+        field.set(globalStateMgr, new Load());
 
-        long checksum1 = catalog.saveHeader(dos, new Random().nextLong(), 0);
-        catalog.clear();
-        catalog = null;
+        long checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), 0);
+        globalStateMgr.clear();
+        globalStateMgr = null;
         dos.close();
 
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        catalog = Catalog.getCurrentCatalog();
-        long checksum2 = catalog.loadHeader(dis, 0);
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+        long checksum2 = globalStateMgr.loadHeader(dis, 0);
         Assert.assertEquals(checksum1, checksum2);
         dis.close();
 
@@ -163,11 +164,11 @@ public class CatalogTest {
         File file = new File(dir, "image");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MetaContext.get().setMetaVersion(FeConstants.meta_version);
-        Field field = catalog.getClass().getDeclaredField("load");
+        Field field = globalStateMgr.getClass().getDeclaredField("load");
         field.setAccessible(true);
-        field.set(catalog, new Load());
+        field.set(globalStateMgr, new Load());
 
         Database db1 = new Database(10000L, "testCluster.db1");
         db1.setClusterName("testCluster");
@@ -180,21 +181,21 @@ public class CatalogTest {
         table.addPartition(partition);
         db1.createTable(table);
 
-        catalog.addCluster(cluster);
-        catalog.unprotectCreateDb(db1);
+        globalStateMgr.addCluster(cluster);
+        globalStateMgr.unprotectCreateDb(db1);
         SchemaChangeJob job1 = new SchemaChangeJob(db1.getId(), table.getId(), null, table.getName(), 2022);
 
-        catalog.getSchemaChangeHandler().replayInitJob(job1, catalog);
-        long checksum1 = catalog.saveAlterJob(dos, 0, JobType.SCHEMA_CHANGE);
-        catalog.clear();
-        catalog = null;
+        globalStateMgr.getSchemaChangeHandler().replayInitJob(job1, globalStateMgr);
+        long checksum1 = globalStateMgr.saveAlterJob(dos, 0, JobType.SCHEMA_CHANGE);
+        globalStateMgr.clear();
+        globalStateMgr = null;
         dos.close();
 
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        catalog = Catalog.getCurrentCatalog();
-        long checksum2 = catalog.loadAlterJob(dis, 0, JobType.SCHEMA_CHANGE);
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+        long checksum2 = globalStateMgr.loadAlterJob(dis, 0, JobType.SCHEMA_CHANGE);
         Assert.assertEquals(checksum1, checksum2);
-        Map<Long, AlterJob> map = catalog.getSchemaChangeHandler().unprotectedGetAlterJobs();
+        Map<Long, AlterJob> map = globalStateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs();
         Assert.assertEquals(1, map.size());
         SchemaChangeJob job2 = (SchemaChangeJob) map.get(table.getId());
         Assert.assertEquals(job1.getTransactionId(), (job2.getTransactionId()));

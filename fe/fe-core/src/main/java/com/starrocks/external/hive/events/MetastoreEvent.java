@@ -112,6 +112,7 @@ public abstract class MetastoreEvent {
     /**
      * Certain events like ALTER_TABLE or ALTER_PARTITION implement logic to ignore
      * some events because they do not affect query results.
+     *
      * @return true if this event can be skipped.
      */
     protected boolean canBeSkipped() {
@@ -136,7 +137,7 @@ public abstract class MetastoreEvent {
      * message. This can be used to generate helpful exception messages
      *
      * @param msgFormatString String value to be used in String.format() for the given message
-     * @param args args to the <code>String.format()</code> for the given msgFormatString
+     * @param args            args to the <code>String.format()</code> for the given msgFormatString
      */
     protected String debugString(String msgFormatString, Object... args) {
         String formatString = STR_FORMAT_EVENT_ID_TYPE + msgFormatString;

@@ -430,7 +430,7 @@ public class FunctionSet {
         addBuiltInFunction(fn);
     }
 
-    // Populate all the aggregate builtins in the catalog.
+    // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {

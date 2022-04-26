@@ -82,7 +82,7 @@ public class BinaryPredicateStatisticCalculator {
         ColumnStatistic newEstimateColumnStatistics =
                 ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                        addColumnStatistic(operator, newEstimateColumnStatistics).build()).
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
     }
 
@@ -229,7 +229,7 @@ public class BinaryPredicateStatisticCalculator {
                 setType(columnStatistic.getType()).
                 build();
         return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                addColumnStatistic(operator, newEstimateColumnStatistics).build()).
+                        addColumnStatistic(operator, newEstimateColumnStatistics).build()).
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
     }
 }

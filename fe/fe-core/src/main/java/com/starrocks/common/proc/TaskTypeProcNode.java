@@ -23,8 +23,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TTaskType;
 
@@ -54,7 +54,7 @@ public class TaskTypeProcNode implements ProcDirInterface {
 
         int totalFailedNum = 0;
         int totalTaskNum = 0;
-        List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
         for (Long backendId : backendIds) {
             int failedNum = AgentTaskQueue.getTaskNum(backendId, type, true);
             int taskNum = AgentTaskQueue.getTaskNum(backendId, type, false);

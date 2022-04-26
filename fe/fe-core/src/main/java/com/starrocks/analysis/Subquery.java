@@ -98,7 +98,6 @@ public class Subquery extends Expr {
         analyzer = other.analyzer;
     }
 
-
     public Subquery(QueryStatement queryStatement) {
         super();
         this.queryStatement = queryStatement;

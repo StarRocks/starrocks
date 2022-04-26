@@ -152,7 +152,7 @@ public class ColumnDef {
 
     // only for test
     public String getDefaultValue() {
-        if (defaultValueDef.expr instanceof StringLiteral)  {
+        if (defaultValueDef.expr instanceof StringLiteral) {
             return ((StringLiteral) defaultValueDef.expr).getValue();
         } else if (defaultValueDef.expr instanceof NullLiteral) {
             return null;
@@ -346,14 +346,15 @@ public class ColumnDef {
                     throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
             }
         } else if (defaultExpr instanceof FunctionCallExpr) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr)defaultExpr;
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
             if (!"now".equalsIgnoreCase(functionName)) {
-                throw new AnalysisException(String.format("Default expr for function %s is not supported", functionName));
+                throw new AnalysisException(
+                        String.format("Default expr for function %s is not supported", functionName));
             }
 
             // default function current_timestamp currently only support DATETIME type.
-            if("now".equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
+            if ("now".equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
                 throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
             }
         } else if (defaultExpr instanceof NullLiteral) {

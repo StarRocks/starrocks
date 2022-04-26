@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -15,17 +15,17 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        Catalog catalog = connectContext.getCatalog();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
         setTableStatistics(t0, 1);
 
-        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
         setTableStatistics(t1, 10);
-        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t2");
         setTableStatistics(t2, 100000);
 
-        OlapTable t3 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t3");
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t3");
         setTableStatistics(t3, 1000000000);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
         FeConstants.runningUnitTest = true;

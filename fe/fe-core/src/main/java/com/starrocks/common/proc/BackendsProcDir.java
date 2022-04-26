@@ -28,13 +28,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -88,11 +88,11 @@ public class BackendsProcDir implements ProcDirInterface {
      * @return
      */
     public static List<List<String>> getClusterBackendInfos(String clusterName) {
-        final SystemInfoService clusterInfoService = Catalog.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> backendInfos = new LinkedList<>();
         List<Long> backendIds;
         if (!Strings.isNullOrEmpty(clusterName)) {
-            final Cluster cluster = Catalog.getCurrentCatalog().getCluster(clusterName);
+            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
             // root not in any cluster
             if (null == cluster) {
                 return backendInfos;
@@ -115,7 +115,7 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             watch.start();
-            long tabletNum = Catalog.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            long tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));

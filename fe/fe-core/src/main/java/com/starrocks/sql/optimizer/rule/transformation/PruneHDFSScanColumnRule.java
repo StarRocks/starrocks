@@ -31,7 +31,8 @@ import static java.util.function.UnaryOperator.identity;
 
 public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule HIVE_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final PruneHDFSScanColumnRule ICEBERG_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PruneHDFSScanColumnRule ICEBERG_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final PruneHDFSScanColumnRule HUDI_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HUDI_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {

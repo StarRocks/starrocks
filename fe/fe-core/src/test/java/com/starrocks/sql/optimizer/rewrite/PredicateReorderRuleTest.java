@@ -4,13 +4,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -95,7 +95,7 @@ public class PredicateReorderRuleTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            Catalog.getCurrentCatalog().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }
@@ -125,7 +125,7 @@ public class PredicateReorderRuleTest {
         builder.addColumnStatistics(ImmutableMap.of(v7, new ColumnStatistic(1065801600, 1065888000, 0, 10, 200)));
         statistics = builder.build();
 
-        Catalog catalog = Catalog.getCurrentCatalog();
+        GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
         OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
@@ -144,7 +144,7 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) Catalog.getCurrentCatalog().getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t0");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -218,8 +218,8 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) Catalog.getCurrentCatalog().getDb("default_cluster:test").getTable("t0");
-        OlapTable t1 = (OlapTable) Catalog.getCurrentCatalog().getDb("default_cluster:test").getTable("t1");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t0");
+        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t1");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 

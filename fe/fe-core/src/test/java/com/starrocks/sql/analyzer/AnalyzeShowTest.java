@@ -56,7 +56,8 @@ public class AnalyzeShowTest {
     public void testShowTables() throws AnalysisException {
         analyzeSuccess("show tables;");
         ShowTableStmt statement = (ShowTableStmt) analyzeSuccess("show tables where table_name = 't1';");
-        Assert.assertEquals("SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
+        Assert.assertEquals(
+                "SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
                 AST2SQL.toString(statement.toSelectStmt()));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");

@@ -22,7 +22,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
@@ -31,6 +30,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -84,12 +84,12 @@ public class LoadAction extends RestBaseAction {
         checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.LOAD);
 
         // Choose a backend sequentially.
-        List<Long> backendIds = Catalog.getCurrentSystemInfo().seqChooseBackendIds(1, true, false, clusterName);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false, clusterName);
         if (backendIds == null) {
             throw new DdlException("No backend alive.");
         }
 
-        Backend backend = Catalog.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
         if (backend == null) {
             throw new DdlException("No backend alive.");
         }

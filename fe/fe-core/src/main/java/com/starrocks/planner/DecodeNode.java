@@ -12,7 +12,7 @@ import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.Map;
 
-public class DecodeNode extends PlanNode{
+public class DecodeNode extends PlanNode {
     // The dict id int column ids to dict string column ids
     private final Map<Integer, Integer> dictIdToStringIds;
     // The string functions have applied global dict optimization
@@ -39,7 +39,8 @@ public class DecodeNode extends PlanNode{
         msg.node_type = TPlanNodeType.DECODE_NODE;
         msg.decode_node = new TDecodeNode();
         msg.decode_node.setDict_id_to_string_ids(dictIdToStringIds);
-        stringFunctions.forEach((key, value) -> msg.decode_node.putToString_functions(key.asInt(), value.treeToThrift()));
+        stringFunctions.forEach(
+                (key, value) -> msg.decode_node.putToString_functions(key.asInt(), value.treeToThrift()));
     }
 
     @Override
