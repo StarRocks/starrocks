@@ -120,6 +120,7 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -364,7 +365,7 @@ public class ShowExecutor {
         rowSet.add(Lists.newArrayList("ELASTICSEARCH", "YES", "ELASTICSEARCH cluster which data is in it", "NO", "NO", "NO"));
         rowSet.add(Lists.newArrayList("HIVE", "YES", "HIVE database which data is in it", "NO", "NO", "NO"));
         rowSet.add(Lists.newArrayList("ICEBERG", "YES", "ICEBERG data lake which data is in it", "NO", "NO", "NO"));
-        
+        rowSet.add(Lists.newArrayList("HUDI", "YES", "HUDI database which data is in it", "NO", "NO", "NO"));
         // Only success
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
@@ -579,9 +580,44 @@ public class ShowExecutor {
                     // Engine
                     row.add(table.getEngine());
                     // version, ra
-                    for (int i = 0; i < 15; ++i) {
+                    row.add(null);
+                    // Row_format
+                    row.add(null);
+                    // Rows
+                    row.add(String.valueOf(table.getRowCount()));
+                    // Avg_row_length
+                    row.add(String.valueOf(table.getAvgRowLength()));
+                    // Data_length
+                    row.add(String.valueOf(table.getDataLength()));
+                    // Max_data_length
+                    row.add(String.valueOf(table.getMaxDataLength()));
+                    // Index_length
+                    row.add(null);
+                    // Data_free
+                    row.add(null);
+                    // Auto_increment
+                    row.add(null);
+                    // Create_time
+                    row.add(TimeUtils.longToTimeString(table.getCreateTime() * 1000));
+                    // Update_time
+                    if (table.getUpdateTime() > 0) {
+                        row.add(TimeUtils.longToTimeString(table.getUpdateTime()));
+                    } else {
                         row.add(null);
                     }
+                    // Check_time
+                    if (table.getLastCheckTime() > 0) {
+                        row.add(TimeUtils.longToTimeString(table.getLastCheckTime()));
+                    } else {
+                        row.add(null);
+                    }
+                    // Collation
+                    row.add("utf-8");
+                    // Checksum
+                    row.add(null);
+                    // Create_options
+                    row.add(null);
+
                     row.add(table.getComment());
                     rows.add(row);
                 }

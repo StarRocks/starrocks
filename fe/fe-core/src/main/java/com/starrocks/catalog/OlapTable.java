@@ -857,12 +857,60 @@ public class OlapTable extends Table {
         return tTableDescriptor;
     }
 
+    @Override
     public long getRowCount() {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             rowCount += entry.getValue().getBaseIndex().getRowCount();
         }
         return rowCount;
+    }
+
+    @Override
+    public long getAvgRowLength() {
+        long rowCount = 0;
+        long dataSize = 0;
+        for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
+            rowCount += entry.getValue().getBaseIndex().getRowCount();
+            dataSize += entry.getValue().getBaseIndex().getDataSize();
+        }
+        if (rowCount > 0) {
+            return dataSize / rowCount;
+        } else {
+            return 0;
+        }
+    }
+
+    @Override
+    public long getDataLength() {
+        long dataSize = 0;
+        for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
+            dataSize += entry.getValue().getBaseIndex().getDataSize();
+        }
+        return dataSize;
+    }
+
+    @Override
+    public long getMaxDataLength() {
+        long dataSize = 0;
+        for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
+            if (dataSize >= entry.getValue().getBaseIndex().getDataSize()) {
+                dataSize = entry.getValue().getBaseIndex().getDataSize();
+            }
+        }
+        return dataSize;
+    }
+
+
+    @Override
+    public long getUpdateTime() {
+        long updateTime = tempPartitions.getUpdateTime();
+        for (Partition p : idToPartition.values()) {
+            if (p.getVisibleVersionTime() > updateTime) {
+                updateTime = p.getVisibleVersionTime();
+            }
+        }
+        return updateTime;
     }
 
     @Override
@@ -974,6 +1022,7 @@ public class OlapTable extends Table {
         }
         return false;
     }
+
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -1462,7 +1511,7 @@ public class OlapTable extends Table {
         }
         tableProperty
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                                       Boolean.valueOf(enablePersistentIndex).toString());
+                        Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
     }
 
