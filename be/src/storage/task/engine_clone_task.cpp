@@ -345,7 +345,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
     // of timeout for now, we may need a smart way to estimate the time of make_snapshot in future
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<BackendServiceClient>(
             ip, port, [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); },
-            20000));
+            config::make_snapshot_rpc_timeout_ms));
     if (result.status.status_code != TStatusCode::OK) {
         return Status(result.status);
     }
