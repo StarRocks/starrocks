@@ -169,7 +169,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testDropMaterializedView() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
