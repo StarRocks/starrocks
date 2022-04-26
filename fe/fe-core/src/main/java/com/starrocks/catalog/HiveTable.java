@@ -50,7 +50,6 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -192,6 +191,22 @@ public class HiveTable extends Table {
     }
 
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
+        boolean needRefreshColumn = isRefreshColumn();
+        if (!needRefreshColumn) {
+            refreshTableCacheByColumnNames(new ArrayList<>(nameToColumn.keySet()));
+        } else {
+            refreshTableCacheByColumnNames(new ArrayList<>(getAllHiveColumns().keySet()));
+            updateFullSchema(dbName, tableName, getAllHiveColumns());
+        }
+    }
+
+    private void refreshTableCacheByColumnNames(List<String> columnNames) throws DdlException {
+        Catalog.getCurrentCatalog().getHiveRepository()
+                .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
+                        columnNames);
+    }
+    
+    private Map<String, FieldSchema> getAllHiveColumns() throws DdlException{
         org.apache.hadoop.hive.metastore.api.Table table = Catalog.getCurrentCatalog().getHiveRepository()
                 .getTable(resourceName, this.hiveDb, this.hiveTable);
         List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
@@ -201,6 +216,11 @@ public class HiveTable extends Table {
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
+        return allHiveColumns;
+    }
+
+    private boolean isRefreshColumn() throws DdlException{
+        Map<String, FieldSchema> allHiveColumns = getAllHiveColumns();
         boolean needRefreshColumn = allHiveColumns.size() != this.fullSchema.size();
         if (!needRefreshColumn) {
             for (Column column : fullSchema) {
@@ -209,23 +229,14 @@ public class HiveTable extends Table {
                     needRefreshColumn = true;
                     break;
                 }
-                PrimitiveType type = toPrimitiveType(fieldSchema.getType());
+                PrimitiveType type = convertColumnType(fieldSchema.getType());
                 if (!type.name().equalsIgnoreCase(column.getType().toString())) {
                     needRefreshColumn = true;
                     break;
                 }
             }
         }
-        if (!needRefreshColumn) {
-            Catalog.getCurrentCatalog().getHiveRepository()
-                    .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                            new ArrayList<>(nameToColumn.keySet()));
-        } else {
-            updateFullSchema(dbName, tableName, allHiveColumns);
-            Catalog.getCurrentCatalog().getHiveRepository()
-                    .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                            new ArrayList<>(allHiveColumns.keySet()));
-        }
+        return needRefreshColumn;
     }
 
     private void updateFullSchema(String dbName, String tableName, Map<String, FieldSchema> allHiveColumns) throws DdlException {
@@ -235,7 +246,7 @@ public class HiveTable extends Table {
         fullSchema.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            PrimitiveType type = toPrimitiveType(fieldSchema.getType());
+            PrimitiveType type = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, true,
                     NULL_DEFAULT_VALUE, fieldSchema.getComment());
             fullSchema.add(column);
@@ -438,7 +449,7 @@ public class HiveTable extends Table {
         }
     }
 
-    private PrimitiveType toPrimitiveType(String hiveType) throws DdlException {
+    private PrimitiveType convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         switch (typeUpperCase) {
             case "TINYINT":
