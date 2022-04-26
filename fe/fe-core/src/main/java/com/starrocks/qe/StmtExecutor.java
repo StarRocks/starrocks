@@ -545,7 +545,9 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        boolean isQuery = (parsedStmt instanceof QueryStmt ||
+                parsedStmt instanceof QueryStatement ||
+                parsedStmt instanceof ShowStmt);
         masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus, isQuery);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
         masterOpExecutor.execute();

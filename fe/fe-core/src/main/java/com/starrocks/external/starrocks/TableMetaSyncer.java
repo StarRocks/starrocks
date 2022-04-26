@@ -29,7 +29,7 @@ public class TableMetaSyncer {
         authInfo.setPasswd(table.getSourceTablePassword());
         request.setAuth_info(authInfo);
         try {
-            TGetTableMetaResponse response = FrontendServiceProxy.call(addr, 10000,
+            TGetTableMetaResponse response = FrontendServiceProxy.call(addr, 10000, 3,
                     client -> client.getTableMeta(request));
             if (response.status.getStatus_code() != TStatusCode.OK) {
                 String errMsg;
