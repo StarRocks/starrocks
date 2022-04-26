@@ -23,8 +23,9 @@ class Column;
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
-enum IndexFileVersion {
-    VERSION_1 = 1,
+enum PersistentIndexFileVersion {
+    UNKNOWN = 0,
+    PERSISTENT_INDEX_VERSION_1,
 };
 
 using IndexValue = uint64_t;
