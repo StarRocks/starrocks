@@ -51,10 +51,6 @@ Status JsonScanner::open() {
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
-    if (range.__isset.jsonpaths && range.__isset.json_root) {
-        return Status::InvalidArgument("json path and json root cannot be both set");
-    }
-
     if (range.__isset.jsonpaths) {
         RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
     }
