@@ -185,7 +185,7 @@ public class MaterializedViewRefreshJob implements Writable {
                     task.setStatus(Constants.MaterializedViewTaskStatus.SUCCESS);
                 } catch (Throwable ex) {
                     task.setStatus(Constants.MaterializedViewTaskStatus.FAILED);
-                    LOG.warn("materialized view refresh task failed. jobid:{}", id, ex);
+                    LOG.warn("materialized view refresh task failed. jobId:{}", id, ex);
                     task.setErrMsg(ex.getMessage());
                 }
                 task.finishTask();
