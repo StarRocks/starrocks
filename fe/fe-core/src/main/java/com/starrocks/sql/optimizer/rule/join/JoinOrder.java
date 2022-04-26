@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.statistic.Constants;
 
@@ -322,7 +321,7 @@ public abstract class JoinOrder {
             if (contains(joinBitSet, edge.vertexes) &&
                     left.intersects(edge.vertexes) &&
                     right.intersects(edge.vertexes)) {
-                if (JoinPredicateUtils.isEqualBinaryPredicate(edge.predicate)) {
+                if (Utils.isEqualBinaryPredicate(edge.predicate)) {
                     equalOnPredicates.add(edge.predicate);
                 } else {
                     otherPredicates.add(edge.predicate);
