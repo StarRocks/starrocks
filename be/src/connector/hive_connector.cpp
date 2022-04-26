@@ -10,6 +10,15 @@ DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::Con
     return nullptr;
 }
 
+Status HiveDataSourceProvider::init(RuntimeState* state) {
+    return Status::OK();
+}
+DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
+    return nullptr;
+}
+
+HiveDataSource::HiveDataSource(HiveDataSourceProvider* provider, const TScanRange& scan_range) : _provider(provider) {}
+
 Status HiveDataSource::do_open(RuntimeState* state) {
     return Status::OK();
 }
@@ -18,13 +27,6 @@ void HiveDataSource::do_close(RuntimeState* state) {
 }
 Status HiveDataSource::do_get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     return Status::OK();
-}
-
-Status HiveDataSourceProvider::init(RuntimeState* state) {
-    return Status::OK();
-}
-DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
-    return nullptr;
 }
 
 } // namespace connector

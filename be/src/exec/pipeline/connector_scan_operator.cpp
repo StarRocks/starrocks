@@ -55,6 +55,10 @@ ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, Mors
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
     const TScanRange* scan_range = scan_morsel->get_scan_range();
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    _data_source->set_predicates(_conjunct_ctxs);
+    _data_source->set_runtime_filters(_runtime_bloom_filters);
+    _data_source->set_read_limit(_limit);
+    _data_source->init();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {

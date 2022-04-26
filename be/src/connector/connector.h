@@ -8,23 +8,33 @@
 
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+
 namespace starrocks {
 
+class ExprContext;
 namespace vectorized {
 class ConnectorScanNode;
+class RuntimeFilterProbeCollector;
 } // namespace vectorized
 
 namespace connector {
 
 class DataSource {
 public:
+    virtual void set_predicates(const std::vector<ExprContext*>& conjunct_ctxs) {}
+    virtual void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {}
+    virtual void set_read_limit(const uint64_t limit) {}
+
+    virtual Status init();
     virtual Status open(RuntimeState* state);
     virtual void close(RuntimeState* state);
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk);
 
-    virtual Status do_open(RuntimeState* state) = 0;
-    virtual void do_close(RuntimeState* state) = 0;
-    virtual Status do_get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
+    virtual int64_t raw_rows_read() const { return 0; }
+    virtual int64_t num_rows_read() const { return 0; }
+    virtual Status do_open(RuntimeState* state) { return Status::OK(); }
+    virtual void do_close(RuntimeState* state) {}
+    virtual Status do_get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
@@ -36,6 +46,14 @@ public:
     // Later version we could use user-defined data.
     virtual DataSourcePtr create_data_source(const TScanRange& scan_range) = 0;
     // virtual DataSourcePtr create_data_source(const std::string& scan_range_spec)  = 0;
+
+    // non-pipeline APIs
+    Status prepare(RuntimeState* state) { return Status::OK(); }
+    Status open(RuntimeState* state) { return Status::OK(); }
+    void close(RuntimeState* state) {}
+
+protected:
+    const TupleDescriptor* _tuple_desc;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
