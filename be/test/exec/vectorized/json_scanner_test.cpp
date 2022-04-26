@@ -802,16 +802,14 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
     types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TypeDescriptor::create_varchar_type(20));
-    types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
-    range.__isset.jsonpaths = false;
-    range.__isset.json_root = false;
+    range.__isset.jsonpaths = true;
+    range.__isset.json_root = true;
 
     range.jsonpaths = "[\"$.ip\", \"$.value\"]";
     range.json_root = "$.keyname";
