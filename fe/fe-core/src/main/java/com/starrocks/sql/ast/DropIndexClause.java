@@ -1,10 +1,10 @@
-package com.starrocks.sql.ast;// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.AlterTableClause;
 import com.starrocks.analysis.TableName;
-
-import java.util.Map;
 
 public class DropIndexClause extends AlterTableClause {
     private final String indexName;
@@ -16,11 +16,6 @@ public class DropIndexClause extends AlterTableClause {
 
     public String getIndexName() {
         return indexName;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override

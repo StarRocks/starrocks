@@ -5,8 +5,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.AlterTableClause;
 
-import java.util.Map;
-
 public class TableRenameClause extends AlterTableClause {
     private final String newTableName;
 
@@ -18,11 +16,6 @@ public class TableRenameClause extends AlterTableClause {
 
     public String getNewTableName() {
         return newTableName;
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return null;
     }
 
     @Override

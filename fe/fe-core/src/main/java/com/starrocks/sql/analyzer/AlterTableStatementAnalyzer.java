@@ -4,7 +4,10 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Index;
+import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
@@ -50,8 +53,20 @@ public class AlterTableStatementAnalyzer {
         }
 
         @Override
-        public Void visitTableRenameClause(TableRenameClause statement, ConnectContext context) {
-            String newTableName = statement.getNewTableName();
+        public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
+            IndexDef indexDef = clause.getIndexDef();
+            try {
+                indexDef.analyze();
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(), indexDef.getComment()));
+            return null;
+        }
+
+        @Override
+        public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
+            String newTableName = clause.getNewTableName();
             if (Strings.isNullOrEmpty(newTableName)) {
                 throw new SemanticException("New Table name is not set");
             }
@@ -63,6 +78,4 @@ public class AlterTableStatementAnalyzer {
             return null;
         }
     }
-
-
 }

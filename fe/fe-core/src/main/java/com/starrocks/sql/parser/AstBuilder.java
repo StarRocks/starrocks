@@ -113,8 +113,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateIndexStatement(StarRocksParser.CreateIndexStatemetContext context) {
-        CreateIndexClause createIndexClause = new CreateIndexClause(null, , true);
+    public ParseNode visitCreateIndexStatement(StarRocksParser.CreateIndexStatementContext context) {
+        String indexName = ((Identifier) visit(context.identifier())).getValue();
+        List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
+
+        IndexDef indexDef = new IndexDef(indexName,
+                columnList.stream().map(Identifier::getValue).collect(toList()),
+                IndexDef.IndexType.BITMAP,
+                comment);
+
+        CreateIndexClause createIndexClause = new CreateIndexClause(null, indexDef, true);
+
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new AlterTableStmt(targetTableName, Lists.newArrayList(createIndexClause));
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -170,7 +186,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateIndexClause(StarRocksParser.CreateIndexClauseContext context) {
+        String indexName = ((Identifier) visit(context.identifier())).getValue();
+        List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+        String comment = null;
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
+        }
 
+        IndexDef indexDef = new IndexDef(indexName,
+                columnList.stream().map(Identifier::getValue).collect(toList()),
+                IndexDef.IndexType.BITMAP,
+                comment);
+
+        return new CreateIndexClause(null, indexDef, true);
     }
 
     @Override

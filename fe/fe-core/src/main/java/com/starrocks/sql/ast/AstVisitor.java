@@ -53,7 +53,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -82,10 +81,6 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterTableStatement(AlterTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
-    }
-
-    public R visitTableRenameClause(TableRenameClause statement, C context) {
-        return visitNode(statement, context);
     }
 
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
@@ -179,6 +174,22 @@ public abstract class AstVisitor<R, C> {
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
+
+    // ----------------- Alter Clause ---------------
+
+    public R visitCreateIndexClause(CreateIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDropIndexClause(DropIndexClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitTableRenameClause(TableRenameClause statement, C context) {
+        return visitNode(statement, context);
+    }
+
+
     // ----------------- Relation ---------------
 
     public R visitRelation(Relation node, C context) {
