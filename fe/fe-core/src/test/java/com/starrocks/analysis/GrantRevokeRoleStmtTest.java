@@ -96,9 +96,9 @@ public class GrantRevokeRoleStmtTest {
         // revoke
         // RevokeRoleStmt stmt2 = new RevokeRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
         RevokeRoleStmt stmt2 = (RevokeRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "revoke role 'test_role' from 'test_user'@'%'", 1).get(0);
+                "revoke role 'test_role' from 'test_user'@['starrocks.com']", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE ROLE 'test_cluster:test_role' FROM 'test_cluster:test_user'@'%'", stmt2.toString());
+        Assert.assertEquals("REVOKE ROLE 'test_cluster:test_role' FROM 'test_cluster:test_user'@['starrocks.com']", stmt2.toString());
     }
 
     @Test(expected = SemanticException.class)

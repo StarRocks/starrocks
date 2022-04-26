@@ -132,7 +132,12 @@ public class Auth implements Writable {
      * check if role exist, this function can be used in analyze phrase to validate role
      */
     public boolean doesRoleExist(String roleName) {
-        return roleManager.getRole(roleName) != null;
+        readLock();
+        try {
+            return roleManager.getRole(roleName) != null;
+        } finally {
+            readUnlock();
+        }
     }
 
     private GlobalPrivEntry grantGlobalPrivs(UserIdentity userIdentity, boolean errOnExist, boolean errOnNonExist,
@@ -196,7 +201,12 @@ public class Auth implements Writable {
     }
 
     public List<String> getRoleNamesByUser(UserIdentity userIdentity) {
-        return roleManager.getRoleNamesByUser(userIdentity);
+        readLock();
+        try {
+            return roleManager.getRoleNamesByUser(userIdentity);
+        } finally {
+            readUnlock();
+        }
     }
 
     /**

@@ -524,7 +524,7 @@ identifierOrString
 userIdentifier
     : identifierOrString                                     # userWithoutHost
     | identifierOrString '@' identifierOrString              # userWithHost
-    | identifierOrString '@' '(' identifierOrString ')'      # userWithHostAndBlanket
+    | identifierOrString '@' '[' identifierOrString ']'      # userWithHostAndBlanket
     ;
 
 assignment
