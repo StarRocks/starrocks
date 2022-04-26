@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -19,6 +20,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+
 namespace starrocks {
 namespace pipeline {
 
@@ -120,6 +122,8 @@ public:
 
     bool enable_resource_group() const { return _enable_resource_group; }
 
+    void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -155,6 +159,8 @@ private:
     Status _s_status;
 
     bool _enable_resource_group = false;
+
+    DriverLimiter::TokenPtr _driver_token = nullptr;
 };
 
 class FragmentContextManager {

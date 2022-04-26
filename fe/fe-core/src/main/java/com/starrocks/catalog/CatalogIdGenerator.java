@@ -24,7 +24,7 @@ package com.starrocks.catalog;
 import com.starrocks.persist.EditLog;
 
 // This new Id generator is just same as TransactionIdGenerator.
-// But we can't just use TransactionIdGenerator to replace the old catalog's 'nextId' for compatibility reason.
+// But we can't just use TransactionIdGenerator to replace the old globalStateMgr's 'nextId' for compatibility reason.
 // cause they are using different edit log operation type.
 public class CatalogIdGenerator {
     private static final int BATCH_ID_INTERVAL = 1000;

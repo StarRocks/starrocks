@@ -95,7 +95,7 @@ public:
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
-    static Status traverse_headers(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func);
+    static Status walk(KVStore* meta, std::function<bool(long, long, std::string_view)> const& func);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
@@ -126,7 +126,7 @@ public:
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
 
-    using PendingRowsetIterateFunc = std::function<bool(int64_t version, const std::string_view& rowset_meta_data)>;
+    using PendingRowsetIterateFunc = std::function<bool(int64_t version, std::string_view rowset_meta_data)>;
     static Status pending_rowset_iterate(DataDir* store, TTabletId tablet_id, const PendingRowsetIterateFunc& func);
 
     // On success, store a pointer to `RowsetMeta` in |*meta| and return OK status.

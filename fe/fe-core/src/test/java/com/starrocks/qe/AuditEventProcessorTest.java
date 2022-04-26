@@ -21,20 +21,17 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.io.IOException;
-import java.util.UUID;
 
 public class AuditEventProcessorTest {
 
@@ -93,7 +90,7 @@ public class AuditEventProcessorTest {
 
     @Test
     public void testAuditEventProcessor() throws IOException {
-        AuditEventProcessor processor = Catalog.getCurrentAuditEventProcessor();
+        AuditEventProcessor processor = GlobalStateMgr.getCurrentAuditEventProcessor();
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10000; i++) {
             AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)

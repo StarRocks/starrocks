@@ -61,7 +61,7 @@ public class PlanTestBase {
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(1));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -125,6 +125,19 @@ public class PlanTestBase {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v13`, `v14`, v15)\n" +
                 "DISTRIBUTED BY HASH(`v13`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t5` (\n" +
+                "  `v16` bigint NULL COMMENT \"\",\n" +
+                "  `v17` bigint NULL COMMENT \"\",\n" +
+                "  `v18` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v16`, `v17`, v18)\n" +
+                "DISTRIBUTED BY HASH(`v16`, `v17`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
@@ -198,6 +211,27 @@ public class PlanTestBase {
                 "  `id_datetime` datetime NULL COMMENT \"\",\n" +
                 "  `id_date` date NULL COMMENT \"\", \n" +
                 "  `id_decimal` decimal(10,2) NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_all_type_not_null` (\n" +
+                "  `t1a` varchar(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NOT NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `t1e` float NOT NULL COMMENT \"\",\n" +
+                "  `t1f` double NOT NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
+                "  `id_date` date NOT NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NOT NULL COMMENT \"\" \n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`t1a`)\n" +
                 "COMMENT \"OLAP\"\n" +

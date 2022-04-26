@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableMap;
 
 import java.util.Optional;
 
-
 public class MockDictManager implements IDictManager {
     private static final ImmutableMap<String, Integer> mockDict = ImmutableMap.of("mock", 1);
 

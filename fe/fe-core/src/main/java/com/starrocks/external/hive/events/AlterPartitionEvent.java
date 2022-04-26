@@ -4,6 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -38,7 +39,8 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             partitionAfter = Preconditions.checkNotNull(alterPartitionMessage.getPtnObjAfter());
             hmsTbl = alterPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(HivePartitionKey.gen(dbName, tblName, partitionAfter.getValues()));
+            hivePartitionKeys.add(
+                    new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter partition message"), e);
@@ -78,7 +80,6 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     protected boolean isSupported() {
         return true;
     }
-
 
     @Override
     protected void process() throws MetastoreNotificationException {

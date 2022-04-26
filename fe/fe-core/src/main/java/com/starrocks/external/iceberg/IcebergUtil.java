@@ -5,6 +5,7 @@ package com.starrocks.external.iceberg;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.hive.HdfsFileFormat;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionField;
@@ -37,29 +38,42 @@ public class IcebergUtil {
     }
 
     /**
-     * Returns the corresponding catalog implementation.
+     * Returns the corresponding globalStateMgr implementation.
      */
     public static IcebergCatalog getIcebergCatalog(IcebergTable table)
             throws StarRocksIcebergException {
         IcebergCatalogType catalogType = table.getCatalogType();
-        return getIcebergCatalog(catalogType, table.getIcebergHiveMetastoreUris());
-    }
-
-    /**
-     * Returns the corresponding catalog implementation.
-     */
-    public static IcebergCatalog getIcebergCatalog(IcebergCatalogType catalogType, String metastoreUris)
-            throws StarRocksIcebergException {
         switch (catalogType) {
-            case HIVE_CATALOG: return IcebergHiveCatalog.getInstance(metastoreUris);
+            case HIVE_CATALOG:
+                return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris());
+            case CUSTOM_CATALOG:
+                return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
                 throw new StarRocksIcebergException(
-                        "Unexpected catalog type: " + catalogType.toString());
+                        "Unexpected globalStateMgr type: " + catalogType.toString());
         }
     }
 
     /**
+     * Returns the corresponding hive globalStateMgr implementation.
+     */
+    public static IcebergCatalog getIcebergHiveCatalog(String metastoreUris)
+            throws StarRocksIcebergException {
+        return IcebergHiveCatalog.getInstance(metastoreUris);
+    }
+
+    /**
+     * Returns the corresponding custom globalStateMgr implementation.
+     */
+    public static IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties)
+            throws StarRocksIcebergException {
+        return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", catalogImpl),
+                new Configuration(), icebergProperties, catalogImpl).loadCatalog();
+    }
+
+    /**
      * Get hdfs file format in StarRocks use iceberg file format.
+     *
      * @param format
      * @return HdfsFileFormat
      */
@@ -78,6 +92,7 @@ public class IcebergUtil {
     /**
      * Get current snapshot of iceberg table, return null if snapshot do not exist.
      * Refresh table is needed.
+     *
      * @param table
      * @return Optional<Snapshot>
      */
@@ -91,6 +106,7 @@ public class IcebergUtil {
     /**
      * Get table scan for given table and snapshot, filter with given iceberg predicates.
      * Refresh table if needed.
+     *
      * @param table
      * @param snapshot
      * @param icebergPredicates
@@ -125,7 +141,7 @@ public class IcebergUtil {
                     throw new NoSuchTableException("No such table: %s", table.name());
                 }
             } else {
-                // table loaded by Catalog should be a base table
+                // table loaded by GlobalStateMgr should be a base table
                 throw new StarRocksIcebergException(String.format("Invalid table type of %s, it should be a BaseTable!",
                         table.name()));
             }
@@ -139,7 +155,6 @@ public class IcebergUtil {
     }
 
     /**
-     *
      * @param partitionSpec
      * @return
      */

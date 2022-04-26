@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -23,8 +24,6 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
-
 /**
  * Because the children of Join need to shuffle data
  * according to the equivalence conditions in onPredicate, if there is an expression on predicate,
@@ -44,8 +43,8 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
         ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
         ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
 
-        List<BinaryPredicateOperator> equalConjs =
-                getEqConj(leftOutputColumns, rightOutputColumns, Utils.extractConjuncts(onPredicate));
+        List<BinaryPredicateOperator> equalConjs = JoinHelper.
+                getEqualsPredicate(leftOutputColumns, rightOutputColumns, Utils.extractConjuncts(onPredicate));
 
         return !equalConjs.isEmpty();
     }
@@ -58,12 +57,12 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
         ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
         ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
 
-        List<BinaryPredicateOperator> equalConjs =
-                getEqConj(leftOutputColumns, rightOutputColumns, Utils.extractConjuncts(onPredicate));
+        List<BinaryPredicateOperator> equalsPredicate = JoinHelper.
+                getEqualsPredicate(leftOutputColumns, rightOutputColumns, Utils.extractConjuncts(onPredicate));
 
         Map<ColumnRefOperator, ScalarOperator> leftProjectMaps = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightProjectMaps = new HashMap<>();
-        for (BinaryPredicateOperator binaryPredicateOperator : equalConjs) {
+        for (BinaryPredicateOperator binaryPredicateOperator : equalsPredicate) {
             ScalarOperator left = binaryPredicateOperator.getChild(0);
             ScalarOperator right = binaryPredicateOperator.getChild(1);
             if (leftOutputColumns.containsAll(left.getUsedColumns()) && !left.isColumnRef()) {

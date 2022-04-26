@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
  * This event represents a batch of events of type T. The batch of events is
  * initialized from a single initial event called baseEvent. More events can be added
  * to the batch using {@code addToBatchEvents} method.
+ *
  * @param <T> The type of event which is batched by this event.
  */
 public class BatchEvent<T extends MetastoreTableEvent> extends MetastoreTableEvent {

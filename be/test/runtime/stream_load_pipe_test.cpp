@@ -25,6 +25,7 @@
 
 #include <thread>
 
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/monotime.h"
 
@@ -36,43 +37,6 @@ public:
     virtual ~StreamLoadPipeTest() {}
     void SetUp() override {}
 };
-
-PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
-    StreamLoadPipe pipe(66, 64);
-
-    auto appender = [&pipe] {
-        int k = 0;
-        for (int i = 0; i < 2; ++i) {
-            auto byte_buf = ByteBuffer::allocate(64);
-            char buf[64];
-            for (int j = 0; j < 64; ++j) {
-                buf[j] = '0' + (k++ % 10);
-            }
-            byte_buf->put_bytes(buf, 64);
-            byte_buf->flip();
-            pipe.append(byte_buf);
-        }
-        pipe.finish();
-    };
-    std::thread t1(appender);
-
-    char buf[256];
-    size_t buf_len = 256;
-    bool eof = false;
-    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(128, buf_len);
-    ASSERT_FALSE(eof);
-    for (int i = 0; i < 128; ++i) {
-        ASSERT_EQ('0' + (i % 10), buf[i]);
-    }
-    st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
-
-    t1.join();
-}
 
 PARALLEL_TEST(StreamLoadPipeTest, append_bytes) {
     StreamLoadPipe pipe(66, 64);
@@ -143,65 +107,6 @@ PARALLEL_TEST(StreamLoadPipeTest, append_bytes2) {
     t1.join();
 }
 
-PARALLEL_TEST(StreamLoadPipeTest, append_mix) {
-    StreamLoadPipe pipe(66, 64);
-
-    auto appender = [&pipe] {
-        // 10
-        int k = 0;
-        for (int i = 0; i < 10; ++i) {
-            char buf = '0' + (k++ % 10);
-            pipe.append(&buf, 1);
-        }
-        // 60
-        {
-            auto byte_buf = ByteBuffer::allocate(60);
-            char buf[60];
-            for (int j = 0; j < 60; ++j) {
-                buf[j] = '0' + (k++ % 10);
-            }
-            byte_buf->put_bytes(buf, 60);
-            byte_buf->flip();
-            pipe.append(byte_buf);
-        }
-        // 8
-        for (int i = 0; i < 8; ++i) {
-            char buf = '0' + (k++ % 10);
-            pipe.append(&buf, 1);
-        }
-        // 50
-        {
-            auto byte_buf = ByteBuffer::allocate(50);
-            char buf[50];
-            for (int j = 0; j < 50; ++j) {
-                buf[j] = '0' + (k++ % 10);
-            }
-            byte_buf->put_bytes(buf, 50);
-            byte_buf->flip();
-            pipe.append(byte_buf);
-        }
-        pipe.finish();
-    };
-    std::thread t1(appender);
-
-    char buf[128];
-    size_t buf_len = 128;
-    bool eof = false;
-    auto st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(128, buf_len);
-    ASSERT_FALSE(eof);
-    for (int i = 0; i < 128; ++i) {
-        ASSERT_EQ('0' + (i % 10), buf[i]);
-    }
-    st = pipe.read((uint8_t*)buf, &buf_len, &eof);
-    ASSERT_TRUE(st.ok());
-    ASSERT_EQ(0, buf_len);
-    ASSERT_TRUE(eof);
-
-    t1.join();
-}
-
 PARALLEL_TEST(StreamLoadPipeTest, cancel) {
     StreamLoadPipe pipe(66, 64);
 
@@ -224,60 +129,17 @@ PARALLEL_TEST(StreamLoadPipeTest, cancel) {
     t1.join();
 }
 
-PARALLEL_TEST(StreamLoadPipeTest, close) {
-    StreamLoadPipe pipe(66, 64);
-
-    auto appender = [&pipe] {
-        int k = 0;
-        {
-            auto byte_buf = ByteBuffer::allocate(64);
-            char buf[64];
-            for (int j = 0; j < 64; ++j) {
-                buf[j] = '0' + (k++ % 10);
-            }
-            byte_buf->put_bytes(buf, 64);
-            byte_buf->flip();
-            pipe.append(byte_buf);
-        }
-        {
-            auto byte_buf = ByteBuffer::allocate(64);
-            char buf[64];
-            for (int j = 0; j < 64; ++j) {
-                buf[j] = '0' + (k++ % 10);
-            }
-            byte_buf->put_bytes(buf, 64);
-            byte_buf->flip();
-            auto st = pipe.append(byte_buf);
-            ASSERT_TRUE(st.ok());
-        }
-    };
-    std::thread t1(appender);
-
-    SleepFor(MonoDelta::FromMilliseconds(10));
-
-    pipe.close();
-
-    t1.join();
-}
-
 PARALLEL_TEST(StreamLoadPipeTest, read_one_message) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
         int k = 0;
-        auto byte_buf = ByteBuffer::allocate(64);
         char buf[64];
         for (int j = 0; j < 64; ++j) {
             buf[j] = '0' + (k++ % 10);
         }
-        byte_buf->put_bytes(buf, 64);
-        byte_buf->flip();
-        // 1st append
-        pipe.append(byte_buf);
-
-        // 2nd append
         pipe.append(buf, sizeof(buf));
-
+        pipe.append_and_flush(buf, sizeof(buf));
         pipe.finish();
     };
     std::thread t1(appender);
@@ -306,6 +168,50 @@ PARALLEL_TEST(StreamLoadPipeTest, read_one_message) {
     ASSERT_EQ(0, buf_sz);
 
     t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, append_and_flush) {
+    StreamLoadPipe pipe;
+
+    ASSERT_OK(pipe.append("123", 3));
+    ASSERT_OK(pipe.append_and_flush("456", 3));
+    pipe.finish();
+
+    char buf[12];
+    size_t buf_len = 12;
+    bool eof = false;
+    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
+    ASSERT_EQ(6, buf_len);
+    ASSERT_FALSE(eof);
+    ASSERT_EQ(std::string_view("123456"), std::string_view(buf, buf_len));
+
+    pipe.finish();
+    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
+    ASSERT_EQ(0, buf_len);
+    ASSERT_TRUE(eof);
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
+    StreamLoadPipe pipe(/*max_buffered_bytes=*/6, /*min_chunk_size=*/4);
+
+    auto producer = std::thread([&pipe]() {
+        // append data with size larger than max_buffered_bytes
+        ASSERT_OK(pipe.append("0123456789", 10));
+        pipe.finish();
+    });
+
+    char buf[12];
+    size_t buf_len = 12;
+    bool eof = false;
+    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
+    ASSERT_EQ(10, buf_len);
+    ASSERT_FALSE(eof);
+    ASSERT_EQ(std::string_view("0123456789"), std::string_view(buf, buf_len));
+    ASSERT_OK(pipe.read((uint8_t*)buf, &buf_len, &eof));
+    ASSERT_EQ(0, buf_len);
+    ASSERT_TRUE(eof);
+
+    producer.join();
 }
 
 } // namespace starrocks

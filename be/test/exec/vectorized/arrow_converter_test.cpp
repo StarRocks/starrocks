@@ -1234,8 +1234,3 @@ PARALLEL_TEST(ArrowConverterTest, test_map_to_json) {
 }
 
 } // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

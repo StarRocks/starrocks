@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -276,10 +277,18 @@ public class OperatorStrings {
         }
 
         public OperatorStr visitPhysicalHashJoin(OptExpression optExpression, Integer step) {
+            return visitPhysicalJoin(optExpression, step);
+        }
+
+        public OperatorStr visitPhysicalMergeJoin(OptExpression optExpression, Integer step) {
+            return visitPhysicalJoin(optExpression, step);
+        }
+
+        public OperatorStr visitPhysicalJoin(OptExpression optExpression, Integer step) {
             OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
 
-            PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
+            PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
             sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");

@@ -5,7 +5,6 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -15,6 +14,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,7 +63,7 @@ public class HiveRepository {
             if (client != null) {
                 return client;
             }
-            Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
             if (resource == null) {
                 throw new DdlException("get hive client failed, resource[" + resourceName + "] not exists");
             }
@@ -137,7 +137,7 @@ public class HiveRepository {
             try {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("get table {}.{} partition meta info failed.", hmsTable.getDb(), hmsTable.getTable(),  e);
+                LOG.warn("get table {}.{} partition meta info failed.", hmsTable.getDb(), hmsTable.getTable(), e);
                 throw new DdlException(e.getMessage());
             }
         }
@@ -193,16 +193,12 @@ public class HiveRepository {
         metaCache.refreshColumnStats(hmsTable);
     }
 
-    public void clearCache(String resourceName, String dbName, String tableName) {
-        clearCache(resourceName, dbName, tableName, false);
-    }
-
-    public void clearCache(String resourceName, String dbName, String tableName, boolean isHudiTable) {
+    public void clearCache(HiveMetaStoreTableInfo hmsTable) {
         try {
-            HiveMetaCache metaCache = getMetaCache(resourceName);
-            metaCache.clearCache(dbName, tableName, isHudiTable);
+            HiveMetaCache metaCache = getMetaCache(hmsTable.getResourceName());
+            metaCache.clearCache(hmsTable);
         } catch (DdlException e) {
-            LOG.warn("clean table {}.{} cache failed.", dbName, tableName,  e);
+            LOG.warn("clean table {}.{} cache failed.", hmsTable.getDb(), hmsTable.getTable(), e);
         }
     }
 

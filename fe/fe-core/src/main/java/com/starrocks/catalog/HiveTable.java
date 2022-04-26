@@ -42,6 +42,7 @@ import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.hive.Utils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -154,7 +155,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public Map<String, String> getHiveProperties() {
         // The user may alter the resource properties
         // So we do this to get the fresh properties
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource != null) {
             HiveResource hiveResource = (HiveResource) resource;
             hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
@@ -191,19 +192,19 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void refreshTableCache() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
+        GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableCache(hmsTableInfo);
     }
 
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
+        GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshPartitionCache(hmsTableInfo, partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
-        Catalog.getCurrentCatalog().getHiveRepository()
+        GlobalStateMgr.getCurrentState().getHiveRepository()
                 .refreshTableColumnStats(hmsTableInfo);
     }
 
@@ -251,7 +252,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         copiedProps.remove(HIVE_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource == null) {
             throw new DdlException("hive resource [" + resourceName + "] not exists");
         }
@@ -266,7 +267,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         // 1. check column exists in hive table
         // 2. check column type mapping
         // 3. check hive partition column exists in table column list
-        org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
+        org.apache.hadoop.hive.metastore.api.Table hiveTable = GlobalStateMgr.getCurrentState().getHiveRepository()
                 .getTable(resourceName, this.hiveDb, this.hiveTable);
         String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
@@ -480,7 +481,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_3) {
+        if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_3) {
             String json = Text.readString(in);
             JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
             hiveDb = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_DB).getAsString();
@@ -538,16 +539,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onCreate() {
         if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().registerTable(this);
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(this);
         }
     }
 
     @Override
     public void onDrop() {
         if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getHiveRepository().
-                    clearCache(this.resourceName, this.hiveDb, this.hiveTable);
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().unregisterTable(this);
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);
         }
     }
 

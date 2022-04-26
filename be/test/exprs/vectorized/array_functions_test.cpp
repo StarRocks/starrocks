@@ -241,7 +241,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_contains(nullptr, {array, target});
@@ -253,7 +253,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_contains(nullptr, {array, target});
@@ -296,7 +296,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -439,7 +439,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -512,7 +512,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element) {
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -533,7 +533,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_target) {
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_contains(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
@@ -571,7 +571,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_contains(nullptr, {array, target});
         EXPECT_EQ(2, result->size());
@@ -619,7 +619,7 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -679,7 +679,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_position(nullptr, {array, target});
@@ -691,7 +691,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_position(nullptr, {array, target});
@@ -734,7 +734,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -877,7 +877,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -950,7 +950,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -971,7 +971,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
@@ -1055,7 +1055,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_position(nullptr, {array, target});
         EXPECT_EQ(2, result->size());
@@ -1103,7 +1103,7 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1163,7 +1163,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target});
@@ -1176,7 +1176,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target});
@@ -1225,7 +1225,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -1418,7 +1418,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -1600,7 +1600,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element) {
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -1632,7 +1632,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_target) {
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
         auto result = ArrayFunctions::array_remove(nullptr, {array, target});
         EXPECT_EQ(1, result->size());
 
@@ -1691,7 +1691,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element_and_target) {
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target});
         EXPECT_EQ(2, result->size());
@@ -1770,7 +1770,7 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1856,7 +1856,7 @@ TEST_F(ArrayFunctionsTest, array_append) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto null = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        auto null = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_append(nullptr, {array, null});
         EXPECT_EQ(1, result->size());
@@ -1874,7 +1874,7 @@ TEST_F(ArrayFunctionsTest, array_append) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum());
 
-        auto data = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 1);
+        auto data = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         data->append_datum("def");
 
         auto result = ArrayFunctions::array_append(nullptr, {array, data});

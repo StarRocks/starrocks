@@ -41,7 +41,7 @@ import java.util.Set;
 
 /**
  * An inline view is a query statement with an alias. Inline views can be parsed directly
- * from a query string or represent a reference to a local or catalog view.
+ * from a query string or represent a reference to a local or globalStateMgr view.
  */
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -49,7 +49,7 @@ import java.util.Set;
 public class InlineViewRef extends TableRef {
     private static final Logger LOG = LogManager.getLogger(InlineViewRef.class);
 
-    // Catalog or local view that is referenced.
+    // GlobalStateMgr or local view that is referenced.
     // Null for inline views parsed directly from a query string.
     private final View view;
 
@@ -97,7 +97,7 @@ public class InlineViewRef extends TableRef {
     }
 
     /**
-     * C'tor for creating inline views that replace a local or catalog view ref.
+     * C'tor for creating inline views that replace a local or globalStateMgr view ref.
      */
     public InlineViewRef(View view, TableRef origTblRef) {
         super(origTblRef.getName(), origTblRef.getExplicitAlias());
@@ -240,7 +240,7 @@ public class InlineViewRef extends TableRef {
      */
     @Override
     public TupleDescriptor createTupleDescriptor(Analyzer analyzer) throws AnalysisException {
-        // Create a fake catalog table for the inline view
+        // Create a fake globalStateMgr table for the inline view
         int numColLabels = getColLabels().size();
         Preconditions.checkState(numColLabels > 0);
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);

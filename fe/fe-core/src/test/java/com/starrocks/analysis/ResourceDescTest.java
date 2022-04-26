@@ -22,12 +22,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -39,7 +39,7 @@ import java.util.Map;
 public class ResourceDescTest {
 
     @Test
-    public void testNormal(@Mocked Catalog catalog, @Injectable ResourceMgr resourceMgr)
+    public void testNormal(@Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr)
             throws AnalysisException, DdlException {
         String resourceName = "spark0";
         Map<String, String> properties = Maps.newHashMap();
@@ -51,7 +51,7 @@ public class ResourceDescTest {
 
         new Expectations() {
             {
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
                 resourceMgr.getResource(resourceName);
                 result = resource;
@@ -65,13 +65,14 @@ public class ResourceDescTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoResource(@Mocked Catalog catalog, @Injectable ResourceMgr resourceMgr) throws AnalysisException {
+    public void testNoResource(@Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr)
+            throws AnalysisException {
         String resourceName = "spark1";
         ResourceDesc resourceDesc = new ResourceDesc(resourceName, null);
 
         new Expectations() {
             {
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
                 resourceMgr.getResource(resourceName);
                 result = null;

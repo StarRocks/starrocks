@@ -53,7 +53,7 @@ public class ArithmeticExprTest {
 
     @Test
     public void testDecimalMultiply() throws AnalysisException {
-        Object[][] cases = new Object[][]{
+        Object[][] cases = new Object[][] {
                 {
                         dec(32, 4, 3),
                         dec(32, 4, 3),
@@ -117,7 +117,8 @@ public class ArithmeticExprTest {
             ScalarType expectReturnType = (ScalarType) c[2];
             ScalarType expectLhsType = (ScalarType) c[3];
             ScalarType expectRhsType = (ScalarType) c[4];
-            ArithmeticExpr.TypeTriple tr = ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
+            ArithmeticExpr.TypeTriple tr =
+                    ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
             Assert.assertEquals(tr.returnType, expectReturnType);
             Assert.assertEquals(tr.lhsTargetType, expectLhsType);
             Assert.assertEquals(tr.rhsTargetType, expectRhsType);
@@ -126,7 +127,7 @@ public class ArithmeticExprTest {
 
     @Test
     public void testDecimalMultiplyFail() {
-        Object[][] cases = new Object[][]{
+        Object[][] cases = new Object[][] {
                 {
                         dec(128, 38, 36),
                         dec(32, 4, 3),

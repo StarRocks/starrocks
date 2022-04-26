@@ -3,10 +3,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -54,7 +54,7 @@ public class RewriteHllCountDistinctRule extends TransformationRule {
                     oldFunctionCall.getChildren().get(0).getType().isHllType()) {
                 Function searchDesc = new Function(new FunctionName(FunctionSet.HLL_UNION_AGG),
                         oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-                Function fn = Catalog.getCurrentCatalog().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+                Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
                 CallOperator c = new CallOperator(FunctionSet.HLL_UNION_AGG,
                         oldFunctionCall.getType(), oldFunctionCall.getChildren(), fn);

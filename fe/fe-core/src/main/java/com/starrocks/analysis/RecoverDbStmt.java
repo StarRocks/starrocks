@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -33,6 +32,7 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 public class RecoverDbStmt extends DdlStmt {
     private String dbName;
@@ -53,10 +53,10 @@ public class RecoverDbStmt extends DdlStmt {
         }
         dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), dbName,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
-                        Privilege.CREATE_PRIV,
-                        Privilege.ADMIN_PRIV),
+                                Privilege.CREATE_PRIV,
+                                Privilege.ADMIN_PRIV),
                         Operator.OR))) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
         }

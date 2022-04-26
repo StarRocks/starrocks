@@ -28,6 +28,7 @@
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
+#include "exprs/agg/window_funnel.h"
 #include "percentile_union.h"
 #include "udf/java/java_function_fwd.h"
 
@@ -68,6 +69,10 @@ AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeCountAggregateFunction() {
     return std::make_shared<CountAggregateFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
+    return std::make_shared<WindowFunnelAggregateFunction>();
 }
 
 template <PrimitiveType PT>
@@ -340,12 +345,17 @@ public:
             } else if (name == "retention") {
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
+            } else if (name == "window_funnel") {
+                auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction();
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState>(windowfunnel);
             }
         } else {
             if (name == "dict_merge") {
                 return AggregateFactory::MakeDictMergeAggregateFunction();
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
+            } else if (name == "window_funnel") {
+                return AggregateFactory::MakeWindowfunnelAggregateFunction();
             }
         }
 
@@ -896,6 +906,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+    // This first type is the 4th type input of windowfunnel.
+    // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
+    add_array_mapping<TYPE_ARRAY, TYPE_INT>("window_funnel");
 }
 
 #undef ADD_ALL_TYPE

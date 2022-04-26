@@ -72,7 +72,7 @@ public class GetLoadInfoAction extends RestBaseAction {
                         PrivPredicate.LOAD);
             }
         }
-        catalog.getLoadManager().getLoadJobInfo(info);
+        globalStateMgr.getLoadManager().getLoadJobInfo(info);
 
         sendResult(request, response, new Result(info));
     }

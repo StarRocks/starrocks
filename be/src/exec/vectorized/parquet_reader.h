@@ -7,23 +7,21 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
-#include <column/vectorized_fwd.h>
-#include <env/env.h>
-#include <exec/file_reader.h>
-#include <exec/parquet_reader.h>
-#include <exprs/expr.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <runtime/types.h>
 
 #include <cstdint>
 #include <map>
 #include <string>
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "env/env.h"
+#include "exprs/expr.h"
+#include "runtime/types.h"
 
 namespace starrocks::vectorized {
 
@@ -45,6 +43,49 @@ public:
 private:
     std::shared_ptr<starrocks::RandomAccessFile> _file;
     uint64_t _pos = 0;
+};
+
+class ParquetReaderWrap {
+public:
+    ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file,
+                      int64_t read_offset, int64_t read_size);
+    virtual ~ParquetReaderWrap();
+
+    void close();
+    Status size(int64_t* size);
+    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
+    Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
+    const std::shared_ptr<arrow::RecordBatch>& get_batch();
+
+private:
+    Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
+    Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
+    Status next_selected_row_group();
+
+    const int32_t _num_of_columns_from_file;
+    parquet::ReaderProperties _properties;
+    std::shared_ptr<arrow::io::RandomAccessFile> _parquet;
+
+    // parquet file reader object
+    std::shared_ptr<::arrow::RecordBatchReader> _rb_batch;
+    std::shared_ptr<arrow::RecordBatch> _batch;
+    std::unique_ptr<parquet::arrow::FileReader> _reader;
+    std::shared_ptr<parquet::FileMetaData> _file_metadata;
+
+    // For nested column type, it's consisting of multiple physical-columns
+    std::map<std::string, std::vector<int>> _map_column_nested;
+    std::vector<int> _parquet_column_ids;
+    int _total_groups; // groups in a parquet file
+    int _current_group;
+
+    int _rows_of_group; // rows in a group.
+    int _current_line_of_group;
+    int _current_line_of_batch;
+
+    int64_t _read_offset;
+    int64_t _read_size;
+
+    std::string _timezone;
 };
 
 // Reader of broker parquet file

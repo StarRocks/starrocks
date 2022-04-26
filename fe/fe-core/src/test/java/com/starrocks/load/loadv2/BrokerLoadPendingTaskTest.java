@@ -24,12 +24,12 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -48,7 +48,7 @@ public class BrokerLoadPendingTaskTest {
     public void testExecuteTask(@Injectable BrokerLoadJob brokerLoadJob,
                                 @Injectable BrokerFileGroup brokerFileGroup,
                                 @Injectable BrokerDesc brokerDesc,
-                                @Mocked Catalog catalog,
+                                @Mocked GlobalStateMgr globalStateMgr,
                                 @Injectable TBrokerFileStatus tBrokerFileStatus) throws UserException {
         Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
         List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
@@ -57,7 +57,7 @@ public class BrokerLoadPendingTaskTest {
         aggKeyToFileGroups.put(aggKey, brokerFileGroups);
         new Expectations() {
             {
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 result = 1L;
                 brokerFileGroup.getFilePaths();
                 result = "hdfs://localhost:8900/test_column";

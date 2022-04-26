@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -23,7 +23,6 @@ import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getDatetimeFromLong;
-import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
@@ -65,7 +64,7 @@ public class ExpressionStatisticCalculator {
             if (operator.isNull()) {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             }
-            OptionalDouble value = doubleValueFromConstant(operator);
+            OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getTypeSize(), 1);
@@ -113,8 +112,10 @@ public class ExpressionStatisticCalculator {
 
             try {
                 if (cast.getChild(0).getType().isDateType()) {
-                    max = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
-                    min = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
+                    max = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
+                    min = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
                     max = max.castTo(cast.getType());
                     min = min.castTo(cast.getType());
@@ -288,34 +289,5 @@ public class ExpressionStatisticCalculator {
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
         }
-    }
-
-    private static OptionalDouble doubleValueFromConstant(ConstantOperator constantOperator) {
-        if (Type.BOOLEAN.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getBoolean() ? 1.0 : 0.0);
-        } else if (Type.TINYINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getTinyInt());
-        } else if (Type.SMALLINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getSmallint());
-        } else if (Type.INT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getInt());
-        } else if (Type.BIGINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getBigint());
-        } else if (Type.LARGEINT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getLargeInt().doubleValue());
-        } else if (Type.FLOAT.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getFloat());
-        } else if (Type.DOUBLE.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getDouble());
-        } else if (Type.DATE.equals(constantOperator.getType())) {
-            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDate()));
-        } else if (Type.DATETIME.equals(constantOperator.getType())) {
-            return OptionalDouble.of(getLongFromDateTime(constantOperator.getDatetime()));
-        } else if (Type.TIME.equals(constantOperator.getType())) {
-            return OptionalDouble.of(constantOperator.getTime());
-        } else if (constantOperator.getType().isDecimalOfAnyVersion()) {
-            return OptionalDouble.of(constantOperator.getDecimal().doubleValue());
-        }
-        return OptionalDouble.empty();
     }
 }

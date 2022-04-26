@@ -27,7 +27,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import java.util.List;
 
 /**
- * A fake catalog representation of an inline view. It's like a table. It has name
+ * A fake globalStateMgr representation of an inline view. It's like a table. It has name
  * and columns, but it won't have ids and it shouldn't be converted to Thrift.
  * An inline view is constructed by providing an alias (required) and then adding columns
  * one-by-one.

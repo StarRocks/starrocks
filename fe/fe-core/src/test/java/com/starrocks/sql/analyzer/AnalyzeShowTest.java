@@ -3,13 +3,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
@@ -56,9 +55,13 @@ public class AnalyzeShowTest {
     @Test
     public void testShowTables() throws AnalysisException {
         analyzeSuccess("show tables;");
-        ShowStmt statement = (ShowStmt) analyzeSuccess("show tables where table_name = 't1';");
-        Assert.assertEquals("SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
+        ShowTableStmt statement = (ShowTableStmt) analyzeSuccess("show tables where table_name = 't1';");
+        Assert.assertEquals(
+                "SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
                 AST2SQL.toString(statement.toSelectStmt()));
+
+        statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
+        Assert.assertEquals("default_cluster:test", statement.getDb());
     }
 
     @Test

@@ -3,13 +3,14 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OutputPropertyDeriver;
 import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
@@ -23,15 +24,13 @@ import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
-
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
 /**
  * EnforceAndCostTask costs a physical expression.
@@ -198,7 +197,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         curTotalCost = 0;
 
         // TODO(kks): do Lower Bound Pruning here
-        RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context.getRequiredProperty());
+        RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context);
         requiredPropertiesList = requiredPropertyDeriver.getRequiredProps(groupExpression);
         curChildIndex = 0;
     }
@@ -221,7 +220,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (!OperatorType.PHYSICAL_HASH_JOIN.equals(groupExpression.getOp().getOpType())) {
             return true;
         }
-        PhysicalHashJoinOperator node = (PhysicalHashJoinOperator) groupExpression.getOp();
+        PhysicalJoinOperator node = (PhysicalJoinOperator) groupExpression.getOp();
         // If broadcast child has hint, need to change the cost to zero
         double childCost = childBestExpr.getCost(inputProperty);
         if (node.getJoinHint().equalsIgnoreCase("BROADCAST")
@@ -234,9 +233,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // if this groupExpression can only do Broadcast, don't need to check the broadcastRowCountLimit
         ColumnRefSet leftChildColumns = groupExpression.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = groupExpression.getChildOutputColumns(1);
-        List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
-        if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, node.getJoinHint())) {
+        List<BinaryPredicateOperator> equalOnPredicate = JoinHelper
+                .getEqualsPredicate(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
+        if (JoinHelper.onlyBroadcast(node.getJoinType(), equalOnPredicate, node.getJoinHint())) {
             return true;
         }
         // Only when right table is not significantly smaller than left table, consider the
@@ -245,7 +244,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
-        int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+        int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
         if (leftChildStats == null || rightChildStats == null) {

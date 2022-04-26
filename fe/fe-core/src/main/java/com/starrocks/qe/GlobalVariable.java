@@ -43,6 +43,7 @@ public final class GlobalVariable {
     public static final String SYSTEM_TIME_ZONE = "system_time_zone";
     public static final String QUERY_CACHE_SIZE = "query_cache_size";
     public static final String DEFAULT_ROWSET_TYPE = "default_rowset_type";
+    public static final String CHARACTER_SET_DATABASE = "character_set_database";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
@@ -76,6 +77,9 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = DEFAULT_ROWSET_TYPE, flag = VariableMgr.GLOBAL)
     public static volatile String defaultRowsetType = "alpha";
+
+    @VariableMgr.VarAttr(name = CHARACTER_SET_DATABASE, flag = VariableMgr.GLOBAL)
+    public static volatile String characterSetDatabase = "utf8";
 
     // Whether the Performance Schema is enabled
     // Compatible with jdbc that version > 8.0.15

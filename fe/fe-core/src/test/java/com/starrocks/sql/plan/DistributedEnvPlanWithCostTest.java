@@ -887,10 +887,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testCastDatePredicate() throws Exception {
-        OlapTable lineitem = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").getTable("lineitem");
+        OlapTable lineitem = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
-        connectContext.getCatalog().setStatisticStorage(mock);
+        connectContext.getGlobalStateMgr().setStatisticStorage(mock);
 
         // ===========================
         // To handle cast(int) in normal range
@@ -947,7 +947,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "     column statistics: \n" +
                 "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE");
 
-        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(100));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(100));
     }
 
     @Test

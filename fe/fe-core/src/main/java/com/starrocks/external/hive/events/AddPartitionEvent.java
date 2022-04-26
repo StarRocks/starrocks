@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HivePartitionKeysKey;
@@ -33,9 +34,9 @@ public class AddPartitionEvent extends MetastoreTableEvent {
      * Prevent instantiation from outside should use MetastoreEventFactory instead
      */
     private AddPartitionEvent(NotificationEvent event,
-                                HiveMetaCache metaCache,
-                                Partition addedPartition,
-                                List<Column> partCols) {
+                              HiveMetaCache metaCache,
+                              Partition addedPartition,
+                              List<Column> partCols) {
         super(event, metaCache);
         Preconditions.checkState(getEventType().equals(MetastoreEventType.ADD_PARTITION));
         if (event.getMessage() == null) {
@@ -50,7 +51,8 @@ public class AddPartitionEvent extends MetastoreTableEvent {
             this.partCols = partCols;
             hmsTbl = addPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(HivePartitionKey.gen(dbName, tblName, addedPartition.getValues()));
+            hivePartitionKeys.add(
+                    new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, addedPartition.getValues()));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);
         }
@@ -100,14 +102,14 @@ public class AddPartitionEvent extends MetastoreTableEvent {
         return true;
     }
 
-
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
             return;
         }
         try {
-            HivePartitionKeysKey partitionKeysKey = HivePartitionKeysKey.gen(dbName, tblName, partCols);
+            HivePartitionKeysKey partitionKeysKey =
+                    new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
             PartitionKey partitionKey = Utils.createPartitionKey(addedPartition.getValues(), partCols);
             cache.addPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
         } catch (Exception e) {

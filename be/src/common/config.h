@@ -651,6 +651,9 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
 CONF_Int64(pipeline_sink_brpc_dop, "8");
+// Used to reject coming fragment instances, when the number of running drivers
+// exceeds it*pipeline_exec_thread_pool_thread_num.
+CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");

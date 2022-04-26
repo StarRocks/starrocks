@@ -76,14 +76,16 @@ public class ColumnFilterConverterTest {
     public void testIsNullOnCastColumn() {
         {
             // cast(c0 as smallint) is null.
-            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
+            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false,
+                    new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 0);
         }
         {
             // c0 is null.
-            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
+            IsNullPredicateOperator isNullPredicate =
+                    new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 1);

@@ -413,9 +413,9 @@ Status TabletMeta::serialize(string* meta_binary) {
     return Status::OK();
 }
 
-Status TabletMeta::deserialize(const string& meta_binary) {
+Status TabletMeta::deserialize(std::string_view data) {
     TabletMetaPB tablet_meta_pb;
-    if (!tablet_meta_pb.ParseFromString(meta_binary)) {
+    if (!tablet_meta_pb.ParseFromArray(data.data(), data.size())) {
         LOG(WARNING) << "parse tablet meta failed";
         return Status::InternalError("parse TabletMetaPB from string failed");
     }
@@ -811,13 +811,13 @@ Status TabletMeta::set_partition_id(int64_t partition_id) {
 void TabletMeta::create_inital_updates_meta() {
     CHECK(!_updatesPB) << "_updates should be empty";
     _updatesPB = std::make_unique<TabletUpdatesPB>();
-    auto vm = _updatesPB->add_versions();
-    auto v = vm->mutable_version();
-    v->set_major(1);
-    v->set_minor(0);
-    vm->set_creation_time(creation_time());
-    _updatesPB->mutable_apply_version()->set_major(v->major());
-    _updatesPB->mutable_apply_version()->set_minor(v->minor());
+    auto edit_version_meta_pb = _updatesPB->add_versions();
+    auto edit_version_pb = edit_version_meta_pb->mutable_version();
+    edit_version_pb->set_major(1);
+    edit_version_pb->set_minor(0);
+    edit_version_meta_pb->set_creation_time(creation_time());
+    _updatesPB->mutable_apply_version()->set_major(edit_version_pb->major());
+    _updatesPB->mutable_apply_version()->set_minor(edit_version_pb->minor());
     _updatesPB->set_next_log_id(0);
     _updatesPB->set_next_rowset_id(0);
 }

@@ -26,7 +26,7 @@ public:
     Status skip(int64_t n) override;
 
     // TODO: support peak
-    bool allows_peak() const override { return false; }
+    bool allows_peek() const override { return false; }
 
     // TODO: add custom statistics
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {

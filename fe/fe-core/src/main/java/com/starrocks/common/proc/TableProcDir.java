@@ -93,7 +93,8 @@ public class TableProcDir implements ProcDirInterface {
             } else if (table instanceof HiveMetaStoreTable) {
                 return new HMSTablePartitionsProcDir((HiveMetaStoreTable) table);
             } else {
-                throw new AnalysisException("Table[" + table.getName() + "] is not a OLAP/ELASTICSEARCH/HIVE/HUDI table");
+                throw new AnalysisException(
+                        "Table[" + table.getName() + "] is not a OLAP/ELASTICSEARCH/HIVE/HUDI table");
             }
         } else if (entryName.equals(TEMP_PARTITIONS)) {
             if (table.getType() == TableType.OLAP) {

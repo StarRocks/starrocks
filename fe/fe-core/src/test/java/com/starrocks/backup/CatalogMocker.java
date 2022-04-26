@@ -26,7 +26,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -59,6 +58,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -396,58 +396,58 @@ public class CatalogMocker {
         return db;
     }
 
-    public static Catalog fetchAdminCatalog() {
+    public static GlobalStateMgr fetchAdminCatalog() {
         try {
             FakeEditLog fakeEditLog = new FakeEditLog();
 
-            Catalog catalog = Deencapsulation.newInstance(Catalog.class);
+            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
             Database db = new Database();
             Auth auth = fetchAdminAccess();
 
-            new Expectations(catalog) {
+            new Expectations(globalStateMgr) {
                 {
-                    catalog.getAuth();
+                    globalStateMgr.getAuth();
                     minTimes = 0;
                     result = auth;
 
-                    catalog.getDb(TEST_DB_NAME);
+                    globalStateMgr.getDb(TEST_DB_NAME);
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb(WRONG_DB);
+                    globalStateMgr.getDb(WRONG_DB);
                     minTimes = 0;
                     result = null;
 
-                    catalog.getDb(TEST_DB_ID);
+                    globalStateMgr.getDb(TEST_DB_ID);
                     minTimes = 0;
                     result = db;
 
-                    catalog.getDb(anyString);
+                    globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
 
-                    catalog.getDbNames();
+                    globalStateMgr.getDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList(TEST_DB_NAME);
 
-                    catalog.getLoadInstance();
+                    globalStateMgr.getLoadInstance();
                     minTimes = 0;
                     result = new Load();
 
-                    catalog.getEditLog();
+                    globalStateMgr.getEditLog();
                     minTimes = 0;
                     result = new EditLog("name");
 
-                    catalog.changeDb((ConnectContext) any, WRONG_DB);
+                    globalStateMgr.changeDb((ConnectContext) any, WRONG_DB);
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    catalog.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeDb((ConnectContext) any, anyString);
                     minTimes = 0;
                 }
             };
-            return catalog;
+            return globalStateMgr;
         } catch (DdlException e) {
             return null;
         }

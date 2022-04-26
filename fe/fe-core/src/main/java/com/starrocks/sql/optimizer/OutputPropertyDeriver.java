@@ -5,9 +5,9 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -17,7 +17,6 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -25,7 +24,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -33,9 +34,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,11 +44,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
-
 // The output property of the node is calculated according to the attributes of the child node and itself.
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
-public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, ExpressionContext> {
+public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
     private PhysicalPropertySet requirements;
     // children output property
     private List<PhysicalPropertySet> childrenOutputProperties;
@@ -85,7 +82,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
         List<Integer> leftShuffleColumns = leftScanDistributionSpec.getShuffleColumns();
 
-        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
         long rightTableId = rightInfo.tableId;
 
@@ -105,7 +102,7 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
     }
 
     // compute the distribution property info, just compute the nullable columns now
-    private PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalHashJoinOperator node,
+    private PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalJoinOperator node,
                                                                         PhysicalPropertySet physicalPropertySet,
                                                                         List<Integer> leftOnPredicateColumns,
                                                                         List<Integer> rightOnPredicateColumns,
@@ -137,6 +134,15 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
 
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    public PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
@@ -149,18 +155,14 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         // 2. Distribution is shuffle
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
-        List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
+        JoinHelper joinHelper = JoinHelper.of(node, leftChildColumns, rightChildColumns);
 
-        List<Integer> leftOnPredicateColumns = new ArrayList<>();
-        List<Integer> rightOnPredicateColumns = new ArrayList<>();
-        JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
-                leftOnPredicateColumns, rightOnPredicateColumns);
+        List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
+        List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
         // Get required properties for children.
         List<PhysicalPropertySet> requiredProperties =
-                Utils.computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns,
-                        rightOnPredicateColumns);
+                computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns, rightOnPredicateColumns);
         Preconditions.checkState(requiredProperties.size() == 2);
         List<Integer> leftShuffleColumns =
                 ((HashDistributionSpec) requiredProperties.get(0).getDistributionProperty().getSpec())
@@ -364,14 +366,4 @@ public class OutputPropertyDeriver extends OperatorVisitor<PhysicalPropertySet, 
         return PhysicalPropertySet.EMPTY;
     }
 
-    private PhysicalPropertySet createLimitGatherProperty(long limit) {
-        DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec(limit);
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY);
-    }
-
-    private PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty);
-    }
 }

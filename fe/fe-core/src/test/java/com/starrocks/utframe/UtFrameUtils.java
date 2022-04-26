@@ -34,7 +34,6 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
@@ -48,6 +47,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -130,7 +130,7 @@ public class UtFrameUtils {
         ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
-        ctx.setCatalog(Catalog.getCurrentCatalog());
+        ctx.setCatalog(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
@@ -142,7 +142,7 @@ public class UtFrameUtils {
         ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(testUser);
         ctx.setQualifiedUser(testUser.getQualifiedUser());
-        ctx.setCatalog(Catalog.getCurrentCatalog());
+        ctx.setCatalog(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         return ctx;
     }
@@ -172,7 +172,7 @@ public class UtFrameUtils {
             throws Exception {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         StatementBase statementBase = null;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);
@@ -194,7 +194,7 @@ public class UtFrameUtils {
         System.out.println("begin to parse stmts: " + originStmt);
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         List<StatementBase> statementBases = null;
         try {
             statementBases = SqlParserUtils.getMultiStmts(parser);
@@ -245,7 +245,7 @@ public class UtFrameUtils {
 
             // sleep to wait first heartbeat
             int retry = 0;
-            while (Catalog.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+            while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
                     retry++ < 600) {
                 Thread.sleep(100);
             }
@@ -280,11 +280,11 @@ public class UtFrameUtils {
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
-        Catalog.getCurrentSystemInfo().addBackend(be);
+        GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
-        Catalog.getCurrentSystemInfo().dropBackend(backendId);
+        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
     }
 
     public static void cleanStarRocksFeDir(String baseDir) {
@@ -411,7 +411,7 @@ public class UtFrameUtils {
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
         // create table
         int backendId = 10002;
-        int backendIdSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         for (int i = 1; i < backendIdSize; ++i) {
             UtFrameUtils.dropMockBackend(backendId++);
         }
@@ -448,7 +448,7 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getCatalog().getDb("default_cluster:" + dbName)
+            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
@@ -458,11 +458,12 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getCatalog().getDb("default_cluster:" + dbName)
+            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
-                Catalog.getCurrentStatisticStorage().addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
-                        columnStatisticEntry.getValue());
+                GlobalStateMgr.getCurrentStatisticStorage()
+                        .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
+                                columnStatisticEntry.getValue());
             }
         }
         return replaySql;
@@ -470,7 +471,7 @@ public class UtFrameUtils {
 
     private static void tearMockEnv() {
         int backendId = 10002;
-        int backendIdSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         for (int i = 1; i < backendIdSize; ++i) {
             try {
                 UtFrameUtils.dropMockBackend(backendId++);

@@ -46,7 +46,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -690,9 +689,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return true;
         }
 
-        List<HashJoinNode> joinNodes = Lists.newArrayList();
-        collectAll(Predicates.instanceOf(HashJoinNode.class), joinNodes);
-        for (HashJoinNode node : joinNodes) {
+        List<JoinNode> joinNodes = Lists.newArrayList();
+        collectAll(Predicates.instanceOf(JoinNode.class), joinNodes);
+        for (JoinNode node : joinNodes) {
             if (node.getJoinOp().isOuterJoin()) {
                 return true;
             }

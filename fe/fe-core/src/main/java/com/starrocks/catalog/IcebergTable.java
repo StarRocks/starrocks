@@ -16,6 +16,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -42,8 +43,9 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String ICEBERG_CATALOG = "starrocks.globalStateMgr-type";
+    private static final String ICEBERG_METASTORE_URIS = "iceberg.globalStateMgr.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.globalStateMgr-impl";
     private static final String ICEBERG_DB = "database";
     private static final String ICEBERG_TABLE = "table";
     private static final String ICEBERG_RESOURCE = "resource";
@@ -82,6 +84,14 @@ public class IcebergTable extends Table {
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG));
+    }
+
+    public String getCatalogImpl() {
+        return icebergProperties.get(ICEBERG_IMPL);
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getIcebergHiveMetastoreUris() {
@@ -129,7 +139,7 @@ public class IcebergTable extends Table {
         }
 
         copiedProps.remove(ICEBERG_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource == null) {
             throw new DdlException("iceberg resource [" + resourceName + "] not exists");
         }
@@ -140,16 +150,33 @@ public class IcebergTable extends Table {
         IcebergCatalogType type = icebergResource.getCatalogType();
         icebergProperties.put(ICEBERG_CATALOG, type.name());
         LOG.info("Iceberg table type is " + type.name());
+        IcebergCatalog icebergCatalog;
         switch (type) {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
+                icebergCatalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs());
+                break;
+            case CUSTOM_CATALOG:
+                icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());
+                for (String key : copiedProps.keySet()) {
+                    icebergProperties.put(key, copiedProps.remove(key));
+                }
+                icebergCatalog =
+                        IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
                 break;
             default:
-                throw new DdlException("unsupported catalog type " + type.name());
+                throw new DdlException("unsupported globalStateMgr type " + type.name());
         }
         this.resourceName = resourceName;
 
-        IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(type, icebergResource.getHiveMetastoreURIs());
+        validateColumn(icebergCatalog);
+
+        if (!copiedProps.isEmpty()) {
+            throw new DdlException("Unknown table properties: " + copiedProps.toString());
+        }
+    }
+
+    private void validateColumn(IcebergCatalog catalog) throws DdlException {
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
         // TODO: use TypeUtil#indexByName to handle nested field
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
@@ -168,10 +195,7 @@ public class IcebergTable extends Table {
                         "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
             }
         }
-
-        if (!copiedProps.isEmpty()) {
-            throw new DdlException("Unknown table properties: " + copiedProps.toString());
-        }
+        LOG.debug("successfully validating columns for " + catalog);
     }
 
     private boolean validateColumnType(Type icebergType, com.starrocks.catalog.Type type) {

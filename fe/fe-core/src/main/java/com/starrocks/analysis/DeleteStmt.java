@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -34,6 +33,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -113,8 +113,9 @@ public class DeleteStmt extends DmlStmt {
         analyzePredicate(wherePredicate);
 
         // check access
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tblName.getDb(), tblName.getTbl(),
-                PrivPredicate.LOAD)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth()
+                .checkTblPriv(ConnectContext.get(), tblName.getDb(), tblName.getTbl(),
+                        PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                     ConnectContext.get().getQualifiedUser(),
                     ConnectContext.get().getRemoteIP(), tblName.getTbl());

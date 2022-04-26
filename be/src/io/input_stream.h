@@ -23,8 +23,8 @@ public:
     // Returns error if an underlying read error occurs.
     virtual Status skip(int64_t count) = 0;
 
-    // Returns true if InputStream support `peak()`
-    virtual bool allows_peak() const { return false; }
+    // Returns true if InputStream support `peek()`
+    virtual bool allows_peek() const { return false; }
 
     // Return zero-copy string_view to upcoming bytes.
     //
@@ -34,7 +34,7 @@ public:
     //
     // May return NotSupported on streams that don't support it.
     //
-    virtual StatusOr<std::string_view> peak(int64_t nbytes) { return Status::NotSupported("InputStream::peak"); }
+    virtual StatusOr<std::string_view> peek(int64_t nbytes) { return Status::NotSupported("InputStream::peek"); }
 
     // Get statistics about the reads which this InputStream has done.
     // If the InputStream implementation doesn't support statistics, a null pointer or
@@ -65,9 +65,9 @@ public:
 
     Status skip(int64_t count) override { return _impl->skip(count); }
 
-    bool allows_peak() const override { return _impl->allows_peak(); }
+    bool allows_peek() const override { return _impl->allows_peek(); }
 
-    StatusOr<std::string_view> peak(int64_t nbytes) override { return _impl->peak(nbytes); }
+    StatusOr<std::string_view> peek(int64_t nbytes) override { return _impl->peek(nbytes); }
 
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _impl->get_numeric_statistics();

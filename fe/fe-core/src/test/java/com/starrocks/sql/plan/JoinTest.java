@@ -2,13 +2,13 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
@@ -1076,8 +1076,8 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
-        Catalog catalog = connectContext.getCatalog();
-        Database db = catalog.getDb("default_cluster:test");
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Database db = globalStateMgr.getDb("default_cluster:test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
@@ -1103,8 +1103,8 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("default_cluster:test");
-        Catalog catalog = connectContext.getCatalog();
-        Table table = catalog.getDb("default_cluster:test").getTable("join2");
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {
@@ -1624,8 +1624,8 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
-        Catalog catalog = connectContext.getCatalog();
-        Table table = catalog.getDb("default_cluster:test").getTable("join2");
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {
@@ -2573,6 +2573,20 @@ public class JoinTest extends PlanTestBase {
                     "  |----6:EXCHANGE\n" +
                     "  |    \n" +
                     "  4:EXCHANGE");
+        }
+        {
+            String sql = "select * from ( select * from t5 join[bucket] t1 on t5.v16 = t1.v4 and t5.v17 = t1.v5) s1 " +
+                    "join[bucket] t2 on s1.v4 = t2.v7";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)");
+        }
+        {
+            String sql = "select * from t5 join[bucket] ( select * from t2 join[bucket] t1 on t2.v7 = t1.v4) s1 " +
+                    "on t5.v16 = s1.v4 and t5.v17 = s1.v5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n");
         }
         FeConstants.runningUnitTest = false;
     }

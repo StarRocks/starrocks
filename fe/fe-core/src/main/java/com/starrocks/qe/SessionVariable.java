@@ -21,13 +21,13 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -137,6 +137,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // disable join reorder
     public static final String DISABLE_JOIN_REORDER = "disable_join_reorder";
 
+    // open predicate reorder
+    public static final String ENABLE_PREDICATE_REORDER = "enable_predicate_reorder";
+
     public static final String ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE =
             "enable_filter_unused_columns_in_scan_stage";
 
@@ -198,6 +201,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
+    public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -396,6 +400,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
+    private boolean enablePredicateReorder = false;
+
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = false;
 
@@ -504,6 +511,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
+
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "hash"; // auto, merge, hash
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
@@ -688,6 +698,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void enableJoinReorder() {
         this.disableJoinReorder = false;
+    }
+
+    public boolean isEnablePredicateReorder() {
+        return enablePredicateReorder;
+    }
+
+    public void disablePredicateReorder() {
+        this.enablePredicateReorder = false;
+    }
+
+    public void enablePredicateReorder() {
+        this.enablePredicateReorder = true;
     }
 
     public boolean isAbleFilterUnusedColumnsInScanStage() {
@@ -921,6 +943,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSQLDigest;
     }
 
+    public String getJoinImplementationMode() {
+        return joinImplementationMode;
+    }
+
+    public void setJoinImplementationMode(String joinImplementationMode) {
+        this.joinImplementationMode = joinImplementationMode;
+    }
+
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
     }
@@ -1015,7 +1045,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_67) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_67) {
             codegenLevel = in.readInt();
             netBufferLength = in.readInt();
             sqlSafeUpdates = in.readInt();
@@ -1038,7 +1068,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             txIsolation = Text.readString(in);
             autoCommit = in.readBoolean();
             resourceGroup = Text.readString(in);
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_65) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_65) {
                 sqlMode = in.readLong();
             } else {
                 // read old version SQL mode
@@ -1048,15 +1078,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             isReportSucc = in.readBoolean();
             queryTimeoutS = in.readInt();
             maxExecMemByte = in.readLong();
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_37) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {
                 collationServer = Text.readString(in);
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_38) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_38) {
                 batchSize = in.readInt();
                 disableStreamPreaggregations = in.readBoolean();
                 parallelExecInstanceNum = in.readInt();
             }
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_62) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_62) {
                 exchangeInstanceParallel = in.readInt();
             }
         } else {

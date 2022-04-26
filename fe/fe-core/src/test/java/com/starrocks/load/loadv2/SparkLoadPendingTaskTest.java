@@ -30,7 +30,6 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -56,6 +55,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlIndex;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartition;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -73,7 +73,7 @@ public class SparkLoadPendingTaskTest {
     public void testExecuteTask(@Injectable SparkLoadJob sparkLoadJob,
                                 @Injectable SparkResource resource,
                                 @Injectable BrokerDesc brokerDesc,
-                                @Mocked Catalog catalog,
+                                @Mocked GlobalStateMgr globalStateMgr,
                                 @Injectable SparkLoadAppHandle handle,
                                 @Injectable Database database,
                                 @Injectable OlapTable table) throws LoadException {
@@ -108,7 +108,7 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = database;
                 sparkLoadJob.getHandle();
                 result = handle;
@@ -156,12 +156,12 @@ public class SparkLoadPendingTaskTest {
     public void testNoDb(@Injectable SparkLoadJob sparkLoadJob,
                          @Injectable SparkResource resource,
                          @Injectable BrokerDesc brokerDesc,
-                         @Mocked Catalog catalog) throws LoadException {
+                         @Mocked GlobalStateMgr globalStateMgr) throws LoadException {
         long dbId = 0L;
 
         new Expectations() {
             {
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = null;
             }
         };
@@ -174,7 +174,7 @@ public class SparkLoadPendingTaskTest {
     public void testNoTable(@Injectable SparkLoadJob sparkLoadJob,
                             @Injectable SparkResource resource,
                             @Injectable BrokerDesc brokerDesc,
-                            @Mocked Catalog catalog,
+                            @Mocked GlobalStateMgr globalStateMgr,
                             @Injectable Database database) throws LoadException {
         long dbId = 0L;
         long tableId = 1L;
@@ -190,7 +190,7 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = database;
                 database.getTable(tableId);
                 result = null;
@@ -205,7 +205,7 @@ public class SparkLoadPendingTaskTest {
     public void testRangePartitionHashDistribution(@Injectable SparkLoadJob sparkLoadJob,
                                                    @Injectable SparkResource resource,
                                                    @Injectable BrokerDesc brokerDesc,
-                                                   @Mocked Catalog catalog,
+                                                   @Mocked GlobalStateMgr globalStateMgr,
                                                    @Injectable Database database,
                                                    @Injectable OlapTable table)
             throws LoadException, DdlException, AnalysisException {
@@ -258,7 +258,7 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = database;
                 database.getTable(tableId);
                 result = table;

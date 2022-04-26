@@ -46,7 +46,7 @@ public interface TxnStateChangeCallback {
     void beforeAborted(TransactionState txnState) throws TransactionException;
 
     /**
-     * update catalog of job which has related txn after transaction has been committed
+     * update globalStateMgr of job which has related txn after transaction has been committed
      *
      * @param txnState
      */

@@ -92,7 +92,7 @@ public class ReplayFromDumpTest {
         String originCostPlan = Stream.of(getModelContent(filename, "fragment statistics").split("\n")).
                 filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         String replayCostPlan = Stream.of(
-                PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
+                        PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
                 .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
@@ -344,11 +344,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
-               "  |  STREAMING\n" +
-               "  |  output: multi_distinct_count(5: lo_suppkey)"));
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(5: lo_suppkey)"));
         Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
-               "  |  output: multi_distinct_count(18: count)\n" +
-               "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+                "  |  output: multi_distinct_count(18: count)\n" +
+                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
     }
 
     @Test
@@ -363,7 +363,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testLocalAggregateWithoutTableRowCount() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_without_table_rowcount"), null,
+                        TExplainLevel.NORMAL);
         // check local aggregate
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(4: lo_partkey)"));
@@ -372,7 +373,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testLogicalAggWithOneTablet() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), null,
+                        TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(4: t0d)"));
     }
@@ -380,7 +382,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testSelectSubqueryWithMultiJoin() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
+                        TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("18:Project\n" +
                 "  |  <slot 33> : bitmap_and(21: expr, 29: bitmap_union)\n" +
                 "  |  \n" +

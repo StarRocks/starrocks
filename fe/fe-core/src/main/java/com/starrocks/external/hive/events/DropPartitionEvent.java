@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HivePartitionKeysKey;
@@ -46,7 +47,8 @@ public class DropPartitionEvent extends MetastoreTableEvent {
             Preconditions.checkState(!partCols.isEmpty());
             this.partCols = partCols;
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(HivePartitionKey.gen(dbName, tblName, Lists.newArrayList(droppedPartition.values())));
+            hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE,
+                    Lists.newArrayList(droppedPartition.values())));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(
                     debugString("Could not parse drop event message. "), ex);
@@ -96,8 +98,10 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         try {
-            HivePartitionKeysKey partitionKeysKey = HivePartitionKeysKey.gen(dbName, tblName, partCols);
-            PartitionKey partitionKey = Utils.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
+            HivePartitionKeysKey partitionKeysKey =
+                    new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
+            PartitionKey partitionKey =
+                    Utils.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
             cache.dropPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",

@@ -28,27 +28,27 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 ");");
         // for agg table
         starRocksAssert.withTable("CREATE TABLE `metrics_detail` ( \n" +
-                "`tags_id` int(11) NULL COMMENT \"\", \n" + 
+                "`tags_id` int(11) NULL COMMENT \"\", \n" +
                 "`timestamp` datetime NULL COMMENT \"\", \n" +
                 "`value` double SUM NULL COMMENT \"\" \n" +
-                ") ENGINE=OLAP \n" + 
+                ") ENGINE=OLAP \n" +
                 "AGGREGATE KEY(`tags_id`, `timestamp`) \n" +
                 "COMMENT \"OLAP\" \n" +
-                "PARTITION BY RANGE(`timestamp`)\n" + 
-                "(PARTITION p20200704 VALUES [('0000-01-01 00:00:00'), ('2020-07-05 00:00:00')))\n" + 
+                "PARTITION BY RANGE(`timestamp`)\n" +
+                "(PARTITION p20200704 VALUES [('0000-01-01 00:00:00'), ('2020-07-05 00:00:00')))\n" +
                 "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" + 
+                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
         // for primary key table
         starRocksAssert.withTable("CREATE TABLE `primary_table` ( \n" +
-                "`tags_id` int(11) NOT NULL COMMENT \"\", \n" + 
+                "`tags_id` int(11) NOT NULL COMMENT \"\", \n" +
                 "`timestamp` datetime NOT NULL COMMENT \"\", \n" +
                 "`k3` varchar(65533) NOT NULL COMMENT \"\" \n" +
-                ") ENGINE=OLAP \n" + 
+                ") ENGINE=OLAP \n" +
                 "PRIMARY KEY(`tags_id`, `timestamp`) \n" +
                 "COMMENT \"OLAP\" \n" +
                 "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
@@ -97,7 +97,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
 
-    @Test 
+    @Test
     public void testFilterAggTable() throws Exception {
         String sql = "select timestamp\n" +
                 "               from metrics_detail where value is NULL limit 10;";
@@ -105,7 +105,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
 
-    @Test 
+    @Test
     public void testFilterPrimaryKeyTable() throws Exception {
         String sql = "select timestamp\n" +
                 "               from primary_table where k3 = \"test\" limit 10;";

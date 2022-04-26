@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -45,6 +44,7 @@ import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.ArrayList;
@@ -114,7 +114,7 @@ public class DescribeStmt extends ShowStmt {
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         dbTableName.analyze(analyzer);
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
                 dbTableName.getTbl(), PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
                     ConnectContext.get().getQualifiedUser(),
@@ -122,7 +122,7 @@ public class DescribeStmt extends ShowStmt {
                     dbTableName.getTbl());
         }
 
-        Database db = Catalog.getCurrentCatalog().getDb(dbTableName.getDb());
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbTableName.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbTableName.getDb());
         }
@@ -140,7 +140,8 @@ public class DescribeStmt extends ShowStmt {
                                 for (Column column : columns) {
                                     // Extra string (aggregation and bloom filter)
                                     List<String> extras = Lists.newArrayList();
-                                    if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                                    if (column.getAggregationType() != null &&
+                                            olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                         extras.add(column.getAggregationType().name());
                                     }
                                     String defaultStr = column.getMetaDefaultValue(extras);
@@ -206,7 +207,8 @@ public class DescribeStmt extends ShowStmt {
 
                             // Extra string (aggregation and bloom filter)
                             List<String> extras = Lists.newArrayList();
-                            if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                            if (column.getAggregationType() != null &&
+                                    olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                 extras.add(column.getAggregationType().name());
                             }
                             if (bfColumns != null && bfColumns.contains(column.getName())) {
