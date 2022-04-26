@@ -187,7 +187,6 @@ public:
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
-    RowsetMetaSharedPtr acquire_stale_rs_meta_by_version(const Version& version) const;
 
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     void remove_delete_predicate_by_version(const Version& version);
