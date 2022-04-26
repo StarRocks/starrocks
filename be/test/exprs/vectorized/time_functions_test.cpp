@@ -2322,7 +2322,8 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 21, 22, 50), TimestampValue::create(0001, 3, 2, 14, 17, 25),
@@ -2360,7 +2361,8 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 21, 20, 0), TimestampValue::create(0001, 3, 2, 14, 15, 0),
@@ -2398,12 +2400,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 20, 0, 0), TimestampValue::create(0001, 3, 2, 10, 0, 0),
                 TimestampValue::create(0001, 5, 6, 10, 0, 0), TimestampValue::create(2022, 7, 8, 8, 0, 0),
-                TimestampValue::create(2022, 9, 9, 6, 0, 0),   TimestampValue::create(2022, 11, 3, 21, 0, 0)};
+                TimestampValue::create(2022, 9, 9, 6, 0, 0),  TimestampValue::create(2022, 11, 3, 21, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2436,12 +2439,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 3, 2, 0, 0, 0),
                 TimestampValue::create(0001, 5, 6, 0, 0, 0), TimestampValue::create(2022, 7, 5, 0, 0, 0),
-                TimestampValue::create(2022, 9, 8, 0, 0, 0),   TimestampValue::create(2022, 11, 2, 0, 0, 0)};
+                TimestampValue::create(2022, 9, 8, 0, 0, 0), TimestampValue::create(2022, 11, 2, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2474,12 +2478,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
-                TimestampValue::create(2022, 9, 1, 0, 0, 0),   TimestampValue::create(2022, 9, 1, 0, 0, 0)};
+                TimestampValue::create(2022, 9, 1, 0, 0, 0), TimestampValue::create(2022, 9, 1, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2512,12 +2517,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0),
-                TimestampValue::create(2021, 1, 1, 0, 0, 0),   TimestampValue::create(2021, 1, 1, 0, 0, 0)};
+                TimestampValue::create(2021, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2550,12 +2556,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
-                TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 2, 5, 0, 0, 0),
+                TimestampValue::create(0001, 1, 1, 0, 0, 0),  TimestampValue::create(0001, 2, 5, 0, 0, 0),
                 TimestampValue::create(0001, 4, 16, 0, 0, 0), TimestampValue::create(2022, 6, 20, 0, 0, 0),
-                TimestampValue::create(2022, 8, 29, 0, 0, 0),   TimestampValue::create(2022, 10, 3, 0, 0, 0)};
+                TimestampValue::create(2022, 8, 29, 0, 0, 0), TimestampValue::create(2022, 10, 3, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2588,12 +2595,13 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
                             _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+        auto datetimes =
+                ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
         TimestampValue check_result[6] = {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(0001, 1, 1, 0, 0, 0),
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
-                TimestampValue::create(2022, 4, 1, 0, 0, 0),   TimestampValue::create(2022, 4, 1, 0, 0, 0)};
+                TimestampValue::create(2022, 4, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);

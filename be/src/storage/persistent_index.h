@@ -21,6 +21,12 @@ class Schema;
 class Column;
 } // namespace vectorized
 
+// Add version for persistent index file to support future upgrade compatibility
+// There is only one version for now
+enum IndexFileVersion {
+    VERSION_1 = 1,
+};
+
 using IndexValue = uint64_t;
 static constexpr IndexValue NullIndexValue = -1;
 
