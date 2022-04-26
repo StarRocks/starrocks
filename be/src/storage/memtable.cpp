@@ -25,15 +25,14 @@ static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-                   RowsetWriter* rowset_writer, MemTracker* mem_tracker, DeltaWriter* delta_writer)
+                   RowsetWriter* rowset_writer, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _tablet_schema(tablet_schema),
           _slot_descs(slot_descs),
           _keys_type(tablet_schema->keys_type()),
           _rowset_writer(rowset_writer),
           _aggregator(nullptr),
-          _mem_tracker(mem_tracker),
-          _delta_writer(delta_writer) {
+          _mem_tracker(mem_tracker) {
     _vectorized_schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
@@ -203,9 +202,6 @@ Status MemTable::finalize() {
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
-                if (_delta_writer != nullptr) {
-                    _delta_writer->calc_flush_chunk_state(!_result_chunk->is_empty(), _deletes && !_deletes->empty());
-                }
             }
             _aggregator.reset();
             _aggregator_memory_usage = 0;
@@ -226,21 +222,8 @@ Status MemTable::flush() {
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
-        if (_keys_type == KeysType::PRIMARY_KEYS) {
-            // three flush states
-            // 1. pure upsert, support multi-segment
-            // 2. pure delete, support multi-segment
-            // 3. mixed upsert/delete, do not support multi-segment
-            if (!_result_chunk->is_empty() && !(_deletes && !_deletes->empty())) {
-                // 1. pure upsert
-                RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
-            } else if (_result_chunk->is_empty() && (_deletes && !_deletes->empty())) {
-                // 2. pure delete
-                RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes_only(*_deletes));
-            } else {
-                // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
-                RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
-            }
+        if (_deletes) {
+            RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         } else {
             RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
         }

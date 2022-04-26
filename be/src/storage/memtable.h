@@ -8,7 +8,6 @@
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
-#include "storage/delta_writer.h"
 #include "storage/olap_define.h"
 
 namespace starrocks {
@@ -22,7 +21,7 @@ namespace vectorized {
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-             RowsetWriter* rowset_writer, MemTracker* mem_tracker, DeltaWriter* delta_writer = nullptr);
+             RowsetWriter* rowset_writer, MemTracker* mem_tracker);
 
     MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
              MemTracker* mem_tracker);
@@ -94,8 +93,6 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
-
-    DeltaWriter* _delta_writer;
 };
 
 } // namespace vectorized

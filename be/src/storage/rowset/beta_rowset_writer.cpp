@@ -306,28 +306,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
                                                             const vectorized::Column& deletes) {
-    if (!deletes.empty()) {
-        auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
-        std::unique_ptr<fs::WritableBlock> wblock;
-        fs::CreateBlockOptions opts({path});
-        RETURN_IF_ERROR(_block_mgr->create_block(opts, &wblock));
-        size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
-        // TODO(cbl): temp buffer doubles the memory usage, need to optimize
-        std::vector<uint8_t> content(sz);
-        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
-            return Status::InternalError("deletes column serialize failed");
-        }
-        RETURN_IF_ERROR(wblock->append(Slice(content.data(), content.size())));
-        RETURN_IF_ERROR(wblock->finalize());
-        RETURN_IF_ERROR(wblock->close());
-        _segment_has_deletes.resize(_num_segment + 1, false);
-        _segment_has_deletes[_num_segment] = true;
-    }
-    return flush_chunk(upserts);
-}
-
-Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes_only(const vectorized::Column& deletes) {
-    if (!deletes.empty()) {
+    auto flush_del_file = [&](const vectorized::Column& deletes) {
         auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id,
                                                       _segment_has_deletes.size());
         std::unique_ptr<fs::WritableBlock> wblock;
@@ -342,8 +321,69 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes_only(const vectorize
         RETURN_IF_ERROR(wblock->finalize());
         RETURN_IF_ERROR(wblock->close());
         _segment_has_deletes.push_back(true);
+        return Status::OK();
+    };
+    // three flush states
+    // 1. pure upsert, support multi-segment
+    // 2. pure delete, support multi-segment
+    // 3. mixed upsert/delete, do not support multi-segment
+    if (!upserts.is_empty() && deletes.empty()) {
+        // 1. pure upsert
+        // once upsert, subsequent flush can only do upsert
+        switch (_flush_chunk_state) {
+        case FlushChunkState::UNKNOWN:
+            _flush_chunk_state = FlushChunkState::UPSERTS;
+            break;
+        case FlushChunkState::UPSERTS:
+            break;
+        default: {
+            std::string msg =
+                    "multi-segment only supported by pure upsert/delete, so pure upsert after another "
+                    "operation is illegal";
+            LOG(WARNING) << msg;
+            return Status::Cancelled(msg);
+        }
+        }
+        return flush_chunk(upserts);
+    } else if (upserts.is_empty() && !deletes.empty()) {
+        // 2. pure delete
+        // once delete, subsequent flush can only do delete
+        switch (_flush_chunk_state) {
+        case FlushChunkState::UNKNOWN:
+            _flush_chunk_state = FlushChunkState::DELETES;
+            break;
+        case FlushChunkState::DELETES:
+            break;
+        default: {
+            std::string msg =
+                    "multi-segment only supported by pure upsert/delete, so pure delete after another "
+                    "operation is illegal";
+            LOG(WARNING) << msg;
+            return Status::Cancelled(msg);
+        }
+        }
+        RETURN_IF_ERROR(flush_del_file(deletes));
+        return Status::OK();
+    } else if (!upserts.is_empty() && !deletes.empty()) {
+        // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
+        switch (_flush_chunk_state) {
+        case FlushChunkState::UNKNOWN:
+            _flush_chunk_state = FlushChunkState::MIXED;
+            break;
+        case FlushChunkState::MIXED:
+            break;
+        default: {
+            std::string msg =
+                    "multi-segment only supported by pure upsert/delete, so mixed upsert/delete after another "
+                    "operation is illegal";
+            LOG(WARNING) << msg;
+            return Status::Cancelled(msg);
+        }
+        }
+        RETURN_IF_ERROR(flush_del_file(deletes));
+        return flush_chunk(upserts);
     }
-    return Status::OK();
+    return flush_chunk(upserts);
 }
 
 Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {

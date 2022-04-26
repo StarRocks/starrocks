@@ -257,64 +257,6 @@ Status DeltaWriter::close() {
 
 Status DeltaWriter::_flush_memtable_async() {
     RETURN_IF_ERROR(_mem_table->finalize());
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // three flush states
-        // 1. pure upsert, support multi-segment
-        // 2. pure delete, support multi-segment
-        // 3. mixed upsert/delete, do not support multi-segment
-        if (_curr_flush_chunk_state == FlushChunkState::upserts) {
-            // 1. pure upsert
-            // once upsert, subsequent flush can only do upsert
-            switch (_flush_chunk_state) {
-            case FlushChunkState::original:
-                _flush_chunk_state = FlushChunkState::upserts;
-                break;
-            case FlushChunkState::upserts:
-                break;
-            default: {
-                std::string msg =
-                        "multi-segment only supported by pure upsert/delete, so pure upsert after another "
-                        "operation is illegal";
-                LOG(WARNING) << msg;
-                return Status::Cancelled(msg);
-            }
-            }
-        } else if (_curr_flush_chunk_state == FlushChunkState::deletes) {
-            // 2. pure delete
-            // once delete, subsequent flush can only do delete
-            switch (_flush_chunk_state) {
-            case FlushChunkState::original:
-                _flush_chunk_state = FlushChunkState::deletes;
-                break;
-            case FlushChunkState::deletes:
-                break;
-            default: {
-                std::string msg =
-                        "multi-segment only supported by pure upsert/delete, so pure delete after another "
-                        "operation is illegal";
-                LOG(WARNING) << msg;
-                return Status::Cancelled(msg);
-            }
-            }
-        } else {
-            // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
-            switch (_flush_chunk_state) {
-            case FlushChunkState::original:
-                _flush_chunk_state = FlushChunkState::mixed;
-                break;
-            case FlushChunkState::mixed:
-                break;
-            default: {
-                std::string msg =
-                        "multi-segment only supported by pure upsert/delete, so mixed upsert/delete after another "
-                        "operation is illegal";
-                LOG(WARNING) << msg;
-                return Status::Cancelled(msg);
-            }
-            }
-        }
-    }
-
     return _flush_token->submit(std::move(_mem_table));
 }
 
@@ -325,7 +267,7 @@ Status DeltaWriter::_flush_memtable() {
 
 void DeltaWriter::_reset_mem_table() {
     _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _rowset_writer.get(),
-                                            _mem_tracker, this);
+                                            _mem_tracker);
 }
 
 Status DeltaWriter::commit() {
@@ -411,16 +353,6 @@ const char* DeltaWriter::_state_name(State state) const {
         return "kClosed";
     }
     return "";
-}
-
-void DeltaWriter::calc_flush_chunk_state(bool upserts, bool deletes) {
-    if (upserts && !deletes) {
-        this->_curr_flush_chunk_state = FlushChunkState::upserts;
-    } else if (!upserts && deletes) {
-        this->_curr_flush_chunk_state = FlushChunkState::deletes;
-    } else {
-        this->_curr_flush_chunk_state = FlushChunkState::mixed;
-    }
 }
 
 } // namespace starrocks::vectorized

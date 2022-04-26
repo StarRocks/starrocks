@@ -37,6 +37,8 @@ class WritableBlock;
 
 class SegmentWriter;
 
+enum class FlushChunkState { UNKNOWN, UPSERTS, DELETES, MIXED };
+
 class BetaRowsetWriter : public RowsetWriter {
 public:
     explicit BetaRowsetWriter(const RowsetWriterContext& context);
@@ -79,6 +81,8 @@ protected:
 
     bool _is_pending = false;
     bool _already_built = false;
+
+    FlushChunkState _flush_chunk_state = FlushChunkState::UNKNOWN;
 };
 
 // Chunk contains all schema columns data.
@@ -92,7 +96,6 @@ public:
 
     Status flush_chunk(const vectorized::Chunk& chunk) override;
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
-    Status flush_chunk_with_deletes_only(const vectorized::Column& deletes);
 
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;
