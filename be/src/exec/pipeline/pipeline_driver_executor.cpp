@@ -83,8 +83,6 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
 
-            // query context has ready drivers to run, so extend its lifetime.
-            query_ctx->extend_lifetime();
             auto status = driver->process(runtime_state, worker_id);
             this->_driver_queue->update_statistics(driver);
 
