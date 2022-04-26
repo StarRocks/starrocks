@@ -172,11 +172,12 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
     ASSERT_TRUE(c1->unique());
     ASSERT_TRUE(c1->is_nullable());
     ASSERT_EQ(0, c1->size());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1) != nullptr);
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->data_column()->unique());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->null_column()->unique());
-    ASSERT_EQ(0, std::dynamic_pointer_cast<NullableColumn>(c1)->data_column()->size());
-    ASSERT_EQ(0, std::dynamic_pointer_cast<NullableColumn>(c1)->null_column()->size());
+
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c1) != nullptr);
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c1)->data_column()->unique());
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c1)->null_column()->unique());
+    ASSERT_EQ(0, ColumnHelper::as_column<NullableColumn>(c1)->data_column()->size());
+    ASSERT_EQ(0, ColumnHelper::as_column<NullableColumn>(c1)->null_column()->size());
 
     c1->append_datum({}); // NULL
     c1->append_datum({(int32_t)1});
