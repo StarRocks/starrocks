@@ -206,7 +206,7 @@ public class MaterializedViewJobManager {
     }
 
     public boolean cancelJob(Long mvTableId, Long jobId) {
-        if (!lock.tryLock()) {
+        if (!tryLock()) {
             return false;
         }
         try {
@@ -276,6 +276,7 @@ public class MaterializedViewJobManager {
                 } else {
                     LOG.warn("materialized view lock owner is null");
                 }
+                return false;
             }
             return true;
         } catch (InterruptedException e) {
@@ -336,7 +337,9 @@ public class MaterializedViewJobManager {
             }
         } else if (fromStatus == Constants.MaterializedViewJobStatus.RUNNING) {
             if (toStatus == Constants.MaterializedViewJobStatus.SUCCESS |
-                    toStatus == Constants.MaterializedViewJobStatus.CANCELED) {
+                    toStatus == Constants.MaterializedViewJobStatus.CANCELED |
+                    toStatus == Constants.MaterializedViewJobStatus.FAILED |
+                    toStatus == Constants.MaterializedViewJobStatus.PARTIAL_SUCCESS) {
                 MaterializedViewRefreshJob job = runningJobMap.remove(mvTableId);
                 job.setStatus(toStatus);
                 jobHistory.addFirst(job);
