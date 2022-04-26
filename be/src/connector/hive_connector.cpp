@@ -5,6 +5,11 @@
 namespace starrocks {
 namespace connector {
 
+DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+                                                                 const TPlanNode& plan_node) const {
+    return nullptr;
+}
+
 Status HiveDataSource::do_open(RuntimeState* state) {
     return Status::OK();
 }

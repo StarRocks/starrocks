@@ -140,6 +140,7 @@ set(EXEC_FILES
     pipeline/scan_operator.cpp
     pipeline/olap_scan_operator.cpp
     pipeline/hdfs_scan_operator.cpp
+    pipeline/connector_scan_operator.cpp
     pipeline/hdfs_chunk_source.cpp
     pipeline/jdbc_scan_operator.cpp
     pipeline/select_operator.cpp
@@ -198,6 +199,7 @@ set(EXEC_FILES
     ${EXEC_FILES}
     vectorized/mysql_scan_node.cpp
     mysql_scanner.cpp
+    vectorized/connector_scan_node.cpp
     vectorized/hdfs_scan_node.cpp)
 
 add_library(Exec STATIC

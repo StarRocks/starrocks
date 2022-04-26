@@ -12,7 +12,6 @@ namespace starrocks {
 
 namespace vectorized {
 class ConnectorScanNode;
-// class ConnectorSinkNode;
 } // namespace vectorized
 
 namespace connector {
@@ -36,23 +35,20 @@ public:
     // First version we use TScanRange to define scan range
     // Later version we could use user-defined data.
     virtual DataSourcePtr create_data_source(const TScanRange& scan_range) = 0;
-    // virtual DataSourcePtr create_data_source(const std::string& scan_range_spec) = 0;
+    // virtual DataSourcePtr create_data_source(const std::string& scan_range_spec)  = 0;
 };
-
-// class DataSinkProvider;
+using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
 class Connector {
 public:
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
-    virtual DataSourceProvider* create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
-                                                            const TPlanNode& plan_node) = 0;
+    virtual DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+                                                              const TPlanNode& plan_node) const = 0;
 
-    // virtual DataSourceProvider* create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
-    //                                                         const std::string& table_handle);
-    // virtual DataSinkProvider* create_data_sink_provider(vectorized::ConnectorSinkNode* sink_node,
-    //                                                     const std::string& table_handle);
+    // virtual DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    //                                                         const std::string& table_handle) const;
 };
 
 class ConnectorManager {

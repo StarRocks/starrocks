@@ -9,8 +9,8 @@ namespace connector {
 
 class HiveConnector final : public Connector {
 public:
-    DataSourceProvider* create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
-                                                    const TPlanNode& plan_node) override;
+    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+                                                      const TPlanNode& plan_node) const override;
 };
 
 class HiveDataSource final : public DataSource {
