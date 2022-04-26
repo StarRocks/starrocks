@@ -55,7 +55,7 @@ StarRocks 数据导入整体生态图如下。
 ```bash
 curl --location-trusted -u root: -T detailDemo_data -H "label: streamDemo" \
 -H "column_separator:," \
-http://127.0.0.1:8030/api/example_db/detailDemo_stream_load
+http://127.0.0.1:8030/api/example_db/detailDemo/_stream_load
 ```
 
 > 注意：这里 root 是 fe 的用户名，默认密码为空，使用用户有密码时需在冒号后面补充密码；http 中 ip 为 fe 节点 ip，端口 8030 是 fe.conf 中配置的 http port。
