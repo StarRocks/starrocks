@@ -8,7 +8,6 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -16,7 +15,6 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.util.List;
-import java.util.UUID;
 
 public class CreateTableWithDecimalTypesTest {
     private static StarRocksAssert starRocksAssert;
@@ -76,7 +74,7 @@ public class CreateTableWithDecimalTypesTest {
                 " from decimalv3_table";
 
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(selectSql, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 11);
@@ -142,7 +140,7 @@ public class CreateTableWithDecimalTypesTest {
                 " from decimalv2_table";
 
         SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(selectSql, ctx);
-        stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
+        stmt.rewriteExprs(new Analyzer(ctx.getGlobalStateMgr(), ctx).getExprRewriter());
         Assert.assertTrue(stmt.selectList != null);
         List<SelectListItem> items = stmt.selectList.getItems();
         Assert.assertTrue(items.size() == 9);

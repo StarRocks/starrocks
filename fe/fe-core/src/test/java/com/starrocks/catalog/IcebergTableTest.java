@@ -8,6 +8,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCustomCatalogTest;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,14 +49,14 @@ public class IcebergTableTest {
     }
 
     @Test
-    public void testWithResourceName(@Mocked Catalog catalog,
+    public void testWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked IcebergCatalog icebergCatalog,
                                      @Mocked Table iTable) throws DdlException {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
-        resourceProperties.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.1:9083");
-        resourceProperties.put("starrocks.catalog-type", "hive");
+        resourceProperties.put("iceberg.globalStateMgr.hive.metastore.uris", "thrift://127.0.0.1:9083");
+        resourceProperties.put("starrocks.globalStateMgr-type", "hive");
         icebergResource.setProperties(resourceProperties);
 
         List<Types.NestedField> fields = new ArrayList<>();
@@ -71,11 +72,11 @@ public class IcebergTableTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("iceberg0");
@@ -96,14 +97,15 @@ public class IcebergTableTest {
     }
 
     @Test
-    public void testCustomWithResourceName(@Mocked Catalog catalog,
+    public void testCustomWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr,
                                            @Mocked IcebergCatalog icebergCatalog,
                                            @Mocked Table iTable) throws DdlException {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
-        resourceProperties.put("starrocks.catalog-type", "custom");
-        resourceProperties.put("iceberg.catalog-impl", IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
+        resourceProperties.put("starrocks.globalStateMgr-type", "custom");
+        resourceProperties.put("iceberg.globalStateMgr-impl",
+                IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
         icebergResource.setProperties(resourceProperties);
 
         List<Types.NestedField> fields = new ArrayList<>();
@@ -119,11 +121,11 @@ public class IcebergTableTest {
 
         new Expectations() {
             {
-                com.starrocks.catalog.Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("iceberg0");

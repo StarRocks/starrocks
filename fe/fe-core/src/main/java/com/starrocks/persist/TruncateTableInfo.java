@@ -23,12 +23,12 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -74,7 +74,7 @@ public class TruncateTableInfo implements Writable {
     }
 
     public static TruncateTableInfo read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_74) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_74) {
             TruncateTableInfo info = new TruncateTableInfo();
             info.readFields(in);
             return info;

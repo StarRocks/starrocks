@@ -39,7 +39,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.PrimitiveType;
@@ -52,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -366,7 +366,7 @@ public class FileScanNode extends LoadScanNode {
 
         FsBroker broker = null;
         try {
-            broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
+            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
         } catch (AnalysisException e) {
             throw new UserException(e.getMessage());
         }
@@ -440,7 +440,7 @@ public class FileScanNode extends LoadScanNode {
 
     private void assignBackends() throws UserException {
         backends = Lists.newArrayList();
-        for (Backend be : Catalog.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAvailable()) {
                 backends.add(be);
             }
@@ -631,7 +631,7 @@ public class FileScanNode extends LoadScanNode {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);
             TBrokerScanRange brokerScanRange = locations.getScan_range().getBroker_scan_range();
             TNetworkAddress address = brokerScanRange.getBroker_addresses().get(0);
-            FsBroker fsBroker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(brokerDesc.getName(),
+            FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerDesc.getName(),
                     address.hostname, address.port);
             if (aliveBes.contains(scanRangeLocation.getBackend_id()) && (fsBroker != null && fsBroker.isAlive)) {
                 continue;

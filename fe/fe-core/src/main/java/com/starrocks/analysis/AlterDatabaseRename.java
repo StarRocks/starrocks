@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -34,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 public class AlterDatabaseRename extends DdlStmt {
     private String dbName;
@@ -59,9 +59,9 @@ public class AlterDatabaseRename extends DdlStmt {
             throw new AnalysisException("Database name is not set");
         }
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ConnectContext.get(), dbName,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                        Privilege.ALTER_PRIV),
+                                Privilege.ALTER_PRIV),
                         Operator.OR))) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
         }

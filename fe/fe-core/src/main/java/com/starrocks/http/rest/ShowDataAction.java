@@ -21,7 +21,6 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -30,6 +29,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -69,7 +69,7 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = Catalog.getCurrentCatalog().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get("default_cluster:" + dbName);

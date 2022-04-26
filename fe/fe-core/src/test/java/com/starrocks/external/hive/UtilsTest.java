@@ -10,7 +10,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import org.apache.hadoop.hive.common.StatsSetupConst;
-import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
 import org.junit.Assert;
 import org.junit.Test;
 

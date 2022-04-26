@@ -24,7 +24,6 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -46,6 +45,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -88,7 +88,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        transactionId = Catalog.getCurrentGlobalTransactionMgr()
+        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
@@ -99,7 +99,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     protected void unprotectedExecuteJob() throws LoadException {
         LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
         idToTasks.put(task.getSignature(), task);
-        submitTask(Catalog.getCurrentCatalog().getPendingLoadTaskScheduler(), task);
+        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
 
     /**
@@ -211,7 +211,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
                 // save all related tables and rollups in transaction state
                 TransactionState txnState =
-                        Catalog.getCurrentGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(dbId, transactionId);
                 if (txnState == null) {
                     throw new UserException("txn does not exist: " + transactionId);
                 }
@@ -224,7 +224,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
-            submitTask(Catalog.getCurrentCatalog().getLoadingLoadTaskScheduler(), loadTask);
+            submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
         }
     }
 
@@ -290,7 +290,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("txn_id", transactionId)
                     .add("msg", "Load job try to commit txn")
                     .build());
-            Catalog.getCurrentGlobalTransactionMgr().commitTransaction(
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));

@@ -107,20 +107,25 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         // L_LINESTATUS    CHAR(1)
         tableLineitemPartition.put("L_LINESTATUS", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 2));
         // L_SHIPDATE      DATE
-        tableLineitemPartition.put("L_SHIPDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-02")),
-                getLongFromDateTime(formatDateFromString("1998-12-01")), 0, 4, 2526));
+        tableLineitemPartition.put("L_SHIPDATE",
+                new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-02")),
+                        getLongFromDateTime(formatDateFromString("1998-12-01")), 0, 4, 2526));
         // L_COMMITDATE    DATE
-        tableLineitemPartition.put("L_COMMITDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-31")),
-                getLongFromDateTime(formatDateFromString("1998-10-31")), 0, 4, 2466));
+        tableLineitemPartition.put("L_COMMITDATE",
+                new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-31")),
+                        getLongFromDateTime(formatDateFromString("1998-10-31")), 0, 4, 2466));
         // L_RECEIPTDATE   DATE
-        tableLineitemPartition.put("L_RECEIPTDATE", new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-03")),
-                getLongFromDateTime(formatDateFromString("1998-12-31")), 0, 4, 2554));
+        tableLineitemPartition.put("L_RECEIPTDATE",
+                new ColumnStatistic(getLongFromDateTime(formatDateFromString("1992-01-03")),
+                        getLongFromDateTime(formatDateFromString("1998-12-31")), 0, 4, 2554));
         // L_SHIPINSTRUCT  CHAR(25)
-        tableLineitemPartition.put("L_SHIPINSTRUCT", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 25, 4));
+        tableLineitemPartition.put("L_SHIPINSTRUCT",
+                new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 25, 4));
         // L_SHIPMODE      CHAR(10)
         tableLineitemPartition.put("L_SHIPMODE", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 7));
         // L_COMMENT       VARCHAR(44)
-        tableLineitemPartition.put("L_COMMENT", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 44, 4580667));
+        tableLineitemPartition.put("L_COMMENT",
+                new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 44, 4580667));
         tableStatistics.put("lineitem_partition", tableLineitemPartition);
 
         Map<String, ColumnStatistic> tableNation = new CaseInsensitiveMap<>();

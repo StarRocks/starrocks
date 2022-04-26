@@ -33,15 +33,12 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class QueryPlannerTest {
     private static ConnectContext connectContext;
@@ -141,7 +138,7 @@ public class QueryPlannerTest {
         Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
         long id = -1;
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-        id = entry.getValue().id;
+            id = entry.getValue().id;
             Assert.assertEquals("select k1 from .+", entry.getKey());
         }
 
@@ -149,7 +146,8 @@ public class QueryPlannerTest {
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
         stmtExecutor2.execute();
-        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
@@ -178,7 +176,8 @@ public class QueryPlannerTest {
         StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statementBase);
         stmtExecutor2.execute();
-        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin", connectContext.getState().getErrorMessage());
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);

@@ -3,7 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -1675,7 +1675,7 @@ public class ViewPlanTest extends PlanTestBase {
 
         AlterViewStmt alterViewStmt =
                 (AlterViewStmt) UtFrameUtils.parseStmtWithNewParser(alterView, starRocksAssert.getCtx());
-        Catalog.getCurrentCatalog().alterView(alterViewStmt);
+        GlobalStateMgr.getCurrentState().alterView(alterViewStmt);
 
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);

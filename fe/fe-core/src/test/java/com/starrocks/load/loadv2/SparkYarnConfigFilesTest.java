@@ -1,8 +1,8 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.LoadException;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
@@ -20,7 +20,7 @@ public class SparkYarnConfigFilesTest {
     private Map<String, String> properties;
 
     @Mocked
-    Catalog catalog;
+    GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {

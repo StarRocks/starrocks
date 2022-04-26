@@ -22,9 +22,9 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.clone.ClusterLoadStatistic;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
@@ -51,7 +51,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        statMap = Catalog.getCurrentCatalog().getTabletScheduler().getStatisticMap();
+        statMap = GlobalStateMgr.getCurrentState().getTabletScheduler().getStatisticMap();
 
         statMap.values().forEach(t -> {
             List<List<String>> statistics = t.getClusterStatistic(medium);
@@ -75,7 +75,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid be id format: " + beIdStr);
         }
 
-        Backend be = Catalog.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (be == null) {
             throw new AnalysisException("backend " + beId + " does not exist");
         }

@@ -22,7 +22,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCapability;
@@ -34,6 +33,7 @@ import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -191,7 +191,7 @@ public class ConnectProcessorTest {
         }
     }
 
-    private static ConnectContext initMockContext(MysqlChannel channel, Catalog catalog) {
+    private static ConnectContext initMockContext(MysqlChannel channel, GlobalStateMgr globalStateMgr) {
         ConnectContext context = new ConnectContext(socketChannel) {
             private boolean firstTimeToSetCommand = true;
 
@@ -242,9 +242,9 @@ public class ConnectProcessorTest {
                 maxTimes = 3;
                 returns(false, true, false);
 
-                context.getCatalog();
+                context.getGlobalStateMgr();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 context.getAuditEventBuilder();
                 minTimes = 0;

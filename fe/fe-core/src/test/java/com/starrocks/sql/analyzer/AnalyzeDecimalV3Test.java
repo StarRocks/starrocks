@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -31,7 +30,6 @@ import org.junit.rules.ExpectedException;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 public class AnalyzeDecimalV3Test {
     private static StarRocksAssert starRocksAssert;

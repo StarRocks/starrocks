@@ -81,7 +81,8 @@ public abstract class BaseApply2OuterJoinRule extends TransformationRule {
 
         // aggregate
         LogicalAggregationOperator aggregate =
-                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(pair.second.keySet()), Maps.newHashMap());
+                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(pair.second.keySet()),
+                        Maps.newHashMap());
 
         OptExpression aggregateOptExpression = OptExpression.create(aggregate);
         rootOptExpression = aggregateOptExpression;

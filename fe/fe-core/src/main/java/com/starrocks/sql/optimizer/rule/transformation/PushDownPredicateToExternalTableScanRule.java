@@ -71,13 +71,13 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
                 .collect(Collectors.toMap(Function.identity(), Function.identity()));
         if (reservedPredicate == null) {
             /*
-            * all predicates can push down
-            *
-            *    Filter          Project
-            *      |      --->      |
-            *     Scan         Scan(Predicate)
-            *
-            * */
+             * all predicates can push down
+             *
+             *    Filter          Project
+             *      |      --->      |
+             *     Scan         Scan(Predicate)
+             *
+             * */
 
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(scanOutput);
 
@@ -87,15 +87,15 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
             return Lists.newArrayList(project);
         } else {
             /*
-            *  some predicates can't push down
-            *
-            *   Filter             Project
-            *     |      --->         |
-            *    Scan          Filter(Reserved Predicates)
-            *                         |
-            *                  Scan(Pushed Predicates)
-            *
-            * */
+             *  some predicates can't push down
+             *
+             *   Filter             Project
+             *     |      --->         |
+             *    Scan          Filter(Reserved Predicates)
+             *                         |
+             *                  Scan(Pushed Predicates)
+             *
+             * */
 
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(reservedPredicate);
 

@@ -73,7 +73,8 @@ public class MVProjectAggProjectScanRewrite {
     }
 
     private void rewriteTopProjectOperator(LogicalAggregationOperator agg, LogicalProjectOperator project,
-                                           Pair<ColumnRefOperator, ColumnRefOperator> aggUsedColumn, CallOperator queryAgg) {
+                                           Pair<ColumnRefOperator, ColumnRefOperator> aggUsedColumn,
+                                           CallOperator queryAgg) {
         CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
                 Type.DOUBLE, Lists.newArrayList(aggUsedColumn.second, queryAgg.getChild(1)),
                 Expr.getBuiltinFunction(
@@ -134,10 +135,10 @@ public class MVProjectAggProjectScanRewrite {
     // TODO(kks): refactor this method later
     // query: percentile_approx(a) && mv: percentile_union(a) -> percentile_union(a)
     protected Pair<ColumnRefOperator, ColumnRefOperator> rewriteAggOperator(OptExpression optExpression,
-                                                   CallOperator agg,
-                                                   ColumnRefOperator aggUsedColumn,
-                                                   Column mvColumn,
-                                                   ColumnRefFactory factory) {
+                                                                            CallOperator agg,
+                                                                            ColumnRefOperator aggUsedColumn,
+                                                                            Column mvColumn,
+                                                                            ColumnRefFactory factory) {
         LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) optExpression.getInputs().get(0).getOp();
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggOperator.getAggregations());
 

@@ -52,9 +52,10 @@ public class TableFunction extends Function {
                 Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT));
 
         functionSet.addBuiltin(unnestFunction);
-        
-        TableFunction jsonEachFunction = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
-                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+
+        TableFunction jsonEachFunction =
+                new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
+                        Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEachFunction);
     }
 

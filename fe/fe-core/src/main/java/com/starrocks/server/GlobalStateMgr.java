@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.server;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -97,15 +97,71 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
+import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.BrokerTable;
+import com.starrocks.catalog.CatalogIdGenerator;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Database.DbState;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.DomainResolver;
+import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MetaReplayState;
+import com.starrocks.catalog.MetaVersion;
+import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Replica.ReplicaStatus;
+import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.StarOSAgent;
+import com.starrocks.catalog.StarOSTablet;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableIndexes;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletStatMgr;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
+import com.starrocks.catalog.WorkGroupMgr;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -279,8 +335,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-public class Catalog {
-    private static final Logger LOG = LogManager.getLogger(Catalog.class);
+public class GlobalStateMgr {
+    private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int HTTP_TIMEOUT_SECOND = 5;
@@ -334,7 +390,7 @@ public class Catalog {
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
     // set to true after finished replay all meta and ready to serve
-    // set to false when catalog is not ready.
+    // set to false when globalStateMgr is not ready.
     private AtomicBoolean isReady = new AtomicBoolean(false);
     // set to true if FE can offer READ service.
     // canRead can be true even if isReady is false.
@@ -363,7 +419,7 @@ public class Catalog {
     // For checkpoint and observer memory replayed marker
     private AtomicLong replayedJournalId;
 
-    private static Catalog CHECKPOINT = null;
+    private static GlobalStateMgr CHECKPOINT = null;
     private static long checkpointThreadId = -1;
     private Checkpoint checkpointer;
     private List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
@@ -517,15 +573,15 @@ public class Catalog {
     }
 
     private static class SingletonHolder {
-        private static final Catalog INSTANCE = new Catalog();
+        private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
 
-    private Catalog() {
+    private GlobalStateMgr() {
         this(false);
     }
 
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
-    private Catalog(boolean isCheckpointCatalog) {
+    private GlobalStateMgr(boolean isCheckpointCatalog) {
         this.idToDb = new ConcurrentHashMap<>();
         this.fullNameToDb = new ConcurrentHashMap<>();
         this.load = new Load();
@@ -632,12 +688,12 @@ public class Catalog {
         }
     }
 
-    public static Catalog getCurrentCatalog() {
+    public static GlobalStateMgr getCurrentState() {
         if (isCheckpointThread()) {
             // only checkpoint thread it self will goes here.
             // so no need to care about the thread safe.
             if (CHECKPOINT == null) {
-                CHECKPOINT = new Catalog(true);
+                CHECKPOINT = new GlobalStateMgr(true);
             }
             return CHECKPOINT;
         } else {
@@ -645,9 +701,9 @@ public class Catalog {
         }
     }
 
-    // NOTICE: in most case, we should use getCurrentCatalog() to get the right catalog.
-    // but in some cases, we should get the serving catalog explicitly.
-    public static Catalog getServingCatalog() {
+    // NOTICE: in most case, we should use getCurrentState() to get the right globalStateMgr.
+    // but in some cases, we should get the serving globalStateMgr explicitly.
+    public static GlobalStateMgr getServingState() {
         return SingletonHolder.INSTANCE;
     }
 
@@ -660,7 +716,7 @@ public class Catalog {
     }
 
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
-        return getCurrentCatalog().globalTransactionMgr;
+        return getCurrentState().globalTransactionMgr;
     }
 
     public GlobalTransactionMgr getGlobalTransactionMgr() {
@@ -701,33 +757,33 @@ public class Catalog {
 
     // use this to get correct ClusterInfoService instance
     public static SystemInfoService getCurrentSystemInfo() {
-        return getCurrentCatalog().getClusterInfo();
+        return getCurrentState().getClusterInfo();
     }
 
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
-        return getCurrentCatalog().getHeartbeatMgr();
+        return getCurrentState().getHeartbeatMgr();
     }
 
     // use this to get correct TabletInvertedIndex instance
     public static TabletInvertedIndex getCurrentInvertedIndex() {
-        return getCurrentCatalog().getTabletInvertedIndex();
+        return getCurrentState().getTabletInvertedIndex();
     }
 
     // use this to get correct ColocateTableIndex instance
     public static ColocateTableIndex getCurrentColocateIndex() {
-        return getCurrentCatalog().getColocateTableIndex();
+        return getCurrentState().getColocateTableIndex();
     }
 
     public static CatalogRecycleBin getCurrentRecycleBin() {
-        return getCurrentCatalog().getRecycleBin();
+        return getCurrentState().getRecycleBin();
     }
 
-    // use this to get correct Catalog's journal version
-    public static int getCurrentCatalogJournalVersion() {
+    // use this to get correct GlobalStateMgr's journal version
+    public static int getCurrentStateJournalVersion() {
         return MetaContext.get().getMetaVersion();
     }
 
-    public static int getCurrentCatalogStarRocksJournalVersion() {
+    public static int getCurrentStateStarRocksJournalVersion() {
         return MetaContext.get().getStarRocksMetaVersion();
     }
 
@@ -736,15 +792,15 @@ public class Catalog {
     }
 
     public static PluginMgr getCurrentPluginMgr() {
-        return getCurrentCatalog().getPluginMgr();
+        return getCurrentState().getPluginMgr();
     }
 
     public static AnalyzeManager getCurrentAnalyzeMgr() {
-        return getCurrentCatalog().getAnalyzeManager();
+        return getCurrentState().getAnalyzeManager();
     }
 
     public static StatisticStorage getCurrentStatisticStorage() {
-        return getCurrentCatalog().statisticStorage;
+        return getCurrentState().statisticStorage;
     }
 
     // Only used in UT
@@ -753,7 +809,7 @@ public class Catalog {
     }
 
     public static AuditEventProcessor getCurrentAuditEventProcessor() {
-        return getCurrentCatalog().getAuditEventProcessor();
+        return getCurrentState().getAuditEventProcessor();
     }
 
     public StarOSAgent getStarOSAgent() {
@@ -772,7 +828,7 @@ public class Catalog {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("catalog lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -783,7 +839,7 @@ public class Catalog {
                 }
                 return true;
             } catch (InterruptedException e) {
-                LOG.warn("got exception while getting catalog lock", e);
+                LOG.warn("got exception while getting globalStateMgr lock", e);
                 if (mustLock) {
                     continue;
                 } else {
@@ -815,7 +871,7 @@ public class Catalog {
 
     public void initialize(String[] args) throws Exception {
         // set meta dir first.
-        // we already set these variables in constructor. but Catalog is a singleton class.
+        // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
 
@@ -908,13 +964,13 @@ public class Catalog {
     public void waitForReady() throws InterruptedException {
         while (true) {
             if (isReady()) {
-                LOG.info("catalog is ready. FE type: {}", feType);
+                LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
                 break;
             }
 
             Thread.sleep(2000);
-            LOG.info("wait catalog to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+            LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
         }
     }
 
@@ -1359,7 +1415,7 @@ public class Catalog {
         getConsistencyChecker().start();
         // Backup handler
         getBackupHandler().start();
-        // catalog recycle bin
+        // globalStateMgr recycle bin
         getRecycleBin().start();
         // time printer
         createTimePrinter();
@@ -1531,7 +1587,8 @@ public class Catalog {
             return;
         }
         replayedJournalId.set(storage.getImageJournalId());
-        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
+        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
+                GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
@@ -1541,7 +1598,7 @@ public class Catalog {
             checksum = loadHeader(dis, checksum);
             checksum = loadMasterInfo(dis, checksum);
             checksum = loadFrontends(dis, checksum);
-            checksum = Catalog.getCurrentSystemInfo().loadBackends(dis, checksum);
+            checksum = GlobalStateMgr.getCurrentSystemInfo().loadBackends(dis, checksum);
             checksum = loadDb(dis, checksum);
             // ATTN: this should be done after load Db, and before loadAlterJob
             recreateTabletInvertIndex();
@@ -1591,7 +1648,7 @@ public class Catalog {
         }
 
         // create inverted index
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (Database db : this.fullNameToDb.values()) {
             long dbId = db.getId();
             for (Table table : db.getTables()) {
@@ -1694,7 +1751,7 @@ public class Catalog {
     }
 
     public long loadFrontends(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             int size = dis.readInt();
             long newChecksum = checksum ^ size;
             for (int i = 0; i < size; i++) {
@@ -1705,7 +1762,7 @@ public class Catalog {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
-                if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_41) {
+                if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_41) {
                     Frontend fe = Frontend.read(dis);
                     removedFrontends.add(fe.getNodeName());
                 } else {
@@ -1743,20 +1800,20 @@ public class Catalog {
         Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
 
         // delete jobs
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_11) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
             jobSize = dis.readInt();
             newChecksum ^= jobSize;
             Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
         }
 
         // load error hub info
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_24) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_24) {
             LoadErrorHub.Param param = new LoadErrorHub.Param();
             param.readFields(dis);
             load.setLoadErrorHubInfo(param);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             // 4. load delete jobs
             int deleteJobSize = dis.readInt();
             newChecksum ^= deleteJobSize;
@@ -1769,7 +1826,7 @@ public class Catalog {
 
     public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
         long newChecksum = checksum;
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_32) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_32) {
             int size = dis.readInt();
             newChecksum = checksum ^ size;
             for (int i = 0; i < size; ++i) {
@@ -1788,7 +1845,7 @@ public class Catalog {
         long newChecksum = checksum;
         for (JobType type : JobType.values()) {
             if (type == JobType.DECOMMISSION_BACKEND) {
-                if (Catalog.getCurrentCatalogJournalVersion() >= 5) {
+                if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
                     newChecksum = loadAlterJob(dis, newChecksum, type);
                 }
             } else {
@@ -1833,7 +1890,7 @@ public class Catalog {
             }
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= 2) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             // finished or cancelled jobs
             long currentTimeMs = System.currentTimeMillis();
             size = dis.readInt();
@@ -1850,7 +1907,7 @@ public class Catalog {
         }
 
         // alter job v2
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_61) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
@@ -1878,7 +1935,7 @@ public class Catalog {
     }
 
     public long loadBackupHandler(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_42) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
             getBackupHandler().readFields(dis);
         }
         getBackupHandler().setCatalog(this);
@@ -1892,7 +1949,7 @@ public class Catalog {
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_82) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_82) {
             this.deleteHandler = DeleteHandler.read(dis);
         }
         LOG.info("finished replay deleteHandler from image");
@@ -1920,7 +1977,7 @@ public class Catalog {
     }
 
     public long loadAuth(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_43) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
             // CAN NOT use Auth.read(), cause this auth instance is already passed to DomainResolver
             auth.readFields(dis);
         }
@@ -1929,7 +1986,7 @@ public class Catalog {
     }
 
     public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             int size = dis.readInt();
             long newChecksum = checksum ^ size;
             globalTransactionMgr.readFields(dis);
@@ -1940,14 +1997,14 @@ public class Catalog {
     }
 
     public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             recycleBin.readFields(dis);
             if (!isCheckpointThread()) {
                 // add tablet in Recycle bin to TabletInvertedIndex
                 recycleBin.addTabletToInvertedIndex();
             }
             // create DatabaseTransactionMgr for db in recycle bin.
-            // these dbs do not exist in `idToDb` of the catalog.
+            // these dbs do not exist in `idToDb` of the globalStateMgr.
             for (Long dbId : recycleBin.getAllDbIds()) {
                 globalTransactionMgr.addDatabaseTransactionMgr(dbId);
             }
@@ -1957,23 +2014,23 @@ public class Catalog {
     }
 
     public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_46) {
-            Catalog.getCurrentColocateIndex().readFields(dis);
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
+            GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
         }
         LOG.info("finished replay colocateTableIndex from image");
         return checksum;
     }
 
     public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_49) {
-            Catalog.getCurrentCatalog().getRoutineLoadManager().readFields(dis);
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_49) {
+            GlobalStateMgr.getCurrentState().getRoutineLoadManager().readFields(dis);
         }
         LOG.info("finished replay routineLoadJobs from image");
         return checksum;
     }
 
     public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_50) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
             loadManager.readFields(in);
         }
         LOG.info("finished replay loadJobsV2 from image");
@@ -1981,7 +2038,7 @@ public class Catalog {
     }
 
     public long loadResources(DataInputStream in, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
@@ -1989,7 +2046,7 @@ public class Catalog {
     }
 
     public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_52) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_52) {
             smallFileMgr.readFields(in);
         }
         LOG.info("finished replay smallFiles from image");
@@ -2018,7 +2075,7 @@ public class Catalog {
         }
 
         // save image does not need any lock. because only checkpoint thread will call this method.
-        LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
+        LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
@@ -2026,7 +2083,7 @@ public class Catalog {
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = saveMasterInfo(dos, checksum);
             checksum = saveFrontends(dos, checksum);
-            checksum = Catalog.getCurrentSystemInfo().saveBackends(dos, checksum);
+            checksum = GlobalStateMgr.getCurrentSystemInfo().saveBackends(dos, checksum);
             checksum = saveDb(dos, checksum);
             checksum = saveLoadJob(dos, checksum);
             checksum = saveAlterJob(dos, checksum);
@@ -2243,24 +2300,24 @@ public class Catalog {
     }
 
     public long saveRecycleBin(DataOutputStream dos, long checksum) throws IOException {
-        CatalogRecycleBin recycleBin = Catalog.getCurrentRecycleBin();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentRecycleBin();
         recycleBin.write(dos);
         return checksum;
     }
 
     public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentColocateIndex().write(dos);
+        GlobalStateMgr.getCurrentColocateIndex().write(dos);
         return checksum;
     }
 
     public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentCatalog().getRoutineLoadManager().write(dos);
+        GlobalStateMgr.getCurrentState().getRoutineLoadManager().write(dos);
         return checksum;
     }
 
     // global variable persistence
     public long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
             VariableMgr.read(in);
         }
         LOG.info("finished replay globalVariable from image");
@@ -2281,12 +2338,12 @@ public class Catalog {
     }
 
     public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
-        Catalog.getCurrentCatalog().getLoadManager().write(out);
+        GlobalStateMgr.getCurrentState().getLoadManager().write(out);
         return checksum;
     }
 
     public long saveResources(DataOutputStream out, long checksum) throws IOException {
-        Catalog.getCurrentCatalog().getResourceMgr().write(out);
+        GlobalStateMgr.getCurrentState().getResourceMgr().write(out);
         return checksum;
     }
 
@@ -2563,7 +2620,7 @@ public class Catalog {
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             Frontend fe = checkFeExist(host, editLogPort);
@@ -2608,7 +2665,7 @@ public class Catalog {
             throw new DdlException("can not drop current master node.");
         }
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             Frontend fe = checkFeExist(host, port);
@@ -2677,7 +2734,7 @@ public class Catalog {
         String fullDbName = stmt.getFullDbName();
         long id = 0L;
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (!nameToCluster.containsKey(clusterName)) {
@@ -2733,7 +2790,7 @@ public class Catalog {
 
         // 1. check if database exists
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (!fullNameToDb.containsKey(dbName)) {
@@ -2751,7 +2808,7 @@ public class Catalog {
             db.writeLock();
             try {
                 if (!stmt.isForceDrop()) {
-                    if (Catalog.getCurrentCatalog().getGlobalTransactionMgr()
+                    if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), null, null)) {
                         throw new DdlException(
                                 "There are still some transactions in the COMMITTED state waiting to be completed. " +
@@ -2797,16 +2854,16 @@ public class Catalog {
                 Set<String> tableNames = db.getTableNamesWithLock();
                 batchTaskMap = unprotectDropDb(db, stmt.isForceDrop(), false);
                 if (!stmt.isForceDrop()) {
-                    Catalog.getCurrentRecycleBin().recycleDatabase(db, tableNames);
+                    GlobalStateMgr.getCurrentRecycleBin().recycleDatabase(db, tableNames);
                 } else {
-                    Catalog.getCurrentCatalog().onEraseDatabase(db.getId());
+                    GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 }
             } finally {
                 db.writeUnlock();
             }
             sendDropTabletTasks(batchTaskMap);
 
-            // 3. remove db from catalog
+            // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = nameToCluster.get(db.getClusterName());
@@ -2863,9 +2920,9 @@ public class Catalog {
                 Set<String> tableNames = db.getTableNamesWithLock();
                 unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
-                    Catalog.getCurrentRecycleBin().recycleDatabase(db, tableNames);
+                    GlobalStateMgr.getCurrentRecycleBin().recycleDatabase(db, tableNames);
                 } else {
-                    Catalog.getCurrentCatalog().onEraseDatabase(db.getId());
+                    GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 }
             } finally {
                 db.writeUnlock();
@@ -2888,11 +2945,11 @@ public class Catalog {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-        Database db = Catalog.getCurrentRecycleBin().recoverDatabase(recoverStmt.getDbName());
+        Database db = GlobalStateMgr.getCurrentRecycleBin().recoverDatabase(recoverStmt.getDbName());
 
-        // add db to catalog
+        // add db to globalStateMgr
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (fullNameToDb.containsKey(db.getFullName())) {
@@ -2932,7 +2989,7 @@ public class Catalog {
                 ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
 
-            if (!Catalog.getCurrentRecycleBin().recoverTable(db, tableName)) {
+            if (!GlobalStateMgr.getCurrentRecycleBin().recoverTable(db, tableName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
         } finally {
@@ -2966,21 +3023,21 @@ public class Catalog {
                 throw new DdlException("partition[" + partitionName + "] already exist in table[" + tableName + "]");
             }
 
-            Catalog.getCurrentRecycleBin().recoverPartition(db.getId(), olapTable, partitionName);
+            GlobalStateMgr.getCurrentRecycleBin().recoverPartition(db.getId(), olapTable, partitionName);
         } finally {
             db.writeUnlock();
         }
     }
 
     public void replayEraseDatabase(long dbId) {
-        Catalog.getCurrentRecycleBin().replayEraseDatabase(dbId);
+        GlobalStateMgr.getCurrentRecycleBin().replayEraseDatabase(dbId);
     }
 
     public void replayRecoverDatabase(RecoverInfo info) {
         long dbId = info.getDbId();
-        Database db = Catalog.getCurrentRecycleBin().replayRecoverDatabase(dbId);
+        Database db = GlobalStateMgr.getCurrentRecycleBin().replayRecoverDatabase(dbId);
 
-        // add db to catalog
+        // add db to globalStateMgr
         replayCreateDb(db);
 
         LOG.info("replay recover db[{}], name: {}", dbId, db.getFullName());
@@ -3026,7 +3083,7 @@ public class Catalog {
         Database db = null;
         Cluster cluster = null;
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             cluster = nameToCluster.get(clusterName);
@@ -3114,7 +3171,7 @@ public class Catalog {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            Catalog.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
             // check db quota
             db.checkQuota();
         }
@@ -3163,7 +3220,7 @@ public class Catalog {
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
         try {
-            Database db = Catalog.getCurrentCatalog().getDb(stmt.getExistedDbName());
+            Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getExistedDbName());
             List<String> createTableStmt = Lists.newArrayList();
             db.readLock();
             try {
@@ -3171,7 +3228,7 @@ public class Catalog {
                 if (table == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getExistedTableName());
                 }
-                Catalog.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+                GlobalStateMgr.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
                 if (createTableStmt.isEmpty()) {
                     ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
                 }
@@ -3317,7 +3374,7 @@ public class Catalog {
             }
 
             // check colocation
-            if (Catalog.getCurrentColocateIndex().isColocateTable(olapTable.getId())) {
+            if (GlobalStateMgr.getCurrentColocateIndex().isColocateTable(olapTable.getId())) {
                 String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 Preconditions.checkNotNull(groupSchema);
@@ -3498,14 +3555,14 @@ public class Catalog {
                     for (Long tabletId : existPartitionTabletSet) {
                         // createPartitionWithIndices create duplicate tablet that if not exists scenario
                         // so here need to clean up those created tablets which partition already exists from invert index
-                        Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+                        GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
                     }
                 }
                 db.writeUnlock();
             }
         } catch (DdlException e) {
             for (Long tabletId : tabletIdSetForAll) {
-                Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
             }
             throw e;
         }
@@ -3551,7 +3608,7 @@ public class Catalog {
 
             if (!isCheckpointThread()) {
                 // add to inverted index
-                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -3602,7 +3659,7 @@ public class Catalog {
             if (!clause.isForceDrop()) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
-                    if (Catalog.getCurrentCatalog().getGlobalTransactionMgr()
+                    if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
                         throw new DdlException(
                                 "There are still some transactions in the COMMITTED state waiting to be completed." +
@@ -3640,7 +3697,7 @@ public class Catalog {
     }
 
     public void replayErasePartition(long partitionId) throws DdlException {
-        Catalog.getCurrentRecycleBin().replayErasePartition(partitionId);
+        GlobalStateMgr.getCurrentRecycleBin().replayErasePartition(partitionId);
     }
 
     public void replayRecoverPartition(RecoverInfo info) {
@@ -3649,7 +3706,7 @@ public class Catalog {
         db.writeLock();
         try {
             Table table = db.getTable(info.getTableId());
-            Catalog.getCurrentRecycleBin().replayRecoverPartition((OlapTable) table, info.getPartitionId());
+            GlobalStateMgr.getCurrentRecycleBin().replayRecoverPartition((OlapTable) table, info.getPartitionId());
         } finally {
             db.writeUnlock();
         }
@@ -4002,14 +4059,14 @@ public class Catalog {
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
 
         // calc short key column count
-        short shortKeyColumnCount = Catalog.calcShortKeyColumnCount(baseSchema, stmt.getProperties());
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, stmt.getProperties());
         LOG.debug("create table[{}] short key column count: {}", tableName, shortKeyColumnCount);
 
         // indexes
         TableIndexes indexes = new TableIndexes(stmt.getIndexes());
 
         // create table
-        long tableId = Catalog.getCurrentCatalog().getNextId();
+        long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -4069,7 +4126,8 @@ public class Catalog {
         olapTable.setIsInMemory(isInMemory);
 
         boolean enablePersistentIndex =
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                        false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
@@ -4160,9 +4218,9 @@ public class Catalog {
             List<Column> rollupColumns = getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
                     olapTable, baseRollupIndex, false);
             short rollupShortKeyColumnCount =
-                    Catalog.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
+                    GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
             int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
-            long rollupIndexId = getCurrentCatalog().getNextId();
+            long rollupIndexId = getCurrentState().getNextId();
             olapTable.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                     rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
         }
@@ -4253,7 +4311,7 @@ public class Catalog {
 
             // check database exists again, because database can be dropped when creating table
             if (!tryLock(false)) {
-                throw new DdlException("Failed to acquire catalog lock. Try again");
+                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
             }
             try {
                 if (getDb(db.getId()) == null) {
@@ -4292,7 +4350,7 @@ public class Catalog {
         } finally {
             if (!createTblSuccess) {
                 for (Long tabletId : tabletIdSet) {
-                    Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
                 }
             }
             // only remove from memory, because we have not persist it
@@ -4307,13 +4365,13 @@ public class Catalog {
 
         List<Column> columns = stmt.getColumns();
 
-        long tableId = Catalog.getCurrentCatalog().getNextId();
+        long tableId = GlobalStateMgr.getCurrentState().getNextId();
         MysqlTable mysqlTable = new MysqlTable(tableId, tableName, columns, stmt.getProperties());
         mysqlTable.setComment(stmt.getComment());
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -4354,13 +4412,13 @@ public class Catalog {
             partitionInfo = new SinglePartitionInfo();
         }
 
-        long tableId = Catalog.getCurrentCatalog().getNextId();
+        long tableId = GlobalStateMgr.getCurrentState().getNextId();
         EsTable esTable = new EsTable(tableId, tableName, baseSchema, stmt.getProperties(), partitionInfo);
         esTable.setComment(stmt.getComment());
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -4396,7 +4454,7 @@ public class Catalog {
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -4428,7 +4486,7 @@ public class Catalog {
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -4476,7 +4534,7 @@ public class Catalog {
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getFullName()) == null) {
@@ -4505,7 +4563,7 @@ public class Catalog {
         JDBCTable jdbcTable = new JDBCTable(tableId, tableName, columns, properties);
 
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
 
         try {
@@ -4687,7 +4745,7 @@ public class Catalog {
 
             // enable_persistent_index
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).append("\" = \"");
-            sb.append(olapTable.enablePersistentIndex()).append("\"");            
+            sb.append(olapTable.enablePersistentIndex()).append("\"");
 
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
@@ -4889,7 +4947,7 @@ public class Catalog {
         if (!isCheckpointThread()) {
             // add to inverted index
             if (table.getType() == TableType.OLAP) {
-                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 OlapTable olapTable = (OlapTable) table;
                 long dbId = db.getId();
                 long tableId = table.getId();
@@ -4939,12 +4997,12 @@ public class Catalog {
                 tabletIdSet.add(tablet.getId());
             }
         } else {
-            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+            ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
             List<List<Long>> backendsPerBucketSeq = null;
             GroupId groupId = null;
             if (colocateIndex.isColocateTable(tabletMeta.getTableId())) {
                 // if this is a colocate table, try to get backend seqs from colocation index.
-                Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
                 groupId = colocateIndex.getGroup(tabletMeta.getTableId());
                 // Use db write lock here to make sure the backendsPerBucketSeq is consistent when the backendsPerBucketSeq is updating.
                 // This lock will release very fast.
@@ -5011,8 +5069,9 @@ public class Catalog {
     // create replicas for tablet with random chosen backends
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
             throws DdlException {
-        List<Long> chosenBackendIds = Catalog.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
-                true, true, clusterName, storageMedium);
+        List<Long> chosenBackendIds =
+                GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
+                        true, true, clusterName, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
                     "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
@@ -5022,7 +5081,7 @@ public class Catalog {
     }
 
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
-        SystemInfoService systemInfoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Long> chosenBackendIds =
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true, clusterName);
         if (chosenBackendIds == null) {
@@ -5070,7 +5129,7 @@ public class Catalog {
             }
 
             if (!stmt.isForceDrop()) {
-                if (Catalog.getCurrentCatalog().getGlobalTransactionMgr()
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .existCommittedTxns(db.getId(), table.getId(), null)) {
                     throw new DdlException(
                             "There are still some transactions in the COMMITTED state waiting to be completed. " +
@@ -5115,7 +5174,8 @@ public class Catalog {
         }
     }
 
-    public HashMap<Long, AgentBatchTask> unprotectDropTable(Database db, long tableId, boolean isForceDrop, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> unprotectDropTable(Database db, long tableId, boolean isForceDrop,
+                                                            boolean isReplay) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         Table table = db.getTable(tableId);
         // delete from db meta
@@ -5127,13 +5187,13 @@ public class Catalog {
 
         db.dropTable(table.getName());
         if (!isForceDrop) {
-            Table oldTable = Catalog.getCurrentRecycleBin().recycleTable(db.getId(), table);
+            Table oldTable = GlobalStateMgr.getCurrentRecycleBin().recycleTable(db.getId(), table);
             if (oldTable != null && oldTable.getType() == TableType.OLAP) {
-                batchTaskMap = Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) oldTable, false);
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, false);
             }
         } else {
             if (table.getType() == TableType.OLAP) {
-                batchTaskMap = Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, isReplay);
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, isReplay);
             }
         }
 
@@ -5152,13 +5212,13 @@ public class Catalog {
     }
 
     public void replayEraseTable(long tableId) throws DdlException {
-        Catalog.getCurrentRecycleBin().replayEraseTable(tableId);
+        GlobalStateMgr.getCurrentRecycleBin().replayEraseTable(tableId);
     }
 
     public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) throws DdlException {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
         for (Long tableId : tableIds) {
-            Catalog.getCurrentRecycleBin().replayEraseTable(tableId);
+            GlobalStateMgr.getCurrentRecycleBin().replayEraseTable(tableId);
         }
     }
 
@@ -5167,7 +5227,7 @@ public class Catalog {
         Database db = getDb(dbId);
         db.writeLock();
         try {
-            Catalog.getCurrentRecycleBin().replayRecoverTable(db, info.getTableId());
+            GlobalStateMgr.getCurrentRecycleBin().replayRecoverTable(db, info.getTableId());
         } finally {
             db.writeUnlock();
         }
@@ -6136,7 +6196,7 @@ public class Catalog {
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
-        ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         if (colocateTableIndex.isColocateTable(table.getId())) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
@@ -6186,7 +6246,7 @@ public class Catalog {
     public void modifyTableDefaultReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
-        ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         if (colocateTableIndex.isColocateTable(table.getId())) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
@@ -6266,7 +6326,8 @@ public class Catalog {
         editLog.logModifyInMemory(info);
     }
 
-    public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties, TTabletMetaType metaType) {
+    public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
+                                TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
             modifyTableInMemoryMeta(db, table, properties);
         } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
@@ -6445,7 +6506,7 @@ public class Catalog {
 
         List<Column> columns = stmt.getColumns();
 
-        long tableId = Catalog.getCurrentCatalog().getNextId();
+        long tableId = GlobalStateMgr.getCurrentState().getNextId();
         View newView = new View(tableId, tableName, columns);
         newView.setComment(stmt.getComment());
         newView.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
@@ -6459,7 +6520,7 @@ public class Catalog {
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -6482,8 +6543,8 @@ public class Catalog {
 
     /**
      * Returns the function that best matches 'desc' that is registered with the
-     * catalog using 'mode' to check for matching. If desc matches multiple
-     * functions in the catalog, it will return the function with the strictest
+     * globalStateMgr using 'mode' to check for matching. If desc matches multiple
+     * functions in the globalStateMgr, it will return the function with the strictest
      * matching mode. If multiple functions match at the same matching mode,
      * ties are broken by comparing argument types in lexical order. Argument
      * types are ordered by argument precision (e.g. double is preferred over
@@ -6538,7 +6599,7 @@ public class Catalog {
      * @throws DdlException
      */
     public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        if (!Catalog.getCurrentCatalog().getAuth().checkCanEnterCluster(ConnectContext.get(), clusterName)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkCanEnterCluster(ConnectContext.get(), clusterName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_AUTHORITY,
                     ConnectContext.get().getQualifiedUser(), "enter");
         }
@@ -6625,7 +6686,7 @@ public class Catalog {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException, DdlException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             int clusterCount = dis.readInt();
             checksum ^= clusterCount;
             for (long i = 0; i < clusterCount; ++i) {
@@ -6645,10 +6706,10 @@ public class Catalog {
 
                 String dbName = InfoSchemaDb.getFullInfoSchemaDbName(cluster.getName());
                 InfoSchemaDb db;
-                // Use real Catalog instance to avoid InfoSchemaDb id continuously increment
+                // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
                 // when checkpoint thread load image.
-                if (Catalog.getCurrentCatalog().getFullNameToDb().containsKey(dbName)) {
-                    db = (InfoSchemaDb) Catalog.getCurrentCatalog().getFullNameToDb().get(dbName);
+                if (GlobalStateMgr.getCurrentState().getFullNameToDb().containsKey(dbName)) {
+                    db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
                     db = new InfoSchemaDb(cluster.getName());
                     db.setClusterName(cluster.getName());
@@ -6673,10 +6734,10 @@ public class Catalog {
     public void refreshExternalTable(RefreshExternalTableStmt stmt) throws DdlException {
         refreshExternalTable(stmt.getDbName(), stmt.getTableName(), stmt.getPartitions());
 
-        List<Frontend> allFrontends = Catalog.getCurrentCatalog().getFrontends(null);
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
         for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(Catalog.getCurrentCatalog().getSelfNode().first)) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
                 continue;
             }
 
@@ -6986,7 +7047,7 @@ public class Catalog {
         } catch (DdlException e) {
             // create partition failed, remove all newly created tablets
             for (Long tabletId : tabletIdSet) {
-                Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
             }
             throw e;
         }
@@ -7074,7 +7135,7 @@ public class Catalog {
 
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
-            Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
     }
 
@@ -7085,9 +7146,9 @@ public class Catalog {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTblId());
             truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable());
 
-            if (!Catalog.isCheckpointThread()) {
+            if (!GlobalStateMgr.isCheckpointThread()) {
                 // add tablet to inverted index
-                TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (Partition partition : info.getPartitions()) {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
@@ -7154,11 +7215,11 @@ public class Catalog {
 
         setFrontendConfig(configs);
 
-        List<Frontend> allFrontends = Catalog.getCurrentCatalog().getFrontends(null);
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(Catalog.getCurrentCatalog().getSelfNode().first)) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
                 continue;
             }
 
@@ -7354,13 +7415,13 @@ public class Catalog {
     }
 
     public long savePlugins(DataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentPluginMgr().write(dos);
+        GlobalStateMgr.getCurrentPluginMgr().write(dos);
         return checksum;
     }
 
     public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_78) {
-            Catalog.getCurrentPluginMgr().readFields(dis);
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_78) {
+            GlobalStateMgr.getCurrentPluginMgr().readFields(dis);
         }
         LOG.info("finished replay plugins from image");
         return checksum;
@@ -7391,13 +7452,13 @@ public class Catalog {
     }
 
     public long saveAnalyze(DataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentAnalyzeMgr().write(dos);
+        GlobalStateMgr.getCurrentAnalyzeMgr().write(dos);
         return checksum;
     }
 
     public long loadAnalyze(DataInputStream dis, long checksum) throws IOException {
         try {
-            Catalog.getCurrentAnalyzeMgr().readFields(dis);
+            GlobalStateMgr.getCurrentAnalyzeMgr().readFields(dis);
             LOG.info("finished replay analyze job from image");
         } catch (EOFException e) {
             LOG.info("none analyze job replay.");
@@ -7462,16 +7523,16 @@ public class Catalog {
 
     public void onEraseDatabase(long dbId) {
         // remove jobs
-        Catalog.getCurrentCatalog().getSchemaChangeHandler().removeDbAlterJob(dbId);
-        Catalog.getCurrentCatalog().getRollupHandler().removeDbAlterJob(dbId);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().removeDbAlterJob(dbId);
+        GlobalStateMgr.getCurrentState().getRollupHandler().removeDbAlterJob(dbId);
 
         // remove database transaction manager
-        Catalog.getCurrentCatalog().getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
     public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
         for (Partition partition : allPartitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
@@ -7518,13 +7579,13 @@ public class Catalog {
             } // end for partitions
         }
         // colocation
-        Catalog.getCurrentColocateIndex().removeTable(olapTable.getId());
+        GlobalStateMgr.getCurrentColocateIndex().removeTable(olapTable.getId());
         return batchTaskMap;
     }
 
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
-        TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 invertedIndex.deleteTablet(tablet.getId());

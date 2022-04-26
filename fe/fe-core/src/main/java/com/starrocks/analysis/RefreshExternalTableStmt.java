@@ -2,12 +2,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -44,7 +44,7 @@ public class RefreshExternalTableStmt extends DdlStmt {
         TableName tableName = tableRef.getName();
         tableName.analyze(analyzer);
 
-        if (!Catalog.getCurrentCatalog().getAuth()
+        if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(),
                         PrivPredicate.ALTER)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "REFRESH TABLE",
