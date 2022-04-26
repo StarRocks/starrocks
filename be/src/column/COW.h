@@ -75,7 +75,7 @@ inline void intrusive_ptr_release(const COWCounter<Derived>* p) {
 // chameleon_ptr is used inside column, and it will be mutable or immutable which id 
 // decided by the outer column.
 template <typename Derived>
-class COW : public COWCounter<Derived> 
+class COW : public COWCounter<Derived> {
 private:
     Derived* derived() { return static_cast<Derived*>(this); }
     const Derived* derived() const { return static_cast<const Derived*>(this); }
