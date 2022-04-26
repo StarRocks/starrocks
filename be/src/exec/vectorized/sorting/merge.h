@@ -57,31 +57,16 @@ struct SortedRun {
     bool empty() const { return range.second == range.first; }
     void reset();
     void resize(size_t size);
+    int debug_dump() const;
+
+    // Check if two run has intersect, if not we don't need to merge them row by row
+    // @return 0 if two run has intersect, -1 if left is less than right, 1 if left is greater than right
+    int intersect(const SortDescs& sort_desc, const SortedRun& right_run) const;
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
-    ChunkUniquePtr clone_slice() const {
-        if (range.first == 0 && range.second == chunk->num_rows()) {
-            return chunk->clone_unique();
-        } else {
-            size_t slice_rows = num_rows();
-            DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
-            ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
-            cloned->append(*chunk, range.first, slice_rows);
-            return cloned;
-        }
-    }
+    ChunkUniquePtr clone_slice() const;
 
-    int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
-        DCHECK_LT(lhs_row, range.second);
-        DCHECK_LT(rhs_row, rhs.range.second);
-        for (int i = 0; i < orderby.size(); i++) {
-            int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
-            if (x != 0) {
-                return x;
-            }
-        }
-        return 0;
-    }
+    int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const;
 };
 
 // Multiple sorted chunks kept the order, without any intersection
@@ -97,18 +82,9 @@ struct SortedRuns {
     size_t num_chunks() const { return chunks.size(); }
     size_t num_rows() const;
     void resize(size_t size);
-
-    ChunkPtr assemble() const {
-        if (chunks.empty()) {
-            return {};
-        }
-        ChunkPtr result(chunks.front().clone_slice().release());
-        for (int i = 1; i < chunks.size(); i++) {
-            auto& run = chunks[i];
-            result->append(*run.chunk, run.range.first, run.num_rows());
-        }
-        return result;
-    }
+    bool is_sorted(const SortDescs& sort_desc) const;
+    ChunkPtr assemble() const;
+    int debug_dump() const;
 };
 
 // Merge two sorted cusor

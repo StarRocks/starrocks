@@ -208,7 +208,7 @@ public:
                 (*output)[i].index_in_chunk = i + left_run.range.first;
             }
         } else {
-            int intersect = run_intersect(sort_desc, left_run, right_run);
+            int intersect = left_run.intersect(sort_desc, right_run);
             if (intersect != 0) {
                 size_t left_rows = left_run.num_rows();
                 size_t right_rows = right_run.num_rows();
@@ -255,26 +255,6 @@ public:
 
         return Status::OK();
     }
-
-private:
-    // Check if two run has intersect, if not we don't need to merge them row by row
-    // @return 0 if two run has intersect, -1 if left is less than right, 1 if left is greater than right
-    static int run_intersect(const SortDescs& sort_desc, const SortedRun& left_run, const SortedRun& right_run) {
-        // Compare left tail with right head
-        int left_tail_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.second - 1,
-                                              right_run.range.first);
-        if (left_tail_cmp < 0) {
-            return -1;
-        }
-
-        // Compare left head with right tail
-        int left_head_cmp = compare_chunk_row(sort_desc, left_run.orderby, right_run.orderby, left_run.range.first,
-                                              right_run.range.second - 1);
-        if (left_head_cmp > 0) {
-            return 1;
-        }
-        return 0;
-    }
 };
 
 void SortedRun::reset() {
@@ -289,6 +269,58 @@ void SortedRun::resize(size_t size) {
     }
     // Only resize the range but not clone chunk
     range.second = range.first + (uint32_t)size;
+}
+
+int SortedRun::intersect(const SortDescs& sort_desc, const SortedRun& right_run) const {
+    if (empty()) {
+        return 1;
+    }
+    if (right_run.empty()) {
+        return -1;
+    }
+    // Compare left tail with right head
+    int left_tail_cmp = compare_row(sort_desc, right_run, end_index() - 1, right_run.start_index());
+    if (left_tail_cmp < 0) {
+        return -1;
+    }
+
+    // Compare left head with right tail
+    int left_head_cmp = compare_row(sort_desc, right_run, start_index(), right_run.end_index() - 1);
+    if (left_head_cmp > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+ChunkUniquePtr SortedRun::clone_slice() const {
+    if (range.first == 0 && range.second == chunk->num_rows()) {
+        return chunk->clone_unique();
+    } else {
+        size_t slice_rows = num_rows();
+        DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
+        ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
+        cloned->append(*chunk, range.first, slice_rows);
+        return cloned;
+    }
+}
+
+int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const {
+    DCHECK_LT(lhs_row, range.second);
+    DCHECK_LT(rhs_row, rhs.range.second);
+    for (int i = 0; i < desc.num_columns(); i++) {
+        int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
+        if (x != 0) {
+            return x * desc.get_column_desc(i).sort_order;
+        }
+    }
+    return 0;
+}
+
+int SortedRun::debug_dump() const {
+    for (int i = start_index(); i < end_index(); i++) {
+        LOG(INFO) << fmt::format("row {}: {}", i, chunk->debug_row(i));
+    }
+    return 0;
 }
 
 size_t SortedRuns::num_rows() const {
@@ -314,6 +346,46 @@ void SortedRuns::resize(size_t size) {
         }
         accumulate += run.num_rows();
     }
+}
+
+bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
+    for (int i = 0; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        if (i > 0) {
+            auto& prev = chunks[i - 1];
+            int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
+            if (x > 0) {
+                return false;
+            }
+        }
+        for (int row = run.start_index() + 1; row < run.end_index(); row++) {
+            int x = run.compare_row(sort_desc, run, row - 1, row);
+            if (x > 0) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+int SortedRuns::debug_dump() const {
+    for (int k = 0; k < num_chunks(); k++) {
+        chunks[k].debug_dump();
+    }
+    return 0;
+}
+
+ChunkPtr SortedRuns::assemble() const {
+    if (chunks.empty()) {
+        return {};
+    }
+    ChunkPtr result(chunks.front().clone_slice().release());
+    for (int i = 1; i < chunks.size(); i++) {
+        auto& run = chunks[i];
+        result->append(*run.chunk, run.range.first, run.num_rows());
+    }
+    return result;
 }
 
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
@@ -379,13 +451,17 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         SortedRuns right = queue.front();
         queue.pop_front();
 
+        // TODO: push down the limit to merge procedure
         SortedRuns merged;
-        // TODO: push the limit to merge procedure
         RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, sort_exprs, left, right, &merged));
+
+        DCHECK(left.is_sorted(descs)) << left.debug_dump();
+        DCHECK(right.is_sorted(descs)) << right.debug_dump();
+        DCHECK(merged.is_sorted(descs)) << merged.debug_dump();
+
         if (limit > 0) {
             merged.resize(limit);
         }
-
         queue.push_back(merged);
     }
     *output = queue.front();

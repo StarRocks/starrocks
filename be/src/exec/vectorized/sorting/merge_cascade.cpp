@@ -27,14 +27,15 @@ struct CursorAlgo {
         perm.resize(end - start);
     }
 
-    // Find upper_bound in left column based on right row
-    static size_t upper_bound(SortDesc desc, const Column& column, std::pair<size_t, size_t> range,
-                              const Column& rhs_column, size_t rhs_row) {
-        size_t first = range.first;
-        size_t count = range.second - range.first;
+    // TODO(Murphy): optimize with column-wise binary-search
+    // Find the first row in `run` greater than last row in cut. AKA upper-bound
+    // @return row index of upper bound
+    static size_t chunk_upper_bound(const SortDescs& sort_descs, const SortedRun& run, const SortedRun& cut) {
+        size_t first = run.start_index();
+        size_t count = run.num_rows();
         while (count > 0) {
             size_t mid = first + count / 2;
-            int x = column.compare_at(mid, rhs_row, rhs_column, desc.null_first) * desc.sort_order;
+            int x = run.compare_row(sort_descs, cut, mid, cut.end_index() - 1);
             if (x <= 0) {
                 first = mid + 1;
                 count -= count / 2 + 1;
@@ -43,44 +44,6 @@ struct CursorAlgo {
             }
         }
         return first;
-    }
-
-    static size_t lower_bound(SortDesc desc, const Column& column, std::pair<size_t, size_t> range,
-                              const Column& rhs_column, size_t rhs_row) {
-        size_t first = range.first;
-        size_t count = range.second - range.first;
-        while (count > 0) {
-            size_t mid = first + count / 2;
-            int x = column.compare_at(mid, rhs_row, rhs_column, desc.null_first) * desc.sort_order;
-            if (x < 0) {
-                first = mid + 1;
-                count -= count / 2 + 1;
-            } else {
-                count /= 2;
-            }
-        }
-        return first;
-    }
-
-    // Cutoff by upper_bound
-    // @return last row index of upper bound
-    static size_t cutoff_run(const SortDescs& sort_descs, SortedRun run, std::pair<SortedRun, size_t> cut) {
-        std::pair<size_t, size_t> search_range = run.range;
-        size_t res = 0;
-
-        for (int i = 0; i < sort_descs.num_columns(); i++) {
-            auto& lhs_col = *run.get_column(i);
-            auto& rhs_col = *cut.first.get_column(i);
-            SortDesc desc = sort_descs.get_column_desc(i);
-            size_t lower = lower_bound(desc, lhs_col, search_range, rhs_col, cut.second);
-            size_t upper = upper_bound(desc, lhs_col, search_range, rhs_col, cut.second);
-            res = upper;
-            if (upper - lower <= 1) {
-                break;
-            }
-            search_range = {lower, upper};
-        }
-        return res;
     }
 };
 
@@ -144,19 +107,20 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     const SortDescs& sort_desc = _sort_desc;
     ChunkUniquePtr result;
 
-    if (_left_run.empty()) {
-        // TODO: avoid copy
-        result = _right_run.clone_slice();
-        _right_run.reset();
-    } else if (_right_run.empty()) {
+    int intersect = _left_run.intersect(sort_desc, _right_run);
+    if (intersect < 0) {
         result = _left_run.clone_slice();
         _left_run.reset();
+        VLOG_ROW << "merge_sorted_cursor_two_way output left run";
+    } else if (intersect > 0) {
+        result = _right_run.clone_slice();
+        _right_run.reset();
+        VLOG_ROW << "merge_sorted_cursor_two_way output right run";
     } else {
+        // Cutoff right by left tail
         int tail_cmp = CursorAlgo::compare_tail(sort_desc, _left_run, _right_run);
         if (tail_cmp <= 0) {
-            // Cutoff right by left tail
-            size_t right_cut =
-                    CursorAlgo::cutoff_run(sort_desc, _right_run, std::make_pair(_left_run, _left_run.num_rows() - 1));
+            size_t right_cut = CursorAlgo::chunk_upper_bound(sort_desc, _right_run, _left_run);
             SortedRun right_1(_right_run, _right_run.start_index(), right_cut);
             SortedRun right_2(_right_run, right_cut, _right_run.end_index());
 
@@ -168,13 +132,14 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
             append_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
 
-            _left_run.reset();
+            VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output left and right [{}, {})",
+                                    _right_run.start_index(), right_cut);
             _right_run = right_2;
             result = std::move(merged);
+            _left_run.reset();
         } else {
             // Cutoff left by right tail
-            size_t left_cut =
-                    CursorAlgo::cutoff_run(sort_desc, _left_run, std::make_pair(_right_run, _right_run.num_rows() - 1));
+            size_t left_cut = CursorAlgo::chunk_upper_bound(sort_desc, _left_run, _right_run);
             SortedRun left_1(_left_run, _left_run.start_index(), left_cut);
             SortedRun left_2(_left_run, left_cut, _left_run.end_index());
 
@@ -186,9 +151,11 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
             append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
+            VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output right and left [{}, {})",
+                                    _left_run.start_index(), left_cut);
             _left_run = left_2;
-            _right_run.reset();
             result = std::move(merged);
+            _right_run.reset();
         }
     }
 
