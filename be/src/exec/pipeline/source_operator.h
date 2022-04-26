@@ -36,7 +36,6 @@ public:
 
 protected:
     MorselQueue* _morsel_queue = nullptr;
-    ChunkSourcePtr _chunk_source;
 
     int64_t _last_scan_rows_num = 0;
 };
