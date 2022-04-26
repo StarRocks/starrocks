@@ -19,19 +19,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
-<<<<<<< HEAD
  * eg:
- * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=0
- * (mark forbit test_basic use global dict)
- * POST    /api/global_dict/table/forbit?db_name=default_cluster:test&table_name=test_basic&enable=1
+ * POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=0
+ * (mark disable test_basic use global dict)
+ * POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=1
  * (mark enable test_basic use global dict)
-=======
- *  eg:
- *       POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=0
- *               (mark disable test_basic use global dict)
- *       POST    /api/global_dict/table/enable?db_name=default_cluster:test&table_name=test_basic&enable=1
- *               (mark enable test_basic use global dict)
->>>>>>> small change
  */
 
 public class GlobalDictMetaService {
