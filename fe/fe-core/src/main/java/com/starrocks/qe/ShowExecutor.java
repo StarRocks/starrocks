@@ -274,7 +274,7 @@ public class ShowExecutor {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ctx, db.getFullName(), PrivPredicate.SHOW)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ctx, db.getFullName(), PrivPredicate.SHOW)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
                     ctx.getQualifiedUser(),
                     ctx.getRemoteIP(),
