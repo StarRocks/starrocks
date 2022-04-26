@@ -8,9 +8,8 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.load.loadv2.SparkLoadAppHandle;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -109,14 +108,14 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testReplayEraseTableEx(@Mocked Catalog catalog) {
+    public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
 
-                catalog.getEditLog().logEraseMultiTables((List<Long>) any);
+                globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
                 minTimes = 0;
                 result = null;
             }
@@ -138,7 +137,8 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAddTabletToInvertedIndexWithLocalTablet(@Mocked Catalog catalog, @Mocked Database db) {
+    public void testAddTabletToInvertedIndexWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Mocked Database db) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -191,7 +191,7 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 result = invertedIndex;
             }
         };
@@ -211,7 +211,8 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAddTabletToInvertedIndexWithStarOSTablet(@Mocked Catalog catalog, @Mocked Database db) {
+    public void testAddTabletToInvertedIndexWithStarOSTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                                             @Mocked Database db) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -258,7 +259,7 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 result = invertedIndex;
             }
         };

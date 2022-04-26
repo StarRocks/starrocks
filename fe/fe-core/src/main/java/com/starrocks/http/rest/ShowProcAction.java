@@ -24,7 +24,6 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -39,6 +38,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.MasterOpExecutor;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,7 +71,7 @@ public class ShowProcAction extends RestBaseAction {
         }
 
         // forward to master if necessary
-        if (!Catalog.getCurrentCatalog().isMaster() && isForward) {
+        if (!GlobalStateMgr.getCurrentState().isMaster() && isForward) {
             String showProcStmt = "SHOW PROC \"" + path + "\"";
             // ConnectContext build in RestBaseAction
             ConnectContext context = ConnectContext.get();

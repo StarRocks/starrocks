@@ -22,11 +22,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import org.junit.Assert;
@@ -35,19 +35,19 @@ import org.junit.Test;
 
 public class ShowAlterStmtTest {
     private Analyzer analyzer;
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     private SystemInfoService systemInfo;
 
-    private static FakeCatalog fakeCatalog;
+    private static FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = AccessTestUtil.fetchAdminCatalog();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
 
-        FakeCatalog.setCatalog(catalog);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
-        analyzer = new Analyzer(catalog, new ConnectContext(null));
+        analyzer = new Analyzer(globalStateMgr, new ConnectContext(null));
         new Expectations(analyzer) {
             {
                 analyzer.getDefaultDb();
@@ -60,7 +60,7 @@ public class ShowAlterStmtTest {
 
                 analyzer.getCatalog();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
                 analyzer.getClusterName();
                 minTimes = 0;

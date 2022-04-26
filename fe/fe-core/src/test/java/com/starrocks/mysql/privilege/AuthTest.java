@@ -37,7 +37,6 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -48,6 +47,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -64,7 +64,7 @@ public class AuthTest {
 
     private Auth auth;
     @Mocked
-    public Catalog catalog;
+    public GlobalStateMgr globalStateMgr;
     @Mocked
     private Analyzer analyzer;
     @Mocked
@@ -110,15 +110,15 @@ public class AuthTest {
                 minTimes = 0;
                 result = SystemInfoService.DEFAULT_CLUSTER;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
@@ -1141,7 +1141,6 @@ public class AuthTest {
             Assert.fail();
         }
         Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
-
 
         // 38.3 grant node_priv to role
         grantStmt = new GrantStmt(null, "role3", tablePattern, privileges);

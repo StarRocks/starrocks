@@ -39,7 +39,8 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             partitionAfter = Preconditions.checkNotNull(alterPartitionMessage.getPtnObjAfter());
             hmsTbl = alterPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
+            hivePartitionKeys.add(
+                    new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter partition message"), e);
@@ -79,7 +80,6 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     protected boolean isSupported() {
         return true;
     }
-
 
     @Override
     protected void process() throws MetastoreNotificationException {

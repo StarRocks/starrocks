@@ -183,7 +183,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 
 struct ColumnBuilder {
     template <PrimitiveType ptype>
-    ColumnPtr operator()(const TypeDescriptor& type_desc) {
+    ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
         case INVALID_TYPE:
         case TYPE_NULL:
@@ -194,15 +194,14 @@ struct ColumnBuilder {
         case TYPE_MAP:
             LOG(FATAL) << "Unsupported column type" << ptype;
         case TYPE_DECIMAL32:
-            return Decimal32Column::create(type_desc.precision, type_desc.scale);
+            return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL64:
-            return Decimal64Column::create(type_desc.precision, type_desc.scale);
+            return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
         case TYPE_DECIMAL128:
-            return Decimal128Column::create(type_desc.precision, type_desc.scale);
-        default:;
+            return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
+        default:
+            return RunTimeColumnType<ptype>::create(size);
         }
-
-        return RunTimeColumnType<ptype>::create();
     }
 };
 
@@ -211,32 +210,28 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     if (VLOG_ROW_IS_ON) {
         VLOG_ROW << "PrimitiveType " << type << " nullable " << nullable << " is_const " << is_const;
     }
-    if (nullable && is_const) {
-        return ColumnHelper::create_const_null_column(size);
-    }
 
-    if (type == TYPE_NULL) {
-        if (is_const) {
-            return ColumnHelper::create_const_null_column(size);
-        } else if (nullable) {
-            return NullableColumn::create(BooleanColumn::create(), NullColumn::create());
-        }
+    if (is_const && (nullable || type == TYPE_NULL)) {
+        return ColumnHelper::create_const_null_column(size);
+    } else if (type == TYPE_NULL) {
+        return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
     }
 
     ColumnPtr p;
     if (type_desc.type == TYPE_ARRAY) {
-        auto offsets = UInt32Column::create();
-        auto data = create_column(type_desc.children[0], true);
+        auto offsets = UInt32Column::create(size);
+        auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else {
-        p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc);
+        p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
 
     if (is_const) {
-        return ConstColumn::create(p);
+        return ConstColumn::create(p, size);
     }
     if (nullable) {
-        return NullableColumn::create(p, NullColumn::create());
+        // Default value is null
+        return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
     }
     return p;
 }

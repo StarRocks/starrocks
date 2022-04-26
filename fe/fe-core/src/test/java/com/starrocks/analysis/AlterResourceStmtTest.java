@@ -3,12 +3,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -28,8 +28,9 @@ public class AlterResourceStmtTest {
     }
 
     @Test
-    public void testAlterResourceProperties(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
-        this.expectations(catalog, auth);
+    public void testAlterResourceProperties(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
+        this.expectations(globalStateMgr, auth);
         Map<String, String> properties = Maps.newHashMap();
         properties.put("hive.metastore.uris", "thrift://10.10.44.98:9083");
         AlterResourceStmt stmt = new AlterResourceStmt("hive0", properties);
@@ -41,8 +42,9 @@ public class AlterResourceStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNotAllowModifyResourceType(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
-        this.expectations(catalog, auth);
+    public void testNotAllowModifyResourceType(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
+        this.expectations(globalStateMgr, auth);
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", "hive");
         AlterResourceStmt stmt = new AlterResourceStmt("hive0", properties);
@@ -50,17 +52,18 @@ public class AlterResourceStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testResourcePropertiesNotEmpty(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
-        this.expectations(catalog, auth);
+    public void testResourcePropertiesNotEmpty(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
+        this.expectations(globalStateMgr, auth);
         Map<String, String> properties = Maps.newHashMap();
         AlterResourceStmt stmt = new AlterResourceStmt("hive0", properties);
         stmt.analyze(analyzer);
     }
 
-    private void expectations(Catalog catalog, Auth auth) {
+    private void expectations(GlobalStateMgr globalStateMgr, Auth auth) {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

@@ -85,37 +85,37 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.SyncStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.server.GlobalStateMgr;
 
 public class DdlExecutor {
-    public static void execute(Catalog catalog, DdlStmt ddlStmt) throws Exception {
+    public static void execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
         if (ddlStmt instanceof CreateDbStmt) {
-            catalog.createDb((CreateDbStmt) ddlStmt);
+            globalStateMgr.createDb((CreateDbStmt) ddlStmt);
         } else if (ddlStmt instanceof DropDbStmt) {
-            catalog.dropDb((DropDbStmt) ddlStmt);
+            globalStateMgr.dropDb((DropDbStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateFunctionStmt) {
-            catalog.createFunction((CreateFunctionStmt) ddlStmt);
+            globalStateMgr.createFunction((CreateFunctionStmt) ddlStmt);
         } else if (ddlStmt instanceof DropFunctionStmt) {
-            catalog.dropFunction((DropFunctionStmt) ddlStmt);
+            globalStateMgr.dropFunction((DropFunctionStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateTableStmt) {
-            catalog.createTable((CreateTableStmt) ddlStmt);
+            globalStateMgr.createTable((CreateTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateTableLikeStmt) {
-            catalog.createTableLike((CreateTableLikeStmt) ddlStmt);
+            globalStateMgr.createTableLike((CreateTableLikeStmt) ddlStmt);
         } else if (ddlStmt instanceof DropTableStmt) {
-            catalog.dropTable((DropTableStmt) ddlStmt);
+            globalStateMgr.dropTable((DropTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
-            catalog.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
+            globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof DropMaterializedViewStmt) {
-            catalog.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
+            globalStateMgr.dropMaterializedView((DropMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterTableStmt) {
-            catalog.alterTable((AlterTableStmt) ddlStmt);
+            globalStateMgr.alterTable((AlterTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterViewStmt) {
-            catalog.alterView((AlterViewStmt) ddlStmt);
+            globalStateMgr.alterView((AlterViewStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelAlterTableStmt) {
-            catalog.cancelAlter((CancelAlterTableStmt) ddlStmt);
+            globalStateMgr.cancelAlter((CancelAlterTableStmt) ddlStmt);
         } else if (ddlStmt instanceof LoadStmt) {
             LoadStmt loadStmt = (LoadStmt) ddlStmt;
             EtlJobType jobType = loadStmt.getEtlJobType();
@@ -127,117 +127,117 @@ public class DdlExecutor {
                         + " Try using broker load. See 'help broker load;'");
             }
 
-            catalog.getLoadManager().createLoadJobFromStmt(loadStmt);
+            globalStateMgr.getLoadManager().createLoadJobFromStmt(loadStmt);
         } else if (ddlStmt instanceof CancelLoadStmt) {
-            catalog.getLoadManager().cancelLoadJob((CancelLoadStmt) ddlStmt);
+            globalStateMgr.getLoadManager().cancelLoadJob((CancelLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateRoutineLoadStmt) {
-            catalog.getRoutineLoadManager().createRoutineLoadJob((CreateRoutineLoadStmt) ddlStmt);
+            globalStateMgr.getRoutineLoadManager().createRoutineLoadJob((CreateRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof PauseRoutineLoadStmt) {
-            catalog.getRoutineLoadManager().pauseRoutineLoadJob((PauseRoutineLoadStmt) ddlStmt);
+            globalStateMgr.getRoutineLoadManager().pauseRoutineLoadJob((PauseRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof ResumeRoutineLoadStmt) {
-            catalog.getRoutineLoadManager().resumeRoutineLoadJob((ResumeRoutineLoadStmt) ddlStmt);
+            globalStateMgr.getRoutineLoadManager().resumeRoutineLoadJob((ResumeRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof StopRoutineLoadStmt) {
-            catalog.getRoutineLoadManager().stopRoutineLoadJob((StopRoutineLoadStmt) ddlStmt);
+            globalStateMgr.getRoutineLoadManager().stopRoutineLoadJob((StopRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterRoutineLoadStmt) {
-            catalog.getRoutineLoadManager().alterRoutineLoadJob((AlterRoutineLoadStmt) ddlStmt);
+            globalStateMgr.getRoutineLoadManager().alterRoutineLoadJob((AlterRoutineLoadStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateUserStmt) {
             CreateUserStmt stmt = (CreateUserStmt) ddlStmt;
-            catalog.getAuth().createUser(stmt);
+            globalStateMgr.getAuth().createUser(stmt);
         } else if (ddlStmt instanceof AlterUserStmt) {
             AlterUserStmt stmt = (AlterUserStmt) ddlStmt;
-            catalog.getAuth().alterUser(stmt);
+            globalStateMgr.getAuth().alterUser(stmt);
         } else if (ddlStmt instanceof DropUserStmt) {
             DropUserStmt stmt = (DropUserStmt) ddlStmt;
-            catalog.getAuth().dropUser(stmt);
+            globalStateMgr.getAuth().dropUser(stmt);
         } else if (ddlStmt instanceof RevokeRoleStmt) {
             // this condition must go first because RevokeRoleStmt is a subclass of GrantRoleStmt
             RevokeRoleStmt stmt = (RevokeRoleStmt) ddlStmt;
-            catalog.getAuth().revokeRole(stmt);
+            globalStateMgr.getAuth().revokeRole(stmt);
         } else if (ddlStmt instanceof GrantRoleStmt) {
             GrantRoleStmt stmt = (GrantRoleStmt) ddlStmt;
-            catalog.getAuth().grantRole(stmt);
+            globalStateMgr.getAuth().grantRole(stmt);
         } else if (ddlStmt instanceof GrantStmt) {
             GrantStmt stmt = (GrantStmt) ddlStmt;
-            catalog.getAuth().grant(stmt);
+            globalStateMgr.getAuth().grant(stmt);
         } else if (ddlStmt instanceof RevokeStmt) {
             RevokeStmt stmt = (RevokeStmt) ddlStmt;
-            catalog.getAuth().revoke(stmt);
+            globalStateMgr.getAuth().revoke(stmt);
         } else if (ddlStmt instanceof CreateRoleStmt) {
-            catalog.getAuth().createRole((CreateRoleStmt) ddlStmt);
+            globalStateMgr.getAuth().createRole((CreateRoleStmt) ddlStmt);
         } else if (ddlStmt instanceof DropRoleStmt) {
-            catalog.getAuth().dropRole((DropRoleStmt) ddlStmt);
+            globalStateMgr.getAuth().dropRole((DropRoleStmt) ddlStmt);
         } else if (ddlStmt instanceof SetUserPropertyStmt) {
-            catalog.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
+            globalStateMgr.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterSystemStmt) {
             AlterSystemStmt stmt = (AlterSystemStmt) ddlStmt;
-            catalog.alterCluster(stmt);
+            globalStateMgr.alterCluster(stmt);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
-            catalog.cancelAlterCluster(stmt);
+            globalStateMgr.cancelAlterCluster(stmt);
         } else if (ddlStmt instanceof AlterDatabaseQuotaStmt) {
-            catalog.alterDatabaseQuota((AlterDatabaseQuotaStmt) ddlStmt);
+            globalStateMgr.alterDatabaseQuota((AlterDatabaseQuotaStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterDatabaseRename) {
-            catalog.renameDatabase((AlterDatabaseRename) ddlStmt);
+            globalStateMgr.renameDatabase((AlterDatabaseRename) ddlStmt);
         } else if (ddlStmt instanceof RecoverDbStmt) {
-            catalog.recoverDatabase((RecoverDbStmt) ddlStmt);
+            globalStateMgr.recoverDatabase((RecoverDbStmt) ddlStmt);
         } else if (ddlStmt instanceof RecoverTableStmt) {
-            catalog.recoverTable((RecoverTableStmt) ddlStmt);
+            globalStateMgr.recoverTable((RecoverTableStmt) ddlStmt);
         } else if (ddlStmt instanceof RecoverPartitionStmt) {
-            catalog.recoverPartition((RecoverPartitionStmt) ddlStmt);
+            globalStateMgr.recoverPartition((RecoverPartitionStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateViewStmt) {
-            catalog.createView((CreateViewStmt) ddlStmt);
+            globalStateMgr.createView((CreateViewStmt) ddlStmt);
         } else if (ddlStmt instanceof BackupStmt) {
-            catalog.backup((BackupStmt) ddlStmt);
+            globalStateMgr.backup((BackupStmt) ddlStmt);
         } else if (ddlStmt instanceof RestoreStmt) {
-            catalog.restore((RestoreStmt) ddlStmt);
+            globalStateMgr.restore((RestoreStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelBackupStmt) {
-            catalog.cancelBackup((CancelBackupStmt) ddlStmt);
+            globalStateMgr.cancelBackup((CancelBackupStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateRepositoryStmt) {
-            catalog.getBackupHandler().createRepository((CreateRepositoryStmt) ddlStmt);
+            globalStateMgr.getBackupHandler().createRepository((CreateRepositoryStmt) ddlStmt);
         } else if (ddlStmt instanceof DropRepositoryStmt) {
-            catalog.getBackupHandler().dropRepository((DropRepositoryStmt) ddlStmt);
+            globalStateMgr.getBackupHandler().dropRepository((DropRepositoryStmt) ddlStmt);
         } else if (ddlStmt instanceof SyncStmt) {
             return;
         } else if (ddlStmt instanceof TruncateTableStmt) {
-            catalog.truncateTable((TruncateTableStmt) ddlStmt);
+            globalStateMgr.truncateTable((TruncateTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminRepairTableStmt) {
-            catalog.getTabletChecker().repairTable((AdminRepairTableStmt) ddlStmt);
+            globalStateMgr.getTabletChecker().repairTable((AdminRepairTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminCancelRepairTableStmt) {
-            catalog.getTabletChecker().cancelRepairTable((AdminCancelRepairTableStmt) ddlStmt);
+            globalStateMgr.getTabletChecker().cancelRepairTable((AdminCancelRepairTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminSetConfigStmt) {
-            catalog.setConfig((AdminSetConfigStmt) ddlStmt);
+            globalStateMgr.setConfig((AdminSetConfigStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateFileStmt) {
-            catalog.getSmallFileMgr().createFile((CreateFileStmt) ddlStmt);
+            globalStateMgr.getSmallFileMgr().createFile((CreateFileStmt) ddlStmt);
         } else if (ddlStmt instanceof DropFileStmt) {
-            catalog.getSmallFileMgr().dropFile((DropFileStmt) ddlStmt);
+            globalStateMgr.getSmallFileMgr().dropFile((DropFileStmt) ddlStmt);
         } else if (ddlStmt instanceof InstallPluginStmt) {
-            catalog.installPlugin((InstallPluginStmt) ddlStmt);
+            globalStateMgr.installPlugin((InstallPluginStmt) ddlStmt);
         } else if (ddlStmt instanceof UninstallPluginStmt) {
-            catalog.uninstallPlugin((UninstallPluginStmt) ddlStmt);
+            globalStateMgr.uninstallPlugin((UninstallPluginStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminCheckTabletsStmt) {
-            catalog.checkTablets((AdminCheckTabletsStmt) ddlStmt);
+            globalStateMgr.checkTablets((AdminCheckTabletsStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminSetReplicaStatusStmt) {
-            catalog.setReplicaStatus((AdminSetReplicaStatusStmt) ddlStmt);
+            globalStateMgr.setReplicaStatus((AdminSetReplicaStatusStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateResourceStmt) {
-            catalog.getResourceMgr().createResource((CreateResourceStmt) ddlStmt);
+            globalStateMgr.getResourceMgr().createResource((CreateResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof DropResourceStmt) {
-            catalog.getResourceMgr().dropResource((DropResourceStmt) ddlStmt);
+            globalStateMgr.getResourceMgr().dropResource((DropResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterResourceStmt) {
-            catalog.getResourceMgr().alterResource((AlterResourceStmt) ddlStmt);
+            globalStateMgr.getResourceMgr().alterResource((AlterResourceStmt) ddlStmt);
         } else if (ddlStmt instanceof CancelExportStmt) {
-            catalog.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
+            globalStateMgr.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateAnalyzeJobStmt) {
-            catalog.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
+            globalStateMgr.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
-            catalog.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
+            globalStateMgr.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
         } else if (ddlStmt instanceof RefreshExternalTableStmt) {
-            catalog.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
+            globalStateMgr.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
-            catalog.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
+            globalStateMgr.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof DropWorkGroupStmt) {
-            catalog.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
+            globalStateMgr.getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterWorkGroupStmt) {
-            catalog.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
+            globalStateMgr.getWorkGroupMgr().alterWorkGroup((AlterWorkGroupStmt) ddlStmt);
         } else {
             throw new DdlException("Unknown statement.");
         }

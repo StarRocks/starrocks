@@ -30,7 +30,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
@@ -71,6 +70,7 @@ import com.starrocks.proto.PStatus;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -351,7 +351,7 @@ public class Coordinator {
             queryProfile.addChild(fragmentProfiles.get(i));
         }
 
-        this.idToBackend = Catalog.getCurrentSystemInfo().getIdToBackend();
+        this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         if (LOG.isDebugEnabled()) {
             LOG.debug("idToBackend size={}", idToBackend.size());
             for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
@@ -438,7 +438,7 @@ public class Coordinator {
             // set the broker address for OUTFILE sink
             ResultSink resultSink = (ResultSink) topParams.fragment.getSink();
             if (resultSink.isOutputFileSink() && resultSink.needBroker()) {
-                FsBroker broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(resultSink.getBrokerName(),
+                FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(resultSink.getBrokerName(),
                         execBeAddr.getHostname());
                 resultSink.setBrokerAddr(broker.ip, broker.port);
                 LOG.info("OUTFILE through broker: {}:{}", broker.ip, broker.port);
@@ -450,7 +450,7 @@ public class Coordinator {
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(addressToBackendID.values());
-            Catalog.getCurrentCatalog().getLoadManager().initJobProgress(jobId, queryId, instanceIds,
+            GlobalStateMgr.getCurrentState().getLoadManager().initJobProgress(jobId, queryId, instanceIds,
                     relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId), addressToBackendID.keySet());
         }
@@ -1115,7 +1115,7 @@ public class Coordinator {
     }
 
     private TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
-        Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new UserException("Backend not found. Check if any backend is down or not");
@@ -1124,7 +1124,7 @@ public class Coordinator {
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
-        Backend backend = Catalog.getCurrentSystemInfo().getBackendWithBePort(
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (backend == null) {
             throw new UserException("Backend not found. Check if any backend is down or not");
@@ -1622,7 +1622,7 @@ public class Coordinator {
         }
 
         if (params.isSetLoaded_rows()) {
-            Catalog.getCurrentCatalog().getLoadManager().updateJobPrgress(
+            GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
                     params.done);
         }
@@ -2080,7 +2080,7 @@ public class Coordinator {
 
             WorkGroup workgroup = null;
             if (ConnectContext.get() != null) {
-                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                         ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
             }
 

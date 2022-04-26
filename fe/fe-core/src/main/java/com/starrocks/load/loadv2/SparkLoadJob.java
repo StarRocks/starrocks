@@ -35,7 +35,6 @@ import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -73,6 +72,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -174,7 +174,7 @@ public class SparkLoadJob extends BulkLoadJob {
     private void setResourceInfo() throws DdlException {
         // spark resource
         String resourceName = resourceDesc.getName();
-        Resource oriResource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource oriResource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (oriResource == null) {
             throw new DdlException("Resource does not exist. name: " + resourceName);
         }
@@ -189,7 +189,7 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
-        transactionId = Catalog.getCurrentGlobalTransactionMgr()
+        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         LoadJobSourceType.FRONTEND, id, timeoutSecond);
@@ -202,7 +202,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 sparkResource, brokerDesc);
         task.init();
         idToTasks.put(task.getSignature(), task);
-        submitTask(Catalog.getCurrentCatalog().getPendingLoadTaskScheduler(), task);
+        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
 
     @Override
@@ -479,7 +479,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                     if (!tabletToSentReplicaPushTask.containsKey(tabletId)
                                             || !tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
                                         long backendId = replica.getBackendId();
-                                        long taskSignature = Catalog.getCurrentGlobalTransactionMgr()
+                                        long taskSignature = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                                                 .getTransactionIDGenerator().getNextTransactionId();
 
                                         PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
@@ -502,9 +502,9 @@ public class SparkLoadJob extends BulkLoadJob {
                                         }
 
                                         // update broker address
-                                        Backend backend = Catalog.getCurrentCatalog().getCurrentSystemInfo()
+                                        Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
-                                        FsBroker fsBroker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(
+                                        FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
                                                 brokerDesc.getName(), backend.getHost());
                                         tBrokerScanRange.getBroker_addresses().add(
                                                 new TNetworkAddress(fsBroker.ip, fsBroker.port));
@@ -646,7 +646,7 @@ public class SparkLoadJob extends BulkLoadJob {
         Database db = getDb();
         db.writeLock();
         try {
-            Catalog.getCurrentGlobalTransactionMgr().commitTransaction(
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
@@ -716,7 +716,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         super.afterVisible(txnState, txnOperated);
         // collect table-level metrics after spark load job finished
-        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
@@ -795,7 +795,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         sparkResource = (SparkResource) Resource.read(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_91) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_91) {
             sparkLoadAppHandle = SparkLoadAppHandle.read(in);
         }
         etlStartTimestamp = in.readLong();
@@ -816,7 +816,7 @@ public class SparkLoadJob extends BulkLoadJob {
         SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
                 id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
                 loadStartTimestamp, tabletMetaToFileInfo);
-        Catalog.getCurrentCatalog().getEditLog().logUpdateLoadJob(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info);
     }
 
     @Override

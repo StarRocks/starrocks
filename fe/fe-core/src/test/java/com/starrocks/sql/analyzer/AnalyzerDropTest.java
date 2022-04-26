@@ -55,5 +55,4 @@ public class AnalyzerDropTest {
         Assert.assertFalse(stmt.isForceDrop());
     }
 
-
 }

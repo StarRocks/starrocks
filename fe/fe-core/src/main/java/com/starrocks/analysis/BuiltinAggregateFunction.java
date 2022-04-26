@@ -96,8 +96,8 @@ public class BuiltinAggregateFunction extends Function {
         intermediateType_ = t;
     }
 
-    // TODO: this is effectively a catalog of builtin aggregate functions.
-    // We should move this to something in the catalog instead of having it
+    // TODO: this is effectively a globalStateMgr of builtin aggregate functions.
+    // We should move this to something in the globalStateMgr instead of having it
     // here like this.
     public enum Operator {
         ANY_VALUE("ANY_VALUE", TAggregationOp.ANY_VALUE, null),

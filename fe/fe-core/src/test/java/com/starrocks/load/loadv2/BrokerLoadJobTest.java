@@ -28,7 +28,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -41,15 +40,13 @@ import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
-import com.starrocks.load.Load;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.MasterTaskExecutor;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -70,7 +67,7 @@ public class BrokerLoadJobTest {
     public void testFromLoadStmt(@Injectable LoadStmt loadStmt,
                                  @Injectable LabelName labelName,
                                  @Injectable DataDescription dataDescription,
-                                 @Mocked Catalog catalog,
+                                 @Mocked GlobalStateMgr globalStateMgr,
                                  @Injectable Database database) {
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
         dataDescriptionList.add(dataDescription);
@@ -85,7 +82,7 @@ public class BrokerLoadJobTest {
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
-                catalog.getDb(databaseName);
+                globalStateMgr.getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -115,7 +112,7 @@ public class BrokerLoadJobTest {
                                   @Injectable LabelName labelName,
                                   @Injectable Database database,
                                   @Injectable OlapTable olapTable,
-                                  @Mocked Catalog catalog) {
+                                  @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
         long dbId = 1;
@@ -136,7 +133,7 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
-                catalog.getDb(databaseName);
+                globalStateMgr.getDb(databaseName);
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -178,7 +175,7 @@ public class BrokerLoadJobTest {
     @Test
     public void testGetTableNames(@Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
                                   @Injectable BrokerFileGroup brokerFileGroup,
-                                  @Mocked Catalog catalog,
+                                  @Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Database database,
                                   @Injectable Table table) throws MetaNotFoundException {
         List<BrokerFileGroup> brokerFileGroups = Lists.newArrayList();
@@ -197,7 +194,7 @@ public class BrokerLoadJobTest {
                 fileGroupAggInfo.getAllTableIds();
                 minTimes = 0;
                 result = Sets.newHashSet(1L);
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 database.getTable(1L);
@@ -263,7 +260,7 @@ public class BrokerLoadJobTest {
 
     @Test
     public void testPendingTaskOnFinished(@Injectable BrokerPendingTaskAttachment attachment,
-                                          @Mocked Catalog catalog,
+                                          @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Database database,
                                           @Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
                                           @Injectable BrokerFileGroup brokerFileGroup1,
@@ -298,7 +295,7 @@ public class BrokerLoadJobTest {
                 attachment.getTaskId();
                 minTimes = 0;
                 result = taskId;
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 fileGroupAggInfo.getAggKeyToFileGroups();
@@ -307,7 +304,7 @@ public class BrokerLoadJobTest {
                 database.getTable(anyLong);
                 minTimes = 0;
                 result = olapTable;
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 result = 1L;
                 result = 2L;
@@ -365,7 +362,7 @@ public class BrokerLoadJobTest {
                                                       @Injectable BrokerLoadingTaskAttachment attachment2,
                                                       @Injectable LoadTask loadTask1,
                                                       @Injectable LoadTask loadTask2,
-                                                      @Mocked Catalog catalog) {
+                                                      @Mocked GlobalStateMgr globalStateMgr) {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         Map<Long, LoadTask> idToTasks = Maps.newHashMap();
@@ -410,7 +407,7 @@ public class BrokerLoadJobTest {
     @Test
     public void testLoadingTaskOnFinished(@Injectable BrokerLoadingTaskAttachment attachment1,
                                           @Injectable LoadTask loadTask1,
-                                          @Mocked Catalog catalog,
+                                          @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Database database) {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
@@ -428,7 +425,7 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
             }

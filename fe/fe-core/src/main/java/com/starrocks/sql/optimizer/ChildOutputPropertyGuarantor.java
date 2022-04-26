@@ -4,10 +4,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
@@ -15,21 +14,15 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
-
-public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, ExpressionContext> {
+public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, ExpressionContext> {
     private PhysicalPropertySet requirements;
     // children best group expression
     private List<GroupExpression> childrenBestExprList;
@@ -79,7 +72,7 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
         DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
 
-        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
         long rightTableId = rightInfo.tableId;
 
@@ -118,11 +111,6 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
         }
 
         return true;
-    }
-
-    private PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty);
     }
 
     // enforce child SHUFFLE type distribution
@@ -176,7 +164,7 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
 
         DistributionSpec rightDistributionSpec =
                 DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(bucketShuffleColumns,
-                        HashDistributionDesc.SourceType.BUCKET_JOIN));
+                        HashDistributionDesc.SourceType.BUCKET));
 
         GroupExpression rightChild = childrenBestExprList.get(1);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
@@ -216,16 +204,15 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
         }
     }
 
-    private PhysicalPropertySet addChildEnforcer(PhysicalPropertySet oldOutputProperty,
-                                                 DistributionProperty newDistributionProperty,
-                                                 double childCost, Group childGroup) {
+    private void addChildEnforcer(PhysicalPropertySet oldOutputProperty,
+                                  DistributionProperty newDistributionProperty,
+                                  double childCost, Group childGroup) {
         PhysicalPropertySet newOutputProperty = oldOutputProperty.copy();
         newOutputProperty.setDistributionProperty(newDistributionProperty);
         GroupExpression enforcer = newDistributionProperty.appendEnforcers(childGroup);
 
         enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
         updateChildCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty, childCost, childGroup);
-        return newOutputProperty;
     }
 
     private void updateChildCostWithEnforcer(GroupExpression enforcer,
@@ -273,19 +260,12 @@ public class ChildOutputPropertyGuarantor extends OperatorVisitor<Void, Expressi
             return visitOperator(node, context);
         }
         // 2. Distribution is shuffle
-        ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
-        ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
-        List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
-
-        List<Integer> leftOnPredicateColumns = new ArrayList<>();
-        List<Integer> rightOnPredicateColumns = new ArrayList<>();
-        JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
-                leftOnPredicateColumns, rightOnPredicateColumns);
-        Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
+        JoinHelper joinHelper = JoinHelper.of(node, context.getChildOutputColumns(0), context.getChildOutputColumns(1));
+        List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
+        List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
         // Get required properties for children.
         List<PhysicalPropertySet> requiredProperties =
-                Utils.computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns,
+                computeShuffleJoinRequiredProperties(requirements, leftOnPredicateColumns,
                         rightOnPredicateColumns);
         Preconditions.checkState(requiredProperties.size() == 2);
         List<Integer> leftShuffleColumns =

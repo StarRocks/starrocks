@@ -21,6 +21,7 @@
 
 package com.starrocks.service;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
@@ -42,7 +43,8 @@ public class FrontendOptions {
 
     private static final String PRIORITY_CIDR_SEPARATOR = ";";
 
-    private static final List<String> priorityCidrs = Lists.newArrayList();
+    @VisibleForTesting
+    static final List<String> priorityCidrs = Lists.newArrayList();
     private static InetAddress localAddr = InetAddress.getLoopbackAddress();
 
     public static void init() throws UnknownHostException {
@@ -78,7 +80,7 @@ public class FrontendOptions {
                         localAddr = addr;
                         hasMatchedIp = true;
                         break;
-                    } 
+                    }
                 } else {
                     localAddr = addr;
                     break;
@@ -132,7 +134,9 @@ public class FrontendOptions {
         priorityCidrs.addAll(priorNetworks);
     }
 
-    private static boolean isInPriorNetwork(String ip) {
+
+    @VisibleForTesting
+    static boolean isInPriorNetwork(String ip) {
         ip = ip.trim();
         for (String cidr : priorityCidrs) {
             cidr = cidr.trim();
@@ -142,7 +146,9 @@ public class FrontendOptions {
                     return true;
                 }
             } else {
-                SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(cidr).getInfo();
+                SubnetUtils subnetUtils = new SubnetUtils(cidr);
+                subnetUtils.setInclusiveHostCount(true);
+                SubnetUtils.SubnetInfo subnetInfo = subnetUtils.getInfo();
                 if (subnetInfo.isInRange(ip)) {
                     return true;
                 }

@@ -22,10 +22,10 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -59,7 +59,7 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         }
 
         GroupId groupId = new GroupId(dbId, grpId);
-        ColocateTableIndex index = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
         List<List<Long>> beSeqs = index.getBackendsPerBucketSeq(groupId);
         return new ColocationGroupBackendSeqsProcNode(beSeqs);
     }
@@ -69,7 +69,7 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        ColocateTableIndex index = Catalog.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
         List<List<String>> infos = index.getInfos();
         result.setRows(infos);
         return result;

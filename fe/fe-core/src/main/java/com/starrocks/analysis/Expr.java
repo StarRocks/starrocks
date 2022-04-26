@@ -27,7 +27,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
@@ -36,6 +35,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExpr;
@@ -1468,7 +1468,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Looks up in the catalog the builtin for 'name' and 'argTypes'.
+     * Looks up in the globalStateMgr the builtin for 'name' and 'argTypes'.
      * Returns null if the function is not found.
      */
     protected Function getBuiltinFunction(
@@ -1476,13 +1476,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             throws AnalysisException {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
-        return Catalog.getCurrentCatalog().getFunction(searchDesc, mode);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
     public static Function getBuiltinFunction(String name, Type[] argTypes, Function.CompareMode mode) {
         FunctionName fnName = new FunctionName(name);
         Function searchDesc = new Function(fnName, argTypes, Type.INVALID, false);
-        return Catalog.getCurrentCatalog().getFunction(searchDesc, mode);
+        return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
     /**

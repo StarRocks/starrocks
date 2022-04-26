@@ -22,9 +22,9 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
 // show proc "/cluster_balance/priority_repair";
 public class PriorityRepairProcNode implements ProcNodeInterface {
@@ -40,7 +40,7 @@ public class PriorityRepairProcNode implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        TabletChecker tabletChecker = Catalog.getCurrentCatalog().getTabletChecker();
+        TabletChecker tabletChecker = GlobalStateMgr.getCurrentState().getTabletChecker();
         result.setRows(tabletChecker.getPriosInfo());
 
         return result;

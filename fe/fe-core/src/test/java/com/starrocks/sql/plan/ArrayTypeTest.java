@@ -161,7 +161,8 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayDifferenceArgs3() throws Exception {
         String sql = "select array_difference(c1, 3) from test_array";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("No matching function with signature: array_difference(ARRAY<varchar(65533)>, tinyint(4)).");
+        expectedEx.expectMessage(
+                "No matching function with signature: array_difference(ARRAY<varchar(65533)>, tinyint(4)).");
         getFragmentPlan(sql);
     }
 
@@ -178,7 +179,8 @@ public class ArrayTypeTest extends PlanTestBase {
 
     @Test
     public void testArrayClone() throws Exception {
-        String sql = "select array_contains([v],1), array_contains([v],2) from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
+        String sql =
+                "select array_contains([v],1), array_contains([v],2) from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  8:Project\n" +
                 "  |  <slot 8> : array_contains(ARRAY<bigint(20)>[7: expr], 1)\n" +

@@ -42,11 +42,16 @@ public class JDBCResourceTest {
 
         Assert.assertTrue(resource1 instanceof JDBCResource);
         Assert.assertEquals(resource0.getName(), resource1.getName());
-        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_URL), ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_URL));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_CLASS), ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_CLASS));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.URI), ((JDBCResource) resource1).getProperty(JDBCResource.URI));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.USER), ((JDBCResource) resource1).getProperty(JDBCResource.USER));
-        Assert.assertEquals(resource0.getProperty(JDBCResource.PASSWORD), ((JDBCResource) resource1).getProperty(JDBCResource.PASSWORD));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_URL),
+                ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_URL));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.DRIVER_CLASS),
+                ((JDBCResource) resource1).getProperty(JDBCResource.DRIVER_CLASS));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.URI),
+                ((JDBCResource) resource1).getProperty(JDBCResource.URI));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.USER),
+                ((JDBCResource) resource1).getProperty(JDBCResource.USER));
+        Assert.assertEquals(resource0.getProperty(JDBCResource.PASSWORD),
+                ((JDBCResource) resource1).getProperty(JDBCResource.PASSWORD));
     }
 
     @Test(expected = DdlException.class)

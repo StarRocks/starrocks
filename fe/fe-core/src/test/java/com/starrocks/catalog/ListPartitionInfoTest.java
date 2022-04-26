@@ -7,19 +7,20 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.io.Text;
-import com.starrocks.meta.MetaContext;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
-import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -39,7 +40,7 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testWriteOutAndReadIn(@Mocked Catalog catalog) throws IOException,
+    public void testWriteOutAndReadIn(@Mocked GlobalStateMgr globalStateMgr) throws IOException,
             NotImplementedException, ParseException {
         // Write objects to file
         File file = new File("./test_serial.log");
@@ -53,7 +54,7 @@ public class ListPartitionInfoTest {
         out.close();
 
         new Expectations() {{
-            Catalog.getCurrentCatalogJournalVersion();
+            GlobalStateMgr.getCurrentStateJournalVersion();
             result = FeMetaVersion.VERSION_CURRENT;
         }};
 

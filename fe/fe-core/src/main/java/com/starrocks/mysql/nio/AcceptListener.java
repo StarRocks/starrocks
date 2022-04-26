@@ -20,11 +20,11 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -55,7 +55,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
             NConnectContext context = new NConnectContext(connection);
-            context.setCatalog(Catalog.getCurrentCatalog());
+            context.setCatalog(GlobalStateMgr.getCurrentState());
             connectScheduler.submit(context);
 
             try {
@@ -70,7 +70,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
                         if (connectScheduler.registerConnection(context)) {
                             MysqlProto.sendResponsePacket(context);
-                            connection.setCloseListener(streamConnection -> connectScheduler.unregisterConnection(context));
+                            connection.setCloseListener(
+                                    streamConnection -> connectScheduler.unregisterConnection(context));
                         } else {
                             context.getState().setError("Reach limit of connections");
                             MysqlProto.sendResponsePacket(context);
