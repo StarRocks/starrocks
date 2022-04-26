@@ -154,13 +154,16 @@ public:
         this->data(state).window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(0));
 
         // get timestamp
-        const auto* timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
-
         TimeType tv;
-        if constexpr (PT == TYPE_DATETIME) {
-            tv = timestamp_column->get(row_num).get_timestamp();
-        } else if constexpr (PT == TYPE_DATE) {
-            tv = timestamp_column->get(row_num).get_date();
+        if (!columns[1]->is_constant()) {
+            const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
+            if constexpr (PT == TYPE_DATETIME) {
+                tv = timestamp_column->get(row_num).get_timestamp();
+            } else if constexpr (PT == TYPE_DATE) {
+                tv = timestamp_column->get(row_num).get_date();
+            }
+        } else {
+            tv = ColumnHelper::get_const_value<PT>(columns[1]);
         }
 
         // get event
