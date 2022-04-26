@@ -4,7 +4,7 @@ package com.starrocks.analysis;
 
 // REVOKE Role 'role' FROM 'user'
 // share the same parameter and check logic with GrantRoleStmt
-public class RevokeRoleStmt extends GrantRoleStmt {
+public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
 
     public RevokeRoleStmt(String role, UserIdentity userIdent) {
         super(role, userIdent);
@@ -13,7 +13,7 @@ public class RevokeRoleStmt extends GrantRoleStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("REVOKE ROLE '").append(qualifiedRole).append("' FROM ").append(userIdent);
+        sb.append("REVOKE '").append(qualifiedRole).append("' FROM ").append(userIdent);
         return sb.toString();
     }
 }

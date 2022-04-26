@@ -11,6 +11,7 @@ import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -30,7 +31,6 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
@@ -91,7 +91,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitGrantRoleStatement(GrantRoleStmt statement, C context) {
+    public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

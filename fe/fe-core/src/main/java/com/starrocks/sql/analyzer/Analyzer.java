@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
+import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -13,7 +14,6 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.GrantRoleStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ShowStmt;
@@ -138,8 +138,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext session) {
-            GrantRoleAnalyzer.analyze(stmt, session);
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            GrantRevokeRoleAnalyzer.analyze(stmt, session);
             return null;
         }
 

@@ -2,7 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 
-import com.starrocks.analysis.GrantRoleStmt;
+import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -14,9 +14,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 
-public class GrantRoleAnalyzer {
+public class GrantRevokeRoleAnalyzer {
 
-    public static void analyze(GrantRoleStmt stmt, ConnectContext session) {
+    public static void analyze(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
         Auth auth = Catalog.getCurrentCatalog().getAuth();
 
         // validate user

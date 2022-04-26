@@ -83,22 +83,27 @@ public class GrantRevokeRoleStmtTest {
                 result = true;
             }
         };
+
         // grant
+        // user without host
         GrantRoleStmt stmt = (GrantRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "grant role test_role to test_user", 1).get(0);
+                "grant test_role to test_user", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT ROLE 'test_cluster:test_role' TO 'test_cluster:test_user'@'%'", stmt.toString());
-        // GrantRoleStmt stmt = new GrantRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        Assert.assertEquals("GRANT 'test_cluster:test_role' TO 'test_cluster:test_user'@'%'", stmt.toString());
+
+        // grant 2
+        // user with host
         stmt = (GrantRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "grant role 'test_role' to 'test_user'@'localhost'", 1).get(0);
+                "grant 'test_role' to 'test_user'@'localhost'", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT ROLE 'test_cluster:test_role' TO 'test_cluster:test_user'@'localhost'", stmt.toString());
+        Assert.assertEquals("GRANT 'test_cluster:test_role' TO 'test_cluster:test_user'@'localhost'", stmt.toString());
+
         // revoke
-        // RevokeRoleStmt stmt2 = new RevokeRoleStmt("test_role", new UserIdentity("test_user", "localhost"));
+        // user with domain
         RevokeRoleStmt stmt2 = (RevokeRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "revoke role 'test_role' from 'test_user'@['starrocks.com']", 1).get(0);
+                "revoke 'test_role' from 'test_user'@['starrocks.com']", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE ROLE 'test_cluster:test_role' FROM 'test_cluster:test_user'@['starrocks.com']", stmt2.toString());
+        Assert.assertEquals("REVOKE 'test_cluster:test_role' FROM 'test_cluster:test_user'@['starrocks.com']", stmt2.toString());
     }
 
     @Test(expected = SemanticException.class)
