@@ -577,7 +577,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
     ASSERT_EQ(num_rows, rpad_result->size());
     ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
-    std::shared_ptr<BinaryColumn> rpad_v;
+    BinaryColumn::Ptr rpad_v;
     if (c.rpad_expected_null) {
         rpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
                 ColumnHelper::as_raw_column<NullableColumn>(rpad_result)->data_column());
@@ -595,7 +595,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
     ASSERT_EQ(num_rows, lpad_result->size());
     ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
-    std::shared_ptr<BinaryColumn> lpad_v;
+    BinaryColumn::Ptr lpad_v;
     if (c.lpad_expected_null) {
         lpad_v = ColumnHelper::cast_to<TYPE_VARCHAR>(
                 ColumnHelper::as_raw_column<NullableColumn>(lpad_result)->data_column());

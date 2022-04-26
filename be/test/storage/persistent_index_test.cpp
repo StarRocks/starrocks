@@ -385,7 +385,7 @@ void build_persistent_index_from_tablet(size_t N) {
         LOG(WARNING) << "failed to load rowset update state: " << st.to_string();
         ASSERT_TRUE(false);
     }
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = vectorized::MutableColumnPtr;
     const std::vector<ColumnUniquePtr>& upserts = state.upserts();
 
     PersistentIndex persistent_index(kPersistentIndexDir);

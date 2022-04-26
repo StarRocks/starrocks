@@ -81,10 +81,10 @@ public:
         return Status::OK();
     }
 
-    std::unique_ptr<Column> all_pks;
+    MutableColumnPtr all_pks;
     vector<uint32_t> all_rssids;
 
-    vector<std::unique_ptr<Column>> non_key_columns;
+    vector<MutableColumnPtr> non_key_columns;
 };
 
 class RowsetMergerTest : public testing::Test {

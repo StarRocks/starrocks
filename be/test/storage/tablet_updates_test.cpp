@@ -1805,7 +1805,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowsets(_tablet, keys, max_rows_per_segment)).ok());
     std::vector<uint32_t> read_column_ids = {1, 2};
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    std::vector<vectorized::MutableColumnPtr> read_columns(read_column_ids.size());
     const auto& tablet_schema = _tablet->tablet_schema();
     for (auto i = 0; i < read_column_ids.size(); i++) {
         const auto read_column_id = read_column_ids[i];

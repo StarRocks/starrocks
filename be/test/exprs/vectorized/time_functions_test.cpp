@@ -701,9 +701,9 @@ TEST_F(TimeFunctionsTest, toUnixForNow) {
 
         ASSERT_TRUE(result->is_constant());
 
-        auto v = std::static_pointer_cast<ConstColumn>(result)->data_column();
+        auto v = ColumnHelper::as_column<ConstColumn>(result)->data_column();
         //auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
-        ASSERT_EQ(1565080737, std::static_pointer_cast<Int32Column>(v)->get_data()[0]);
+        ASSERT_EQ(1565080737, ColumnHelper::as_column<Int32Column>(v)->get_data()[0]);
     }
 }
 
