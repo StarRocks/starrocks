@@ -210,7 +210,7 @@ tEnv.executeSql(
     flink.starrocks.sink.buffer-flush.interval-ms=15000
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下。
 
     ```bash
     $./starrocks-migrate-tool
@@ -219,33 +219,32 @@ tEnv.executeSql(
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-8. 生成StarRocks的表结构
+8. 生成StarRocks的表结构。
 
     ```bash
     Mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.1.sql
     ```
 
-9. 生成Flink table并开始同步
+9. 生成Flink table并开始同步。
 
     ```bash
-    bin/sql-client.sh -f flink-create.1.sql
+    bin/sql-client.sh embedded < flink-create.1.sql
     ```
 
-    这个执行以后同步任务会持续执行
-    > 如果是Flink 1.13之前的版本可能无法直接执行脚本，需要逐行提交
-    注意 记得打开MySQL binlog
+    命令执行以后同步任务会持续执行。
+    > 注意：记得打开MySQL binlog。
 
-10. 观察任务状况
+10. 观察任务状况。
   
     ```bash
     bin/flink list 
     ```
 
-  如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
+  如果任务执行报错可以通过flink log日志查看详细错误信息，可以通过修改flink conf中配置文件来调整系统配置中内存和slot的配置。
 
 ### 注意事项
 
-1. 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置
+1. 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置。
 
     ```bash
     [table-rule.1]
@@ -311,14 +310,14 @@ tEnv.executeSql(
 
     这样会自动生成一个多对一的导入关系，在StarRocks默认生成的表名是 course__auto_shard，也可以自行在生成的配置文件中修改。
 
-4. 如果在sql-client中命令行执行建表和同步任务，需要做对'\'字符进行转义
+4. 如果在sql-client中命令行执行建表和同步任务，需要做对'\'字符进行转义。
 
     ```bash
     'sink.properties.column_separator' = '\\x01'
     'sink.properties.row_delimiter' = '\\x02'  
     ```
 
-5. 如何开启MySQL binlog  
+5. 如何开启MySQL binlog。
   修改/etc/my.cnf
   
     ```bash
