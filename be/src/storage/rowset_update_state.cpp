@@ -333,8 +333,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                                                                  &read_columns));
 
             for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-                ColumnUniquePtr new_write_column =
-                        _partial_update_states[i].write_columns[col_idx]->clone_empty();
+                ColumnUniquePtr new_write_column = _partial_update_states[i].write_columns[col_idx]->clone_empty();
                 new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
                 RETURN_IF_ERROR(_partial_update_states[i].write_columns[col_idx]->update_rows(*new_write_column,
                                                                                               conflict_idxes.data()));

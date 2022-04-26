@@ -119,8 +119,7 @@ private:
     std::vector<ExprContext*> _expr_close_list;
 };
 
-std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(
-        const GlobalDictMap& dict_map);
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
 
 template <PrimitiveType primitive_type, typename Dict, PrimitiveType result_primitive_type>
 struct DictDecoder {

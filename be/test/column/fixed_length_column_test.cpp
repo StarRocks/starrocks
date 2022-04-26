@@ -157,7 +157,6 @@ TEST(FixedLengthColumnTest, test_nullable) {
         auto result = column;
         auto data_result = ColumnHelper::as_column<Int32Column>(result->data_column());
 
-
         ASSERT_EQ(50, result->size());
         for (int j = 0; j < 50; ++j) {
             if ((j + 50) % 3) {

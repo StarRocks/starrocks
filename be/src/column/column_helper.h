@@ -190,9 +190,7 @@ public:
      * Cast Column* to ColumnPtr 
      *  
      */
-    static inline ColumnPtr cast_to_ptr(const Column* column) {
-        return ColumnPtr(const_cast<Column *>(column));
-    }
+    static inline ColumnPtr cast_to_ptr(const Column* column) { return ColumnPtr(const_cast<Column*>(column)); }
 
     /**
      * Cast columnPtr to special type Column*

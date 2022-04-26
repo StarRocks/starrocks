@@ -207,7 +207,7 @@ public:
 
     const NullColumn& null_column_ref() const { return *_null_column; }
     NullColumn& null_column_ref() { return *_null_column; }
-    
+
     const NullColumnPtr& null_column() const { return _null_column; }
     NullColumnPtr& null_column() { return _null_column; }
 

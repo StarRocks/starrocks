@@ -3,14 +3,14 @@
 #pragma once
 
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <type_traits>
-#include <iostream>
 
+#include "column/COW.h"
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
-#include "column/COW.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/type_list.h"
@@ -31,7 +31,7 @@ class Datum;
 template <typename Derived>
 void return_column(Derived* ptr, size_t chunk_size);
 
-class Column:public COW<Column> {
+class Column : public COW<Column> {
 private:
     friend class COW<Column>;
 
@@ -422,13 +422,9 @@ public:
         return typename AncestorBase::Ptr(new Derived(*derived()));
     }
 
-    MutablePtr clone_derived() const {
-        return MutablePtr(new Derived(*derived()));
-    }
+    MutablePtr clone_derived() const { return MutablePtr(new Derived(*derived())); }
 
-    Ptr clone_shared_derived() const {
-        return Ptr(new Derived(*derived()));
-    }
+    Ptr clone_shared_derived() const { return Ptr(new Derived(*derived())); }
 
     Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
 
@@ -437,22 +433,23 @@ public:
     }
 
     using ColumnPoolTypeList =
-        TypeList<Int8Column, UInt8Column, Int16Column, Int32Column, UInt32Column, Int64Column, Int128Column, 
-        FloatColumn, DoubleColumn, BinaryColumn, DateColumn, TimestampColumn, DecimalColumn, Decimal32Column, 
-        Decimal64Column, Decimal128Column >;
+            TypeList<Int8Column, UInt8Column, Int16Column, Int32Column, UInt32Column, Int64Column, Int128Column,
+                     FloatColumn, DoubleColumn, BinaryColumn, DateColumn, TimestampColumn, DecimalColumn,
+                     Decimal32Column, Decimal64Column, Decimal128Column>;
 
     void return_to_pool() const override {
         if constexpr (InList<Derived, ColumnPoolTypeList>::value) {
-            return_column<Derived>(const_cast<Derived *>(static_cast<const Derived *>(this)), Base::_chunk_size);
+            return_column<Derived>(const_cast<Derived*>(static_cast<const Derived*>(this)), Base::_chunk_size);
         }
     }
-protected:
-    MutablePtr shallowMutate() const { return MutablePtr(static_cast<Derived *>(Base::shallowMutate().get())); }
-    
-public:
-    MutablePtr assumeMutable() const { return MutablePtr(const_cast<Derived *>(static_cast<const Derived *>(this))); }
 
-    Derived & assumeMutableRef() const { return static_cast<Derived &>(Base::assumeMutableRef()); }
+protected:
+    MutablePtr shallowMutate() const { return MutablePtr(static_cast<Derived*>(Base::shallowMutate().get())); }
+
+public:
+    MutablePtr assumeMutable() const { return MutablePtr(const_cast<Derived*>(static_cast<const Derived*>(this))); }
+
+    Derived& assumeMutableRef() const { return static_cast<Derived&>(Base::assumeMutableRef()); }
 };
 
 } // namespace vectorized

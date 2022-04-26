@@ -126,7 +126,9 @@ struct ColumnPtrBuilder {
     ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
         auto nullable = [&](ColumnPtr c) -> ColumnPtr {
             if (field.is_nullable()) {
-                return NullableColumn::create(std::move(c), ColumnHelper::as_column<NullColumn>(ColumnHelper::cast_to_ptr(get_column_ptr<NullColumn, force>(chunk_size))));
+                return NullableColumn::create(std::move(c),
+                                              ColumnHelper::as_column<NullColumn>(ColumnHelper::cast_to_ptr(
+                                                      get_column_ptr<NullColumn, force>(chunk_size))));
             } else {
                 return c;
             }
@@ -135,18 +137,23 @@ struct ColumnPtrBuilder {
         if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
             auto elements = field.sub_field(0).create_column();
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
-            auto array = ArrayColumn::create(std::move(elements), ColumnHelper::as_column<UInt32Column>(ColumnHelper::cast_to_ptr(offsets)));
+            auto array = ArrayColumn::create(std::move(elements),
+                                             ColumnHelper::as_column<UInt32Column>(ColumnHelper::cast_to_ptr(offsets)));
             return nullable(array);
         } else {
             switch (ftype) {
             case OLAP_FIELD_TYPE_DECIMAL32:
-                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size)));
+                return nullable(ColumnHelper::cast_to_ptr(
+                        get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size)));
             case OLAP_FIELD_TYPE_DECIMAL64:
-                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size)));
+                return nullable(ColumnHelper::cast_to_ptr(
+                        get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size)));
             case OLAP_FIELD_TYPE_DECIMAL128:
-                return nullable(ColumnHelper::cast_to_ptr(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size)));
+                return nullable(ColumnHelper::cast_to_ptr(
+                        get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size)));
             default: {
-                return nullable(ColumnHelper::cast_to_ptr(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size)));
+                return nullable(ColumnHelper::cast_to_ptr(
+                        get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size)));
             }
             }
         }

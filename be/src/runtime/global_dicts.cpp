@@ -320,8 +320,7 @@ Status DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx
     return _check_could_apply_dict_optimize(expr_ctx, dict_opt_ctx);
 }
 
-std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(
-        const GlobalDictMap& dict_map) {
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map) {
     auto res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     res->reserve(dict_map.size() + 1);
 

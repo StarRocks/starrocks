@@ -278,8 +278,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
-                                        vectorized::MutableColumnPtr* pcolumn) {
+Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, vectorized::MutableColumnPtr* pcolumn) {
     if (!is_supported(schema)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
