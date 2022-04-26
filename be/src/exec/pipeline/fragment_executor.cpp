@@ -238,6 +238,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
+
     Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
@@ -245,9 +246,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
-        const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
+        const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
+        VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only OlapScanOperator need a MorselQueue attached.
         setup_profile_hierarchy(runtime_state, pipeline);
@@ -255,14 +257,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
-            if (morsel_queue->num_morsels() > 0) {
-                DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
-            }
-            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(degree_of_parallelism);
-            DCHECK(morsel_queue_per_driver.size() == degree_of_parallelism);
+            DCHECK(morsel_queue->num_morsels() == 0 || cur_pipeline_dop <= morsel_queue->num_morsels());
+            std::vector<MorselQueuePtr> morsel_queue_per_driver = morsel_queue->split_by_size(cur_pipeline_dop);
+            DCHECK(morsel_queue_per_driver.size() == cur_pipeline_dop);
 
-            for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
+            for (size_t i = 0; i < cur_pipeline_dop; ++i) {
+                auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
@@ -277,8 +277,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 drivers.emplace_back(std::move(driver));
             }
         } else {
-            for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
+            for (size_t i = 0; i < cur_pipeline_dop; ++i) {
+                auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 setup_profile_hierarchy(pipeline, driver);
@@ -289,6 +289,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
+
+    auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
+    if (maybe_driver_token.ok()) {
+        _fragment_ctx->set_driver_token(std::move(maybe_driver_token.value()));
+    } else {
+        return maybe_driver_token.status();
+    }
 
     if (wg != nullptr) {
         for (auto& driver : _fragment_ctx->drivers()) {
