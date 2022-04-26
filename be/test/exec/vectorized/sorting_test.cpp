@@ -230,10 +230,32 @@ TEST(SortingTest, sorted_runs) {
 }
 
 TEST(SortingTest, merge_sorted_chunks) {
-    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 0, 100, 1);
-    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 1, 0, 100, 1);
-    Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
+    std::vector<ChunkPtr> input_chunks;
+    Chunk::SlotHashMap slot_map{{0, 0}};
+
+    std::vector<std::vector<int>> input_runs = {{-2074, -1691, -1400, -969, -767, -725},
+                                                {-680, -571, -568},
+                                                {-2118, -2065, -1328, -1103, -1099, -1093},
+                                                {-950, -807, -604}};
+    for (auto& input_numbers : input_runs) {
+        ColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        for (int x : input_numbers) {
+            column->append_datum(Datum((int32_t)x));
+        }
+        ChunkPtr chunk = std::make_shared<Chunk>(Columns{column}, slot_map);
+        input_chunks.push_back(chunk);
+    }
+
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    exprs.push_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
+    sort_exprs.push_back(new ExprContext(exprs.back().get()));
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
+
+    SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
+    SortedRuns output;
+    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output, 0);
+    ASSERT_TRUE(output.is_sorted(sort_desc));
 }
 
 TEST(SortingTest, merge_sorted_stream) {
