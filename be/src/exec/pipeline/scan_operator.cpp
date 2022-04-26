@@ -183,7 +183,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                 size_t num_read_chunks = 0;
                 _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, _is_finished, &num_read_chunks, worker_id, _workgroup);
+                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
                 // TODO (by laotan332): More detailed information is needed
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                 _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
@@ -208,7 +208,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         task.work_function = [this, state, chunk_source_index]() {
             {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, _is_finished);
+                _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
             }
 
             _num_running_io_tasks--;

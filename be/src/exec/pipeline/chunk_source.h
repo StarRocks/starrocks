@@ -38,8 +38,8 @@ public:
 
     virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
 
-    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) = 0;
-    virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish,
+    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) = 0;
+    virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
     virtual int64_t last_spent_cpu_time_ns() { return 0; }

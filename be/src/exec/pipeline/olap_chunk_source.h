@@ -47,8 +47,8 @@ public:
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
 
-    Status buffer_next_batch_chunks_blocking(size_t chunk_size, bool& can_finish) override;
-    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, bool& can_finish, size_t* num_read_chunks,
+    Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) override;
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state, size_t* num_read_chunks,
                                                            int worker_id, workgroup::WorkGroupPtr running_wg) override;
 
     // Return last bytes of Scan or Exchange Data, then reset it
