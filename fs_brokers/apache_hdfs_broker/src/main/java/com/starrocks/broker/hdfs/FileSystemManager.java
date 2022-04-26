@@ -37,7 +37,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.log4j.Logger;
@@ -296,7 +295,7 @@ public class FileSystemManager {
             if (fileSystem.getDFSFileSystem() == null) {
                 logger.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
-                Configuration conf = new HdfsConfiguration();
+                Configuration conf = new Configuration();
                 // TODO get this param from properties
                 // conf.set("dfs.replication", "2");
                 String tmpFilePath = null;
@@ -899,27 +898,18 @@ public class FileSystemManager {
 
     public void pwrite(TBrokerFD fd, long offset, byte[] data) {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
-        synchronized (fsDataOutputStream) {
-            long currentStreamOffset;
-            try {
-                currentStreamOffset = fsDataOutputStream.getPos();
-            } catch (IOException e) {
-                logger.error("errors while get file pos from output stream", e);
-                throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
-                        "errors while get file pos from output stream");
-            }
-            if (currentStreamOffset != offset) {
-                throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_OFFSET,
-                        "current outputstream offset is {} not equal to request {}",
-                        currentStreamOffset, offset);
-            }
-            try {
-                fsDataOutputStream.write(data);
-            } catch (IOException e) {
-                logger.error("errors while write data to output stream", e);
-                throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
-                        e, "errors while write data to output stream");
-            }
+        long currentStreamOffset = fsDataOutputStream.getPos();
+        if (currentStreamOffset != offset) {
+            throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_OFFSET,
+                    "current outputstream offset is {} not equal to request {}",
+                    currentStreamOffset, offset);
+        }
+        try {
+            fsDataOutputStream.write(data);
+        } catch (IOException e) {
+            logger.error("errors while write data to output stream", e);
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+                    e, "errors while write data to output stream");
         }
     }
 
