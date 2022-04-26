@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OutputPropertyDeriver;
 import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
@@ -30,8 +31,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
-
-import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
 /**
  * EnforceAndCostTask costs a physical expression.
@@ -198,7 +197,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         curTotalCost = 0;
 
         // TODO(kks): do Lower Bound Pruning here
-        RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context.getRequiredProperty());
+        RequiredPropertyDeriver requiredPropertyDeriver = new RequiredPropertyDeriver(context);
         requiredPropertiesList = requiredPropertyDeriver.getRequiredProps(groupExpression);
         curChildIndex = 0;
     }
@@ -234,9 +233,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // if this groupExpression can only do Broadcast, don't need to check the broadcastRowCountLimit
         ColumnRefSet leftChildColumns = groupExpression.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = groupExpression.getChildOutputColumns(1);
-        List<BinaryPredicateOperator> equalOnPredicate =
-                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
-        if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, node.getJoinHint())) {
+        List<BinaryPredicateOperator> equalOnPredicate = JoinHelper
+                .getEqualsPredicate(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getOnPredicate()));
+        if (JoinHelper.onlyBroadcast(node.getJoinType(), equalOnPredicate, node.getJoinHint())) {
             return true;
         }
         // Only when right table is not significantly smaller than left table, consider the
