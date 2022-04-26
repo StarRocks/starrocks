@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 public class AlterDatabaseQuotaStmt extends DdlStmt {
     private String dbName;
@@ -65,7 +65,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
 
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
         }
 

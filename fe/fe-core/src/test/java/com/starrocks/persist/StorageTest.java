@@ -104,7 +104,7 @@ public class StorageTest {
         Assert.assertEquals(1, storage1.getClusterID());
         Assert.assertEquals("test", storage1.getMetaDir());
 
-        Storage storage2 = new Storage(1, "token", 2,  "test");
+        Storage storage2 = new Storage(1, "token", 2, "test");
         Assert.assertEquals(1, storage2.getClusterID());
         Assert.assertEquals(2, storage2.getImageJournalId());
         Assert.assertEquals("test", storage2.getMetaDir());

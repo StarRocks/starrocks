@@ -1,11 +1,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;
@@ -27,7 +26,8 @@ public class CreateWorkGroupStmt extends DdlStmt {
     private Map<String, String> properties;
     private WorkGroup workgroup;
 
-    public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists, List<List<Predicate>> classifiers, Map<String, String> proeprties) {
+    public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                               List<List<Predicate>> classifiers, Map<String, String> proeprties) {
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;

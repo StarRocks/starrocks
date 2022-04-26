@@ -23,7 +23,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Version;
@@ -31,6 +30,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
 /*
@@ -59,7 +59,7 @@ public class BootstrapFinishAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException {
-        boolean isReady = Catalog.getCurrentCatalog().isReady();
+        boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response
         BootstrapResult result = null;
@@ -78,23 +78,23 @@ public class BootstrapFinishAction extends RestBaseAction {
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (clusterId != Catalog.getCurrentCatalog().getClusterId()) {
+                    if (clusterId != GlobalStateMgr.getCurrentState().getClusterId()) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid cluster id: " + Catalog.getCurrentCatalog().getClusterId();
+                        result.msg = "invalid cluster id: " + GlobalStateMgr.getCurrentState().getClusterId();
                     }
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (!token.equals(Catalog.getCurrentCatalog().getToken())) {
+                    if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid token: " + Catalog.getCurrentCatalog().getToken();
+                        result.msg = "invalid token: " + GlobalStateMgr.getCurrentState().getToken();
                     }
                 }
 
                 if (result.status == ActionStatus.OK) {
                     // cluster id and token are valid, return replayed journal id
-                    long replayedJournalId = Catalog.getCurrentCatalog().getReplayedJournalId();
-                    long feStartTime = Catalog.getCurrentCatalog().getFeStartTime();
+                    long replayedJournalId = GlobalStateMgr.getCurrentState().getReplayedJournalId();
+                    long feStartTime = GlobalStateMgr.getCurrentState().getFeStartTime();
                     result.setMaxReplayedJournal(replayedJournalId);
                     result.setQueryPort(Config.query_port);
                     result.setRpcPort(Config.rpc_port);

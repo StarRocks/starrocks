@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -71,7 +71,7 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
                     Set<ColumnRefOperator> columnRefOperators =
                             optExpression.getStatistics().getColumnStatistics().keySet();
                     for (ColumnRefOperator column : columnRefOperators) {
-                        ColumnStatistic columnStatistic = Catalog.getCurrentStatisticStorage().
+                        ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage().
                                 getColumnStatistic(table, column.getName());
                         statisticsBuilder.addColumnStatistic(column, columnStatistic);
                     }

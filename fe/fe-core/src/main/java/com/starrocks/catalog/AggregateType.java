@@ -146,7 +146,8 @@ public enum AggregateType {
     }
 
     public boolean checkCompatibility(Type type) {
-        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) || (this.isReplaceFamily() && type.isArrayType());
+        return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
+                (this.isReplaceFamily() && type.isArrayType());
     }
 
     public boolean isReplaceFamily() {

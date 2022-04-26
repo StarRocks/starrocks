@@ -36,6 +36,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,7 +94,7 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Resource(" + resourceName + ") already exist");
             }
             // log add
-            Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
             LOG.info("create resource success. resource: {}", resource);
         } finally {
             this.writeUnLock();
@@ -116,7 +117,7 @@ public class ResourceMgr implements Writable {
             onDropResource(resource);
 
             // log drop
-            Catalog.getCurrentCatalog().getEditLog().logDropResource(new DropResourceOperationLog(name));
+            GlobalStateMgr.getCurrentState().getEditLog().logDropResource(new DropResourceOperationLog(name));
             LOG.info("drop resource success. resource name: {}", name);
         } finally {
             this.writeUnLock();
@@ -130,7 +131,7 @@ public class ResourceMgr implements Writable {
 
     private void onDropResource(Resource resource) {
         if (resource instanceof HiveResource) {
-            Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
     }
 
@@ -173,8 +174,8 @@ public class ResourceMgr implements Writable {
                 // 2. clear the cache
                 // 3. update the edit log
                 ((HiveResource) resource).alterProperties(stmt.getProperties());
-                Catalog.getCurrentCatalog().getHiveRepository().clearCache(resource.getName());
-                Catalog.getCurrentCatalog().getEditLog().logCreateResource(resource);
+                GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
             } else {
                 throw new DdlException("Alter resource statement only support external hive now");
             }
@@ -227,7 +228,7 @@ public class ResourceMgr implements Writable {
                 // Since `nameToResource.entrySet` may change after it is called, resource
                 // may be dropped during `show resources`.So that we should do a null pointer
                 // check here. If resource is not null then we should check resource privs.
-                if (resource == null || !Catalog.getCurrentCatalog().getAuth().checkResourcePriv(
+                if (resource == null || !GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
                         ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }

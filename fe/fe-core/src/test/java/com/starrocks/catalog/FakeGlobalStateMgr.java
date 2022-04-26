@@ -21,40 +21,41 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 
-public class FakeCatalog extends MockUp<Catalog> {
+public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
 
-    private static Catalog catalog;
+    private static GlobalStateMgr globalStateMgr;
     private static int metaVersion;
     private static SystemInfoService systemInfo = new SystemInfoService();
 
-    public static void setCatalog(Catalog catalog) {
-        FakeCatalog.catalog = catalog;
+    public static void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
+        FakeGlobalStateMgr.globalStateMgr = globalStateMgr;
     }
 
     public static void setMetaVersion(int metaVersion) {
-        FakeCatalog.metaVersion = metaVersion;
+        FakeGlobalStateMgr.metaVersion = metaVersion;
     }
 
     public static void setSystemInfo(SystemInfoService systemInfo) {
-        FakeCatalog.systemInfo = systemInfo;
+        FakeGlobalStateMgr.systemInfo = systemInfo;
     }
 
     @Mock
-    public static Catalog getCurrentCatalog() {
-        return catalog;
+    public static GlobalStateMgr getCurrentState() {
+        return globalStateMgr;
     }
 
     @Mock
-    public static Catalog getInstance() {
-        return catalog;
+    public static GlobalStateMgr getInstance() {
+        return globalStateMgr;
     }
 
     @Mock
-    public static int getCurrentCatalogJournalVersion() {
+    public static int getCurrentStateJournalVersion() {
         return metaVersion;
     }
 

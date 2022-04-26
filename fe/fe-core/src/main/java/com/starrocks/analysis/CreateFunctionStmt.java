@@ -27,7 +27,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
@@ -41,6 +40,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -273,7 +273,7 @@ public class CreateFunctionStmt extends DdlStmt {
         functionName.analyze(analyzer);
 
         // check operation privilege
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
         }
 

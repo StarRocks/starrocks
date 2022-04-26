@@ -11,7 +11,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -22,6 +21,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -79,7 +79,8 @@ public class FileScanNodeTest {
     }
 
     @Test
-    public void testCreateScanRangeLocations(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testCreateScanRangeLocations(@Mocked GlobalStateMgr globalStateMgr,
+                                             @Mocked SystemInfoService systemInfoService,
                                              @Injectable Database db, @Injectable OlapTable table)
             throws UserException {
         // table schema
@@ -92,7 +93,7 @@ public class FileScanNodeTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -134,7 +135,7 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
         fileStatusesList.add(fileStatusList);
 
-        Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
@@ -194,7 +195,7 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file4", false, 268435451, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
@@ -246,7 +247,7 @@ public class FileScanNodeTest {
         fileStatusList2.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file5", false, 10, true));
         fileStatusesList.add(fileStatusList2);
 
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5);
@@ -294,7 +295,7 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 10, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
@@ -327,7 +328,7 @@ public class FileScanNodeTest {
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
         fileStatusesList.add(fileStatusList);
 
-        analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);

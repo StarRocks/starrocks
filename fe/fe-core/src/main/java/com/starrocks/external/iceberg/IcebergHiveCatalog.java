@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
 
-    private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog =
+            new ConcurrentHashMap<>();
 
     public static synchronized IcebergHiveCatalog getInstance(String uri) {
         if (!metastoreUriToCatalog.containsKey(uri)) {
@@ -51,7 +52,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     private ClientPool<IMetaStoreClient, TException> clients;
 
     @VisibleForTesting
-    public IcebergHiveCatalog() {}
+    public IcebergHiveCatalog() {
+    }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
@@ -99,7 +101,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
 
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
-        this.fileIO = fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
+        this.fileIO =
+                fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
 
         this.clients = new CachedClientPool(conf, properties);
     }

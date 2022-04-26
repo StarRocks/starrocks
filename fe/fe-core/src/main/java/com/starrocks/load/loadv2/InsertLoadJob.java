@@ -24,7 +24,6 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AuthorizationInfo;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -32,6 +31,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -75,7 +75,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
@@ -84,7 +84,7 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNamesForShow() {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             return Sets.newHashSet(String.valueOf(tableId));
         }
@@ -99,7 +99,7 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNames() throws MetaNotFoundException {
-        Database database = Catalog.getCurrentCatalog().getDb(dbId);
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }

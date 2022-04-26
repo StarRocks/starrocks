@@ -27,6 +27,7 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -127,7 +128,7 @@ public class MysqlTable extends Table {
 
     private String getPropertyFromResource(String propertyName) {
         OdbcCatalogResource odbcCatalogResource = (OdbcCatalogResource)
-                (Catalog.getCurrentCatalog().getResourceMgr().getResource(odbcCatalogResourceName));
+                (GlobalStateMgr.getCurrentState().getResourceMgr().getResource(odbcCatalogResourceName));
         if (odbcCatalogResource == null) {
             throw new RuntimeException("Resource does not exist. name: " + odbcCatalogResourceName);
         }
@@ -244,7 +245,7 @@ public class MysqlTable extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_92) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_92) {
             // Read MySQL meta
             int size = in.readInt();
             Map<String, String> serializeMap = Maps.newHashMap();

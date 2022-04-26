@@ -23,6 +23,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -41,9 +42,9 @@ import static org.junit.Assert.assertEquals;
 
 public class ReplicaTest {
 
-    // replica serialize and deserialize test will use catalog so that it should be mocked
+    // replica serialize and deserialize test will use globalStateMgr so that it should be mocked
     @Mocked
-    Catalog catalog;
+    GlobalStateMgr globalStateMgr;
 
     private Replica replica;
     private long replicaId;
@@ -88,7 +89,7 @@ public class ReplicaTest {
     public void testSerialization() throws Exception {
         new Expectations() {
             {
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 result = FeMetaVersion.VERSION_45;
             }
         };

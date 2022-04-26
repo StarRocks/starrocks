@@ -23,10 +23,10 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
@@ -70,7 +70,7 @@ public class RoutineLoadsNameProcDir implements ProcDirInterface {
         baseProcResult.setNames(ShowRoutineLoadStmt.getTitleNames());
 
         // find all of job named routine load
-        RoutineLoadManager routineLoadManager = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
         List<RoutineLoadJob> routineLoadJobList = routineLoadManager.getJobByName(jobName);
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
             baseProcResult.addRow(routineLoadJob.getShowInfo());

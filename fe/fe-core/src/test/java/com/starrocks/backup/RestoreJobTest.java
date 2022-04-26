@@ -28,7 +28,6 @@ import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -41,6 +40,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -84,7 +84,7 @@ public class RestoreJobTest {
     private long repoId = 20000;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private MockBackupHandler backupHandler;
 
@@ -92,8 +92,8 @@ public class RestoreJobTest {
 
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
-        public MockBackupHandler(Catalog catalog) {
-            super(catalog);
+        public MockBackupHandler(GlobalStateMgr globalStateMgr) {
+            super(globalStateMgr);
         }
 
         @Override
@@ -128,30 +128,30 @@ public class RestoreJobTest {
     @Before
     public void setUp() throws AnalysisException {
         db = CatalogMocker.mockDb();
-        backupHandler = new MockBackupHandler(catalog);
+        backupHandler = new MockBackupHandler(globalStateMgr);
         repoMgr = new MockRepositoryMgr();
 
-        Deencapsulation.setField(catalog, "backupHandler", backupHandler);
+        Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         new Expectations() {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -253,7 +253,7 @@ public class RestoreJobTest {
         db.dropTable(expectedRestoreTbl.getName());
 
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000, -1, -1, catalog, repo.getId());
+                jobInfo, false, 3, 100000, -1, -1, globalStateMgr, repo.getId());
 
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);

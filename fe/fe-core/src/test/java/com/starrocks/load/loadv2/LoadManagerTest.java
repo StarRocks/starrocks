@@ -21,13 +21,13 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -62,12 +62,12 @@ public class LoadManagerTest {
     }
 
     @Test
-    public void testSerializationNormal(@Mocked Catalog catalog,
+    public void testSerializationNormal(@Mocked GlobalStateMgr globalStateMgr,
                                         @Injectable Database database,
                                         @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 database.getTable(anyLong);
@@ -76,7 +76,7 @@ public class LoadManagerTest {
                 table.getName();
                 minTimes = 0;
                 result = "tablename";
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeMetaVersion.VERSION_56;
             }
@@ -97,12 +97,12 @@ public class LoadManagerTest {
 
     @Test
     public void testSerializationWithJobRemoved(@Mocked MetaContext metaContext,
-                                                @Mocked Catalog catalog,
+                                                @Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table) throws Exception {
         new Expectations() {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 database.getTable(anyLong);
@@ -148,11 +148,11 @@ public class LoadManagerTest {
     }
 
     @Test
-    public void testRemoveOldLoadJob(@Mocked Catalog catalog,
+    public void testRemoveOldLoadJob(@Mocked GlobalStateMgr globalStateMgr,
                                      @Injectable Database db) throws Exception {
         new Expectations() {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 result = db;
             }
         };

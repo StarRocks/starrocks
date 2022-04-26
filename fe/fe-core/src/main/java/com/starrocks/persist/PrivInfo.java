@@ -25,13 +25,13 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.mysql.privilege.PrivBitSet;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -162,7 +162,7 @@ public class PrivInfo implements Writable {
             tblPattern = TablePattern.read(in);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_87) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             if (in.readBoolean()) {
                 resourcePattern = ResourcePattern.read(in);
             }
@@ -173,7 +173,7 @@ public class PrivInfo implements Writable {
         }
 
         if (in.readBoolean()) {
-            if (Catalog.getCurrentCatalogStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
+            if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_2) {
                 passwd = Password.read(in);
             } else {
                 int passwordLen = in.readInt();

@@ -64,7 +64,8 @@ public class PropertyAnalyzerTest {
         try {
             PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid bloom filter column '" + columnName + "'"));
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("Invalid bloom filter column '" + columnName + "'"));
         }
     }
 
@@ -86,7 +87,8 @@ public class PropertyAnalyzerTest {
         // no bf columns
         properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, "");
         try {
-            Assert.assertEquals(Sets.newHashSet(), PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false));
+            Assert.assertEquals(Sets.newHashSet(),
+                    PropertyAnalyzer.analyzeBloomFilterColumns(properties, columns, false));
         } catch (AnalysisException e) {
             Assert.fail();
         }

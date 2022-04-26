@@ -27,6 +27,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
@@ -141,7 +142,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     }
 
     public static FsBroker readIn(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_73) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_73) {
             FsBroker broker = new FsBroker();
             broker.readFields(in);
             return broker;

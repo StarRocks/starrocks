@@ -90,7 +90,8 @@ public class IcebergCustomCatalogTest {
         private ClientPool<IMetaStoreClient, TException> clients;
 
         @VisibleForTesting
-        private IcebergCustomTestingCatalog() {}
+        private IcebergCustomTestingCatalog() {
+        }
 
         @Override
         public IcebergCatalogType getIcebergCatalogType() {
@@ -137,7 +138,8 @@ public class IcebergCustomCatalogTest {
             }
 
             String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
-            this.fileIO = fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
+            this.fileIO =
+                    fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
 
             this.clients = new CachedClientPool(conf, properties);
         }

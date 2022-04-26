@@ -1,10 +1,8 @@
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -21,15 +19,15 @@ import java.util.List;
 
 public class CreateFunctionTest {
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

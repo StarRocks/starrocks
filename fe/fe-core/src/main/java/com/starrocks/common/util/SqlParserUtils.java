@@ -94,7 +94,7 @@ public class SqlParserUtils {
         LOG.info("begin to parse stmt: " + originStmt);
         SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getCatalog(), ctx);
+        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
         StatementBase statementBase;
         try {
             statementBase = SqlParserUtils.getFirstStmt(parser);

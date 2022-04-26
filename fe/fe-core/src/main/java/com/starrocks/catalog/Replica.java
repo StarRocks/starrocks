@@ -25,6 +25,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -489,7 +490,7 @@ public class Replica implements Writable {
         dataSize = in.readLong();
         rowCount = in.readLong();
         state = ReplicaState.valueOf(Text.readString(in));
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_45) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             lastFailedVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
             lastSuccessVersion = in.readLong();

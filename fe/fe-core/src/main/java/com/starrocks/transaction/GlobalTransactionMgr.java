@@ -23,7 +23,6 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -34,6 +33,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -75,10 +75,10 @@ public class GlobalTransactionMgr implements Writable {
     private TransactionIdGenerator idGenerator = new TransactionIdGenerator();
     private TxnStateCallbackFactory callbackFactory = new TxnStateCallbackFactory();
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    public GlobalTransactionMgr(Catalog catalog) {
-        this.catalog = catalog;
+    public GlobalTransactionMgr(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
     }
 
     public TxnStateCallbackFactory getCallbackFactory() {
@@ -94,7 +94,8 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
-        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, catalog, idGenerator)) ==
+        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId,
+                new DatabaseTransactionMgr(dbId, globalStateMgr, idGenerator)) ==
                 null) {
             LOG.debug("add database transaction manager for db {}", dbId);
         }
@@ -188,7 +189,8 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}, error: {}", addr, transactionId, errStr);
+            LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}, error: {}", addr, transactionId,
+                    errStr);
             throw new TransactionCommitFailedException(errStr);
         } else {
             LOG.info("commit remote, txn id: {}", transactionId);
@@ -222,7 +224,8 @@ public class GlobalTransactionMgr implements Writable {
             } else {
                 errStr = "";
             }
-            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}, error: {}", addr, transactionId, errStr);
+            LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}, error: {}", addr, transactionId,
+                    errStr);
             throw new AbortTransactionException(errStr);
         } else {
             LOG.info("abort remote, txn id: {}", transactionId);
@@ -497,7 +500,7 @@ public class GlobalTransactionMgr implements Writable {
         for (long dbId : dbIds) {
             List<Comparable> info = new ArrayList<Comparable>();
             info.add(dbId);
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;
             }

@@ -25,11 +25,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;
 import com.starrocks.thrift.TBrokerDeletePathRequest;
@@ -159,7 +159,7 @@ public class BrokerUtilTest {
     }
 
     @Test
-    public void testReadFile(@Mocked TFileBrokerService.Client client, @Mocked Catalog catalog,
+    public void testReadFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable BrokerMgr brokerMgr)
             throws TException, UserException, UnsupportedEncodingException {
         // list response
@@ -204,7 +204,7 @@ public class BrokerUtilTest {
 
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.getBroker(anyString, anyString);
                 result = fsBroker;
@@ -227,7 +227,7 @@ public class BrokerUtilTest {
     }
 
     @Test
-    public void testWriteFile(@Mocked TFileBrokerService.Client client, @Mocked Catalog catalog,
+    public void testWriteFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                               @Injectable BrokerMgr brokerMgr)
             throws TException, UserException, UnsupportedEncodingException {
         // open writer response
@@ -257,7 +257,7 @@ public class BrokerUtilTest {
 
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.getBroker(anyString, anyString);
                 result = fsBroker;
@@ -282,7 +282,7 @@ public class BrokerUtilTest {
     }
 
     @Test
-    public void testDeletePath(@Mocked TFileBrokerService.Client client, @Mocked Catalog catalog,
+    public void testDeletePath(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                                @Injectable BrokerMgr brokerMgr) throws AnalysisException, TException {
         // delete response
         TBrokerOperationStatus status = new TBrokerOperationStatus();
@@ -308,7 +308,7 @@ public class BrokerUtilTest {
 
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.getBroker(anyString, anyString);
                 result = fsBroker;
