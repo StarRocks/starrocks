@@ -1,0 +1,530 @@
+    Co-authored-by: yan.zhang <dirtysalt1987@gmail.com>
+
+commit a38fe64717f0140f5191d92c2de3b23bd3eb976f
+Author: zihe.liu <ziheliu1024@gmail.com>
+Date:   Thu Apr 21 18:36:14 2022 +0800
+--
+    Co-authored-by: yan.zhang <dirtysalt1987@gmail.com>
+
+commit 2c71fc7208ee2799a97f421a93673f0cb1e65c29
+Author: Pslydhh <luouyuyou@gmail.com>
+Date:   Fri Apr 8 00:14:44 2022 +0800
+--
+    Co-authored-by: yan.zhang <dirtysalt1987@gmail.com>
+
+commit 7c3e4bebc1bee7aeafc4d4210f2304d2a7e3a0e7
+Author: gengjun-git <gengjun@dorisdb.com>
+Date:   Sat Apr 2 13:52:09 2022 +0800
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Mar 14 18:17:38 2022 +0800
+
+    Optimize small read on ORC(small row group index/stripe/file) (#3962) (#4091)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Mar 11 14:59:48 2022 +0800
+
+    Fix be crash caused by #3912 and #3825 (#3934) (#4054)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Mar 7 19:15:45 2022 +0800
+
+    Remove `WITH_AWS` option (#3887)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Mar 7 14:19:49 2022 +0800
+
+    Remove `WITH_HDFS` option (#3886)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Mar 7 11:54:23 2022 +0800
+
+    Code refactor on `HdfsScanNode` (#3862)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Mar 4 14:58:07 2022 +0800
+
+    Code refactor on hdfs/hudi/iceberg table descriptor  (#3825)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Mar 4 10:45:02 2022 +0800
+
+    Add `-fno-omit-frame-pointer` to aws-sdk-cpp (#3816)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Mar 3 14:19:09 2022 +0800
+
+    fix bug during code refactor (#3797)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Mar 3 07:27:16 2022 +0800
+
+    Code refactor on `ScanOperator`  (#3756)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Mar 1 15:46:24 2022 +0800
+
+    optimize ORC late materialization (#3657)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Feb 23 10:42:57 2022 +0800
+
+    Implement ORC late materialization (#3479)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Feb 22 14:47:23 2022 +0800
+
+    Dont let BEcrash when misconfiguration aws section (#3592)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Feb 18 12:57:11 2022 +0800
+
+    Implement ORC late materialization mechanism (#3419)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Feb 15 11:14:24 2022 +0800
+
+    Access s3/oss via new `S3Client` of aws-sdk-cpp (#3066)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Feb 9 17:57:51 2022 +0800
+
+    Make global rf params configurable (#3257)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Jan 28 16:34:42 2022 +0800
+
+    fix build thirdparty (#3182)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Jan 22 16:39:01 2022 +0800
+
+    Add scripts to build aws-sdk-cpp s3 & s3-crt (#3012)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Jan 18 14:04:54 2022 +0800
+
+    To align hive plan with native plan (#2834)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Jan 11 21:42:43 2022 +0800
+
+    Some minor refactors on class `HDFSScanNode` (#2667)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Jan 8 11:51:53 2022 +0800
+
+    Add more profile information on `HDFSScanNode` (#2661)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Jan 7 17:26:38 2022 +0800
+
+    Support java UDAF in FE (#2516)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Dec 31 16:26:23 2021 +0800
+
+    Disable column expr min/max value on zonemap filter when slot type is float/double (#2554)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Dec 31 11:38:52 2021 +0800
+
+    Support new Jar UDF in FE side (#2474)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Dec 29 18:32:54 2021 +0800
+
+    Fix expr monotonicity property (#2520)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Dec 28 20:15:40 2021 +0800
+
+    Fix compound bugs of in-const predicates (#2470)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Dec 27 17:07:52 2021 +0800
+
+    right way to clone chunk (#2461)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Dec 25 19:14:03 2021 +0800
+
+    Fix early deallocation `pass_through_chunk_buffer` using ref count (#2421)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 23 21:11:30 2021 +0800
+
+    Not to push global runtime filter accross CTE (#2401)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 23 20:10:01 2021 +0800
+
+    Track memory usage in Multicast Exchange Node(CTE) (#2304)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 23 10:51:00 2021 +0800
+
+    By default exchange pass through is disabled (#2380)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Dec 22 20:38:12 2021 +0800
+
+    Avoid chunk transmission in the same process (#2228)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Dec 18 14:25:24 2021 +0800
+
+    Add extra field `serialized_size` to check deserialize sanity (#2198)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 16 18:33:56 2021 +0800
+
+    Can not inference upper/lower bound when having call operator (#2204)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 16 11:36:19 2021 +0800
+
+    Revert "use read size not serailized size to check sanity (#2163)" (#2193)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Dec 15 18:26:25 2021 +0800
+
+    use read size not serailized size to check sanity (#2163)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Dec 14 18:41:10 2021 +0800
+
+    Fix full outer join output row count (#2127)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Dec 14 18:25:49 2021 +0800
+
+    In/NotIn and Range predicates does not exclude each other (#2104)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Dec 10 17:04:41 2021 +0800
+
+    Fix cast date stats when stats has infinity (#2036)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Dec 6 14:06:08 2021 +0800
+
+    fix decode agg non value present (#1879)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Dec 4 14:26:04 2021 +0800
+
+    To make CTE BE/pipeline works (#1797)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 2 21:23:01 2021 +0800
+
+    fix assign wrong nullable property to dict column (#1799)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 2 19:44:12 2021 +0800
+
+    Fix dict decode node on function call on constant value (#1791)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Dec 2 18:29:43 2021 +0800
+
+    Support multicast data stream sink (CTE/BE) (#1667)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Dec 1 14:18:19 2021 +0800
+
+    remove `enable_filter_null_values` session variable (#1745)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Nov 30 16:45:23 2021 +0800
+
+    Thrifit protocol to support multi cast stream sink (#1724)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Nov 24 12:57:25 2021 +0800
+
+    Use runtime filter `eq_null` info to filter null values (#1504)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Nov 23 14:57:34 2021 +0800
+
+    discard null value when build rf if ! eq safe (#1498)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Nov 22 15:07:47 2021 +0800
+
+    Push Runtime Filter across SetOperation Node (#1463)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Nov 22 11:07:11 2021 +0800
+
+    Optimize `VectorizedInConstPredicate` using bitmap/array (#1423)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Nov 20 20:45:48 2021 +0800
+
+    push runtime filter when right join (#1426)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Nov 18 22:17:37 2021 +0800
+
+    switch to `dict chunk` even when chunk_size == 0 (#1397)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Nov 18 15:49:29 2021 +0800
+
+    fix crash bug during broker load when having extra fields (#1379)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Nov 18 14:45:27 2021 +0800
+
+    Fix ORC char column dictionary  (#1371)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Nov 16 20:00:08 2021 +0800
+
+    Support to access `char` type in hive orc file (#1176)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Nov 13 22:07:56 2021 +0800
+
+    Support to access parquet boolean column (#1181)
+    
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Nov 10 18:57:44 2021 +0800
+
+    [Refactor] Simplify column predicates using template (#1055)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Nov 8 18:28:41 2021 +0800
+
+    Fix two bugs in column expr predicates (#1101)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Nov 8 09:55:56 2021 +0800
+
+    Prevent pushing down runtime filter to topn nodes (#1045)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Nov 6 21:29:59 2021 +0800
+
+    Disable rewritig GE/GT/LE/LT predicates on dict column temporarily (#1085)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Nov 6 13:03:51 2021 +0800
+
+    fix memory operation (#1061)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Nov 4 16:16:43 2021 +0800
+
+    Push down dict code column predicates  (#1037)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Nov 3 13:13:31 2021 +0800
+
+    fix storage type mapping to column type when push down predicates (#1021)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Nov 1 22:04:30 2021 +0800
+
+    enable column expr predicate to run daily (#986)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Oct 29 10:43:37 2021 +0800
+
+    use expr monotonic property to apply zone map filtering (#912)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Oct 27 19:16:11 2021 +0800
+
+    add monotonic property to expr (#870)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Oct 27 17:32:50 2021 +0800
+
+    add `ZoneMapDetail` to expose more info to `ColumnPredicate` (#889)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Oct 27 12:52:24 2021 +0800
+
+    Support expr as column predicate in scan node (#822)
+
+--
+    Fix master start up failing caused by dirty meta files (#774)
+
+commit da4eac8d7fb4c296e378361e0b6fe93212a2aee7
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Oct 22 14:06:21 2021 +0800
+
+    Refactor `olap_scan_prepare.h`  conjuncts parse and push down  (#804)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Oct 18 17:44:19 2021 +0800
+
+    Dont use min/max values they are absent in runtime filter (#726)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Oct 11 14:34:53 2021 +0800
+
+    optimize multi column group by case (#570)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Oct 8 10:38:16 2021 +0800
+
+    [SR-3811]Optimize Count Distinct using prefetch technique (#544)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Sep 29 16:52:14 2021 +0800
+
+    Optimize agg hash map by precomputing hash value and prefetch (#417)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Sep 27 21:51:24 2021 +0800
+
+    [SR-4816] fix external hive scan: type mismatch and logical empty file (#450)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Sep 24 19:59:51 2021 +0800
+
+    fix asan error in orc broker load case (#411)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Sep 24 19:58:32 2021 +0800
+
+    [Minor] add `emplace_with_hash` function to phmap::flat_hash_set (#362)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Sat Sep 18 10:26:49 2021 +0800
+
+    fix group-by agg hash variant (#306)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Fri Sep 17 16:22:59 2021 +0800
+
+    Improve performance of multi-column group by (#250)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Sep 16 21:13:26 2021 +0800
+
+    move specialized hashset to user class (#272)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Sep 16 19:51:39 2021 +0800
+
+    dont rely cmake to find boost since we aleady set BOOST_ROOT (#275)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Thu Sep 16 18:52:13 2021 +0800
+
+    allocate larger buffer if local buffer is not enough for parquet footer (#261)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Wed Sep 15 21:24:40 2021 +0800
+
+    check JAVA_HOME env is set when we access hdfs via JNI (#254)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Sep 14 20:05:24 2021 +0800
+
+    padding hashset serialization data to ensure min size (#220)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Tue Sep 14 14:30:43 2021 +0800
+
+    fix possible compiler optimization error (#208)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Sep 13 20:09:54 2021 +0800
+
+    [SR-3811] optimize high card count distinct (#139)
+
+--
+Author: yan.zhang <dirtysalt1987@gmail.com>
+Date:   Mon Sep 6 13:00:51 2021 +0800
+
+    Remove .pyc file (#14)
+
