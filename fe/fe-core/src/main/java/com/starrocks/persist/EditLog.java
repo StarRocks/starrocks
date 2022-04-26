@@ -963,8 +963,7 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_PARTITION, info);
     }
 
-    public void
-    logModifyPartition(ModifyPartitionInfo info) {
+    public void logModifyPartition(ModifyPartitionInfo info) {
         logEdit(OperationType.OP_MODIFY_PARTITION, info);
     }
 

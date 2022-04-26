@@ -191,22 +191,23 @@ public class HiveTable extends Table {
     }
 
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
-        boolean needRefreshColumn = isRefreshColumn();
+        Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
+        Map<String, Column> preNameToColumn = nameToColumn;
+        boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
         if (!needRefreshColumn) {
-            refreshTableCacheByColumnNames(new ArrayList<>(nameToColumn.keySet()));
+            refreshTableCache(new ArrayList<>(nameToColumn.keySet()));
         } else {
-            refreshTableCacheByColumnNames(new ArrayList<>(getAllHiveColumns().keySet()));
-            updateFullSchema(dbName, tableName, getAllHiveColumns());
+            refreshTableCache(new ArrayList<>(updatedTableSchemas.keySet()));
+            updateFullSchema(dbName, tableName, preNameToColumn, updatedTableSchemas);
         }
     }
 
-    private void refreshTableCacheByColumnNames(List<String> columnNames) throws DdlException {
+    private void refreshTableCache(List<String> columnNames) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository()
-                .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(),
-                        columnNames);
+                .refreshTableCache(resourceName, hiveDb, hiveTable, getPartitionColumns(), columnNames);
     }
-    
-    private Map<String, FieldSchema> getAllHiveColumns() throws DdlException{
+
+    private Map<String, FieldSchema> getAllHiveColumns() throws DdlException {
         org.apache.hadoop.hive.metastore.api.Table table = Catalog.getCurrentCatalog().getHiveRepository()
                 .getTable(resourceName, this.hiveDb, this.hiveTable);
         List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
@@ -219,18 +220,17 @@ public class HiveTable extends Table {
         return allHiveColumns;
     }
 
-    private boolean isRefreshColumn() throws DdlException{
-        Map<String, FieldSchema> allHiveColumns = getAllHiveColumns();
-        boolean needRefreshColumn = allHiveColumns.size() != this.fullSchema.size();
+    private boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
+        boolean needRefreshColumn = updatedTableSchemas.size() != this.fullSchema.size();
         if (!needRefreshColumn) {
             for (Column column : fullSchema) {
-                FieldSchema fieldSchema = allHiveColumns.get(column.getName());
+                FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
                 if (fieldSchema == null) {
                     needRefreshColumn = true;
                     break;
                 }
                 PrimitiveType type = convertColumnType(fieldSchema.getType());
-                if (!type.name().equalsIgnoreCase(column.getType().toString())) {
+                if (type != column.getType().getPrimitiveType()) {
                     needRefreshColumn = true;
                     break;
                 }
@@ -239,17 +239,27 @@ public class HiveTable extends Table {
         return needRefreshColumn;
     }
 
-    private void updateFullSchema(String dbName, String tableName, Map<String, FieldSchema> allHiveColumns) throws DdlException {
+    private void updateFullSchema(String dbName, String tableName, Map<String, Column> preNameToColumn,
+                                  Map<String, FieldSchema> allHiveColumns) throws DdlException {
         if (!Catalog.getCurrentCatalog().isMaster()) {
             return;
         }
         fullSchema.clear();
+        nameToColumn.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
             PrimitiveType type = convertColumnType(fieldSchema.getType());
-            Column column = new Column(fieldSchema.getName(), ScalarType.createType(type), true, null, true,
-                    NULL_DEFAULT_VALUE, fieldSchema.getComment());
+            Column srColumn = preNameToColumn.get(entry.getKey());
+            Column column;
+            if (srColumn == null) {
+                column = new Column(fieldSchema.getName(), ScalarType.createType(type),
+                        true, null, true, NULL_DEFAULT_VALUE, fieldSchema.getComment());
+            } else {
+                column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
+                        srColumn.getAggregationType(), srColumn.isAllowNull(), NULL_DEFAULT_VALUE, srColumn.getComment());
+            }
             fullSchema.add(column);
+            nameToColumn.put(column.getName(), column);
         }
         ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
         Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
