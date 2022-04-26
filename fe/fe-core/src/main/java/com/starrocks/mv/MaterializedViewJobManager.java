@@ -6,9 +6,9 @@ package com.starrocks.mv;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.Util;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -117,7 +117,7 @@ public class MaterializedViewJobManager {
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() -> addPendingJob(builder.build()),
                 initialDelay, period, timeUnit);
         MaterializedViewSchedulerInfo info = new MaterializedViewSchedulerInfo(startTime, period, timeUnit, builder);
-        long scheduledId = Catalog.getCurrentCatalog().getNextId();
+        long scheduledId = GlobalStateMgr.getCurrentState().getNextId();
         info.setId(scheduledId);
         info.setFuture(future);
         periodScheduledManager.put(scheduledId, info);
@@ -140,7 +140,7 @@ public class MaterializedViewJobManager {
         if (oldId != DEFAULT_UNASSIGNED_ID) {
             return false;
         }
-        long jobId = Catalog.getCurrentCatalog().getNextId();
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(jobId);
         long mvTableId = job.getMvTableId();
         Queue<MaterializedViewRefreshJob> jobQueue = pendingJobMap.get(mvTableId);

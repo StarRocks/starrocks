@@ -3,7 +3,7 @@
 package com.starrocks.mv;
 
 import com.clearspring.analytics.util.Lists;
-import com.starrocks.catalog.Catalog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.Constants;
 import mockit.Expectations;
 import mockit.Mock;
@@ -25,18 +25,18 @@ public class MaterializedViewJobManagerTest {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewJobManagerTest.class);
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 returns(100L, 101L, 102L, 103L, 104L, 105L);
             }

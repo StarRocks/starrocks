@@ -704,24 +704,24 @@ public class EditLog {
                 }
                 case OperationType.OP_REGISTER_SCHEDULED_MV_JOB: {
                     final MaterializedViewSchedulerInfo info = (MaterializedViewSchedulerInfo) journal.getData();
-                    catalog.getMaterializedViewJobScheduler().replayRegisterScheduledJob(info);
+                    globalStateMgr.getMaterializedViewJobScheduler().replayRegisterScheduledJob(info);
                     break;
                 }
                 case OperationType.OP_DEREGISTER_SCHEDULED_MV_JOB: {
                     String idString = journal.getData().toString();
                     long scheduledId = Long.parseLong(idString);
-                    catalog.getMaterializedViewJobScheduler().replayDeregisterScheduledJob(scheduledId);
+                    globalStateMgr.getMaterializedViewJobScheduler().replayDeregisterScheduledJob(scheduledId);
                     break;
                 }
                 case OperationType.OP_ADD_PENDING_MV_JOB: {
                     final MaterializedViewRefreshJob job = (MaterializedViewRefreshJob) journal.getData();
-                    catalog.getMaterializedViewJobScheduler().replayAddPendingJob(job);
+                    globalStateMgr.getMaterializedViewJobScheduler().replayAddPendingJob(job);
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATUS_CHANGE: {
                     final MaterializedViewRefreshJobStatusChange statusChange =
                             (MaterializedViewRefreshJobStatusChange) journal.getData();
-                    catalog.getMaterializedViewJobScheduler().replayJobStatusChange(statusChange);
+                    globalStateMgr.getMaterializedViewJobScheduler().replayJobStatusChange(statusChange);
                     break;
                 }
                 case OperationType.OP_CREATE_SMALL_FILE: {
