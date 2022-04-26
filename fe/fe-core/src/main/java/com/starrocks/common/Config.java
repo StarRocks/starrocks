@@ -803,7 +803,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_udf = false;
 
     @ConfField(mutable = true)
@@ -1402,4 +1402,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int default_bucket_num = 10;
+
+    @ConfField
+    public static boolean enable_dict_optimize_routine_load = false;
 }

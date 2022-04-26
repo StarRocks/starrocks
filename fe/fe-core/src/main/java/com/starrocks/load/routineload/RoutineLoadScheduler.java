@@ -66,12 +66,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
         // update
         routineLoadManager.updateRoutineLoadJob();
         // get need schedule routine jobs
-        List<RoutineLoadJob> routineLoadJobList = null;
-        try {
-            routineLoadJobList = getNeedScheduleRoutineJobs();
-        } catch (LoadException e) {
-            LOG.warn("failed to get need schedule routine jobs", e);
-        }
+        List<RoutineLoadJob> routineLoadJobList = getNeedScheduleRoutineJobs();
 
         LOG.info("there are {} job need schedule", routineLoadJobList.size());
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
@@ -126,7 +121,7 @@ public class RoutineLoadScheduler extends MasterDaemon {
         routineLoadManager.processTimeoutTasks();
     }
 
-    private List<RoutineLoadJob> getNeedScheduleRoutineJobs() throws LoadException {
+    private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
         return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
     }
 }
