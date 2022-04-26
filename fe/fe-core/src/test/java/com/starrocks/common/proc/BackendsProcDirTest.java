@@ -21,10 +21,10 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -43,7 +43,7 @@ public class BackendsProcDirTest {
     @Mocked
     private TabletInvertedIndex tabletInvertedIndex;
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
 
@@ -65,15 +65,15 @@ public class BackendsProcDirTest {
                 editLog.logBackendStateChange((Backend) any);
                 minTimes = 0;
 
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 result = 10000L;
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
-                catalog.clear();
+                globalStateMgr.clear();
                 minTimes = 0;
 
                 systemInfoService.getBackend(1000);
@@ -94,21 +94,21 @@ public class BackendsProcDirTest {
             }
         };
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
 
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
 
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }

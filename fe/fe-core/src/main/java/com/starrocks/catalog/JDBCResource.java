@@ -17,21 +17,21 @@ import java.security.MessageDigest;
 import java.util.Map;
 
 /*
-* External JDBC resource for JDBC table query
-* <p>
-* Example:
-* CREATE EXTERNAL RESOURCE "jdbc_pg"
-* PROPERTIES
-* (
-* "type" = "jdbc",
-* "user" = "user",
-* "password" = "password",
-* "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/db"
-* "driver" = "driver_name",
-* );
-* <p>
-* DROP RESOURCE "jdbc_pg";
-* */
+ * External JDBC resource for JDBC table query
+ * <p>
+ * Example:
+ * CREATE EXTERNAL RESOURCE "jdbc_pg"
+ * PROPERTIES
+ * (
+ * "type" = "jdbc",
+ * "user" = "user",
+ * "password" = "password",
+ * "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/db"
+ * "driver" = "driver_name",
+ * );
+ * <p>
+ * DROP RESOURCE "jdbc_pg";
+ * */
 public class JDBCResource extends Resource {
     public static final String TYPE = "type";
     public static final String NAME = "name";

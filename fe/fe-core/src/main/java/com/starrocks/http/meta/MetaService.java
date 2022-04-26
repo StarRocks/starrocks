@@ -23,7 +23,6 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
@@ -34,6 +33,7 @@ import com.starrocks.master.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -177,7 +177,7 @@ public class MetaService {
             long version = checkLongParam(versionStr);
 
             // for master node, reject image put
-            if (Catalog.getCurrentCatalog().isMaster()) {
+            if (GlobalStateMgr.getCurrentState().isMaster()) {
                 response.appendContent("this node is master, reject image put");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 LOG.error("this node is master, but receive image put from host{}, reject it", machine);
@@ -186,7 +186,7 @@ public class MetaService {
 
             // do not accept image whose version is bigger than max journalId
             // if accepted, newly added log will not be replayed when restart
-            long maxJournalId = Catalog.getCurrentCatalog().getMaxJournalId();
+            long maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
             if (version > maxJournalId) {
                 response.appendContent("image version is bigger than local max journal id, reject image put");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -199,7 +199,7 @@ public class MetaService {
                     + "/image?version=" + versionStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
-            File dir = new File(Catalog.getCurrentCatalog().getImageDir());
+            File dir = new File(GlobalStateMgr.getCurrentState().getImageDir());
             try {
                 OutputStream out = MetaHelper.getOutputStream(filename, dir);
                 MetaHelper.getRemoteFile(url, TIMEOUT_SECOND * 1000, out);
@@ -215,7 +215,7 @@ public class MetaService {
                 return;
             }
 
-            Catalog.getCurrentCatalog().setImageJournalId(version);
+            GlobalStateMgr.getCurrentState().setImageJournalId(version);
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");
@@ -239,7 +239,7 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            long id = Catalog.getCurrentCatalog().getReplayedJournalId();
+            long id = GlobalStateMgr.getCurrentState().getReplayedJournalId();
             response.updateHeader("id", Long.toString(id));
             writeResponse(request, response);
         }
@@ -265,7 +265,7 @@ public class MetaService {
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {
                 int port = Integer.parseInt(portString);
-                Frontend fe = Catalog.getCurrentCatalog().checkFeExist(host, port);
+                Frontend fe = GlobalStateMgr.getCurrentState().checkFeExist(host, port);
                 if (fe == null) {
                     response.updateHeader("role", FrontendNodeType.UNKNOWN.name());
                 } else {
@@ -339,13 +339,13 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             /*
-             * Before dump, we acquired the catalog read lock and all databases' read lock and all
+             * Before dump, we acquired the globalStateMgr read lock and all databases' read lock and all
              * the jobs' read lock. This will guarantee the consistency of database and job queues.
              * But Backend may still inconsistent.
              */
 
             // TODO: Still need to lock ClusterInfoService to prevent add or drop Backends
-            String dumpFilePath = Catalog.getCurrentCatalog().dumpImage();
+            String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
             if (dumpFilePath == null) {
                 response.appendContent("dump failed. " + dumpFilePath);
             }

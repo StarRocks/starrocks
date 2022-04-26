@@ -25,10 +25,10 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Snapshot;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -134,11 +134,13 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     @Override
     public void getNodeInfo() {
-        long feDeadNum = Catalog.getCurrentCatalog().getFrontends(null).stream().filter(f -> !f.isAlive()).count();
+        long feDeadNum = GlobalStateMgr.getCurrentState().getFrontends(null).stream().filter(f -> !f.isAlive()).count();
         long beDeadNum =
-                Catalog.getCurrentSystemInfo().getIdToBackend().values().stream().filter(b -> !b.isAlive()).count();
+                GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values().stream().filter(b -> !b.isAlive())
+                        .count();
         long brokerDeadNum =
-                Catalog.getCurrentCatalog().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive).count();
+                GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
+                        .count();
         sb.append(prefix + "_frontend_dead_num").append(" ").append(String.valueOf(feDeadNum)).append("\n");
         sb.append(prefix + "_backend_dead_num").append(" ").append(String.valueOf(beDeadNum)).append("\n");
         sb.append(prefix + "_broker_dead_num").append(" ").append(String.valueOf(brokerDeadNum)).append("\n");

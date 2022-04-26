@@ -18,7 +18,7 @@ public class HashDistributionDesc {
         //  the result will be error
         SHUFFLE_AGG, // hash property from shuffle agg
         SHUFFLE_JOIN, // hash property from shuffle join
-        BUCKET_JOIN, // hash property from bucket join
+        BUCKET, // hash property from bucket
         SHUFFLE_ENFORCE // parent node which can not satisfy the requirement will enforce child this hash property
     }
 
@@ -74,7 +74,7 @@ public class HashDistributionDesc {
     }
 
     public boolean isBucketJoin() {
-        return this.sourceType == SourceType.BUCKET_JOIN;
+        return this.sourceType == SourceType.BUCKET;
     }
 
     @Override

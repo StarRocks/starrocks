@@ -10,7 +10,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-
 public class CreateMVStmtTest {
 
     private static StarRocksAssert starRocksAssert;
@@ -74,7 +73,8 @@ public class CreateMVStmtTest {
         try {
             UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
         } catch (Exception ex) {
-            Assert.assertTrue(ex.getMessage().contains("The materialized view currently does not support * in select statement"));
+            Assert.assertTrue(
+                    ex.getMessage().contains("The materialized view currently does not support * in select statement"));
         }
     }
 

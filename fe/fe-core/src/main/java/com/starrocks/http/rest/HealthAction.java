@@ -21,11 +21,11 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
 public class HealthAction extends RestBaseAction {
@@ -43,8 +43,8 @@ public class HealthAction extends RestBaseAction {
         response.setContentType("application/json");
 
         RestResult result = new RestResult();
-        result.addResultEntry("total_backend_num", Catalog.getCurrentSystemInfo().getBackendIds(false).size());
-        result.addResultEntry("online_backend_num", Catalog.getCurrentSystemInfo().getBackendIds(true).size());
+        result.addResultEntry("total_backend_num", GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size());
+        result.addResultEntry("online_backend_num", GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
         sendResult(request, response, result);
     }
 }

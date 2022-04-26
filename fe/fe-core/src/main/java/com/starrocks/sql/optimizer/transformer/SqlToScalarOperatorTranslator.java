@@ -30,10 +30,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ResolvedField;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -212,7 +212,7 @@ public final class SqlToScalarOperatorTranslator {
             Preconditions.checkArgument(node.getChildren().size() == 2);
 
             // TODO(mofei) make it more elegant
-            Function func = Catalog.getCurrentCatalog().getFunction(FunctionSet.JSON_QUERY_FUNC,
+            Function func = GlobalStateMgr.getCurrentState().getFunction(FunctionSet.JSON_QUERY_FUNC,
                     Function.CompareMode.IS_IDENTICAL);
             Preconditions.checkNotNull(func, "json_query function not exists");
 

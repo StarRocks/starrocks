@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -32,6 +31,7 @@ import com.starrocks.common.proc.AuthProcDir;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 
 /*
  *  SHOW ALL GRANTS;
@@ -77,7 +77,7 @@ public class ShowGrantsStmt extends ShowStmt {
                 throw new AnalysisException("Can not specified keyword ALL when specified user");
             }
             userIdent.analyze(analyzer.getClusterName());
-            if (!Catalog.getCurrentCatalog().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
                 throw new AnalysisException("user " + userIdent + " not exist!");
             }
         } else {
@@ -91,7 +91,8 @@ public class ShowGrantsStmt extends ShowStmt {
 
         // if show all grants, or show other user's grants, need global GRANT priv.
         if (isAll || !self.equals(userIdent)) {
-            if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
         }

@@ -75,7 +75,7 @@ public class MasterOpExecutor {
     public void execute() throws Exception {
         forward();
         LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
-        ctx.getCatalog().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
+        ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
 
         if (result.state != null) {
             MysqlStateType state = MysqlStateType.fromString(result.state);
@@ -109,8 +109,8 @@ public class MasterOpExecutor {
 
     // Send request to Master
     private void forward() throws Exception {
-        String masterHost = ctx.getCatalog().getMasterIp();
-        int masterRpcPort = ctx.getCatalog().getMasterRpcPort();
+        String masterHost = ctx.getGlobalStateMgr().getMasterIp();
+        int masterRpcPort = ctx.getGlobalStateMgr().getMasterRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
 
         FrontendService.Client client = null;

@@ -4,7 +4,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -15,6 +14,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.statistic.StatisticExecutor;
@@ -49,7 +49,7 @@ public class QueryDumpAction extends RestBaseAction {
         String dbName = request.getSingleParameter(DB);
         if (!Strings.isNullOrEmpty(dbName)) {
             String fullDbName = ClusterNamespace.getFullName(context.getClusterName(), dbName);
-            Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
             if (db == null) {
                 response.getContent().append("Database [" + fullDbName + "] does not exists");
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);

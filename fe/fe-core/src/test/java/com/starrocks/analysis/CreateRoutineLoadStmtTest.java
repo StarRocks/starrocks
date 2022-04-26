@@ -40,7 +40,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -48,7 +47,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class CreateRoutineLoadStmtTest {
 
@@ -186,7 +184,7 @@ public class CreateRoutineLoadStmtTest {
 
         Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpr().get(0);
         Assert.assertTrue(expr instanceof StringLiteral);
-        StringLiteral stringLiteral = (StringLiteral)expr;
+        StringLiteral stringLiteral = (StringLiteral) expr;
         Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");
 
     }

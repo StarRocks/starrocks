@@ -5,6 +5,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
@@ -21,7 +22,7 @@ import java.util.Map;
 
 public class TabletStatMgrTest {
     @Test
-    public void testUpdateTabletStat(@Mocked Catalog catalog) {
+    public void testUpdateTabletStat(@Mocked GlobalStateMgr globalStateMgr) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -90,11 +91,11 @@ public class TabletStatMgrTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                GlobalStateMgr.getCurrentInvertedIndex();
                 result = invertedIndex;
-                catalog.getDb(dbId);
+                globalStateMgr.getDb(dbId);
                 result = db;
             }
         };

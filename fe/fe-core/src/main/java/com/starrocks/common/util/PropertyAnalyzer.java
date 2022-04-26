@@ -295,7 +295,7 @@ public class PropertyAnalyzer {
     }
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
-            boolean isPrimaryKey) throws AnalysisException {
+                                                        boolean isPrimaryKey) throws AnalysisException {
         Set<String> bfColumns = null;
         if (properties != null && properties.containsKey(PROPERTIES_BF_COLUMNS)) {
             bfColumns = Sets.newHashSet();

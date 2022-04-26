@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -61,7 +62,7 @@ public class HiveTableTest {
     }
 
     @Test
-    public void testWithResourceName(@Mocked Catalog catalog,
+    public void testWithResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                      @Mocked ResourceMgr resourceMgr,
                                      @Mocked HiveRepository hiveRepository) throws DdlException {
         Resource hiveResource = new HiveResource(resourceName);
@@ -82,17 +83,17 @@ public class HiveTableTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.getResourceMgr();
+                globalStateMgr.getResourceMgr();
                 result = resourceMgr;
 
                 resourceMgr.getResource("hive0");
                 result = hiveResource;
 
-                catalog.getHiveRepository();
+                globalStateMgr.getHiveRepository();
                 result = hiveRepository;
 
                 hiveRepository.getTable(resourceName, hiveDb, hiveTable);

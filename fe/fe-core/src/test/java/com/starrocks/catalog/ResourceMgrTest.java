@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -72,11 +73,11 @@ public class ResourceMgrTest {
 
     @Test
     public void testAddDropResource(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                    @Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+                                    @Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add
-        addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
+        addSparkResource(mgr, brokerMgr, editLog, globalStateMgr, auth);
 
         // drop
         DropResourceStmt dropStmt = new DropResourceStmt(name);
@@ -86,11 +87,12 @@ public class ResourceMgrTest {
 
     @Test(expected = DdlException.class)
     public void testAddResourceExist(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                     @Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+                                     @Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add
-        CreateResourceStmt stmt = addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
+        CreateResourceStmt stmt = addSparkResource(mgr, brokerMgr, editLog, globalStateMgr, auth);
 
         // add again
         mgr.createResource(stmt);
@@ -106,14 +108,14 @@ public class ResourceMgrTest {
     }
 
     @Test
-    public void testAlterResource(@Injectable EditLog editLog, @Mocked Catalog catalog,
+    public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
         name = "hive0";
         type = "hive";
-        addHiveResource(mgr, editLog, catalog, auth);
+        addHiveResource(mgr, editLog, globalStateMgr, auth);
 
         // alter hive resource
         String newThriftPath = "thrift://10.10.44.xxx:9083";
@@ -133,11 +135,12 @@ public class ResourceMgrTest {
 
     @Test(expected = DdlException.class)
     public void testAllowAlterHiveResourceOnly(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
-                                               @Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+                                               @Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
+            throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add spark resource
-        addSparkResource(mgr, brokerMgr, editLog, catalog, auth);
+        addSparkResource(mgr, brokerMgr, editLog, globalStateMgr, auth);
 
         // alter spark resource
         Map<String, String> properties = new HashMap<>();
@@ -148,14 +151,14 @@ public class ResourceMgrTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked Catalog catalog,
+    public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
         name = "hive0";
         type = "hive";
-        addHiveResource(mgr, editLog, catalog, auth);
+        addHiveResource(mgr, editLog, globalStateMgr, auth);
 
         // alter hive resource
         Map<String, String> properties = new HashMap<>();
@@ -167,14 +170,14 @@ public class ResourceMgrTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked Catalog catalog,
+    public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
 
         // add hive resource
         name = "hive0";
         type = "hive";
-        addHiveResource(mgr, editLog, catalog, auth);
+        addHiveResource(mgr, editLog, globalStateMgr, auth);
 
         // alter hive resource
         Map<String, String> properties = new HashMap<>();
@@ -185,12 +188,12 @@ public class ResourceMgrTest {
     }
 
     private CreateResourceStmt addHiveResource(ResourceMgr mgr, EditLog editLog,
-                                               Catalog catalog, Auth auth) throws UserException {
+                                               GlobalStateMgr globalStateMgr, Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 result = editLog;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -212,16 +215,16 @@ public class ResourceMgrTest {
     }
 
     private CreateResourceStmt addSparkResource(ResourceMgr mgr, BrokerMgr brokerMgr, EditLog editLog,
-                                                Catalog catalog, Auth auth) throws UserException {
+                                                GlobalStateMgr globalStateMgr, Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 result = editLog;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

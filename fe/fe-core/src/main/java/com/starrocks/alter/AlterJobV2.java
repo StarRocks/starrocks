@@ -23,7 +23,6 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -32,6 +31,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,7 +49,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobState {
         PENDING, // Job is created
-        WAITING_TXN, // New replicas are created and Shadow catalog object is visible for incoming txns,
+        WAITING_TXN, // New replicas are created and Shadow globalStateMgr object is visible for incoming txns,
         // waiting for previous txns to be finished
         RUNNING, // alter tasks are sent to BE, and waiting for them finished.
         FINISHED, // job is done
@@ -198,8 +198,8 @@ public abstract class AlterJobV2 implements Writable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
 
-            isStable = tbl.isStable(Catalog.getCurrentSystemInfo(),
-                    Catalog.getCurrentCatalog().getTabletScheduler(), db.getClusterName());
+            isStable = tbl.isStable(GlobalStateMgr.getCurrentSystemInfo(),
+                    GlobalStateMgr.getCurrentState().getTabletScheduler(), db.getClusterName());
         } finally {
             db.readUnlock();
         }
@@ -235,7 +235,7 @@ public abstract class AlterJobV2 implements Writable {
     public abstract void replay(AlterJobV2 replayedJob);
 
     public static AlterJobV2 read(DataInput in) throws IOException {
-        if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_86) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86) {
             JobType type = JobType.valueOf(Text.readString(in));
             switch (type) {
                 case ROLLUP:

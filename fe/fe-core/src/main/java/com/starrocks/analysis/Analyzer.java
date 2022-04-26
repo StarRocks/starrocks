@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InfoSchemaDb;
@@ -52,6 +51,7 @@ import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
 import com.starrocks.rewrite.ReplaceDateFormatRule;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -179,7 +179,7 @@ public class Analyzer {
     // them properties of the tuple descriptor itself.
     private static class GlobalState {
         private final DescriptorTable descTbl = new DescriptorTable();
-        private final Catalog catalog;
+        private final GlobalStateMgr globalStateMgr;
         private final IdGenerator<ExprId> conjunctIdGenerator = ExprId.createGenerator();
         private final ConnectContext context;
 
@@ -248,8 +248,8 @@ public class Analyzer {
         // Expr rewriter for normalizing and rewriting expressions.
         private final ExprRewriter exprRewriter_;
 
-        public GlobalState(Catalog catalog, ConnectContext context) {
-            this.catalog = catalog;
+        public GlobalState(GlobalStateMgr globalStateMgr, ConnectContext context) {
+            this.globalStateMgr = globalStateMgr;
             this.context = context;
             List<ExprRewriteRule> rules = Lists.newArrayList();
             // BetweenPredicates must be rewritten to be executable. Other non-essential
@@ -297,13 +297,13 @@ public class Analyzer {
     // conjunct evaluating to false.
     private boolean hasEmptySpjResultSet_ = false;
 
-    public Analyzer(Catalog catalog, ConnectContext context) {
+    public Analyzer(GlobalStateMgr globalStateMgr, ConnectContext context) {
         ancestors = Lists.newArrayList();
-        globalState = new GlobalState(catalog, context);
+        globalState = new GlobalState(globalStateMgr, context);
     }
 
     /**
-     * Analyzer constructor for nested select block. Catalog and DescriptorTable
+     * Analyzer constructor for nested select block. GlobalStateMgr and DescriptorTable
      * is inherited from the parentAnalyzer.
      *
      * @param parentAnalyzer the analyzer of the enclosing select block
@@ -329,7 +329,8 @@ public class Analyzer {
      * global state.
      */
     public static Analyzer createWithNewGlobalState(Analyzer parentAnalyzer) {
-        GlobalState globalState = new GlobalState(parentAnalyzer.globalState.catalog, parentAnalyzer.getContext());
+        GlobalState globalState =
+                new GlobalState(parentAnalyzer.globalState.globalStateMgr, parentAnalyzer.getContext());
         return new Analyzer(parentAnalyzer, globalState);
     }
 
@@ -484,7 +485,7 @@ public class Analyzer {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
         }
 
-        Database database = globalState.catalog.getDb(dbName);
+        Database database = globalState.globalStateMgr.getDb(dbName);
         if (database == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -509,7 +510,7 @@ public class Analyzer {
     }
 
     public Table getTable(TableName tblName) {
-        Database db = globalState.catalog.getDb(tblName.getDb());
+        Database db = globalState.globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             return null;
         }
@@ -1024,8 +1025,8 @@ public class Analyzer {
         return globalState.descTbl;
     }
 
-    public Catalog getCatalog() {
-        return globalState.catalog;
+    public GlobalStateMgr getCatalog() {
+        return globalState.globalStateMgr;
     }
 
     public Set<String> getAliases() {
@@ -1249,7 +1250,6 @@ public class Analyzer {
     public void markConjunctAssigned(Expr conjunct) {
         globalState.assignedConjuncts.add(conjunct.getId());
     }
-
 
     /**
      * Returns assignment-compatible type of expr.getType() and lastCompatibleType.

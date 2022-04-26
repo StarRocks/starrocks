@@ -12,6 +12,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -30,10 +31,10 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -46,8 +47,8 @@ public class IcebergResourceTest {
         String metastoreURIs = "thrift://127.0.0.1:9380";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("starrocks.catalog-type", catalogType);
-        properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
+        properties.put("starrocks.globalStateMgr-type", catalogType);
+        properties.put("iceberg.globalStateMgr.hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
@@ -58,10 +59,10 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testCustomStmt(@Mocked Catalog catalog, @Injectable Auth auth) throws UserException {
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -74,8 +75,8 @@ public class IcebergResourceTest {
         String catalogImpl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("starrocks.catalog-type", catalogType);
-        properties.put("iceberg.catalog-impl", catalogImpl);
+        properties.put("starrocks.globalStateMgr-type", catalogType);
+        properties.put("iceberg.globalStateMgr-impl", catalogImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
@@ -91,8 +92,8 @@ public class IcebergResourceTest {
         String metastoreURIs = "thrift://127.0.0.1:9380";
         String catalogType = "HIVE";
         Map<String, String> properties = Maps.newHashMap();
-        properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
-        properties.put("starrocks.catalog-type", catalogType);
+        properties.put("iceberg.globalStateMgr.hive.metastore.uris", metastoreURIs);
+        properties.put("starrocks.globalStateMgr-type", catalogType);
         resource.setProperties(properties);
 
         String json = GsonUtils.GSON.toJson(resource);

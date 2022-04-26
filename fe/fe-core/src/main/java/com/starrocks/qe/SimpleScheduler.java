@@ -24,9 +24,9 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -174,7 +174,7 @@ public class SimpleScheduler {
             while (true) {
                 try {
                     Thread.sleep(1000L);
-                    SystemInfoService clusterInfoService = Catalog.getCurrentSystemInfo();
+                    SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
                     LOG.debug("UpdateBlacklistThread retry begin");
                     lock.lock();
                     try {

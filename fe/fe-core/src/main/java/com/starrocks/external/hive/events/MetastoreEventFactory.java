@@ -5,11 +5,11 @@ package com.starrocks.external.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,11 +55,11 @@ public class MetastoreEventFactory implements EventFactory {
         }
     }
 
-    List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events, String resourceName)  {
+    List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events, String resourceName) {
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
         HiveMetaCache metaCache = null;
         try {
-            metaCache = Catalog.getCurrentCatalog().getHiveRepository().getMetaCache(resourceName);
+            metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
         }
@@ -71,7 +71,7 @@ public class MetastoreEventFactory implements EventFactory {
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
         for (NotificationEvent event : events) {
-            HiveTable table = Catalog.getCurrentCatalog().getMetastoreEventsProcessor()
+            HiveTable table = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .getHiveTable(resourceName, event.getDbName(), event.getTableName());
             if (table == null) {
                 continue;

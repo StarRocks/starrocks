@@ -10,13 +10,9 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
@@ -31,7 +27,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
 
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
@@ -40,6 +36,29 @@ public class PrivilegeCheckerTest {
 
         testUser = new UserIdentity("test", "%");
         testUser.analyze("default_cluster");
+    }
+
+    @Test
+    public void testAlterTable() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+
+        String sql = "alter table db1.table1 rename table2";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
+        sql = "alter table db1.table1 rename table2";
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
     }
 
     @Test
@@ -87,7 +106,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testSelectTable() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
         starRocksAssert.getCtx().setQualifiedUser("test");
@@ -105,7 +124,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testInsertStatement() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -125,7 +144,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateView() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -151,7 +170,7 @@ public class PrivilegeCheckerTest {
     }
 
     public void testDropTable() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -173,7 +192,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testDropMaterializedView() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");

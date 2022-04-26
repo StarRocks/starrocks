@@ -290,7 +290,7 @@ public class ReorderJoinRule extends Rule {
 
             if (childInputColumns.equals(outputColumns)) {
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
-                        (LogicalJoinOperator) optExpression.getOp())
+                                (LogicalJoinOperator) optExpression.getOp())
                         .setProjection(null).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();

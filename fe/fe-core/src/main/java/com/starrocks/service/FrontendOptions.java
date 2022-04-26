@@ -80,7 +80,7 @@ public class FrontendOptions {
                         localAddr = addr;
                         hasMatchedIp = true;
                         break;
-                    } 
+                    }
                 } else {
                     localAddr = addr;
                     break;
