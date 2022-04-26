@@ -210,7 +210,7 @@ static ColumnPtr make_int32_column(const std::vector<int32_t>& xs) {
 }
 
 static ColumnPtr make_nullable_int32_column(const std::vector<int32_t>& xs) {
-    auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true, false, xs.size());
+    auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true, false, 0);
     for (auto x : xs) {
         if (x == 0) {
             column->append_nulls(1);
