@@ -675,19 +675,12 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
             it = _stale_rs_metas.erase(it);
+            // version wouldn't be duplicate
+            break;
         } else {
             it++;
         }
     }
-}
-
-RowsetMetaSharedPtr TabletMeta::acquire_stale_rs_meta_by_version(const Version& version) const {
-    for (auto it : _stale_rs_metas) {
-        if (it->version() == version) {
-            return it;
-        }
-    }
-    return nullptr;
 }
 
 void TabletMeta::delete_inc_rs_meta_by_version(const Version& version) {
