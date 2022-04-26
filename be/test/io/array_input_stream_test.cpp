@@ -87,26 +87,26 @@ PARALLEL_TEST(ArrayInputStreamTest, test_read_at) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ArrayInputStreamTest, test_seek_and_peak) {
+PARALLEL_TEST(ArrayInputStreamTest, test_seek_and_peek) {
     std::string s("0123456789");
     ArrayInputStream in(s.data(), static_cast<int64_t>(s.size()));
 
-    ASSERT_TRUE(in.allows_peak());
+    ASSERT_TRUE(in.allows_peek());
 
     ASSERT_OK(in.seek(5));
     ASSERT_EQ(5, *in.position());
-    ASSERT_EQ("56789", *in.peak(10));
+    ASSERT_EQ("56789", *in.peek(10));
 
     ASSERT_OK(in.seek(7));
     ASSERT_EQ(7, *in.position());
-    ASSERT_EQ("789", *in.peak(10));
+    ASSERT_EQ("789", *in.peek(10));
 
     ASSERT_OK(in.seek(10));
     ASSERT_EQ(10, *in.position());
-    ASSERT_EQ("", *in.peak(10));
+    ASSERT_EQ("", *in.peek(10));
 
     ASSERT_OK(in.seek(11));
-    ASSERT_EQ("", *in.peak(10));
+    ASSERT_EQ("", *in.peek(10));
 }
 
 } // namespace starrocks::io

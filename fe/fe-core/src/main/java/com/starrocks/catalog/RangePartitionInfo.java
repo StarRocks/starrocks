@@ -64,6 +64,7 @@ public class RangePartitionInfo extends PartitionInfo {
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;
     }

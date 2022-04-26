@@ -287,7 +287,11 @@ public:
 
     void append_data(Column* agg) override {
         auto* col = down_cast<ArrayColumn*>(agg);
-        col->append(*this->data().column, this->data().row, 1);
+        if (this->data().column) {
+            col->append(*this->data().column, this->data().row, 1);
+        } else {
+            col->append_default();
+        }
     }
 };
 

@@ -138,8 +138,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     // Load pending rowsets
     RETURN_IF_ERROR(TabletMetaManager::pending_rowset_iterate(
-            _tablet.data_dir(), _tablet.tablet_id(),
-            [&](int64_t version, const std::string_view& rowset_meta_data) -> bool {
+            _tablet.data_dir(), _tablet.tablet_id(), [&](int64_t version, std::string_view rowset_meta_data) -> bool {
                 RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
                 CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
                 RowsetSharedPtr rowset;
@@ -1707,12 +1706,14 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t version;
+    bool has_pending = false;
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
         auto& last = _edit_version_infos.back();
         version = last->version.major();
         rowsets = last->rowsets;
+        has_pending = _pending_commits.size() > 0;
     }
     string err_rowsets;
     int64_t total_row = 0;
@@ -1735,6 +1736,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
                                  << " rowset=" << err_rowsets;
     }
     info->__set_version(version);
+    info->__set_version_miss(has_pending);
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
@@ -1969,8 +1971,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         // use src_rowset's meta as base, change some fields to new tablet
         auto& rowset_meta_pb = new_rowset_info.rowset_meta_pb;
         src_rowset.rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-        rowset_meta_pb.set_rowset_id(0);
-        rowset_meta_pb.set_rowset_id_v2(rid.to_string());
+        rowset_meta_pb.set_deprecated_rowset_id(0);
+        rowset_meta_pb.set_rowset_id(rid.to_string());
         rowset_meta_pb.set_rowset_seg_id(new_rowset_info.rowset_id);
         rowset_meta_pb.set_partition_id(_tablet.tablet_meta()->partition_id());
         rowset_meta_pb.set_tablet_id(tablet_id);
@@ -2135,7 +2137,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
         (*new_rowset)->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
         rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
-        rowset_meta_pb.set_rowset_id_v2(rid.to_string());
+        rowset_meta_pb.set_rowset_id(rid.to_string());
 
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
     }
@@ -2339,7 +2341,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
     auto check_rowset_files = [&](const RowsetMetaPB& rowset) {
         for (int seg_id = 0; seg_id < rowset.num_segments(); seg_id++) {
             RowsetId rowset_id;
-            rowset_id.init(rowset.rowset_id_v2());
+            rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {
@@ -2348,7 +2350,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         }
         for (int del_id = 0; del_id < rowset.num_delete_files(); del_id++) {
             RowsetId rowset_id;
-            rowset_id.init(rowset.rowset_id_v2());
+            rowset_id.init(rowset.rowset_id());
             auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
             auto st = Env::Default()->path_exists(path);
             if (!st.ok()) {

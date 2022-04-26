@@ -105,9 +105,8 @@ public:
     //   where we should change tablet status from shutdown back to running
     //
     // return NotFound if the tablet path has been deleted or the tablet statue is SHUTDOWN.
-    Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
-                                 const std::string& header, bool update_meta, bool force = false, bool restore = false,
-                                 bool check_path = true);
+    Status load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash, std::string_view meta,
+                                 bool update_meta, bool force = false, bool restore = false, bool check_path = true);
 
     Status load_tablet_from_dir(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
@@ -130,8 +129,6 @@ public:
                                        const string& tablet_id_path);
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
-
-    void get_partition_related_tablets(int64_t partition_id, std::set<TabletInfo>* tablet_infos);
 
     void do_tablet_meta_checkpoint(DataDir* data_dir);
 

@@ -19,22 +19,34 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet_builder.h"
+#include "exec/parquet_builder.h"
 
-#include <arrow/array.h>
-#include <arrow/status.h>
-
-#include <ctime>
+#include <arrow/io/api.h>
+#include <arrow/io/file.h>
+#include <arrow/io/interfaces.h>
 
 #include "common/logging.h"
-#include "exec/file_writer.h"
-#include "gen_cpp/TFileBrokerService.h"
-#include "runtime/broker_mgr.h"
-#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
 
+class ParquetOutputStream : public arrow::io::OutputStream {
+public:
+    ParquetOutputStream(WritableFile* _writable_file);
+    ~ParquetOutputStream() override;
+
+    arrow::Status Write(const void* data, int64_t nbytes) override;
+    // return the current write position of the stream
+    arrow::Result<int64_t> Tell() const override;
+    arrow::Status Close() override;
+
+    bool closed() const override { return _is_closed; }
+
+private:
+    WritableFile* _writable_file; // not owned
+    int64_t _cur_pos = 0;         // current write position
+    bool _is_closed = false;
+};
 /// ParquetOutputStream
 
 ParquetOutputStream::ParquetOutputStream(WritableFile* writable_file) : _writable_file(writable_file) {

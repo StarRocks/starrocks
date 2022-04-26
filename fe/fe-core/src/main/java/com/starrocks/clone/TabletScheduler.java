@@ -997,7 +997,8 @@ public class TabletScheduler extends MasterDaemon {
             // set priority to normal because it may wait for a long time. Remain it as VERY_HIGH may block other task.
             tabletCtx.setOrigPriority(Priority.NORMAL);
             LOG.info("decommission tablet:" + tabletCtx.getTabletId() + " type:" + tabletCtx.getType() + " replica:" +
-                    replica.getBackendId() + " reason:" + reason, " watermark:" + nextTxnId);
+                    replica.getBackendId() + " reason:" + reason + " watermark:" + nextTxnId + " replicas:" +
+                    tabletCtx.getTablet().getReplicaInfos());
             throw new SchedException(Status.SCHEDULE_FAILED, "set watermark txn " + nextTxnId);
         } else if (replica.getState() == ReplicaState.DECOMMISSION && replica.getWatermarkTxnId() != -1) {
             long watermarkTxnId = replica.getWatermarkTxnId();
@@ -1012,6 +1013,7 @@ public class TabletScheduler extends MasterDaemon {
             }
         }
 
+        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
         // delete this replica from catalog.
         // it will also delete replica from tablet inverted index.
         tabletCtx.deleteReplica(replica);
@@ -1035,8 +1037,8 @@ public class TabletScheduler extends MasterDaemon {
 
         Catalog.getCurrentCatalog().getEditLog().logDeleteReplica(info);
 
-        LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {}",
-                tabletCtx.getTabletId(), replica.getBackendId(), reason, force);
+        LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {} replicas: {}",
+                tabletCtx.getTabletId(), replica.getBackendId(), reason, force, replicaInfos);
     }
 
     private void sendDeleteReplicaTask(long backendId, long tabletId, int schemaHash) {
@@ -1251,7 +1253,7 @@ public class TabletScheduler extends MasterDaemon {
         long tabletId = cloneTask.getTabletId();
         TabletSchedCtx tabletCtx = takeRunningTablets(tabletId);
         if (tabletCtx == null) {
-            LOG.warn("tablet info does not exist: {}", tabletId);
+            LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, cloneTask.getBackendId());
             // tablet does not exist, no need to keep task.
             return true;
         }

@@ -175,7 +175,7 @@ TEST(SortingTest, append_by_permutation_int) {
     ASSERT_EQ(2048, merged->get(1).get_int32());
 }
 
-void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
+static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
     for (ExprContext* ctx : exprs) {
         delete ctx;
     }
@@ -251,8 +251,3 @@ TEST(MergeTest, merge_sorted_stream) {
 }
 
 } // namespace starrocks::vectorized
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

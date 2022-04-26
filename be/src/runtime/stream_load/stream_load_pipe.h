@@ -25,7 +25,6 @@
 #include <deque>
 #include <mutex>
 
-#include "exec/file_reader.h"
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
@@ -35,19 +34,21 @@ namespace starrocks {
 
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
-class StreamLoadPipe : public MessageBodySink, public FileReader {
+class StreamLoadPipe : public MessageBodySink {
 public:
     StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
             : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
     ~StreamLoadPipe() override = default;
 
-    Status open() override { return Status::OK(); }
-
     Status append_and_flush(const char* data, size_t size) {
-        ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(size + 1));
-        buf->put_bytes(data, size);
-        buf->flip();
-        return _append(buf);
+        RETURN_IF_ERROR(append(data, size));
+        if (_write_buf != nullptr) {
+            ByteBufferPtr buf;
+            std::swap(buf, _write_buf);
+            buf->flip();
+            return _append(buf);
+        }
+        return Status::OK();
     }
 
     Status append(const char* data, size_t size) override {
@@ -71,15 +72,6 @@ public:
         _write_buf = ByteBuffer::allocate(chunk_size);
         _write_buf->put_bytes(data + pos, size - pos);
         return Status::OK();
-    }
-
-    Status append(const ByteBufferPtr& buf) override {
-        if (_write_buf != nullptr) {
-            _write_buf->flip();
-            RETURN_IF_ERROR(_append(_write_buf));
-            _write_buf.reset();
-        }
-        return _append(buf);
     }
 
     /* read_one_messages returns data that is written by append in one time.
@@ -120,7 +112,7 @@ public:
         return Status::OK();
     }
 
-    Status read(uint8_t* data, size_t* data_size, bool* eof) override {
+    Status read(uint8_t* data, size_t* data_size, bool* eof) {
         size_t bytes_read = 0;
         while (bytes_read < *data_size) {
             if (_read_buf == nullptr || !_read_buf->has_remaining()) {
@@ -156,20 +148,8 @@ public:
         return Status::OK();
     }
 
-    Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override {
-        return Status::InternalError("Not implemented");
-    }
-
-    int64_t size() override { return 0; }
-
-    Status seek(int64_t position) override { return Status::InternalError("Not implemented"); }
-
-    Status tell(int64_t* position) override { return Status::InternalError("Not implemented"); }
-
     // called when consumer finished
-    void close() override { cancel(Status::OK()); }
-
-    bool closed() override { return _cancelled; }
+    void close() { cancel(Status::OK()); }
 
     // called when producer finished
     Status finish() override {
@@ -200,41 +180,8 @@ public:
     }
 
 private:
-    // read the next buffer from _buf_queue
-    Status _read_next_buffer(std::unique_ptr<uint8_t[]>* out, size_t* out_cap, size_t* out_sz, size_t padding) {
-        std::unique_lock<std::mutex> l(_lock);
-        while (!_cancelled && !_finished && _buf_queue.empty()) {
-            _get_cond.wait(l);
-        }
-        // cancelled
-        if (_cancelled) {
-            return _err_st;
-        }
-        // finished
-        if (_buf_queue.empty()) {
-            DCHECK(_finished);
-            out->reset();
-            *out_sz = 0;
-            *out_cap = 0;
-            return Status::OK();
-        }
-        auto buf = _buf_queue.front();
-        *out_sz = buf->remaining();
-
-        if (*out_cap < *out_sz + padding) {
-            out->reset(new uint8_t[*out_sz + padding]);
-            *out_cap = *out_sz + padding;
-        }
-        buf->get_bytes((char*)(out->get()), *out_sz);
-
-        _buf_queue.pop_front();
-        _buffered_bytes -= buf->limit;
-        _put_cond.notify_one();
-        return Status::OK();
-    }
-
     Status _append(const ByteBufferPtr& buf) {
-        {
+        if (buf != nullptr && buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
             // if _buf_queue is empty, we append this buf without size check
             while (!_cancelled && !_buf_queue.empty() && _buffered_bytes + buf->remaining() > _max_buffered_bytes) {
@@ -245,8 +192,8 @@ private:
             }
             _buf_queue.push_back(buf);
             _buffered_bytes += buf->remaining();
+            _get_cond.notify_one();
         }
-        _get_cond.notify_one();
         return Status::OK();
     }
 

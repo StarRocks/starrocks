@@ -71,9 +71,6 @@ public class CreateWorkGroupStmt extends DdlStmt {
         if (workgroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");
         }
-        if (workgroup.getConcurrencyLimit() == null) {
-            throw new SemanticException("property 'concurrent_limit' is absent");
-        }
     }
 
     public WorkGroup getWorkgroup() {

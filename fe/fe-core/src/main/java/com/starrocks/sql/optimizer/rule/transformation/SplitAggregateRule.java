@@ -377,11 +377,20 @@ public class SplitAggregateRule extends TransformationRule {
             Type intermediateType = getIntermediateType(aggregation);
             // For merge agg function, we need to replace the agg input args to the update agg function result
             if (aggType.isGlobal()) {
+                List<ScalarOperator> arguments =
+                        Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
+                                column.isNullable()));
+                // For Multi args aggregation functions, if they have const args,
+                // We should also pass the const args to merge phase aggregator for performance.
+                // For example, for intersect_count(user_id, dt, '20191111'),
+                // We should pass '20191111' to update and merge phase aggregator in BE both.
+                if (aggregation.getChildren().size() > 1) {
+                    aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+                }
                 callOperator = new CallOperator(
                         aggregation.getFnName(),
                         aggregation.getType(),
-                        Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
-                                column.isNullable())),
+                        arguments,
                         aggregation.getFunction());
             } else {
                 callOperator = new CallOperator(aggregation.getFnName(), intermediateType,

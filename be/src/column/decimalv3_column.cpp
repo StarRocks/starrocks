@@ -5,6 +5,12 @@
 #include "column/fixed_length_column.h"
 
 namespace starrocks::vectorized {
+
+template <typename T>
+DecimalV3Column<T>::DecimalV3Column(size_t num_rows) {
+    this->resize(num_rows);
+}
+
 template <typename T>
 DecimalV3Column<T>::DecimalV3Column(int precision, int scale) : _precision(precision), _scale(scale) {
     DCHECK(0 <= _scale && _scale <= _precision && _precision <= decimal_precision_limit<T>);

@@ -1021,6 +1021,15 @@ public class ShowExecutor {
         row.add("Yes");
         row.add("1");
         rows.add(row);
+        // | gbk_chinese_ci | gbk | 28 | Yes | Yes | 1 |
+        row = Lists.newArrayList();
+        row.add("gbk_chinese_ci");
+        row.add("gbk");
+        row.add("28");
+        row.add("Yes");
+        row.add("Yes");
+        row.add("1");
+        rows.add(row);
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 

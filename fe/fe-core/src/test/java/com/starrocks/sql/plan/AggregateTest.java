@@ -25,6 +25,52 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testHavingNullableSubQuery() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "SELECT t1a, count(*)\n" +
+                    "FROM test_all_type_not_null\n" +
+                    "GROUP BY t1a\n" +
+                    "HAVING ANY_VALUE(t1a <= (\n" +
+                    "\tSELECT t1a\n" +
+                    "\tFROM test_all_type_not_null\n" +
+                    "\tWHERE t1a = 'not exists'\n" +
+                    "));";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], any_value[([22: expr, BOOLEAN, true]); args: BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [1: t1a, VARCHAR, false]\n" +
+                    "  |  having: [24: any_value, BOOLEAN, true]\n" +
+                    "  |  cardinality: 0\n" +
+                    "  |  \n" +
+                    "  6:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                    "  |  22 <-> [1: t1a, VARCHAR, false] <= [11: t1a, VARCHAR, true]\n" +
+                    "  |  cardinality: 1");
+        }
+        {
+            String sql = "SELECT t1a, count(*)\n" +
+                    "FROM test_all_type_not_null\n" +
+                    "GROUP BY t1a\n" +
+                    "HAVING ANY_VALUE(t1a <= '1');";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], any_value[([11: expr, BOOLEAN, false]); args: BOOLEAN; result: BOOLEAN; args nullable: false; result nullable: true]\n" +
+                    "  |  group by: [1: t1a, VARCHAR, false]\n" +
+                    "  |  having: [13: any_value, BOOLEAN, true]\n" +
+                    "  |  cardinality: 0\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                    "  |  11 <-> [1: t1a, VARCHAR, false] <= '1'\n" +
+                    "  |  cardinality: 1");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testCountDistinctBitmapHll() throws Exception {
         String sql = "select count(distinct v1), count(distinct v2), count(distinct v3), count(distinct v4), " +
                 "count(distinct b1), count(distinct b2), count(distinct b3), count(distinct b4) from test_object;";
@@ -366,6 +412,19 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)");
+    }
+
+    @Test
+    public void testIntersectCount() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select intersect_count(b1, v1, 999999) from test_object;";
+        String plan = getThriftPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "int_literal:TIntLiteral(value:999999), " +
+                "output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true)])], " +
+                "intermediate_tuple_id:2");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test

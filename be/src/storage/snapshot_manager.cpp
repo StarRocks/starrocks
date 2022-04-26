@@ -527,9 +527,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
     for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
-        old_rowset_id.init(rowset_meta_pb.rowset_id_v2());
+        old_rowset_id.init(rowset_meta_pb.rowset_id());
 
-        LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id_v2() << " with " << new_rowset_id;
+        LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id() << " with " << new_rowset_id;
 
         for (int seg_id = 0; seg_id < rowset_meta_pb.num_segments(); seg_id++) {
             auto old_path = BetaRowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
@@ -541,7 +541,7 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             auto new_path = BetaRowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
             RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
         }
-        rowset_meta_pb.set_rowset_id_v2(new_rowset_id.to_string());
+        rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
     }
     return Status::OK();
 }
