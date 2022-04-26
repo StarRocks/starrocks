@@ -30,6 +30,17 @@
 #include "storage/rowset/rowset_meta.h"
 
 namespace starrocks {
+
+// It is used to represent Graph vertex.
+struct Vertex {
+    int64_t value = 0;
+    // one vertex to other vertex may have multi same edge
+    // this is just for compatibility with previous implementations.
+    std::multiset<int64_t, std::greater<int64_t>> edges;
+
+    Vertex(int64_t v) : value(v) {}
+};
+
 /// VersionGraph class which is implemented to build and maintain total versions of rowsets.
 /// This class use adjacency-matrix represent rowsets version and links. A vertex is a version
 /// and a link is the _version object of a rowset (from start version to end version + 1).
@@ -53,7 +64,7 @@ public:
 
 private:
     /// Private method add a version to graph.
-    void _add_vertex_to_graph(int64_t vertex_value);
+    int64_t _add_vertex_to_graph(int64_t vertex_value);
 
     // OLAP version contains two parts, [start_version, end_version]. In order
     // to construct graph, the OLAP version has two corresponding vertex, one
