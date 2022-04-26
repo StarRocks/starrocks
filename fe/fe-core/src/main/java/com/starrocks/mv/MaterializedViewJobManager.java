@@ -196,7 +196,7 @@ public class MaterializedViewJobManager {
                     jobQueue.offer(job);
                     pendingJobMap.put(mvTableId, jobQueue);
                 } else {
-                    jobQueue.offer(job);
+                    mergeOrOfferJob(jobQueue, job);
                 }
                 jobIter.remove();
                 return true;
