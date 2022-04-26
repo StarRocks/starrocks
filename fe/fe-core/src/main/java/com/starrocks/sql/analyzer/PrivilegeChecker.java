@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -31,6 +32,16 @@ public class PrivilegeChecker {
     private static class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         public void check(StatementBase statement, ConnectContext session) {
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext session) {
+            String dbName = statement.getTbl().getDb();
+            String tableName = statement.getTbl().getTbl();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
+            }
+            return null;
         }
 
         @Override
