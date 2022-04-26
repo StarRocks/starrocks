@@ -192,11 +192,11 @@ public class HiveTable extends Table {
 
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
         Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
-        Map<String, Column> preNameToColumn = nameToColumn;
         boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
         if (!needRefreshColumn) {
             refreshTableCache(new ArrayList<>(nameToColumn.keySet()));
         } else {
+            Map<String, Column> preNameToColumn = nameToColumn;
             refreshTableCache(new ArrayList<>(updatedTableSchemas.keySet()));
             updateFullSchema(dbName, tableName, preNameToColumn, updatedTableSchemas);
         }
