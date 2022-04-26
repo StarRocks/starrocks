@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/condition_expr.h"
+#include "exprs/condition_expr.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -12,10 +12,10 @@
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

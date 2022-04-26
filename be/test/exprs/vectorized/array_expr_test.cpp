@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/array_expr.h"
+#include "exprs/array_expr.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -9,7 +9,7 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks::vectorized {
 

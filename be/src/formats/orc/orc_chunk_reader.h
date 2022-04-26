@@ -8,7 +8,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 namespace orc {

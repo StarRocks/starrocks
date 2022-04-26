@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/time_functions.h"
+#include "exprs/time_functions.h"
 
 #include <cctz/civil_time.h>
 #include <glog/logging.h>
@@ -13,10 +13,10 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
+#include "testutil/mock_vectorized_expr.h"
 #include "udf/udf.h"
 
 namespace starrocks {

@@ -4,8 +4,8 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
-#include "exprs/vectorized/like_predicate.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "exprs/like_predicate.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

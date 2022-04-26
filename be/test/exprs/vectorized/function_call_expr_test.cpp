@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/function_call_expr.h"
+#include "exprs/function_call_expr.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -9,8 +9,8 @@
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "exprs/cast_expr.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks {
 namespace vectorized {

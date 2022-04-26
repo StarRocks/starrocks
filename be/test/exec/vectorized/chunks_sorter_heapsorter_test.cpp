@@ -15,7 +15,7 @@
 #include "common/object_pool.h"
 #include "exec/vectorized/chunk_sorter_heapsorter.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
+#include "exprs/column_ref.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"

@@ -5,8 +5,8 @@
 
 #include "butil/time.h"
 #include "exprs/anyval_util.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
-#include "exprs/vectorized/string_functions.h"
+#include "exprs/string_functions.h"
+#include "testutil/mock_vectorized_expr.h"
 
 namespace starrocks::vectorized {
 class MoneyFormatDecimalTest : public ::testing::Test {};

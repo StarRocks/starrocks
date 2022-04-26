@@ -28,8 +28,8 @@
 #include <stdexcept>
 
 #include "common/statusor.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"

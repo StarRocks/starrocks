@@ -6,9 +6,9 @@
 #include <variant>
 
 #include "column/type_traits.h"
+#include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/dictmapping_expr.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/date_value.hpp"
 #include "runtime/descriptors.h"

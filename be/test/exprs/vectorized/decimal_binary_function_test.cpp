@@ -2,7 +2,7 @@
 #include <column/column_helper.h>
 #include <column/decimalv3_column.h>
 #include <column/type_traits.h>
-#include <exprs/vectorized/decimal_binary_function.h>
+#include "exprs/decimal_binary_function.h"
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 

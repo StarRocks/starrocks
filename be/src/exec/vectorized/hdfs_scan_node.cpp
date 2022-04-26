@@ -2,6 +2,9 @@
 
 #include "exec/vectorized/hdfs_scan_node.h"
 
+#include <fmt/core.h>
+#include <glog/logging.h>
+
 #include <atomic>
 #include <memory>
 
@@ -13,9 +16,7 @@
 #include "exec/vectorized/hdfs_scanner_text.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "fmt/core.h"
-#include "glog/logging.h"
+#include "exprs/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"

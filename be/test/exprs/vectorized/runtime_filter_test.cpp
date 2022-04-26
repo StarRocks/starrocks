@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/runtime_filter.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 
 namespace starrocks {
 namespace vectorized {

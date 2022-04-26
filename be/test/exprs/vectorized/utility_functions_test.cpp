@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/utility_functions.h"
+#include "exprs/utility_functions.h"
 
 #include <cctz/civil_time.h>
 #include <glog/logging.h>

@@ -5,7 +5,7 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
-#include "exprs/vectorized/arithmetic_operation.h"
+#include "exprs/arithmetic_operation.h"
 #include "gutil/casts.h"
 
 namespace starrocks::vectorized {

@@ -6,9 +6,9 @@
 #include <random>
 
 #include "column/array_column.h"
-#include "exprs/vectorized/function_helper.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
-#include "exprs/vectorized/string_functions.h"
+#include "exprs/function_helper.h"
+#include "testutil/mock_vectorized_expr.h"
+#include "exprs/string_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 

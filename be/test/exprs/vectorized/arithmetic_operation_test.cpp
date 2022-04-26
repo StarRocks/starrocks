@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include <exprs/vectorized/arithmetic_operation.h>
+#include "exprs/arithmetic_operation.h"
 #include <gtest/gtest.h>
 namespace starrocks::vectorized {
 class ArithmeticOperationTest : public ::testing::Test {};
