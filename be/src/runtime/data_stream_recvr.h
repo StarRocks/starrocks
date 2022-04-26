@@ -39,7 +39,7 @@ namespace starrocks {
 namespace vectorized {
 class SortedChunksMerger;
 class CascadeChunkMerger;
-}
+} // namespace vectorized
 
 class DataStreamMgr;
 class MemTracker;
