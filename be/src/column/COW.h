@@ -18,24 +18,27 @@ void intrusive_ptr_add_ref(const COWCounter<Derived>* p);
 template <typename Derived>
 void intrusive_ptr_release(const COWCounter<Derived>* p);
 
+// COWCounter is used for counter of the intrusive_ptr, to adapt the column_pool,
+// used the _pool as the flag of column_pool, and the _chunk_size is used as the
+// threshold for the memery to free or to get back to column_pool
 template <typename Derived>
 class COWCounter {
     typedef boost::detail::atomic_count type;
 
 private:
-    mutable type m_ref_counter;
+    mutable type _ref_counter;
     mutable bool _pool;
 
 protected:
     mutable size_t _chunk_size;
 
 public:
-    COWCounter() : m_ref_counter(0), _pool(false) {}
-    COWCounter(bool pool, size_t chunk_size) : m_ref_counter(0), _pool(pool), _chunk_size(chunk_size) {}
+    COWCounter() : _ref_counter(0), _pool(false), _chunk_size(0) {}
+    COWCounter(bool pool, size_t chunk_size) : _ref_counter(0), _pool(pool), _chunk_size(chunk_size) {}
 
-    COWCounter(COWCounter const&) : m_ref_counter(0) {}
+    COWCounter(COWCounter const&) : _ref_counter(0), _pool(false), _chunk_size(0) {}
     COWCounter& operator=(COWCounter const&) { return *this; }
-    unsigned int use_count() const { return static_cast<unsigned int>(static_cast<long>(m_ref_counter)); }
+    unsigned int use_count() const { return static_cast<unsigned int>(static_cast<long>(_ref_counter)); }
 
 public:
     virtual void return_to_pool() const = 0;
@@ -49,12 +52,12 @@ protected:
 
 template <typename Derived>
 inline void intrusive_ptr_add_ref(const COWCounter<Derived>* p) {
-    ++p->m_ref_counter;
+    ++p->_ref_counter;
 }
 
 template <typename Derived>
 inline void intrusive_ptr_release(const COWCounter<Derived>* p) {
-    if (static_cast<unsigned int>(--p->m_ref_counter) == 0) {
+    if (static_cast<unsigned int>(--p->_ref_counter) == 0) {
         if (!p->_pool) {
             delete static_cast<const Derived*>(p);
         } else {
@@ -63,8 +66,16 @@ inline void intrusive_ptr_release(const COWCounter<Derived>* p) {
     }
 }
 
+// This is inspired by ClickHouse
+// COW is the base class of Column, it defines the mutable_ptr and immutable_ptr,
+// mutable_ptr used to point to the column that can be modified, while immutable_ptr
+// point to the column that can't be modified (tbd: add const to the template args).
+// when modify a column pointed by a immutable_ptr(may be shared), call mutate and it 
+// will check the counter then decides to copy or just to cast.
+// chameleon_ptr is used inside column, and it will be mutable or immutable which id 
+// decided by the outer column.
 template <typename Derived>
-class COW : public COWCounter<Derived> { //public boost::intrusive_ref_counter<Derived> {
+class COW : public COWCounter<Derived> 
 private:
     Derived* derived() { return static_cast<Derived*>(this); }
     const Derived* derived() const { return static_cast<const Derived*>(this); }
