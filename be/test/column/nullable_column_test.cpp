@@ -190,11 +190,11 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
     ASSERT_TRUE(c2->unique());
     ASSERT_TRUE(c2->is_nullable());
     ASSERT_EQ(4, c2->size());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2) != nullptr);
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->data_column()->unique());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->null_column()->unique());
-    ASSERT_EQ(4, std::dynamic_pointer_cast<NullableColumn>(c2)->data_column()->size());
-    ASSERT_EQ(4, std::dynamic_pointer_cast<NullableColumn>(c2)->null_column()->size());
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c2) != nullptr);
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c2)->data_column()->unique());
+    ASSERT_TRUE(ColumnHelper::as_column<NullableColumn>(c2)->null_column()->unique());
+    ASSERT_EQ(4, ColumnHelper::as_column<NullableColumn>(c2)->data_column()->size());
+    ASSERT_EQ(4, ColumnHelper::as_column<NullableColumn>(c2)->null_column()->size());
     ASSERT_TRUE(c2->get(0).is_null());
     ASSERT_EQ(1, c2->get(1).get_int32());
     ASSERT_EQ(2, c2->get(2).get_int32());

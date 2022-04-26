@@ -155,7 +155,8 @@ TEST(FixedLengthColumnTest, test_nullable) {
 
         column->filter(filter);
         auto result = column;
-        auto data_result = std::static_pointer_cast<Int32Column>(result->data_column());
+        auto data_result = ColumnHelper::as_column<Int32Column>(result->data_column());
+
 
         ASSERT_EQ(50, result->size());
         for (int j = 0; j < 50; ++j) {
