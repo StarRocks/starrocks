@@ -266,12 +266,19 @@ public class ShowExecutor {
     }
 
     private void handleShowMaterializedView() throws AnalysisException {
-        String dbName = ((ShowMaterializedViewStmt) stmt).getDb();
+        ShowMaterializedViewStmt showMaterializedViewStmt = (ShowMaterializedViewStmt) stmt;
+        String dbName = showMaterializedViewStmt.getDb();
         List<List<String>> rowSets = Lists.newArrayList();
 
         Database db = Catalog.getCurrentCatalog().getDb(dbName);
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        if (!Catalog.getCurrentCatalog().getAuth().checkDbPriv(ctx, db.getFullName(), PrivPredicate.SHOW)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                    ctx.getQualifiedUser(),
+                    ctx.getRemoteIP(),
+                    db);
         }
         db.readLock();
         try {
@@ -324,7 +331,7 @@ public class ShowExecutor {
         } finally {
             db.readUnlock();
         }
-        resultSet = new ShowResultSet(stmt.getMetaData(), rowSets);
+        resultSet = new ShowResultSet(showMaterializedViewStmt.getMetaData(), rowSets);
     }
 
     // Handle show authors
