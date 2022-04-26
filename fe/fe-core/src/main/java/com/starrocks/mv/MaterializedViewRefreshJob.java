@@ -40,7 +40,7 @@ public class MaterializedViewRefreshJob implements Writable {
     private Constants.MaterializedViewRefreshMode mode;
 
     @SerializedName("triggerType")
-    private Constants.MaterializedViewTriggerType triggerType;
+    private Constants.MaterializedViewRefreshTriggerType triggerType;
 
     @SerializedName("createTime")
     private LocalDateTime createTime;
@@ -104,11 +104,11 @@ public class MaterializedViewRefreshJob implements Writable {
         this.mode = mode;
     }
 
-    public Constants.MaterializedViewTriggerType getTriggerType() {
+    public Constants.MaterializedViewRefreshTriggerType getTriggerType() {
         return triggerType;
     }
 
-    public void setTriggerType(Constants.MaterializedViewTriggerType triggerType) {
+    public void setTriggerType(Constants.MaterializedViewRefreshTriggerType triggerType) {
         this.triggerType = triggerType;
     }
 
@@ -183,9 +183,9 @@ public class MaterializedViewRefreshJob implements Writable {
                 try {
                     task.runTask();
                     task.setStatus(Constants.MaterializedViewTaskStatus.SUCCESS);
-                } catch (Exception ex) {
+                } catch (Throwable ex) {
                     task.setStatus(Constants.MaterializedViewTaskStatus.FAILED);
-                    LOG.warn(ex.getMessage(), ex);
+                    LOG.warn("materialized view refresh task failed. jobid:{}", id, ex);
                     task.setErrMsg(ex.getMessage());
                 }
                 task.finishTask();
@@ -223,7 +223,7 @@ public class MaterializedViewRefreshJob implements Writable {
     }
 
     public void incrementMergeCount() {
-        this.mergeCount = mergeCount + 1;
+        ++this.mergeCount;
     }
 
     public int getRetryTime() {
@@ -231,7 +231,7 @@ public class MaterializedViewRefreshJob implements Writable {
     }
 
     public void incrementRetryTime() {
-        this.retryTime = retryTime + 1;
+        ++this.retryTime;
     }
 
     @Override

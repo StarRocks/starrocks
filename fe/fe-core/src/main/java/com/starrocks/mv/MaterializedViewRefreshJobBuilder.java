@@ -24,7 +24,7 @@ public class MaterializedViewRefreshJobBuilder  {
     private Constants.MaterializedViewRefreshMode mode = Constants.MaterializedViewRefreshMode.ASYNC;
 
     @SerializedName("triggerType")
-    private Constants.MaterializedViewTriggerType triggerType = Constants.MaterializedViewTriggerType.AUTO;
+    private Constants.MaterializedViewRefreshTriggerType triggerType = Constants.MaterializedViewRefreshTriggerType.AUTO;
 
     @SerializedName("properties")
     private Map<String, String> properties;
@@ -46,7 +46,7 @@ public class MaterializedViewRefreshJobBuilder  {
         return this;
     }
 
-    public MaterializedViewRefreshJobBuilder triggerType(Constants.MaterializedViewTriggerType triggerType) {
+    public MaterializedViewRefreshJobBuilder triggerType(Constants.MaterializedViewRefreshTriggerType triggerType) {
         this.triggerType = triggerType;
         return this;
     }

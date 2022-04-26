@@ -2,7 +2,6 @@
 
 package com.starrocks.mv;
 
-
 import com.starrocks.statistic.Constants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
