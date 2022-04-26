@@ -40,7 +40,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testAlterTable() throws Exception {
-        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");

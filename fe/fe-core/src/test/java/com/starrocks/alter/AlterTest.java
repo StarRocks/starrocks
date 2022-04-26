@@ -174,7 +174,7 @@ public class AlterTest {
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail();
             }
