@@ -1,33 +1,36 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarEquivalenceExtractor;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
+import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class JoinPredicateUtils {
+public abstract class PushDownJoinPredicateBase extends TransformationRule {
+    protected PushDownJoinPredicateBase(RuleType type, Pattern pattern) {
+        super(type, pattern);
+    }
+
     public static OptExpression pushDownPredicate(OptExpression root, ScalarOperator leftPushDown,
                                                   ScalarOperator rightPushDown) {
         if (leftPushDown != null) {
@@ -45,65 +48,11 @@ public class JoinPredicateUtils {
         return root;
     }
 
-    public static List<BinaryPredicateOperator> getEqConj(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
-                                                          List<ScalarOperator> conjunctList) {
-        List<BinaryPredicateOperator> eqConjuncts = Lists.newArrayList();
-        for (ScalarOperator predicate : conjunctList) {
-            if (isEqualBinaryPredicate(leftColumns, rightColumns, predicate)) {
-                eqConjuncts.add((BinaryPredicateOperator) predicate);
-            }
-        }
-        return eqConjuncts;
-    }
-
-    public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {
-        if (predicate instanceof BinaryPredicateOperator) {
-            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
-            return binaryPredicate.getBinaryType().isEquivalence();
-        }
-        if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
-            if (compoundPredicate.isAnd()) {
-                return isEqualBinaryPredicate(compoundPredicate.getChild(0)) &&
-                        isEqualBinaryPredicate(compoundPredicate.getChild(1));
-            }
-            return false;
-        }
-        return false;
-    }
-
-    public static boolean isColumnToColumnBinaryPredicate(BinaryPredicateOperator predicateOperator) {
-        return predicateOperator.getChildren().stream().allMatch(ScalarOperator::isColumnRef);
-    }
-
-    public static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns,
-                                                 ColumnRefSet rightColumns,
-                                                 ScalarOperator predicate) {
-        if (predicate instanceof BinaryPredicateOperator) {
-            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
-            if (!binaryPredicate.getBinaryType().isEquivalence()) {
-                return false;
-            }
-
-            ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
-            ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
-
-            // Constant predicate
-            if (leftUsedColumns.isEmpty() || rightUsedColumns.isEmpty()) {
-                return false;
-            }
-
-            return leftColumns.containsAll(leftUsedColumns) && rightColumns.containsAll(rightUsedColumns) ||
-                    leftColumns.containsAll(rightUsedColumns) && rightColumns.containsAll(leftUsedColumns);
-        }
-        return false;
-    }
-
     public static OptExpression pushDownOnPredicate(OptExpression input, ScalarOperator conjunct) {
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
 
         List<ScalarOperator> conjunctList = Utils.extractConjuncts(conjunct);
-        List<BinaryPredicateOperator> eqConjuncts = getEqConj(
+        List<BinaryPredicateOperator> eqConjuncts = JoinHelper.getEqualsPredicate(
                 input.getInputs().get(0).getOutputColumns(),
                 input.getInputs().get(1).getOutputColumns(),
                 conjunctList);
@@ -234,58 +183,4 @@ public class JoinPredicateUtils {
                                 .collect(Collectors.toList())));
     }
 
-    public static void getJoinOnPredicatesColumns(List<BinaryPredicateOperator> equalOnPredicates,
-                                                  ColumnRefSet leftChildColumns,
-                                                  ColumnRefSet rightChildColumns,
-                                                  List<Integer> leftOnPredicateColumns,
-                                                  List<Integer> rightOnPredicateColumns) {
-        for (BinaryPredicateOperator binaryPredicate : equalOnPredicates) {
-            ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
-            ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
-            // Join on expression had pushed down to project node, so there must be one column
-            if (leftUsedColumns.cardinality() > 1 || rightUsedColumns.cardinality() > 1) {
-                throw new StarRocksPlannerException(
-                        "we do not support equal on predicate have multi columns in left or right",
-                        ErrorType.UNSUPPORTED);
-            }
-            if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
-                leftOnPredicateColumns.add(leftUsedColumns.getColumnIds()[0]);
-                rightOnPredicateColumns.add(rightUsedColumns.getColumnIds()[0]);
-            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
-                leftOnPredicateColumns.add(rightUsedColumns.getColumnIds()[0]);
-                rightOnPredicateColumns.add(leftUsedColumns.getColumnIds()[0]);
-            } else {
-                Preconditions.checkState(false, "shouldn't reach here");
-            }
-        }
-    }
-
-
-    public static void getJoinOnPredicatesOrders(List<BinaryPredicateOperator> equalOnPredicates,
-                                                           ColumnRefSet leftChildColumns,
-                                                           ColumnRefSet rightChildColumns,
-                                                           List<Ordering> leftOrderings,
-                                                           List<Ordering> rightOrderings) {
-        for (BinaryPredicateOperator binaryPredicate : equalOnPredicates) {
-            ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
-            ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
-            Ordering leftOrdering = new Ordering((ColumnRefOperator) binaryPredicate.getChild(0), true, true);
-            Ordering rightOrdering = new Ordering((ColumnRefOperator) binaryPredicate.getChild(1), true, true);
-            // Join on expression had pushed down to project node, so there must be one column
-            if (leftUsedColumns.cardinality() > 1 || rightUsedColumns.cardinality() > 1) {
-                throw new StarRocksPlannerException(
-                        "we do not support equal on predicate have multi columns in left or right",
-                        ErrorType.UNSUPPORTED);
-            }
-            if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
-                leftOrderings.add(leftOrdering);
-                rightOrderings.add(rightOrdering);
-            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
-                leftOrderings.add(rightOrdering);
-                rightOrderings.add(leftOrdering);
-            } else {
-                Preconditions.checkState(false, "shouldn't reach here");
-            }
-        }
-    }
 }
