@@ -5,7 +5,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;

@@ -4,7 +4,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

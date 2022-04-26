@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.DropIndexClause;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

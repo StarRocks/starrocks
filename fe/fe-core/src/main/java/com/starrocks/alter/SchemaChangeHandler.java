@@ -38,7 +38,7 @@ import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.DropColumnClause;
-import com.starrocks.analysis.DropIndexClause;
+import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
