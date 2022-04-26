@@ -29,7 +29,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() : _cancel_flag(false) {}
+    FragmentContext() {}
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
@@ -88,13 +88,15 @@ public:
     }
 
     void cancel(const Status& status) {
-        _cancel_flag.store(true, std::memory_order_release);
+        _runtime_state->set_is_cancelled(true);
         set_final_status(status);
     }
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
+    bool is_canceled() {
+        return _runtime_state->is_cancelled();
+    }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
 
@@ -155,7 +157,6 @@ private:
     // FragmentContext can be unregistered safely.
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
-    std::atomic<bool> _cancel_flag;
     Status _s_status;
 
     bool _enable_resource_group = false;

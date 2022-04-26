@@ -123,7 +123,7 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                                   bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                                   bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
@@ -332,7 +332,7 @@ private:
     }
 
 private:
-    const bool& _cancel;
+    const std::atomic<bool>& _cancel;
     const bool _is_asc_order;
     const bool _is_null_first;
 
@@ -407,7 +407,7 @@ Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, c
     return Status::OK();
 }
 
-Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
                              bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
                              bool build_tie, size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
@@ -421,7 +421,7 @@ Status sort_vertical_columns(const bool& cancel, const std::vector<ColumnPtr>& c
     return Status::OK();
 }
 
-Status sort_vertical_chunks(const bool& cancel, const std::vector<Columns>& vertical_chunks,
+Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
                             size_t limit) {
     if (vertical_chunks.empty() || perm.empty()) {
