@@ -1792,6 +1792,11 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
 
+            // set analytic node can use local aggregate
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
+
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
