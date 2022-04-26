@@ -58,7 +58,7 @@ public class AlterTableStatementAnalyzer {
             try {
                 FeNameFormat.checkTableName(newTableName);
             } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, newTableName);
             }
             return null;
         }

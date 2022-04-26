@@ -38,7 +38,7 @@ public class PrivilegeChecker {
             String dbName = statement.getTbl().getDb();
             String tableName = statement.getTbl().getTbl();
             if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
             }
             return null;
         }

@@ -157,7 +157,22 @@ public class AlterTest {
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.alterTableWithNewParser(sql, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        try {
+            Catalog.getCurrentCatalog().alterTable(alterTableStmt);
+            if (expectedException) {
+                Assert.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assert.fail();
+            }
+        }
+    }
+
+    private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             Catalog.getCurrentCatalog().alterTable(alterTableStmt);
             if (expectedException) {
@@ -291,9 +306,7 @@ public class AlterTest {
         alterTable(stmt, false);
         //rename table
         stmt = "alter table test.tbl1 rename newTableName";
-        alterTable(stmt, false);
-        stmt = "alter table test.tbl1 rename _test";
-        alterTable(stmt, true);
+        alterTableWithNewParser(stmt, false);
     }
 
     // test batch update range partitions' properties
