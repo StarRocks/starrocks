@@ -49,6 +49,26 @@ import java.util.Map;
 public class Table extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Table.class);
 
+    public long getRowCount() {
+        return 0;
+    }
+
+    public long getAvgRowLength() {
+        return 0;
+    }
+
+    public long getDataLength() {
+        return 0;
+    }
+
+    public long getUpdateTime() {
+        return 0;
+    }
+
+    public long getMaxDataLength() {
+        return 0;
+    }
+
     public enum TableType {
         MYSQL,
         OLAP,
