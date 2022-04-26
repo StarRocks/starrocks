@@ -28,22 +28,5 @@ void ConnectorManager::init() {
     cm->put("hive", std::make_unique<HiveConnector>());
 }
 
-Status DataSource::open(RuntimeState* state) {
-    // TODO: common operations
-    RETURN_IF_ERROR(do_open(state));
-    return Status::OK();
-}
-
-void DataSource::close(RuntimeState* state) {
-    // TODO: common operations.
-    do_close(state);
-}
-
-Status DataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
-    // TODO: common operations.
-    RETURN_IF_ERROR(do_get_next(state, chunk));
-    return Status::OK();
-}
-
 } // namespace connector
 } // namespace starrocks

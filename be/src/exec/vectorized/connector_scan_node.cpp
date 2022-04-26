@@ -140,7 +140,7 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
-    _data_source_provider->init(state);
+    _data_source_provider->init(state, tnode);
     return Status::OK();
 }
 

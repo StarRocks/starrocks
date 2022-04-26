@@ -21,27 +21,34 @@ namespace connector {
 
 class DataSource {
 public:
-    virtual void set_predicates(const std::vector<ExprContext*>& conjunct_ctxs) {}
-    virtual void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {}
-    virtual void set_read_limit(const uint64_t limit) {}
+    void set_runtime_profile(RuntimeProfile* runtime_profile) { _runtime_profile = runtime_profile; }
+    void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
+    void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {
+        _runtime_filters = runtime_filters;
+    }
+    void set_read_limit(const uint64_t limit) { _read_limit = limit; }
 
-    virtual Status init();
-    virtual Status open(RuntimeState* state);
-    virtual void close(RuntimeState* state);
-    virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk);
+    virtual Status init() { return Status::OK(); }
+    virtual Status open(RuntimeState* state) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
+    virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
 
     virtual int64_t raw_rows_read() const { return 0; }
     virtual int64_t num_rows_read() const { return 0; }
-    virtual Status do_open(RuntimeState* state) { return Status::OK(); }
-    virtual void do_close(RuntimeState* state) {}
-    virtual Status do_get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
+
+protected:
+    int64_t _read_limit = -1; // no limit
+    std::vector<ExprContext*> _conjunct_ctxs;
+    const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
+    RuntimeProfile* _runtime_profile;
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
-    virtual Status init(RuntimeState* state) = 0;
+    virtual Status init(RuntimeState* state, const TPlanNode& plan_node) { return Status::OK(); }
+
     // First version we use TScanRange to define scan range
     // Later version we could use user-defined data.
     virtual DataSourcePtr create_data_source(const TScanRange& scan_range) = 0;
@@ -51,9 +58,6 @@ public:
     Status prepare(RuntimeState* state) { return Status::OK(); }
     Status open(RuntimeState* state) { return Status::OK(); }
     void close(RuntimeState* state) {}
-
-protected:
-    const TupleDescriptor* _tuple_desc;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
