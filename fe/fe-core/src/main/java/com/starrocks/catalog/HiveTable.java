@@ -192,11 +192,11 @@ public class HiveTable extends Table {
 
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
         Map<String, FieldSchema> updatedTableSchemas = getAllHiveColumns();
-        boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
+        Map<String, Column> preNameToColumn = nameToColumn;
+        boolean needRefreshColumn = isRefreshColumn(preNameToColumn, updatedTableSchemas);
         if (!needRefreshColumn) {
-            refreshTableCache(new ArrayList<>(nameToColumn.keySet()));
+            refreshTableCache(new ArrayList<>(preNameToColumn.keySet()));
         } else {
-            Map<String, Column> preNameToColumn = nameToColumn;
             refreshTableCache(new ArrayList<>(updatedTableSchemas.keySet()));
             updateFullSchema(dbName, tableName, preNameToColumn, updatedTableSchemas);
         }
@@ -220,10 +220,11 @@ public class HiveTable extends Table {
         return allHiveColumns;
     }
 
-    private boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
-        boolean needRefreshColumn = updatedTableSchemas.size() != this.fullSchema.size();
+    public boolean isRefreshColumn(Map<String, Column> preNameToColumn,
+                                   Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
+        boolean needRefreshColumn = updatedTableSchemas.size() != preNameToColumn.size();
         if (!needRefreshColumn) {
-            for (Column column : fullSchema) {
+            for (Column column : preNameToColumn.values()) {
                 FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
                 if (fieldSchema == null) {
                     needRefreshColumn = true;
@@ -248,15 +249,15 @@ public class HiveTable extends Table {
         nameToColumn.clear();
         for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
             FieldSchema fieldSchema = entry.getValue();
-            PrimitiveType type = convertColumnType(fieldSchema.getType());
+            PrimitiveType srType = convertColumnType(fieldSchema.getType());
             Column srColumn = preNameToColumn.get(entry.getKey());
             Column column;
-            if (srColumn == null) {
-                column = new Column(fieldSchema.getName(), ScalarType.createType(type),
-                        true, null, true, NULL_DEFAULT_VALUE, fieldSchema.getComment());
-            } else {
+            if (srColumn != null) {
                 column = new Column(srColumn.getName(), srColumn.getType(), srColumn.isKey(),
                         srColumn.getAggregationType(), srColumn.isAllowNull(), NULL_DEFAULT_VALUE, srColumn.getComment());
+            } else {
+                column = new Column(fieldSchema.getName(), ScalarType.createType(srType),
+                        true, null, true, NULL_DEFAULT_VALUE, fieldSchema.getComment());
             }
             fullSchema.add(column);
             nameToColumn.put(column.getName(), column);
