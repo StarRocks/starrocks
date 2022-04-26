@@ -53,7 +53,7 @@ public:
 
     Roaring& roaring() { return _roaring; }
 
-    void add_rid(const rowid_t rid, uint64_t& reverted_index_size, vector<RoaringWrapper*>* size_changed_roaring_vec) {
+    void add_rid(const rowid_t rid, uint64_t* reverted_index_size, vector<RoaringWrapper*>* size_changed_roaring_vec) {
         _roaring.add(rid);
         if (_enable_get_size_in_bytes) {
             if (!_size_changed) {
@@ -68,9 +68,9 @@ public:
             // is very costly when roaring bitmap has a large number of nearly empty array container.
             _element_count++;
             if (LIKELY(_element_count < roaring_get_size_fastpath_threshold)) {
-                reverted_index_size += sizeof(uint32_t);
+                *reverted_index_size += sizeof(uint32_t);
             } else {
-                reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
+                *reverted_index_size -= (roaring_get_size_fastpath_threshold * sizeof(uint32_t) + 1);
                 _size_changed = true;
                 _enable_get_size_in_bytes = true;
                 size_changed_roaring_vec->push_back(this);
@@ -132,7 +132,7 @@ public:
             const CppType& value = unaligned_load<CppType>(p);
             auto it = _mem_index.find(value);
             if (it != _mem_index.end()) {
-                it->second.add_rid(_rid, _reverted_index_size, &_size_changed_roaring_vec);
+                it->second.add_rid(_rid, &_reverted_index_size, &_size_changed_roaring_vec);
             } else {
                 // new value, copy value and insert new key->bitmap pair
                 CppType new_value;
