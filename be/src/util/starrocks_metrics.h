@@ -218,6 +218,10 @@ public:
     METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
 
+    // for testing fast cancel
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(fragment_cancel_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(fragment_cancel_duration_ns, MetricUnit::NANOSECONDS);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;

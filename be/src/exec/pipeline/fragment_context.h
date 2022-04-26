@@ -20,6 +20,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -36,6 +37,10 @@ public:
         close_all_pipelines();
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
+        }
+        if (final_status().is_cancelled()) {
+            StarRocksMetrics::instance()->fragment_cancel_total.increment(1);
+            StarRocksMetrics::instance()->fragment_cancel_duration_ns.increment(_sw.elapsed_time());
         }
     }
     const TUniqueId& query_id() const { return _query_id; }
@@ -88,6 +93,7 @@ public:
     }
 
     void cancel(const Status& status) {
+        _sw.start();
         _runtime_state->set_is_cancelled(true);
         set_final_status(status);
     }
@@ -162,6 +168,7 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+    MonotonicStopWatch _sw;
 };
 
 class FragmentContextManager {
