@@ -178,14 +178,14 @@ PARALLEL_TEST(ConstColumnTest, test_copy_constructor) {
 
     auto c2(*c1);
     ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column().unique());
+    ASSERT_TRUE(c2.data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2.get(i).get_int32());
     }
 
     c1->reset_column();
     ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column().unique());
+    ASSERT_TRUE(c2.data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2.get(i).get_int32());
     }
@@ -205,7 +205,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_constructor) {
 
     auto c2(std::move(*c1));
     ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column().unique());
+    ASSERT_TRUE(c2.data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2.get(i).get_int32());
     }
@@ -227,14 +227,14 @@ PARALLEL_TEST(ConstColumnTest, test_copy_assignment) {
     *c2 = *c1;
 
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -256,7 +256,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_assignment) {
     *c2 = std::move(*c1);
 
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -277,14 +277,14 @@ PARALLEL_TEST(ConstColumnTest, test_clone) {
     auto cloned_col = c1->clone();
     auto c2 = down_cast<ConstColumn*>(cloned_col.get());
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -303,17 +303,17 @@ PARALLEL_TEST(ConstColumnTest, test_clone_shared) {
     ASSERT_EQ(100, c1->size());
 
     auto cloned_col = c1->clone_shared();
-    ASSERT_TRUE(cloned_col.unique());
+    ASSERT_TRUE(cloned_col->unique());
     auto c2 = down_cast<ConstColumn*>(cloned_col.get());
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -334,7 +334,7 @@ PARALLEL_TEST(ConstColumnTest, test_clone_empty) {
     auto cloned_col = c1->clone_empty();
     auto c2 = down_cast<ConstColumn*>(cloned_col.get());
     ASSERT_EQ(0, c2->size());
-    ASSERT_TRUE(c2->data_column().unique());
+    ASSERT_TRUE(c2->data_column()->unique());
 }
 
 } // namespace starrocks::vectorized

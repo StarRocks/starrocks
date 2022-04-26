@@ -54,8 +54,8 @@ PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
     c0->reset_column();
 
     ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column().unique());
-    ASSERT_TRUE(c1.null_column().unique());
+    ASSERT_TRUE(c1.data_column()->unique());
+    ASSERT_TRUE(c1.null_column()->unique());
     ASSERT_EQ(4, c1.data_column()->size());
     ASSERT_EQ(4, c1.null_column()->size());
     ASSERT_TRUE(c1.get(0).is_null());
@@ -76,8 +76,8 @@ PARALLEL_TEST(NullableColumnTest, test_move_constructor) {
     NullableColumn c1(std::move(*c0));
 
     ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column().unique());
-    ASSERT_TRUE(c1.null_column().unique());
+    ASSERT_TRUE(c1.data_column()->unique());
+    ASSERT_TRUE(c1.null_column()->unique());
     ASSERT_EQ(4, c1.data_column()->size());
     ASSERT_EQ(4, c1.null_column()->size());
     ASSERT_TRUE(c1.get(0).is_null());
@@ -100,8 +100,8 @@ PARALLEL_TEST(NullableColumnTest, test_copy_assignment) {
     c0->reset_column();
 
     ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column().unique());
-    ASSERT_TRUE(c1.null_column().unique());
+    ASSERT_TRUE(c1.data_column()->unique());
+    ASSERT_TRUE(c1.null_column()->unique());
     ASSERT_EQ(4, c1.data_column()->size());
     ASSERT_EQ(4, c1.null_column()->size());
     ASSERT_TRUE(c1.get(0).is_null());
@@ -123,8 +123,8 @@ PARALLEL_TEST(NullableColumnTest, test_move_assignment) {
     c1 = *c0;
 
     ASSERT_EQ(4, c1.size());
-    ASSERT_TRUE(c1.data_column().unique());
-    ASSERT_TRUE(c1.null_column().unique());
+    ASSERT_TRUE(c1.data_column()->unique());
+    ASSERT_TRUE(c1.null_column()->unique());
     ASSERT_EQ(4, c1.data_column()->size());
     ASSERT_EQ(4, c1.null_column()->size());
     ASSERT_TRUE(c1.get(0).is_null());
@@ -141,8 +141,8 @@ PARALLEL_TEST(NullableColumnTest, test_clone) {
     ASSERT_TRUE(c1->is_nullable());
     ASSERT_EQ(0, c1->size());
     ASSERT_TRUE(down_cast<NullableColumn*>(c1.get()) != nullptr);
-    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->data_column().unique());
-    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->null_column().unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->data_column()->unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->null_column()->unique());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c1.get())->data_column()->size());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c1.get())->null_column()->size());
 
@@ -169,12 +169,12 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
     auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto c1 = c0->clone_shared();
-    ASSERT_TRUE(c1.unique());
+    ASSERT_TRUE(c1->unique());
     ASSERT_TRUE(c1->is_nullable());
     ASSERT_EQ(0, c1->size());
     ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1) != nullptr);
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->data_column().unique());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->null_column().unique());
+    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->data_column()->unique());
+    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c1)->null_column()->unique());
     ASSERT_EQ(0, std::dynamic_pointer_cast<NullableColumn>(c1)->data_column()->size());
     ASSERT_EQ(0, std::dynamic_pointer_cast<NullableColumn>(c1)->null_column()->size());
 
@@ -186,12 +186,12 @@ PARALLEL_TEST(NullableColumnTest, test_clone_shared) {
     auto c2 = c1->clone_shared();
     c1->reset_column();
 
-    ASSERT_TRUE(c2.unique());
+    ASSERT_TRUE(c2->unique());
     ASSERT_TRUE(c2->is_nullable());
     ASSERT_EQ(4, c2->size());
     ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2) != nullptr);
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->data_column().unique());
-    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->null_column().unique());
+    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->data_column()->unique());
+    ASSERT_TRUE(std::dynamic_pointer_cast<NullableColumn>(c2)->null_column()->unique());
     ASSERT_EQ(4, std::dynamic_pointer_cast<NullableColumn>(c2)->data_column()->size());
     ASSERT_EQ(4, std::dynamic_pointer_cast<NullableColumn>(c2)->null_column()->size());
     ASSERT_TRUE(c2->get(0).is_null());
@@ -208,8 +208,8 @@ PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
     ASSERT_TRUE(c1->is_nullable());
     ASSERT_EQ(0, c1->size());
     ASSERT_TRUE(down_cast<NullableColumn*>(c1.get()) != nullptr);
-    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->data_column().unique());
-    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->null_column().unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->data_column()->unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c1.get())->null_column()->unique());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c1.get())->data_column()->size());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c1.get())->null_column()->size());
 
@@ -223,8 +223,8 @@ PARALLEL_TEST(NullableColumnTest, test_clone_empty) {
     ASSERT_TRUE(c2->is_nullable());
     ASSERT_EQ(0, c2->size());
     ASSERT_TRUE(down_cast<NullableColumn*>(c2.get()) != nullptr);
-    ASSERT_TRUE(down_cast<NullableColumn*>(c2.get())->data_column().unique());
-    ASSERT_TRUE(down_cast<NullableColumn*>(c2.get())->null_column().unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c2.get())->data_column()->unique());
+    ASSERT_TRUE(down_cast<NullableColumn*>(c2.get())->null_column()->unique());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c2.get())->data_column()->size());
     ASSERT_EQ(0, down_cast<NullableColumn*>(c2.get())->null_column()->size());
 }
@@ -244,8 +244,8 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
     std::vector<uint32_t> replace_idxes = {1, 4};
     ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
     ASSERT_EQ(5, column->size());
-    ASSERT_TRUE(column->data_column().unique());
-    ASSERT_TRUE(column->null_column().unique());
+    ASSERT_TRUE(column->data_column()->unique());
+    ASSERT_TRUE(column->null_column()->unique());
     ASSERT_EQ(5, column->data_column()->size());
     ASSERT_EQ(5, column->null_column()->size());
 
@@ -268,8 +268,8 @@ PARALLEL_TEST(NullableColumnTest, test_update_rows) {
 
     ASSERT_TRUE(column1->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
     ASSERT_EQ(5, column1->size());
-    ASSERT_TRUE(column1->data_column().unique());
-    ASSERT_TRUE(column1->null_column().unique());
+    ASSERT_TRUE(column1->data_column()->unique());
+    ASSERT_TRUE(column1->null_column()->unique());
     ASSERT_EQ(5, column1->data_column()->size());
     ASSERT_EQ(5, column1->null_column()->size());
 

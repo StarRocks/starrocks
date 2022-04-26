@@ -525,7 +525,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_shared) {
     ASSERT_EQ("def", slices[1]);
 
     auto c2 = c1->clone_shared();
-    ASSERT_TRUE(c2.unique());
+    ASSERT_TRUE(c2->unique());
 
     c1.reset();
 
