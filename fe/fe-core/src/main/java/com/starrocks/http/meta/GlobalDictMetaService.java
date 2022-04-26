@@ -77,7 +77,7 @@ public class GlobalDictMetaService {
                     return;
                 }
 
-                long isEnable = Long.valueOf(request.getSingleParameter(ENABLE).trim());
+                long isEnable = Long.parseLong(request.getSingleParameter(ENABLE).trim());
 
                 GlobalStateMgr.getCurrentState().setHasForbitGlobalDict(dbName, tableName, isEnable == 0);
             } else {
