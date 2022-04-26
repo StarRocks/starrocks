@@ -72,7 +72,7 @@ inline void intrusive_ptr_release(const COWCounter<Derived>* p) {
 // point to the column that can't be modified (tbd: add const to the template args).
 // when modify a column pointed by a immutable_ptr(may be shared), call mutate and it 
 // will check the counter then decides to copy or just to cast.
-// chameleon_ptr is used inside column, and it will be mutable or immutable which id 
+// chameleon_ptr is used inside column, and it will be mutable or immutable which is 
 // decided by the outer column.
 template <typename Derived>
 class COW : public COWCounter<Derived> {
