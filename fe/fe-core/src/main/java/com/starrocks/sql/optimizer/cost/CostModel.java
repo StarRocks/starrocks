@@ -12,6 +12,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -35,7 +36,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -331,9 +331,10 @@ public class CostModel {
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
-            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
-                    rightStatistics.getUsedColumns(),
-                    Utils.extractConjuncts(join.getOnPredicate()));
+            List<BinaryPredicateOperator> eqOnPredicates =
+                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
+                            rightStatistics.getUsedColumns(),
+                            Utils.extractConjuncts(join.getOnPredicate()));
 
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
@@ -360,9 +361,9 @@ public class CostModel {
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
-            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftStatistics.getUsedColumns(),
-                    rightStatistics.getUsedColumns(),
-                    Utils.extractConjuncts(join.getOnPredicate()));
+            List<BinaryPredicateOperator> eqOnPredicates =
+                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(), rightStatistics.getUsedColumns(),
+                            Utils.extractConjuncts(join.getOnPredicate()));
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),

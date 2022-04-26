@@ -9,6 +9,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -26,7 +27,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -308,7 +308,7 @@ public class PreAggregateTurnOnRule {
             ColumnRefSet leftOutputColumns = optExpression.getInputs().get(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = optExpression.getInputs().get(1).getOutputColumns();
 
-            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftOutputColumns,
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftOutputColumns,
                     rightOutputColumns, Utils.extractConjuncts(joinOperator.getOnPredicate()));
             // cross join can not do pre-aggregation
             if (joinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
