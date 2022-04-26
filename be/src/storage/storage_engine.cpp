@@ -279,9 +279,6 @@ template std::vector<DataDir*> StorageEngine::get_stores<true>();
 Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
-    MonotonicStopWatch timer;
-    timer.start();
-
     // 1. update available capacity of each data dir
     // get all root path info and construct a path map.
     // path -> DataDirInfo
@@ -305,7 +302,6 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
         data_dir_infos->emplace_back(entry.second);
     }
 
-    timer.stop();
     return Status::OK();
 }
 
