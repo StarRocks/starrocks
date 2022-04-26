@@ -29,8 +29,9 @@ public:
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
 protected:
-    MorselQueue* _morsel_queue;
-    ChunkSourcePtr _chunk_source;
+    MorselQueue* _morsel_queue = nullptr;
+
+    int64_t _last_scan_rows_num = 0;
 };
 
 class SourceOperatorFactory : public OperatorFactory {

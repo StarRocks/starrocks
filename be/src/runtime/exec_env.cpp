@@ -26,6 +26,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
@@ -176,6 +177,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&driver_executor_thread_pool));
     _driver_executor = new pipeline::GlobalDriverExecutor(std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(max_thread_num);
+
+    _driver_limiter = new pipeline::DriverLimiter(max_thread_num * config::pipeline_max_num_drivers_per_exec_thread);
 
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
@@ -377,6 +380,10 @@ void ExecEnv::_destroy() {
     if (_wg_driver_executor) {
         delete _wg_driver_executor;
         _wg_driver_executor = nullptr;
+    }
+    if (_driver_limiter) {
+        delete _driver_limiter;
+        _driver_limiter = nullptr;
     }
     if (_fragment_mgr) {
         delete _fragment_mgr;
