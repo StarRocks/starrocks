@@ -2,12 +2,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -18,7 +18,7 @@ import org.junit.Test;
 public class GrantRevokeRoleStmtTest {
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private Auth auth;
     @Mocked
@@ -29,16 +29,9 @@ public class GrantRevokeRoleStmtTest {
     @Before
     public void setUp() {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
-        new Expectations() {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalog();
-                minTimes = 0;
-                result = catalog;
-            }
-        };
-        new Expectations(catalog) {
-            {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
             }
@@ -60,6 +53,10 @@ public class GrantRevokeRoleStmtTest {
                 ctx.getClusterName();
                 minTimes = 0;
                 result = "test_cluster";
+
+                ctx.getGlobalStateMgr();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
     }

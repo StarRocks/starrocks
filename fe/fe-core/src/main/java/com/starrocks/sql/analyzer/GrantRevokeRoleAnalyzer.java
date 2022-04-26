@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -17,7 +16,7 @@ import com.starrocks.qe.ConnectContext;
 public class GrantRevokeRoleAnalyzer {
 
     public static void analyze(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-        Auth auth = Catalog.getCurrentCatalog().getAuth();
+        Auth auth = session.getGlobalStateMgr().getAuth();
 
         // validate user
         UserIdentity userIdent = stmt.getUserIdent();
