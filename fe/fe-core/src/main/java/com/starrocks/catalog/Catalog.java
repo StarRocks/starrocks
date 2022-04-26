@@ -6096,7 +6096,7 @@ public class Catalog {
         }
     }
 
-    public void replayModifyTableColumn(short opCode, ModifyTableColumnOperationLog info) {
+    public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
         if (info.getDbName() == null){
             return;
         }
