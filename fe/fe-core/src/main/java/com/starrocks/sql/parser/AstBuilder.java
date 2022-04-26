@@ -387,16 +387,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.interval() != null) {
             IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
             Expr expr = intervalLiteral.getValue();
-            String intervalVal;
+            long intervalVal;
             if (expr instanceof IntLiteral) {
-                intervalVal = ((IntLiteral) expr).getStringValue();
+                intervalVal = ((IntLiteral) expr).getLongValue();
             } else {
                 throw new IllegalArgumentException("Unsupported interval expr: " + expr);
             }
             return new MultiRangePartitionDesc(
                     ((StringLiteral) visit(context.string(0))).getStringValue(),
                     ((StringLiteral) visit(context.string(1))).getStringValue(),
-                    Long.parseLong(intervalVal),
+                    intervalVal,
                     intervalLiteral.getUnitIdentifier().getDescription());
         } else {
             return new MultiRangePartitionDesc(
