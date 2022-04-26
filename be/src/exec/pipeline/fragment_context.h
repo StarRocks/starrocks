@@ -20,6 +20,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+#include "util/uid_util.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -39,8 +40,10 @@ public:
             _plan->close(_runtime_state.get());
         }
         if (final_status().is_cancelled()) {
+            int64_t elapsed_time = _sw.elapsed_time();
             StarRocksMetrics::instance()->fragment_cancel_total.increment(1);
-            StarRocksMetrics::instance()->fragment_cancel_duration_ns.increment(_sw.elapsed_time());
+            StarRocksMetrics::instance()->fragment_cancel_duration_ns.increment(elapsed_time);
+            LOG(INFO) << "release cancelled fragment cost " << elapsed_time << "ns, fragment_instance_id: " << print_id(_fragment_instance_id);
         }
     }
     const TUniqueId& query_id() const { return _query_id; }
@@ -70,7 +73,12 @@ public:
         _final_status.store(nullptr);
     }
 
-    bool count_down_drivers() { return _num_drivers.fetch_sub(1) == 1; }
+    bool count_down_drivers() {
+        if (final_status().is_cancelled()) {
+            LOG(INFO) << "cancel driver cost " << _sw.elapsed_time() << "ns, fragment_instance_id: " << print_id(_fragment_instance_id);
+        }
+        return _num_drivers.fetch_sub(1) == 1;
+    }
 
     void set_final_status(const Status& status) {
         if (_final_status.load() != nullptr) {
