@@ -21,13 +21,13 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 // TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
 public class TruncateTableStmt extends DdlStmt {
@@ -54,7 +54,7 @@ public class TruncateTableStmt extends DdlStmt {
         // check access
         // it requires LOAD privilege, because we consider this operation as 'delete data', which is also a
         // 'load' operation.
-        if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
                 tblRef.getName().getTbl(), PrivPredicate.LOAD)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
         }

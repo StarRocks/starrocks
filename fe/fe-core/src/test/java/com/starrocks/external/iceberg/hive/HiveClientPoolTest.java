@@ -10,9 +10,8 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.*;
+import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
-import org.apache.thrift.TException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -89,7 +88,8 @@ public class HiveClientPoolTest {
     }
 
     @Test
-    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreThriftClient hmsClient) throws Exception {
+    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreThriftClient hmsClient)
+            throws Exception {
         new MockUp<HiveClientPool>() {
             @Mock
             protected IMetaStoreClient newClient() {

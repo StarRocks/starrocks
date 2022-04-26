@@ -34,7 +34,6 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -53,6 +52,7 @@ import com.starrocks.load.Load;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -126,7 +126,7 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testParallelInstance(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
                                      @Injectable Database db, @Injectable OlapTable table) throws UserException {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -138,7 +138,7 @@ public class LoadingTaskPlannerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -208,7 +208,7 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testVectorizedLoad(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testVectorizedLoad(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
                                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -223,7 +223,7 @@ public class LoadingTaskPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -247,7 +247,7 @@ public class LoadingTaskPlannerTest {
                 result = columns.get(3);
                 table.getColumn("k33");
                 result = null;
-                catalog.getFunction((Function) any, (Function.CompareMode) any);
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
             }
         };
@@ -338,8 +338,9 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testPartialUpdatePlan(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
-                                   @Injectable Database db, @Injectable OlapTable table) throws Exception {
+    public void testPartialUpdatePlan(@Mocked GlobalStateMgr globalStateMgr,
+                                      @Mocked SystemInfoService systemInfoService,
+                                      @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
@@ -353,7 +354,7 @@ public class LoadingTaskPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -380,7 +381,7 @@ public class LoadingTaskPlannerTest {
                 result = columns.get(3);
                 table.getColumn("k33");
                 result = null;
-                catalog.getFunction((Function) any, (Function.CompareMode) any);
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 minTimes = 0;
@@ -434,7 +435,8 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDefault(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDefault(@Mocked GlobalStateMgr globalStateMgr,
+                                            @Mocked SystemInfoService systemInfoService,
                                             @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -444,7 +446,7 @@ public class LoadingTaskPlannerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -519,7 +521,8 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnDelete(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnDelete(@Mocked GlobalStateMgr globalStateMgr,
+                                           @Mocked SystemInfoService systemInfoService,
                                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -529,7 +532,7 @@ public class LoadingTaskPlannerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -605,7 +608,8 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpColumnExpr(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpColumnExpr(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked SystemInfoService systemInfoService,
                                          @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -622,7 +626,7 @@ public class LoadingTaskPlannerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -655,7 +659,7 @@ public class LoadingTaskPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
-                catalog.getFunction((Function) any, (Function.CompareMode) any);
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f2, f3);
             }
         };
@@ -709,7 +713,8 @@ public class LoadingTaskPlannerTest {
     }
 
     @Test
-    public void testLoadWithOpAutoMapping(@Mocked Catalog catalog, @Mocked SystemInfoService systemInfoService,
+    public void testLoadWithOpAutoMapping(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked SystemInfoService systemInfoService,
                                           @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
@@ -729,7 +734,7 @@ public class LoadingTaskPlannerTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;

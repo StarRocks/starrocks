@@ -30,7 +30,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -49,6 +48,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.ExprRewriter;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -263,7 +263,7 @@ public class SelectStmt extends QueryStmt {
     public Expr getHavingClause() {
         return havingClause;
     }
-    
+
     @Override
     public SortInfo getSortInfo() {
         return sortInfo;
@@ -304,13 +304,13 @@ public class SelectStmt extends QueryStmt {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
                 }
 
-                Database db = context.getCatalog().getDb(dbName);
+                Database db = context.getGlobalStateMgr().getDb(dbName);
                 if (db == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
                 // check auth
-                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
                         tblRef.getName().getTbl(),
                         PrivPredicate.SELECT)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
@@ -1583,7 +1583,6 @@ public class SelectStmt extends QueryStmt {
         }
         return strBuilder.toString();
     }
-
 
     @Override
     public String toDigest() {

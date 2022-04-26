@@ -24,7 +24,6 @@ package com.starrocks.load.routineload;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
@@ -36,6 +35,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -77,7 +77,7 @@ public class RoutineLoadTaskScheduler extends MasterDaemon {
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
         super("Routine load task scheduler", 0);
-        this.routineLoadManager = Catalog.getCurrentCatalog().getRoutineLoadManager();
+        this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
     }
 
     public RoutineLoadTaskScheduler(RoutineLoadManager routineLoadManager) {
@@ -302,7 +302,7 @@ public class RoutineLoadTaskScheduler extends MasterDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        Backend backend = Catalog.getCurrentSystemInfo().getBackend(beId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (backend == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }

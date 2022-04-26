@@ -44,28 +44,28 @@ import static org.apache.iceberg.expressions.Expressions.startsWith;
 
 /**
  * Expressions currently supported in Iceberg, maps to StarRocks:
- *
+ * <p>
  * Supported predicate expressions are:
- *   isNull ->IsNullPredicate(..., false)
- *   notNull ->IsNullPredicate(..., true)
- *   equal -> BinaryPredicate(BinaryPredicate.Operator.EQ, ..., ...)
- *   notEqual -> BinaryPredicate(BinaryPredicate.Operator.NE, ..., ...)
- *   lessThan -> BinaryPredicate(BinaryPredicate.Operator.LT, ..., ...)
- *   lessThanOrEqual -> BinaryPredicate(BinaryPredicate.Operator.LE, ..., ...)
- *   greaterThan -> BinaryPredicate(BinaryPredicate.Operator.GT, ..., ...)
- *   greaterThanOrEqual -> BinaryPredicate(BinaryPredicate.Operator.GE, ..., ...)
- *   in -> InPredicate(..., ..., false)
- *   notIn -> InPredicate(..., ..., true)
- *   startsWith -> FunctionCallExpr("starts_with", ...) or LikePredicate(Operator.LIKE, ..., "prefix%")
- *
+ * isNull ->IsNullPredicate(..., false)
+ * notNull ->IsNullPredicate(..., true)
+ * equal -> BinaryPredicate(BinaryPredicate.Operator.EQ, ..., ...)
+ * notEqual -> BinaryPredicate(BinaryPredicate.Operator.NE, ..., ...)
+ * lessThan -> BinaryPredicate(BinaryPredicate.Operator.LT, ..., ...)
+ * lessThanOrEqual -> BinaryPredicate(BinaryPredicate.Operator.LE, ..., ...)
+ * greaterThan -> BinaryPredicate(BinaryPredicate.Operator.GT, ..., ...)
+ * greaterThanOrEqual -> BinaryPredicate(BinaryPredicate.Operator.GE, ..., ...)
+ * in -> InPredicate(..., ..., false)
+ * notIn -> InPredicate(..., ..., true)
+ * startsWith -> FunctionCallExpr("starts_with", ...) or LikePredicate(Operator.LIKE, ..., "prefix%")
+ * <p>
  * Supported expression operations are:
- *   and -> CompoundPredicate(and, ..., ...)
- *   or -> CompoundPredicate(or, ..., ...)
- *   not -> CompoundPredicate(not, ...)
- *
+ * and -> CompoundPredicate(and, ..., ...)
+ * or -> CompoundPredicate(or, ..., ...)
+ * not -> CompoundPredicate(not, ...)
+ * <p>
  * Constant expressions are(Automatically merged in StarRocks, can be ignored):
- *   alwaysTrue
- *   alwaysFalse
+ * alwaysTrue
+ * alwaysFalse
  */
 public class ExpressionConverter extends AstVisitor<Expression, Void> {
 
@@ -157,7 +157,7 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
         }
         if (node.isNotIn()) {
             return notIn(columnName, literalValues);
-        }  else {
+        } else {
             return in(columnName, literalValues);
         }
     }

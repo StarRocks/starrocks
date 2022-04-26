@@ -21,7 +21,6 @@
 
 package com.starrocks.master;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
@@ -29,6 +28,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -48,13 +48,13 @@ public class Checkpoint extends MasterDaemon {
     private static final int CONNECT_TIMEOUT_SECOND = 1;
     private static final int READ_TIMEOUT_SECOND = 1;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     private String imageDir;
     private EditLog editLog;
 
     public Checkpoint(EditLog editLog) {
         super("leaderCheckpointer", FeConstants.checkpoint_interval_second * 1000L);
-        this.imageDir = Catalog.getServingCatalog().getImageDir();
+        this.imageDir = GlobalStateMgr.getServingState().getImageDir();
         this.editLog = editLog;
     }
 
@@ -81,46 +81,46 @@ public class Checkpoint extends MasterDaemon {
         long replayedJournalId = -1;
         // generate new image file
         LOG.info("begin to generate new image: image.{}", checkPointVersion);
-        catalog = Catalog.getCurrentCatalog();
-        catalog.setEditLog(editLog);
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.setEditLog(editLog);
         try {
-            catalog.loadImage(imageDir);
-            catalog.replayJournal(checkPointVersion);
-            if (catalog.getReplayedJournalId() != checkPointVersion) {
+            globalStateMgr.loadImage(imageDir);
+            globalStateMgr.replayJournal(checkPointVersion);
+            if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
                 LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
-                        checkPointVersion, catalog.getReplayedJournalId());
+                        checkPointVersion, globalStateMgr.getReplayedJournalId());
                 return;
             }
 
-            catalog.clearExpiredJobs();
+            globalStateMgr.clearExpiredJobs();
 
-            catalog.saveImage();
-            replayedJournalId = catalog.getReplayedJournalId();
+            globalStateMgr.saveImage();
+            replayedJournalId = globalStateMgr.getReplayedJournalId();
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
-            Catalog.getServingCatalog().setImageJournalId(checkPointVersion);
+            GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } catch (Exception e) {
             e.printStackTrace();
             LOG.error("Exception when generate new image file", e);
             return;
         } finally {
-            // destroy checkpoint catalog, reclaim memory
-            catalog = null;
-            Catalog.destroyCheckpoint();
+            // destroy checkpoint globalStateMgr, reclaim memory
+            globalStateMgr = null;
+            GlobalStateMgr.destroyCheckpoint();
         }
 
         // push image file to all the other non master nodes
         // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
-        List<Frontend> allFrontends = Catalog.getServingCatalog().getFrontends(null);
+        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
         int successPushed = 0;
         int otherNodesCount = 0;
         if (!allFrontends.isEmpty()) {
             otherNodesCount = allFrontends.size() - 1; // skip master itself
             for (Frontend fe : allFrontends) {
                 String host = fe.getHost();
-                if (host.equals(Catalog.getServingCatalog().getMasterIp())) {
+                if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
                     // skip master itself
                     continue;
                 }
@@ -149,7 +149,7 @@ public class Checkpoint extends MasterDaemon {
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
-                    if (host.equals(Catalog.getServingCatalog().getMasterIp())) {
+                    if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
                         // skip master itself
                         continue;
                     }

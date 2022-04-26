@@ -8,12 +8,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,7 +39,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
-            Catalog.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+            GlobalStateMgr.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
@@ -78,7 +78,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
         // 7. BE number
-        long beNum = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        long beNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         dumpJson.addProperty("be_number", beNum);
         // 8. exception
         JsonArray exceptions = new JsonArray();

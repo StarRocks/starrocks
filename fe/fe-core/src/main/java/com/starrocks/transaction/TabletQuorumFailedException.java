@@ -37,7 +37,7 @@ public class TabletQuorumFailedException extends TransactionException {
     public TabletQuorumFailedException(long transactionId, long tabletId,
                                        List<String> errorBackends) {
         super(String.format(TABLET_QUORUM_FAILED_MSG, tabletId, transactionId,
-                            Joiner.on(",").join(errorBackends)));
+                Joiner.on(",").join(errorBackends)));
         this.tabletId = tabletId;
         this.errorBackends = errorBackends;
     }

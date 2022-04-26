@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -24,13 +25,13 @@ import java.util.Map;
 
 public class StarOSTabletTest {
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Test
     public void testSerialization() throws Exception {
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
             }
@@ -72,11 +73,11 @@ public class StarOSTabletTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
-                catalog.getStarOSAgent();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getStarOSAgent();
                 result = new StarOSAgent();
-                Catalog.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);

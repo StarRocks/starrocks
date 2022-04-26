@@ -30,6 +30,7 @@ import com.starrocks.external.elasticsearch.EsMajorVersion;
 import com.starrocks.external.elasticsearch.EsMetaStateTracker;
 import com.starrocks.external.elasticsearch.EsRestClient;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -265,7 +266,7 @@ public class EsTable extends Table {
             adler32.update(name.getBytes(charsetName));
             // type
             adler32.update(type.name().getBytes(charsetName));
-            if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_68) {
+            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
                 for (Map.Entry<String, String> entry : tableContext.entrySet()) {
                     adler32.update(entry.getValue().getBytes(charsetName));
                 }
@@ -305,7 +306,7 @@ public class EsTable extends Table {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_68) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
             int size = in.readInt();
             for (int i = 0; i < size; ++i) {
                 String key = Text.readString(in);
@@ -452,12 +453,12 @@ public class EsTable extends Table {
 
     @Override
     public void onDrop() {
-        Catalog.getCurrentCatalog().getEsRepository().deRegisterTable(this.id);
+        GlobalStateMgr.getCurrentState().getEsRepository().deRegisterTable(this.id);
     }
 
     @Override
     public void onCreate() {
-        Catalog.getCurrentCatalog().getEsRepository().registerTable(this);
+        GlobalStateMgr.getCurrentState().getEsRepository().registerTable(this);
     }
 
     @Override

@@ -16,6 +16,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -42,9 +43,9 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
-    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
+    private static final String ICEBERG_CATALOG = "starrocks.globalStateMgr-type";
+    private static final String ICEBERG_METASTORE_URIS = "iceberg.globalStateMgr.hive.metastore.uris";
+    private static final String ICEBERG_IMPL = "iceberg.globalStateMgr-impl";
     private static final String ICEBERG_DB = "database";
     private static final String ICEBERG_TABLE = "table";
     private static final String ICEBERG_RESOURCE = "resource";
@@ -138,7 +139,7 @@ public class IcebergTable extends Table {
         }
 
         copiedProps.remove(ICEBERG_RESOURCE);
-        Resource resource = Catalog.getCurrentCatalog().getResourceMgr().getResource(resourceName);
+        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource == null) {
             throw new DdlException("iceberg resource [" + resourceName + "] not exists");
         }
@@ -160,10 +161,11 @@ public class IcebergTable extends Table {
                 for (String key : copiedProps.keySet()) {
                     icebergProperties.put(key, copiedProps.remove(key));
                 }
-                icebergCatalog = IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
+                icebergCatalog =
+                        IcebergUtil.getIcebergCustomCatalog(icebergResource.getIcebergImpl(), icebergProperties);
                 break;
             default:
-                throw new DdlException("unsupported catalog type " + type.name());
+                throw new DdlException("unsupported globalStateMgr type " + type.name());
         }
         this.resourceName = resourceName;
 

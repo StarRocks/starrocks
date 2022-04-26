@@ -11,7 +11,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 public class MetaUtils {
     public static Database getStarRocks(ConnectContext session, TableName tableName) {
-        Database db = session.getCatalog().getDb(tableName.getDb());
+        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not find", tableName.getDb());
         }
@@ -19,7 +19,7 @@ public class MetaUtils {
     }
 
     public static Table getStarRocksTable(ConnectContext session, TableName tableName) {
-        Database db = session.getCatalog().getDb(tableName.getDb());
+        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not find", tableName.getDb());
         }

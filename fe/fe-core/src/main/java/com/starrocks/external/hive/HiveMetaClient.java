@@ -231,7 +231,8 @@ public class HiveMetaClient {
         }
     }
 
-    public HivePartition getHudiPartition(String dbName, String tableName, List<String> partitionValues) throws DdlException {
+    public HivePartition getHudiPartition(String dbName, String tableName, List<String> partitionValues)
+            throws DdlException {
         try (AutoCloseClient client = getClient()) {
             Table table = client.hiveClient.getTable(dbName, tableName);
             StorageDescriptor sd = table.getSd();
@@ -243,7 +244,8 @@ public class HiveMetaClient {
                 partName = FSUtils.getRelativePartitionPath(new Path(basePath), new Path(sd.getLocation()));
             }
             Configuration conf = new Configuration();
-            HoodieTableMetaClient metaClient = HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
+            HoodieTableMetaClient metaClient =
+                    HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
             HoodieFileFormat hudiBaseFileFormat = metaClient.getTableConfig().getBaseFileFormat();
 
             HdfsFileFormat format;
@@ -479,7 +481,8 @@ public class HiveMetaClient {
             double vLength = 0.0f;
             for (PartitionKey partitionKey : partitionKeys) {
                 LiteralExpr literalExpr = partitionKey.getKeys().get(colIndex);
-                String partName = FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable));
+                String partName =
+                        FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable));
                 Long partRowNumber = partRowNumbers.get(partName);
                 if (literalExpr instanceof NullLiteral) {
                     if (isHudiTable) {
@@ -566,7 +569,7 @@ public class HiveMetaClient {
     }
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
-                                                StorageDescriptor sd) throws Exception {
+                                               StorageDescriptor sd) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();

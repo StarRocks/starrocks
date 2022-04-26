@@ -61,7 +61,7 @@ public class UnitTestUtil {
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version) {
-        // Catalog.getCurrentInvertedIndex().clear();
+        // GlobalStateMgr.getCurrentInvertedIndex().clear();
 
         // replica
         long replicaId = 0;

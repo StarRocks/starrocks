@@ -25,7 +25,7 @@ import com.google.common.base.Strings;
 import com.starrocks.mysql.privilege.Auth;
 
 /**
- * used to isolate the use for the database name and user name in the catalog,
+ * used to isolate the use for the database name and user name in the globalStateMgr,
  * all using the database name and user name place need to call the appropriate
  * method to makeup full name or get real name, full name is made up generally
  * in stmt's analyze.

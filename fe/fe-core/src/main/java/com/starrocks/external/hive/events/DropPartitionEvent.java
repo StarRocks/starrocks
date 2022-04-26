@@ -98,8 +98,10 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         try {
-            HivePartitionKeysKey partitionKeysKey = new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
-            PartitionKey partitionKey = Utils.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
+            HivePartitionKeysKey partitionKeysKey =
+                    new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
+            PartitionKey partitionKey =
+                    Utils.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
             cache.dropPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",

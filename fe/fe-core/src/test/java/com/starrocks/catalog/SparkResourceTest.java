@@ -32,6 +32,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -67,15 +68,16 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked Catalog catalog, @Injectable Auth auth)
+    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
+                             @Injectable Auth auth)
             throws UserException {
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -141,11 +143,11 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked Catalog catalog,
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
                                             @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -167,15 +169,16 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked Catalog catalog, @Injectable Auth auth)
+    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
+                           @Injectable Auth auth)
             throws UserException {
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;
@@ -204,15 +207,16 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked Catalog catalog, @Injectable Auth auth)
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
+                             @Injectable Auth auth)
             throws UserException {
         new Expectations() {
             {
-                catalog.getBrokerMgr();
+                globalStateMgr.getBrokerMgr();
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = false;
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 result = auth;
                 auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
                 result = true;

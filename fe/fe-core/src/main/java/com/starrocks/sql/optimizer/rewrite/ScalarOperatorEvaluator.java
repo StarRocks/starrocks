@@ -7,13 +7,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.rewrite.FEFunction;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -105,7 +105,8 @@ public enum ScalarOperatorEvaluator {
         // 1. Not UDF
         // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
         // 3. Has null parameter
-        if (!Catalog.getCurrentCatalog().isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
+        if (!GlobalStateMgr.getCurrentState()
+                .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
                 && !fn.isUdf()) {
             for (ScalarOperator op : root.getChildren()) {
                 if (((ConstantOperator) op).isNull()) {

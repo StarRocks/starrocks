@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
@@ -16,7 +16,7 @@ import com.starrocks.sql.optimizer.task.TaskScheduler;
 public class OptimizerContext {
     private final Memo memo;
     private final RuleSet ruleSet;
-    private final Catalog catalog;
+    private final GlobalStateMgr globalStateMgr;
     private final TaskScheduler taskScheduler;
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
@@ -28,7 +28,7 @@ public class OptimizerContext {
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
-        this.catalog = Catalog.getCurrentCatalog();
+        this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
@@ -37,7 +37,7 @@ public class OptimizerContext {
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
-        this.catalog = Catalog.getCurrentCatalog();
+        this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = connectContext.getSessionVariable();
@@ -56,8 +56,8 @@ public class OptimizerContext {
         return ruleSet;
     }
 
-    public Catalog getCatalog() {
-        return catalog;
+    public GlobalStateMgr getCatalog() {
+        return globalStateMgr;
     }
 
     public TaskScheduler getTaskScheduler() {

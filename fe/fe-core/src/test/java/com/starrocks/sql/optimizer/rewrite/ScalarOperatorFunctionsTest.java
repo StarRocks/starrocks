@@ -267,7 +267,7 @@ public class ScalarOperatorFunctionsTest {
 
         assertEquals("2001-01-09",
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
-                        ConstantOperator.createVarchar("%Y-%m-%d"))
+                                ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
         assertEquals("000123", ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000)),
@@ -715,8 +715,6 @@ public class ScalarOperatorFunctionsTest {
     public void intDivideLargeInt() {
         assertEquals("1", ScalarOperatorFunctions.intDivideLargeInt(O_LI_100, O_LI_100).getLargeInt().toString());
     }
-
-
 
     @Test
     public void modTinyInt() {

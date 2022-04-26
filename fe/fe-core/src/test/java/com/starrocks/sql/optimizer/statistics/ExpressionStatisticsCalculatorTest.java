@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -28,8 +27,8 @@ public class ExpressionStatisticsCalculatorTest {
         double distinctValue = 100;
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.DATE, "id_date", true);
         Statistics statistics = builder.addColumnStatistic(columnRefOperator,
-                ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
-                        setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
+                        ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
+                                setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
                 .build();
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(columnRefOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), max, 0.0001);
@@ -65,8 +64,8 @@ public class ExpressionStatisticsCalculatorTest {
         double max = 100.0;
         double distinctValue = 100;
         Statistics statistics = builder.addColumnStatistic(columnRefOperator,
-                ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
-                        setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
+                        ColumnStatistic.builder().setMinValue(min).setMaxValue(max).
+                                setDistinctValuesCount(distinctValue).setNullsFraction(0).setAverageRowSize(10).build())
                 .setOutputRowCount(100).build();
         // test max function
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);

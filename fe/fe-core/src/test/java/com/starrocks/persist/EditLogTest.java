@@ -21,9 +21,9 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -105,7 +105,7 @@ public class EditLogTest {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testWriteLogOnNonMasterNode(@Mocked Catalog catalog) {
+    public void testWriteLogOnNonMasterNode(@Mocked GlobalStateMgr globalStateMgr) {
         // mock BDBJEJournal constructor
         new MockUp<BDBJEJournal>() {
             @Mock
@@ -116,11 +116,11 @@ public class EditLogTest {
 
         new Expectations() {
             {
-                Catalog.getCurrentCatalog();
-                result = catalog;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
 
-                catalog.isMaster();
+                globalStateMgr.isMaster();
                 result = false;
                 minTimes = 0;
             }

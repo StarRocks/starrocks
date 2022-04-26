@@ -112,8 +112,10 @@ public class ExpressionStatisticCalculator {
 
             try {
                 if (cast.getChild(0).getType().isDateType()) {
-                    max = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
-                    min = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
+                    max = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMaxValue()));
+                    min = ConstantOperator.createDatetime(
+                            Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
                     max = max.castTo(cast.getType());
                     min = min.castTo(cast.getType());

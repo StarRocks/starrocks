@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -18,6 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -373,12 +373,12 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
-                                Catalog.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
-                        Catalog.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
@@ -447,8 +447,8 @@ public class Utils {
     public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
                                               Collection<Long> selectedPartitionId,
                                               Collection<Long> selectedTabletId) {
-        int backendSize = Catalog.getCurrentSystemInfo().backendSize();
-        int aliveBackendSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendSize = GlobalStateMgr.getCurrentSystemInfo().backendSize();
+        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);

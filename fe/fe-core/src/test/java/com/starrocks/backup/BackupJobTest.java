@@ -26,7 +26,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob.BackupJobState;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.OlapTable;
@@ -35,6 +34,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -84,7 +84,7 @@ public class BackupJobTest {
     private AtomicLong id = new AtomicLong(50000);
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     private MockBackupHandler backupHandler;
 
@@ -92,8 +92,8 @@ public class BackupJobTest {
 
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
-        public MockBackupHandler(Catalog catalog) {
-            super(catalog);
+        public MockBackupHandler(GlobalStateMgr globalStateMgr) {
+            super(globalStateMgr);
         }
 
         @Override
@@ -133,7 +133,7 @@ public class BackupJobTest {
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         if (backupDir.exists()) {
             Files.walk(BackupHandler.BACKUP_ROOT_DIR,
-                    FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                     .forEach(File::delete);
         }
     }
@@ -142,28 +142,28 @@ public class BackupJobTest {
     public void setUp() {
 
         repoMgr = new MockRepositoryMgr();
-        backupHandler = new MockBackupHandler(catalog);
+        backupHandler = new MockBackupHandler(globalStateMgr);
 
         // Thread is unmockable after Jmockit version 1.48, so use reflection to set field instead.
-        Deencapsulation.setField(catalog, "backupHandler", backupHandler);
+        Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version);
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                catalog.getDb(anyLong);
+                globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 
-                catalog.getNextId();
+                globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
 
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
             }
@@ -195,7 +195,7 @@ public class BackupJobTest {
             }
 
             @Mock
-            Status getBrokerAddress(Long beId, Catalog catalog, List<FsBroker> brokerAddrs) {
+            Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
                 brokerAddrs.add(new FsBroker());
                 return Status.OK;
             }
@@ -203,7 +203,7 @@ public class BackupJobTest {
 
         List<TableRef> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, catalog, repo.getId());
+        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
     @Test
@@ -337,7 +337,7 @@ public class BackupJobTest {
 
         List<TableRef> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, catalog, repo.getId());
+        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());

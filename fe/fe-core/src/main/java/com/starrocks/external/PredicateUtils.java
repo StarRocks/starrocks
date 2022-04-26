@@ -80,8 +80,10 @@ public class PredicateUtils {
         if (BinaryPredicate.IS_RANGE_PREDICATE.apply(binaryPred)) {
             buildStatsPredicate(analyzer, slotRef, binaryPred, binaryPred.getOp(), minMaxTuple, minMaxConjuncts);
         } else if (BinaryPredicate.IS_EQ_PREDICATE.apply(binaryPred)) {
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.GE, minMaxTuple, minMaxConjuncts);
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.LE, minMaxTuple, minMaxConjuncts);
+            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.GE, minMaxTuple,
+                    minMaxConjuncts);
+            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.LE, minMaxTuple,
+                    minMaxConjuncts);
         }
     }
 
