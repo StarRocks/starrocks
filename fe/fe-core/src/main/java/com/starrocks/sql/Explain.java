@@ -197,7 +197,8 @@ public class Explain {
         }
 
         @Override
-        public OperatorStr visitPhysicalIcebergScan(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+        public OperatorStr visitPhysicalIcebergScan(OptExpression optExpression,
+                                                    OperatorPrinter.ExplainContext context) {
             PhysicalIcebergScanOperator scan = (PhysicalIcebergScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- ICEBERG-SCAN [")

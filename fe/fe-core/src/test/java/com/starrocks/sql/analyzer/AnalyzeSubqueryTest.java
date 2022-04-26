@@ -4,13 +4,9 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -61,7 +57,8 @@ public class AnalyzeSubqueryTest {
         analyzeSuccess("select v1 from t0 where v2 = (select v3 from t1)");
         analyzeSuccess("select v1 from t0 where v2 = (select v4 from t1 where v3 = v5)");
 
-        QueryRelation query = ((QueryStatement) analyzeSuccess("select t0.*, v1+5 from t0 left join (select v4 from t1) a on v1 = a.v4")).getQueryRelation();
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select t0.*, v1+5 from t0 left join (select v4 from t1) a on v1 = a.v4")).getQueryRelation();
         Assert.assertEquals("v1,v2,v3,v1 + 5", String.join(",", query.getColumnOutputNames()));
     }
 }

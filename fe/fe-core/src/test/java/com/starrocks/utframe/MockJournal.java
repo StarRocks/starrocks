@@ -4,12 +4,12 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -25,7 +25,7 @@ public class MockJournal implements Journal {
 
     @Override
     public void open() {
-        Catalog.getCurrentCatalog().setHaProtocol(new MockProtocol());
+        GlobalStateMgr.getCurrentState().setHaProtocol(new MockProtocol());
     }
 
     @Override

@@ -116,15 +116,18 @@ public class DecimalV3FunctionAnalyzerTest {
         paramTypes.add(ScalarType.DECIMAL128);
 
         List<String> stdFunctions =
-                Arrays.asList("std", "stddev", "variance", "variance_pop", "var_pop", "variance_samp", "var_samp", "stddev_pop",
+                Arrays.asList("std", "stddev", "variance", "variance_pop", "var_pop", "variance_samp", "var_samp",
+                        "stddev_pop",
                         "stddev_samp");
         for (String funcName : stdFunctions) {
-            AggregateFunction function = (AggregateFunction) Expr.getBuiltinFunction(funcName, paramTypes.toArray(new Type[0]),
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            AggregateFunction function =
+                    (AggregateFunction) Expr.getBuiltinFunction(funcName, paramTypes.toArray(new Type[0]),
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assert.assertNotNull(function);
             Type argType = ScalarType.createWildcardDecimalV3Type(PrimitiveType.DECIMAL128);
             Type retType = Type.DOUBLE;
-            AggregateFunction aggFunc = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
+            AggregateFunction aggFunc =
+                    DecimalV3FunctionAnalyzer.rectifyAggregationFunction(function, argType, retType);
             Type returnType = aggFunc.getReturnType();
             Assert.assertTrue(returnType.isDecimalV3());
         }

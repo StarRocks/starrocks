@@ -1,10 +1,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -40,10 +40,10 @@ public class UDFTest extends PlanTestBase {
 
     @Test
     public void testUDTF() throws Exception {
-        final Catalog catalog = connectContext.getCatalog();
-        final Field functionSetField = Catalog.class.getDeclaredField("functionSet");
+        final GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        final Field functionSetField = GlobalStateMgr.class.getDeclaredField("functionSet");
         functionSetField.setAccessible(true);
-        final FunctionSet functionSet = (FunctionSet) functionSetField.get(catalog);
+        final FunctionSet functionSet = (FunctionSet) functionSetField.get(globalStateMgr);
 
         {
             String fn = "table_function";

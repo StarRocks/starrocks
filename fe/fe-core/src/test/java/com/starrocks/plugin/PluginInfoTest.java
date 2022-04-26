@@ -21,13 +21,13 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,17 +41,17 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PluginInfoTest {
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

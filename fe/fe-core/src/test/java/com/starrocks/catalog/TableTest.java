@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,17 +39,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TableTest {
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

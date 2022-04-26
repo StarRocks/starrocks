@@ -1048,7 +1048,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      ssr\n" +
             "    union all\n" +
             "    select\n" +
-            "      'catalog channel' as channel,\n" +
+            "      'globalStateMgr channel' as channel,\n" +
             "      'catalog_page' || catalog_page_id as id,\n" +
             "      sales,\n" +
             "      returns,\n" +
@@ -3605,11 +3605,11 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      )\n" +
             "    union\n" +
             "    select\n" +
-            "      'catalog' as channel,\n" +
-            "      catalog.item,\n" +
-            "      catalog.return_ratio,\n" +
-            "      catalog.return_rank,\n" +
-            "      catalog.currency_rank\n" +
+            "      'globalStateMgr' as channel,\n" +
+            "      globalStateMgr.item,\n" +
+            "      globalStateMgr.return_ratio,\n" +
+            "      globalStateMgr.return_rank,\n" +
+            "      globalStateMgr.currency_rank\n" +
             "    from\n" +
             "      (\n" +
             "        select\n" +
@@ -3658,11 +3658,11 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "            group by\n" +
             "              cs.cs_item_sk\n" +
             "          ) in_cat\n" +
-            "      ) catalog\n" +
+            "      ) globalStateMgr\n" +
             "    where\n" +
             "      (\n" +
-            "        catalog.return_rank <= 10\n" +
-            "        or catalog.currency_rank <= 10\n" +
+            "        globalStateMgr.return_rank <= 10\n" +
+            "        or globalStateMgr.currency_rank <= 10\n" +
             "      )\n" +
             "    union\n" +
             "    select\n" +
@@ -5290,7 +5290,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      )\n" +
             "    union all\n" +
             "    select\n" +
-            "      'catalog' channel,\n" +
+            "      'globalStateMgr' channel,\n" +
             "      i_brand_id,\n" +
             "      i_class_id,\n" +
             "      i_category_id,\n" +
@@ -6129,7 +6129,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      left join sr on ss.s_store_sk = sr.s_store_sk\n" +
             "    union all\n" +
             "    select\n" +
-            "      'catalog channel' as channel,\n" +
+            "      'globalStateMgr channel' as channel,\n" +
             "      cs_call_center_sk as id,\n" +
             "      sales,\n" +
             "      returns,\n" +
@@ -7545,7 +7545,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      ssr\n" +
             "    union all\n" +
             "    select\n" +
-            "      'catalog channel' as channel,\n" +
+            "      'globalStateMgr channel' as channel,\n" +
             "      'catalog_page' || cp_catalog_page_id as id,\n" +
             "      sales,\n" +
             "      returns,\n" +
@@ -7613,7 +7613,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      AND ws_item_sk = i_item_sk\n" +
             "    UNION ALL\n" +
             "    SELECT\n" +
-            "      'catalog' as channel,\n" +
+            "      'globalStateMgr' as channel,\n" +
             "      'cs_bill_customer_sk' col_name,\n" +
             "      d_year,\n" +
             "      d_qoy,\n" +
@@ -7718,7 +7718,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "        , profit\n" +
             " from   ssr\n" +
             " union all\n" +
-            " select 'catalog channel' as channel\n" +
+            " select 'globalStateMgr channel' as channel\n" +
             "        , 'catalog_page' || catalog_page_id as id\n" +
             "        , sales\n" +
             "        , returns\n" +

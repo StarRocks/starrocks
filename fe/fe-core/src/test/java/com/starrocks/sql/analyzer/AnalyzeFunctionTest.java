@@ -109,7 +109,8 @@ public class AnalyzeFunctionTest {
 
     @Test
     public void testTimestampArithmeticExpr() {
-        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
+        QueryStatement queryStatement =
+                (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
@@ -153,7 +154,8 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
-        queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
+        queryStatement = (QueryStatement) analyzeSuccess(
+                "select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
@@ -161,7 +163,8 @@ public class AnalyzeFunctionTest {
         Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
-        queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
+        queryStatement = (QueryStatement) analyzeSuccess(
+                "select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
     }

@@ -58,10 +58,10 @@ public class RangePartitionPruner implements PartitionPruner {
     }
 
     private List<Long> prune(RangeMap<PartitionKey, Long> rangeMap,
-                                   int columnIdx,
-                                   PartitionKey minKey,
-                                   PartitionKey maxKey,
-                                   int complex)
+                             int columnIdx,
+                             PartitionKey minKey,
+                             PartitionKey maxKey,
+                             int complex)
             throws AnalysisException {
         LOG.debug("column idx {}, column filters {}", columnIdx, partitionColumnFilters);
         // the last column in partition Key

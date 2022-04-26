@@ -26,13 +26,13 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SysVariableDesc;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -46,7 +46,7 @@ import java.util.List;
 public class VariableMgrTest {
     private static final Logger LOG = LoggerFactory.getLogger(VariableMgrTest.class);
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
     @Mocked
@@ -56,14 +56,14 @@ public class VariableMgrTest {
     public void setUp() {
         new Expectations() {
             {
-                catalog.getEditLog();
+                globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
                 editLog.logGlobalVariable((SessionVariable) any);
                 minTimes = 0;
 
-                catalog.getAuth();
+                globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
 
@@ -73,11 +73,11 @@ public class VariableMgrTest {
             }
         };
 
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalog();
+                GlobalStateMgr.getCurrentState();
                 minTimes = 0;
-                result = catalog;
+                result = globalStateMgr;
             }
         };
     }

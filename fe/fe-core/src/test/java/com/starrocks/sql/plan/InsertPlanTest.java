@@ -335,7 +335,9 @@ public class InsertPlanTest extends PlanTestBase {
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                        .get(0);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
 
@@ -559,7 +561,8 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testExplainInsert() throws Exception {
         String sql = "explain insert into t0 select * from t0";
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
         Assert.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }

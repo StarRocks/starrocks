@@ -129,7 +129,8 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         Set<ColumnRefOperator> newGroupingKeys = Sets.newHashSet(pair.second.keySet());
         newGroupingKeys.addAll(aggregate.getGroupingKeys());
         OptExpression vectorAggregationOptExpression = new OptExpression(
-                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(newGroupingKeys), aggregate.getAggregations()));
+                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(newGroupingKeys),
+                        aggregate.getAggregations()));
 
         // correlation filter
         OptExpression correlationFilterOptExpression =

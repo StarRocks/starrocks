@@ -24,7 +24,6 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -42,6 +41,7 @@ import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
@@ -180,7 +180,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
-            ctx.setCatalog(Catalog.getCurrentCatalog());
+            ctx.setCatalog(GlobalStateMgr.getCurrentState());
             ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
             ctx.setThreadLocalInfo();
 
@@ -200,9 +200,9 @@ public class WebBaseAction extends BaseAction {
             if (sessionValue == null) {
                 return false;
             }
-            if (Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(sessionValue.currentUser,
+            if (GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(sessionValue.currentUser,
                     PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                            Privilege.NODE_PRIV),
+                                    Privilege.NODE_PRIV),
                             Operator.OR))) {
                 response.updateCookieAge(request, STARROCKS_SESSION_ID, STARROCKS_SESSION_EXPIRED_TIME);
                 request.setAuthorized(true);
@@ -212,7 +212,7 @@ public class WebBaseAction extends BaseAction {
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
-                ctx.setCatalog(Catalog.getCurrentCatalog());
+                ctx.setCatalog(GlobalStateMgr.getCurrentState());
                 ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
                 ctx.setThreadLocalInfo();
                 return true;

@@ -15,7 +15,7 @@ import static java.lang.Double.NaN;
 public class Statistics {
     private final double outputRowCount;
     private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
-    // This flag set true if get table row count from Catalog LE 1
+    // This flag set true if get table row count from GlobalStateMgr LE 1
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
     private boolean tableRowCountMayInaccurate;

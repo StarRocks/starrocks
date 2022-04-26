@@ -132,6 +132,7 @@ public class TableProperty implements Writable {
                 TStorageFormat.DEFAULT.name()));
         return this;
     }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -173,7 +174,6 @@ public class TableProperty implements Writable {
     public boolean hasDelete() {
         return hasDelete;
     }
-
 
     public void setHasDelete(boolean hasDelete) {
         this.hasDelete = hasDelete;

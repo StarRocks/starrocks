@@ -32,6 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -359,7 +360,7 @@ public class RangePartitionInfo extends PartitionInfo {
             idToRange.put(partitionId, range);
         }
 
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_77) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_77) {
             counter = in.readInt();
             for (int i = 0; i < counter; i++) {
                 long partitionId = in.readLong();

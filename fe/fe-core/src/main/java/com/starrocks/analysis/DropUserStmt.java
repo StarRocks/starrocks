@@ -21,13 +21,13 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 
 // drop user cmy@['domain'];
 // drop user cmy  <==> drop user cmy@'%'
@@ -49,7 +49,7 @@ public class DropUserStmt extends DdlStmt {
         userIdent.analyze(analyzer.getClusterName());
 
         // only user with GLOBAL level's GRANT_PRIV can drop user.
-        if (!Catalog.getCurrentCatalog().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP USER");
         }
     }

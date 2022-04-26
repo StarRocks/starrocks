@@ -22,11 +22,11 @@
 package com.starrocks.persist;
 
 import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database.DbState;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -90,15 +90,15 @@ public class DatabaseInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         this.dbName = Text.readString(in);
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_10) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
             newDbName = Text.readString(in);
         }
         this.quota = in.readLong();
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_30) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             this.clusterName = Text.readString(in);
             this.dbState = DbState.valueOf(Text.readString(in));
         }
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_81) {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             this.quotaType = QuotaType.valueOf(Text.readString(in));
         }
     }

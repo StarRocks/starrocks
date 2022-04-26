@@ -132,7 +132,7 @@ public class AgentTaskQueue {
      * add version, and TPushType to help
      */
     public static synchronized void removePushTaskByTransactionId(long backendId, long transactionId,
-                                                   TPushType pushType, TTaskType taskType) {
+                                                                  TPushType pushType, TTaskType taskType) {
         if (!tasks.contains(backendId, taskType)) {
             return;
         }

@@ -21,8 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -47,7 +47,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
 
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        Catalog.getCurrentCatalog().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
         connectContext.setDatabase("default_cluster:test");
     }
 

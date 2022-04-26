@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -47,22 +48,22 @@ public class LocalTabletTest {
     private TabletInvertedIndex invertedIndex;
 
     @Mocked
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
     @Before
     public void makeTablet() {
         invertedIndex = new TabletInvertedIndex();
-        new Expectations(catalog) {
+        new Expectations(globalStateMgr) {
             {
-                Catalog.getCurrentCatalogJournalVersion();
+                GlobalStateMgr.getCurrentStateJournalVersion();
                 minTimes = 0;
                 result = FeConstants.meta_version;
 
-                Catalog.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                Catalog.isCheckpointThread();
+                GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
                 result = false;
             }

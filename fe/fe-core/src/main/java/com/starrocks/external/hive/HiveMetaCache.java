@@ -8,7 +8,6 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -16,6 +15,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -199,8 +199,10 @@ public class HiveMetaCache {
 
     public HivePartitionStats getPartitionStats(HiveMetaStoreTableInfo hmsTable,
                                                 PartitionKey partitionKey) throws DdlException {
-        List<String> partValues = Utils.getPartitionValues(partitionKey, hmsTable.getTableType() == Table.TableType.HUDI);
-        HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
+        List<String> partValues =
+                Utils.getPartitionValues(partitionKey, hmsTable.getTableType() == Table.TableType.HUDI);
+        HivePartitionKey key =
+                new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
         try {
             return partitionStatsCache.get(key);
         } catch (ExecutionException e) {
@@ -298,8 +300,9 @@ public class HiveMetaCache {
         List<String> columnNames = getAllColumnNames(hmsTable);
         HivePartitionKeysKey hivePartitionKeysKey = new HivePartitionKeysKey(dbName, tableName, tableType, partColumns);
         HiveTableKey hiveTableKey = HiveTableKey.gen(dbName, tableName);
-        HiveTableColumnsKey hiveTableColumnsKey = new HiveTableColumnsKey(dbName, tableName, partColumns, columnNames, tableType);
-        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
+        HiveTableColumnsKey hiveTableColumnsKey =
+                new HiveTableColumnsKey(dbName, tableName, partColumns, columnNames, tableType);
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             ImmutableMap<PartitionKey, Long> partitionKeys = loadPartitionKeys(hivePartitionKeysKey);
             partitionKeysCache.put(hivePartitionKeysKey, partitionKeys);
@@ -308,7 +311,8 @@ public class HiveMetaCache {
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
-                HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tableName, tableType, new ArrayList<>());
+                HivePartitionKey hivePartitionKey =
+                        new HivePartitionKey(dbName, tableName, tableType, new ArrayList<>());
                 partitionsCache.put(hivePartitionKey, loadPartition(hivePartitionKey));
                 partitionStatsCache.put(hivePartitionKey, loadPartitionStats(hivePartitionKey));
             }
@@ -316,12 +320,12 @@ public class HiveMetaCache {
             LOG.warn("refresh table cache failed", e);
             throw new DdlException("refresh table cache failed: " + e.getMessage());
         } finally {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
     }
 
     public void refreshPartition(HiveMetaStoreTableInfo hmsTable, List<String> partNames) throws DdlException {
-        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
@@ -334,7 +338,7 @@ public class HiveMetaCache {
             LOG.warn("refresh partition cache failed", e);
             throw new DdlException("refresh partition cached failed: " + e.getMessage());
         } finally {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
     }
 

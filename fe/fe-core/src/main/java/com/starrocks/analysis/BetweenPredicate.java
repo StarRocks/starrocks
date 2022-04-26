@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

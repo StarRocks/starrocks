@@ -32,10 +32,11 @@ public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     }
 
     @Override
-    protected IMetaStoreClient newClient()  {
+    protected IMetaStoreClient newClient() {
         try {
             try {
-                return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null, HiveMetaStoreThriftClient.class.getName());
+                return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null,
+                        HiveMetaStoreThriftClient.class.getName());
             } catch (RuntimeException e) {
                 // any MetaException would be wrapped into RuntimeException during reflection, so let's double-check type here
                 if (e.getCause() instanceof MetaException) {

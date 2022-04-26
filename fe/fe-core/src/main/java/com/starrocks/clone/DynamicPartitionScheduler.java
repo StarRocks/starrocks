@@ -31,7 +31,6 @@ import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -49,6 +48,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -268,7 +268,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 iterator.remove();
                 continue;
@@ -330,7 +330,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
                 db.writeLock();
                 try {
-                    Catalog.getCurrentCatalog().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
                     recordDropPartitionFailedMsg(db.getFullName(), tableName, e.getMessage());
@@ -342,7 +342,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             if (!skipAddPartition) {
                 for (AddPartitionClause addPartitionClause : addPartitionClauses) {
                     try {
-                        Catalog.getCurrentCatalog().addPartitions(db, tableName, addPartitionClause);
+                        GlobalStateMgr.getCurrentState().addPartitions(db, tableName, addPartitionClause);
                         clearCreatePartitionFailedMsg(tableName);
                     } catch (DdlException | AnalysisException e) {
                         recordCreatePartitionFailedMsg(db.getFullName(), tableName, e.getMessage());
@@ -375,14 +375,14 @@ public class DynamicPartitionScheduler extends MasterDaemon {
     }
 
     private void initDynamicPartitionTable() {
-        for (Long dbId : Catalog.getCurrentCatalog().getDbIds()) {
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;
             }
             db.readLock();
             try {
-                for (Table table : Catalog.getCurrentCatalog().getDb(dbId).getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                     }

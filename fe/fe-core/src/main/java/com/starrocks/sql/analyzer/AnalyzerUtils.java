@@ -80,8 +80,7 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-
-    public static  Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -89,12 +88,12 @@ public class AnalyzerUtils {
             dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
         }
 
-        if (!session.getCatalog().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
             throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
                     ErrorType.USER_ERROR);
         }
 
-        Database db = session.getCatalog().getDb(dbName);
+        Database db = session.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
         }
@@ -131,7 +130,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getCatalog().getDb(node.getDb());
+            Database db = session.getGlobalStateMgr().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
@@ -204,7 +203,7 @@ public class AnalyzerUtils {
                 dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
             }
 
-            Database db = session.getCatalog().getDb(dbName);
+            Database db = session.getGlobalStateMgr().getDb(dbName);
 
             dbs.put(dbName, db);
         }
@@ -240,7 +239,6 @@ public class AnalyzerUtils {
         public Void visitSubquery(SubqueryRelation node, Void context) {
             return visit(node.getQueryStatement());
         }
-
 
         public Void visitView(ViewRelation node, Void context) {
             return visit(node.getQueryStatement(), context);

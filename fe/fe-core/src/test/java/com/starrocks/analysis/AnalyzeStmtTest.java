@@ -7,13 +7,11 @@ import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.StringReader;
-import java.util.UUID;
 
 public class AnalyzeStmtTest {
     private static StarRocksAssert starRocksAssert;

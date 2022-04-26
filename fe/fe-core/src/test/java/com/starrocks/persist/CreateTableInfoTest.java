@@ -23,9 +23,8 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.FakeCatalog;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -37,6 +36,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageType;
 import org.junit.Assert;
 import org.junit.Before;
@@ -51,17 +51,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CreateTableInfoTest {
-    private Catalog catalog;
+    private GlobalStateMgr globalStateMgr;
 
-    private FakeCatalog fakeCatalog;
+    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        fakeCatalog = new FakeCatalog();
-        catalog = Deencapsulation.newInstance(Catalog.class);
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        FakeCatalog.setCatalog(catalog);
-        FakeCatalog.setMetaVersion(FeConstants.meta_version);
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        FakeGlobalStateMgr.setMetaVersion(FeConstants.meta_version);
     }
 
     @Test

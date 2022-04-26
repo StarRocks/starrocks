@@ -22,12 +22,12 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -62,7 +62,7 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
-        ImmutableMap<Long, Backend> backendMap = Catalog.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         List<List<Comparable>> backendInfos = new ArrayList<List<Comparable>>();
         for (Backend backend : backendMap.values()) {
