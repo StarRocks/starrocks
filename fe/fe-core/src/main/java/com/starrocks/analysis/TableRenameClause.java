@@ -21,10 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -44,11 +43,6 @@ public class TableRenameClause extends AlterTableClause {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(newTableName)) {
-            throw new AnalysisException("New Table name is not set");
-        }
-
-        FeNameFormat.checkTableName(newTableName);
     }
 
     @Override
@@ -64,5 +58,10 @@ public class TableRenameClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitTableRenameClause(this, context);
     }
 }

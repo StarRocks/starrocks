@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyzeStmt;
 import com.starrocks.analysis.BaseGrantRevokeRoleStmt;
@@ -49,6 +50,12 @@ public class Analyzer {
         public void analyze(StatementBase statement, ConnectContext session) {
             statement.setClusterName(session.getClusterName());
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+            AlterTableStatementAnalyzer.analyze(statement, context);
+            return null;
         }
 
         @Override

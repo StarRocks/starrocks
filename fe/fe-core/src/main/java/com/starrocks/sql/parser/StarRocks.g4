@@ -23,6 +23,8 @@ statement
         distributionDesc?
         properties?
         AS queryStatement                                                                   #createTableAsSelect
+    | ALTER TABLE qualifiedName
+                alterClause (',' alterClause)*                                              #alterTable
     | explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?        #update
     | explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?      #delete
     | USE schema=identifier                                                                 #use
@@ -41,6 +43,14 @@ statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | GRANT identifierOrString TO userIdentifier                                            #grantRole
     | REVOKE identifierOrString FROM userIdentifier                                         #revokeRole
+    ;
+
+alterClause
+    : tableRenameClause
+    ;
+
+tableRenameClause
+    : RENAME identifier
     ;
 
 explainDesc
